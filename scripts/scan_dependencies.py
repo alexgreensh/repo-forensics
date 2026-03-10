@@ -1,0 +1,350 @@
+#!/usr/bin/env python3
+"""
+scan_dependencies.py - Dependency Scanner (v2: NPM + Python + Go, 500+ packages)
+Detects typosquatting, untrusted registries, and version anomalies.
+
+Created by Alex Greenshpun
+"""
+
+import sys
+import os
+import json
+import difflib
+import re
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import forensics_core as core
+
+SCANNER_NAME = "dependencies"
+
+# Top 200 NPM packages
+POPULAR_NPM = [
+    "react", "react-dom", "lodash", "underscore", "express", "moment", "axios", "chalk", "commander",
+    "debug", "fs-extra", "bluebird", "async", "request", "prop-types", "classnames", "uuid", "mkdirp",
+    "body-parser", "glob", "minimist", "colors", "inquirer", "yeoman-generator", "through2", "cheerio",
+    "shelljs", "rimraf", "yargs", "cookie-parser", "jsonwebtoken", "mongoose", "sequelize",
+    "vue", "angular", "rxjs", "tslib", "zone-js", "core-js", "webpack", "babel-core", "typescript",
+    "tailwindcss", "postcss", "autoprefixer", "eslint", "prettier", "vite", "next", "nuxt",
+    "dotenv", "cors", "morgan", "helmet", "passport", "bcrypt", "nodemon", "concurrently",
+    "cross-env", "webpack-cli", "babel-loader", "css-loader", "style-loader", "file-loader",
+    "url-loader", "html-webpack-plugin", "mini-css-extract-plugin", "terser-webpack-plugin",
+    "jest", "mocha", "chai", "sinon", "supertest", "nyc", "istanbul", "karma",
+    "socket-io", "redis", "pg", "mysql2", "mongodb", "knex", "prisma", "typeorm",
+    "graphql", "apollo-server", "apollo-client", "relay-runtime",
+    "react-router", "react-router-dom", "react-redux", "redux", "redux-thunk", "redux-saga",
+    "mobx", "zustand", "recoil", "immer", "ramda", "date-fns", "dayjs", "luxon",
+    "formik", "yup", "zod", "ajv", "joi", "validator",
+    "winston", "bunyan", "pino", "loglevel", "log4js",
+    "aws-sdk", "firebase", "stripe", "twilio", "sendgrid",
+    "sharp", "jimp", "canvas", "puppeteer", "playwright", "cypress",
+    "electron", "tauri", "capacitor", "ionic", "react-native", "expo",
+    "d3", "chart-js", "three", "p5", "fabric", "konva", "pixi-js",
+    "material-ui", "ant-design", "chakra-ui", "headlessui", "radix-ui",
+    "storybook", "docusaurus", "gatsby", "astro", "remix", "svelte", "sveltekit",
+    "fastify", "koa", "hapi", "nest", "adonis",
+    "esbuild", "rollup", "parcel", "swc", "turbopack",
+    "lerna", "nx", "turborepo", "changesets", "semantic-release",
+    "husky", "lint-staged", "commitlint", "conventional-changelog",
+    "nodemailer", "bull", "agenda", "cron", "node-cron",
+    "multer", "busboy", "formidable", "express-fileupload",
+    "compression", "serve-static", "http-proxy-middleware",
+    "i18next", "intl", "globalize", "polyglot",
+    "nanoid", "cuid", "shortid", "ulid",
+    "cheerio", "jsdom", "node-fetch", "got", "superagent", "ky",
+    "ora", "listr", "progress", "cli-progress", "boxen", "figlet",
+    "execa", "zx", "shelljs", "cross-spawn",
+    "semver", "compare-versions", "node-semver",
+    "yaml", "toml", "ini", "properties-parser",
+    "gray-matter", "front-matter", "markdown-it", "marked", "remark", "rehype",
+]
+
+# Top 200 PyPI packages
+POPULAR_PYPI = [
+    "requests", "numpy", "pandas", "flask", "django", "fastapi", "sqlalchemy", "celery",
+    "boto3", "botocore", "pillow", "scipy", "matplotlib", "scikit-learn", "tensorflow",
+    "pytorch", "torch", "transformers", "beautifulsoup4", "lxml", "scrapy",
+    "pytest", "unittest2", "nose", "tox", "coverage", "hypothesis",
+    "click", "typer", "argparse", "fire", "docopt",
+    "pydantic", "attrs", "dataclasses", "marshmallow",
+    "aiohttp", "httpx", "urllib3", "certifi", "chardet",
+    "cryptography", "pycryptodome", "paramiko", "fabric",
+    "redis", "pymongo", "psycopg2", "mysql-connector-python", "sqlite3",
+    "gunicorn", "uvicorn", "waitress", "twisted", "tornado",
+    "jinja2", "mako", "chameleon",
+    "setuptools", "pip", "wheel", "twine", "build",
+    "black", "flake8", "mypy", "pylint", "isort", "autopep8", "yapf",
+    "python-dotenv", "decouple", "environs",
+    "pyyaml", "toml", "tomli", "configparser",
+    "jsonschema", "simplejson", "orjson", "ujson",
+    "arrow", "pendulum", "python-dateutil", "pytz",
+    "rich", "colorama", "termcolor", "tqdm", "alive-progress",
+    "loguru", "structlog", "python-json-logger",
+    "jwt", "pyjwt", "oauthlib", "authlib",
+    "stripe", "twilio", "sendgrid",
+    "opencv-python", "imageio", "scikit-image",
+    "networkx", "igraph", "graph-tool",
+    "sympy", "mpmath", "statsmodels",
+    "selenium", "playwright", "pyppeteer",
+    "docker", "kubernetes", "ansible",
+    "grpcio", "protobuf", "thrift",
+    "graphene", "strawberry-graphql", "ariadne",
+    "alembic", "migrate", "peewee", "tortoise-orm",
+    "sentry-sdk", "newrelic", "datadog",
+    "openai", "anthropic", "langchain", "llama-index",
+    "streamlit", "gradio", "dash", "panel",
+    "sphinx", "mkdocs", "pdoc",
+    "regex", "more-itertools", "toolz", "funcy",
+    "tenacity", "retrying", "backoff",
+    "apscheduler", "schedule", "rq",
+    "watchdog", "inotify", "pyinotify",
+    "psutil", "py-cpuinfo", "gputil",
+    "pexpect", "ptyprocess", "subprocess32",
+    "pygments", "asttokens", "astunparse",
+]
+
+# Top 100 Go modules (short names for import path matching)
+POPULAR_GO = [
+    "gin", "echo", "fiber", "chi", "mux", "gorilla", "httprouter",
+    "gorm", "sqlx", "pgx", "go-redis", "mongo-driver",
+    "cobra", "viper", "pflag", "urfave-cli",
+    "zap", "logrus", "zerolog",
+    "testify", "gomock", "gocheck",
+    "grpc", "protobuf", "twirp",
+    "jwt", "oauth2", "casbin",
+    "aws-sdk-go", "azure-sdk-for-go", "google-cloud-go",
+    "docker", "kubernetes", "helm", "terraform",
+    "prometheus", "opentelemetry", "jaeger",
+    "uuid", "ulid", "xid",
+    "validator", "ozzo-validation",
+    "go-kit", "micro",
+    "fx", "wire", "dig",
+    "colly", "goquery", "rod",
+    "ginkgo", "gomega", "goconvey",
+    "afero", "embed",
+    "graphql", "gqlgen", "graphql-go",
+]
+
+TRUSTED_REGISTRIES = [
+    "registry.npmjs.org", "registry.yarnpkg.com", "codeload.github.com",
+    "github.com", "cdn.jsdelivr.net", "pnpm.io",
+    "pypi.org", "files.pythonhosted.org",
+    "proxy.golang.org", "sum.golang.org",
+]
+
+
+# Known malicious packages from SANDWORM_MODE npm worm campaign (Jan-Feb 2026)
+# Source: Socket Research, Snyk ToxicSkills 2026, Wiz Research
+SANDWORM_KNOWN_IOC_PACKAGES = {
+    # npm packages
+    "rimarf", "yarsg", "suport-color", "naniod", "opencraw",
+    "claud-code", "cloude-code", "cloude", "mcp-cliient", "mcp-serever",
+    "anthropic-sdk-node", "claude-code-cli", "clawclient",
+    # PyPI packages
+    "anthopic", "antrhopic", "claudes", "mcp-python-sdk",
+}
+
+
+def _apply_l33t(name):
+    """Normalize l33t substitutions for typosquatting comparison.
+    Maps: 0->o, 1->l, 3->e, @->a (common character swaps in malicious packages).
+    """
+    return name.replace('0', 'o').replace('1', 'l').replace('3', 'e').replace('@', 'a')
+
+
+def check_typosquatting(dependencies, popular_list):
+    # Pre-compute lowercase mapping for O(1) lookup instead of O(n) per dep
+    popular_lower_map = {p.lower(): p for p in popular_list}
+    popular_lower_set = set(popular_lower_map.keys())
+    suspicious = []
+    for dep in dependencies:
+        dep_lower = dep.lower()
+        dep_l33t = _apply_l33t(dep_lower)
+
+        if dep_lower in popular_lower_set:
+            continue
+
+        # Check raw similarity
+        for pop_lower, popular in popular_lower_map.items():
+            ratio = difflib.SequenceMatcher(None, dep_lower, pop_lower).ratio()
+            if ratio > 0.85 and dep_lower != pop_lower:
+                suspicious.append((dep, popular, ratio))
+                break
+            # Check l33t-normalized similarity
+            if dep_l33t != dep_lower:
+                ratio_l33t = difflib.SequenceMatcher(None, dep_l33t, pop_lower).ratio()
+                if ratio_l33t > 0.85 and dep_l33t != pop_lower:
+                    suspicious.append((dep, popular, ratio_l33t))
+                    break
+
+    return suspicious
+
+
+def check_version_anomaly(version_str):
+    """Detect dependency confusion signatures like v99.x.x"""
+    m = re.match(r'[~^>=<]*(\d+)', version_str)
+    if m:
+        major = int(m.group(1))
+        if major >= 90:
+            return True
+    return False
+
+
+def check_known_ioc_packages(dependencies, rel_path):
+    """Flag packages matching SANDWORM_MODE campaign known-IOC list (critical)."""
+    findings = []
+    for dep in dependencies:
+        if dep.lower() in SANDWORM_KNOWN_IOC_PACKAGES:
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="critical",
+                title=f"Known Malicious Package: '{dep}'",
+                description="Package matches SANDWORM_MODE campaign IOC list (source: Socket Research, Snyk ToxicSkills 2026)",
+                file=rel_path, line=0, snippet=f"'{dep}' is a known malicious package",
+                category="known-ioc"
+            ))
+    return findings
+
+
+def scan_package_json(filepath, rel_path):
+    findings = []
+    try:
+        with open(filepath, 'r') as f:
+            data = json.load(f)
+
+        all_deps = {}
+        for key in ('dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'):
+            all_deps.update(data.get(key, {}))
+
+        dep_names = list(all_deps.keys())
+
+        # Known IOC check (critical, before typosquatting)
+        findings.extend(check_known_ioc_packages(dep_names, rel_path))
+
+        # Typosquatting
+        typos = check_typosquatting(dep_names, POPULAR_NPM)
+        for suspect, target, score in typos:
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="high",
+                title=f"Typosquat Risk: '{suspect}' ~ '{target}'",
+                description=f"Package name similarity {score:.0%} to popular package",
+                file=rel_path, line=0, snippet=f"'{suspect}' might be typosquatting '{target}'",
+                category="typosquatting"
+            ))
+
+        # Version anomaly
+        for pkg, ver in all_deps.items():
+            if isinstance(ver, str) and check_version_anomaly(ver):
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="high",
+                    title=f"Version Anomaly: {pkg}@{ver}",
+                    description="Abnormally high major version (dependency confusion indicator)",
+                    file=rel_path, line=0, snippet=f"{pkg}: {ver}",
+                    category="dependency-confusion"
+                ))
+
+    except Exception:
+        pass
+    return findings
+
+
+def scan_python_deps(filepath, rel_path):
+    findings = []
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        deps = []
+        basename = os.path.basename(filepath)
+        if basename in ('requirements.txt', 'requirements-dev.txt', 'requirements-test.txt', 'constraints.txt'):
+            for line in content.split('\n'):
+                line = line.strip()
+                if line and not line.startswith('#') and not line.startswith('-'):
+                    pkg = re.split(r'[>=<!\[\];]', line)[0].strip()
+                    if pkg:
+                        deps.append(pkg)
+                    # Check version
+                    ver_m = re.search(r'[>=<]=?(\d+)', line)
+                    if ver_m and int(ver_m.group(1)) >= 90:
+                        findings.append(core.Finding(
+                            scanner=SCANNER_NAME, severity="high",
+                            title=f"Version Anomaly: {pkg}",
+                            description="Abnormally high version in requirements",
+                            file=rel_path, line=0, snippet=line[:120],
+                            category="dependency-confusion"
+                        ))
+
+        elif basename in ('pyproject.toml', 'Pipfile'):
+            for m in re.finditer(r'["\']([a-zA-Z0-9_-]+)["\']', content):
+                deps.append(m.group(1))
+
+        # Known IOC check first
+        findings.extend(check_known_ioc_packages(deps, rel_path))
+
+        typos = check_typosquatting(deps, POPULAR_PYPI)
+        for suspect, target, score in typos:
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="high",
+                title=f"Typosquat Risk: '{suspect}' ~ '{target}'",
+                description=f"Package name similarity {score:.0%} to popular PyPI package",
+                file=rel_path, line=0, snippet=f"'{suspect}' might be typosquatting '{target}'",
+                category="typosquatting"
+            ))
+
+    except Exception:
+        pass
+    return findings
+
+
+def scan_lockfile(filepath, rel_path):
+    findings = []
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        urls = re.findall(r'https?://[^\s"\'}]+', content)
+        suspicious = set()
+
+        for url in urls:
+            is_trusted = any(t in url for t in TRUSTED_REGISTRIES)
+            if not is_trusted and "schema.org" not in url:
+                suspicious.add(url)
+
+        if suspicious:
+            for url in list(suspicious)[:5]:
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="critical",
+                    title="Untrusted Registry URL",
+                    description="Lockfile resolves to non-standard registry (supply chain risk)",
+                    file=rel_path, line=0, snippet=url[:120],
+                    category="untrusted-registry"
+                ))
+
+    except Exception:
+        pass
+    return findings
+
+
+def main():
+    args = core.parse_common_args(sys.argv, "Dependency Scanner")
+    repo_path = args.repo_path
+
+    print(f"[*] Scanning dependencies in {repo_path}...")
+
+    ignore_patterns = core.load_ignore_patterns(repo_path)
+    all_findings = []
+
+    for file_path, rel_path in core.walk_repo(repo_path, ignore_patterns, skip_binary=True, skip_lockfiles=False):
+        basename = os.path.basename(file_path)
+
+        if basename == 'package.json':
+            all_findings.extend(scan_package_json(file_path, rel_path))
+        elif basename in ('package-lock.json', 'pnpm-lock.yaml', 'yarn.lock'):
+            all_findings.extend(scan_lockfile(file_path, rel_path))
+        elif basename in ('requirements.txt', 'requirements-dev.txt', 'requirements-test.txt',
+                          'constraints.txt', 'pyproject.toml', 'Pipfile'):
+            all_findings.extend(scan_python_deps(file_path, rel_path))
+
+    core.output_findings(all_findings, args.format, SCANNER_NAME)
+
+
+if __name__ == "__main__":
+    main()
