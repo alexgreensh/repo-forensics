@@ -1,19 +1,14 @@
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-dist/
-build/
-
-# Internal
+# Internal notes — never commit
 FIELD_NOTES.md
 
-# OS
+# OS / IDE
 .DS_Store
 Thumbs.db
-
-# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+
+# Python artifacts (top-level only)
+__pycache__/
+*.py[cod]

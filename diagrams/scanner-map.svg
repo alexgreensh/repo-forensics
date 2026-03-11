@@ -1,0 +1,229 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520" width="900" height="520">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&amp;display=swap');
+      text { font-family: 'JetBrains Mono', 'Courier New', monospace; }
+    </style>
+    <radialGradient id="bgGrad" cx="50%" cy="50%" r="70%">
+      <stop offset="0%" stop-color="#0f1923"/>
+      <stop offset="100%" stop-color="#060d14"/>
+    </radialGradient>
+    <radialGradient id="centerGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#1e3a5f" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#0a1a2e" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="softglow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6" result="coloredBlur"/>
+      <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="textglow">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <!-- Scanner node gradient colors -->
+    <linearGradient id="redNode" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff4444"/>
+      <stop offset="100%" stop-color="#cc0000"/>
+    </linearGradient>
+    <linearGradient id="orangeNode" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff8c00"/>
+      <stop offset="100%" stop-color="#cc5500"/>
+    </linearGradient>
+    <linearGradient id="blueNode" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2196f3"/>
+      <stop offset="100%" stop-color="#0d47a1"/>
+    </linearGradient>
+    <linearGradient id="greenNode" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00c853"/>
+      <stop offset="100%" stop-color="#007c38"/>
+    </linearGradient>
+    <linearGradient id="purpleNode" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#9c27b0"/>
+      <stop offset="100%" stop-color="#4a148c"/>
+    </linearGradient>
+    <linearGradient id="tealNode" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00bcd4"/>
+      <stop offset="100%" stop-color="#006064"/>
+    </linearGradient>
+    <linearGradient id="centerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1565c0"/>
+      <stop offset="100%" stop-color="#0a237e"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="520" fill="url(#bgGrad)" rx="12"/>
+
+  <!-- Subtle grid lines -->
+  <g opacity="0.04" stroke="#4fc3f7" stroke-width="0.5">
+    <line x1="0" y1="87" x2="900" y2="87"/>
+    <line x1="0" y1="174" x2="900" y2="174"/>
+    <line x1="0" y1="260" x2="900" y2="260"/>
+    <line x1="0" y1="347" x2="900" y2="347"/>
+    <line x1="0" y1="433" x2="900" y2="433"/>
+    <line x1="150" y1="0" x2="150" y2="520"/>
+    <line x1="300" y1="0" x2="300" y2="520"/>
+    <line x1="450" y1="0" x2="450" y2="520"/>
+    <line x1="600" y1="0" x2="600" y2="520"/>
+    <line x1="750" y1="0" x2="750" y2="520"/>
+  </g>
+
+  <!-- Center glow halo -->
+  <circle cx="450" cy="268" r="155" fill="url(#centerGlow)" opacity="0.6"/>
+
+  <!-- Connection lines from center to all scanners -->
+  <!-- skill_threats -->
+  <line x1="450" y1="268" x2="450" y2="90" stroke="#ff4444" stroke-width="1.2" stroke-opacity="0.4" stroke-dasharray="4,4"/>
+  <!-- mcp_security -->
+  <line x1="450" y1="268" x2="297" y2="115" stroke="#ff4444" stroke-width="1.2" stroke-opacity="0.4" stroke-dasharray="4,4"/>
+  <!-- sast -->
+  <line x1="450" y1="268" x2="191" y2="195" stroke="#ff8c00" stroke-width="1.2" stroke-opacity="0.4" stroke-dasharray="4,4"/>
+  <!-- ast_analysis -->
+  <line x1="450" y1="268" x2="163" y2="300" stroke="#ff8c00" stroke-width="1.2" stroke-opacity="0.4" stroke-dasharray="4,4"/>
+  <!-- dataflow -->
+  <line x1="450" y1="268" x2="191" y2="390" stroke="#9c27b0" stroke-width="1.2" stroke-opacity="0.4" stroke-dasharray="4,4"/>
+  <!-- secrets -->
+  <line x1="450" y1="268" x2="297" y2="445" stroke="#9c27b0" stroke-width="1.2" stroke-opacity="0.4" stroke-dasharray="4,4"/>
+  <!-- entropy -->
+  <line x1="450" y1="268" x2="450" y2="460" stroke="#ff8c00" stroke-width="1.2" stroke-opacity="0.4" stroke-dasharray="4,4"/>
+  <!-- lifecycle -->
+  <line x1="450" y1="268" x2="603" y2="445" stroke="#00c853" stroke-width="1.2" stroke-opacity="0.4" stroke-dasharray="4,4"/>
+  <!-- dependencies -->
+  <line x1="450" y1="268" x2="709" y2="390" stroke="#00c853" stroke-width="1.2" stroke-opacity="0.4" stroke-dasharray="4,4"/>
+  <!-- infra -->
+  <line x1="450" y1="268" x2="737" y2="300" stroke="#2196f3" stroke-width="1.2" stroke-opacity="0.4" stroke-dasharray="4,4"/>
+  <!-- binary -->
+  <line x1="450" y1="268" x2="709" y2="195" stroke="#00bcd4" stroke-width="1.2" stroke-opacity="0.4" stroke-dasharray="4,4"/>
+  <!-- git_forensics -->
+  <line x1="450" y1="268" x2="603" y2="115" stroke="#00bcd4" stroke-width="1.2" stroke-opacity="0.4" stroke-dasharray="4,4"/>
+
+  <!-- CENTER HEXAGON -->
+  <polygon points="450,222 493,245 493,291 450,314 407,291 407,245" fill="url(#centerGrad)" stroke="#4fc3f7" stroke-width="2" filter="url(#softglow)"/>
+  <polygon points="450,222 493,245 493,291 450,314 407,291 407,245" fill="none" stroke="#4fc3f7" stroke-width="1" opacity="0.5"/>
+  <text x="450" y="261" text-anchor="middle" fill="#e3f2fd" font-size="10.5" font-weight="600" letter-spacing="1">TARGET</text>
+  <text x="450" y="276" text-anchor="middle" fill="#90caf9" font-size="9" letter-spacing="0.5">REPO</text>
+
+  <!-- SCANNER NODES — 12 around the circle -->
+  <!-- Orbit ring (decorative) -->
+  <circle cx="450" cy="268" r="178" fill="none" stroke="#1e3a5f" stroke-width="1" stroke-dasharray="3,6"/>
+
+  <!-- 1. skill_threats — top (270°) -->
+  <g filter="url(#glow)">
+    <circle cx="450" cy="90" r="36" fill="#1a0a0a" stroke="#ff4444" stroke-width="1.8"/>
+    <text x="450" y="84" text-anchor="middle" fill="#ff6666" font-size="7.5" font-weight="600" letter-spacing="0.5">skill</text>
+    <text x="450" y="95" text-anchor="middle" fill="#ff6666" font-size="7.5" font-weight="600" letter-spacing="0.5">threats</text>
+    <circle cx="450" cy="90" r="36" fill="none" stroke="#ff4444" stroke-width="0.6" opacity="0.4"/>
+  </g>
+
+  <!-- 2. mcp_security — upper-left (~300°) -->
+  <g filter="url(#glow)">
+    <circle cx="297" cy="115" r="36" fill="#1a0a0a" stroke="#ff4444" stroke-width="1.8"/>
+    <text x="297" y="109" text-anchor="middle" fill="#ff6666" font-size="7.5" font-weight="600" letter-spacing="0.5">mcp</text>
+    <text x="297" y="120" text-anchor="middle" fill="#ff6666" font-size="7.5" font-weight="600" letter-spacing="0.5">security</text>
+    <circle cx="297" cy="115" r="36" fill="none" stroke="#ff4444" stroke-width="0.6" opacity="0.4"/>
+  </g>
+
+  <!-- 3. sast — left-upper (~330°) -->
+  <g filter="url(#glow)">
+    <circle cx="191" cy="195" r="36" fill="#150c00" stroke="#ff8c00" stroke-width="1.8"/>
+    <text x="191" y="193" text-anchor="middle" fill="#ffb347" font-size="7.5" font-weight="600" letter-spacing="0.5">sast</text>
+    <text x="191" y="204" text-anchor="middle" fill="#ff9900" font-size="6.5" letter-spacing="0.3">8 languages</text>
+    <circle cx="191" cy="195" r="36" fill="none" stroke="#ff8c00" stroke-width="0.6" opacity="0.4"/>
+  </g>
+
+  <!-- 4. ast_analysis — left (~0°) -->
+  <g filter="url(#glow)">
+    <circle cx="163" cy="300" r="36" fill="#150c00" stroke="#ff8c00" stroke-width="1.8"/>
+    <text x="163" y="294" text-anchor="middle" fill="#ffb347" font-size="7.5" font-weight="600" letter-spacing="0.5">ast</text>
+    <text x="163" y="305" text-anchor="middle" fill="#ffb347" font-size="7.5" font-weight="600" letter-spacing="0.5">analysis</text>
+    <circle cx="163" cy="300" r="36" fill="none" stroke="#ff8c00" stroke-width="0.6" opacity="0.4"/>
+  </g>
+
+  <!-- 5. dataflow — lower-left (~30°) -->
+  <g filter="url(#glow)">
+    <circle cx="191" cy="390" r="36" fill="#0e0316" stroke="#9c27b0" stroke-width="1.8"/>
+    <text x="191" y="388" text-anchor="middle" fill="#ce93d8" font-size="7.5" font-weight="600" letter-spacing="0.5">data</text>
+    <text x="191" y="399" text-anchor="middle" fill="#ce93d8" font-size="7.5" font-weight="600" letter-spacing="0.5">flow</text>
+    <circle cx="191" cy="390" r="36" fill="none" stroke="#9c27b0" stroke-width="0.6" opacity="0.4"/>
+  </g>
+
+  <!-- 6. secrets — lower-left (~60°) -->
+  <g filter="url(#glow)">
+    <circle cx="297" cy="445" r="36" fill="#0e0316" stroke="#9c27b0" stroke-width="1.8"/>
+    <text x="297" y="448" text-anchor="middle" fill="#ce93d8" font-size="7.5" font-weight="600" letter-spacing="0.5">secrets</text>
+    <circle cx="297" cy="445" r="36" fill="none" stroke="#9c27b0" stroke-width="0.6" opacity="0.4"/>
+  </g>
+
+  <!-- 7. entropy — bottom (90°) -->
+  <g filter="url(#glow)">
+    <circle cx="450" cy="460" r="36" fill="#150c00" stroke="#ff8c00" stroke-width="1.8"/>
+    <text x="450" y="458" text-anchor="middle" fill="#ffb347" font-size="7.5" font-weight="600" letter-spacing="0.5">entropy</text>
+    <circle cx="450" cy="460" r="36" fill="none" stroke="#ff8c00" stroke-width="0.6" opacity="0.4"/>
+  </g>
+
+  <!-- 8. lifecycle — lower-right (~120°) -->
+  <g filter="url(#glow)">
+    <circle cx="603" cy="445" r="36" fill="#061507" stroke="#00c853" stroke-width="1.8"/>
+    <text x="603" y="448" text-anchor="middle" fill="#69f0ae" font-size="7.5" font-weight="600" letter-spacing="0.5">lifecycle</text>
+    <circle cx="603" cy="445" r="36" fill="none" stroke="#00c853" stroke-width="0.6" opacity="0.4"/>
+  </g>
+
+  <!-- 9. dependencies — right-lower (~150°) -->
+  <g filter="url(#glow)">
+    <circle cx="709" cy="390" r="36" fill="#061507" stroke="#00c853" stroke-width="1.8"/>
+    <text x="709" y="384" text-anchor="middle" fill="#69f0ae" font-size="7" font-weight="600" letter-spacing="0.3">depen-</text>
+    <text x="709" y="395" text-anchor="middle" fill="#69f0ae" font-size="7" font-weight="600" letter-spacing="0.3">dencies</text>
+    <circle cx="709" cy="390" r="36" fill="none" stroke="#00c853" stroke-width="0.6" opacity="0.4"/>
+  </g>
+
+  <!-- 10. infra — right (~180°) -->
+  <g filter="url(#glow)">
+    <circle cx="737" cy="300" r="36" fill="#050d1a" stroke="#2196f3" stroke-width="1.8"/>
+    <text x="737" y="303" text-anchor="middle" fill="#64b5f6" font-size="7.5" font-weight="600" letter-spacing="0.5">infra</text>
+    <circle cx="737" cy="300" r="36" fill="none" stroke="#2196f3" stroke-width="0.6" opacity="0.4"/>
+  </g>
+
+  <!-- 11. binary — upper-right (~210°) -->
+  <g filter="url(#glow)">
+    <circle cx="709" cy="195" r="36" fill="#031213" stroke="#00bcd4" stroke-width="1.8"/>
+    <text x="709" y="198" text-anchor="middle" fill="#80deea" font-size="7.5" font-weight="600" letter-spacing="0.5">binary</text>
+    <circle cx="709" cy="195" r="36" fill="none" stroke="#00bcd4" stroke-width="0.6" opacity="0.4"/>
+  </g>
+
+  <!-- 12. git_forensics — upper-right (~240°) -->
+  <g filter="url(#glow)">
+    <circle cx="603" cy="115" r="36" fill="#031213" stroke="#00bcd4" stroke-width="1.8"/>
+    <text x="603" y="109" text-anchor="middle" fill="#80deea" font-size="7.5" font-weight="600" letter-spacing="0.5">git</text>
+    <text x="603" y="120" text-anchor="middle" fill="#80deea" font-size="7.5" font-weight="600" letter-spacing="0.5">forensics</text>
+    <circle cx="603" cy="115" r="36" fill="none" stroke="#00bcd4" stroke-width="0.6" opacity="0.4"/>
+  </g>
+
+  <!-- LEGEND -->
+  <rect x="30" y="460" width="820" height="48" rx="6" fill="#0a1520" stroke="#1e3a5f" stroke-width="1" opacity="0.8"/>
+  <!-- Red -->
+  <circle cx="65" cy="484" r="5" fill="#ff4444" filter="url(#glow)"/>
+  <text x="76" y="488" fill="#ff8888" font-size="8.5" font-weight="600">AI Skill Threats</text>
+  <!-- Orange -->
+  <circle cx="192" cy="484" r="5" fill="#ff8c00" filter="url(#glow)"/>
+  <text x="203" y="488" fill="#ffb347" font-size="8.5" font-weight="600">Code Analysis</text>
+  <!-- Purple -->
+  <circle cx="306" cy="484" r="5" fill="#9c27b0" filter="url(#glow)"/>
+  <text x="317" y="488" fill="#ce93d8" font-size="8.5" font-weight="600">Data &amp; Secrets</text>
+  <!-- Green -->
+  <circle cx="420" cy="484" r="5" fill="#00c853" filter="url(#glow)"/>
+  <text x="431" y="488" fill="#69f0ae" font-size="8.5" font-weight="600">Supply Chain</text>
+  <!-- Blue -->
+  <circle cx="520" cy="484" r="5" fill="#2196f3" filter="url(#glow)"/>
+  <text x="531" y="488" fill="#64b5f6" font-size="8.5" font-weight="600">Infrastructure</text>
+  <!-- Teal -->
+  <circle cx="624" cy="484" r="5" fill="#00bcd4" filter="url(#glow)"/>
+  <text x="635" y="488" fill="#80deea" font-size="8.5" font-weight="600">Repository Integrity</text>
+
+  <!-- Title -->
+  <text x="450" y="35" text-anchor="middle" fill="#e3f2fd" font-size="13" font-weight="700" letter-spacing="2" filter="url(#textglow)">repo-forensics — 12-scanner attack surface map</text>
+  <text x="450" y="52" text-anchor="middle" fill="#546e7a" font-size="9" letter-spacing="1">every node is a scanner | every line is a path to detection</text>
+</svg>

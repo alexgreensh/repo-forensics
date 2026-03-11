@@ -8,6 +8,8 @@ user-invocable: true
 argument-hint: <repo_path> [--skill-scan] [--format text|json|summary]
 ---
 
+<!-- repo-forensics v3 | built by Alex Greenshpun | https://linkedin.com/in/alexgreensh | Co-Intelligent.ai -->
+
 # Repo Forensics v3
 
 Deep security auditing for repositories, AI agent skills, and MCP servers.
