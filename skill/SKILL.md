@@ -26,7 +26,7 @@ Deep security auditing for repositories, AI agent skills, and MCP servers.
 - **MCP rug pull detection**: Tool descriptions sourced from database, network, env vars, or conditional logic
 - **Enhanced AST analysis**: 12 patterns including marshal.loads, types.CodeType, sys.addaudithook, bytes decode obfuscation, self-modification
 - **Test suite**: 173 pytest tests covering all scanners
-- **16 scanners** with 12 correlation rules
+- **16 scanners** with 13 correlation rules
 
 ## When to Use
 
@@ -200,7 +200,7 @@ Supports Python (requirements.txt, pyproject.toml, setup.py) and Node.js (packag
 
 ## Correlation Engine
 
-The correlation engine (`forensics_core.py`) identifies compound threats across 12 rules:
+The correlation engine (`forensics_core.py`) identifies compound threats across 13 rules:
 
 1. Environment/credential access + network call = **Potential Data Exfiltration** (critical)
 2. Base64 encoding + exec/eval = **Obfuscated Code Execution** (critical)
@@ -214,6 +214,7 @@ The correlation engine (`forensics_core.py`) identifies compound threats across 
 10. Time/counter trigger + exec/eval = **Time-Triggered Malware** (critical)
 11. Dynamic tool description + MCP server = **MCP Rug Pull Enabler** (high)
 12. Phantom dependency + network call = **Shadow Dependency with Network Access** (critical)
+13. Pipe exfiltration + network sink = **Shell Script Data Exfiltration Chain** (critical)
 
 ## Configuration
 

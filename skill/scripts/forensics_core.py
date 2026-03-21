@@ -229,6 +229,7 @@ def correlate(findings):
     dynamic_desc_keywords = {"dynamic-description", "rug-pull", "rug pull enabler", "dynamic tool description"}
     mcp_server_keywords = {"mcp", "tool-poisoning", "mcp_security", "mcp-config", "rug-pull-enabler"}
     phantom_dep_keywords = {"phantom-dependency", "phantom dep", "shadow dependency"}
+    pipe_exfil_keywords = {"pipe exfiltration", "reverse shell", "/dev/tcp", "pipe-exfiltration"}
 
     def has_category(file_findings, keywords):
         for f in file_findings:
@@ -403,6 +404,19 @@ def correlate(findings):
                 line=0,
                 snippet="[compound: phantom dependency + network call]",
                 category="shadow-dependency"
+            ))
+
+        # Rule 13: Pipe exfiltration in shell scripts
+        if has_category(file_findings, pipe_exfil_keywords) and has_category(file_findings, network_keywords):
+            correlated.append(Finding(
+                scanner="correlation",
+                severity="critical",
+                title="Shell Script Data Exfiltration Chain",
+                description="Shell script contains pipe exfiltration pattern combined with network tool. Data flows from sensitive source through pipe to external endpoint.",
+                file=filepath,
+                line=0,
+                snippet="[compound: pipe exfiltration + network sink]",
+                category="pipe-exfiltration"
             ))
 
     return correlated

@@ -77,7 +77,7 @@ $ ./run_forensics.sh ./suspicious-skill
   <img src="diagrams/pipeline.svg" alt="Scanning pipeline: input → 16 scanners → correlation → verdict" width="900"/>
 </p>
 
-Point it at any repository. 16 scanners run in parallel, each checking a different attack surface. The correlation engine then cross-references findings across 12 rules to detect compound threats that no single scanner would catch (like dynamic import + network fetch = deferred payload loading).
+Point it at any repository. 16 scanners run in parallel, each checking a different attack surface. The correlation engine then cross-references findings across 13 rules to detect compound threats that no single scanner would catch (like dynamic import + network fetch = deferred payload loading).
 
 The result is a severity-ranked verdict with exit codes designed for CI/CD gating.
 
@@ -198,7 +198,7 @@ Then just ask:
 
 ## Correlation Engine
 
-Individual findings are useful. Compound findings are devastating. The correlation engine connects dots across scanners with 12 rules:
+Individual findings are useful. Compound findings are devastating. The correlation engine connects dots across scanners with 13 rules:
 
 | Pattern | Finding | Severity |
 |---------|---------|----------|
@@ -214,6 +214,7 @@ Individual findings are useful. Compound findings are devastating. The correlati
 | time/counter trigger + exec/eval | **Time-Triggered Malware** | critical |
 | dynamic tool description + MCP server | **MCP Rug Pull Enabler** | high |
 | phantom dependency + network call | **Shadow Dependency with Network** | critical |
+| pipe exfiltration + network sink | **Shell Script Data Exfiltration Chain** | critical |
 
 ---
 

@@ -20,6 +20,8 @@ import os
 import sys
 import json
 import hashlib
+import hmac
+import secrets
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -37,15 +39,24 @@ CRITICAL_FILES = [
     '.claude/commands',  # directory - check contents
 ]
 
-# Hook script patterns (files that execute code on Claude Code events)
-HOOK_PATTERNS = [
-    '.claude/settings.json',  # contains hooks section
-]
-
 # Suspicious permission bits
 EXECUTABLE_CONFIG_EXTENSIONS = {'.json', '.md', '.toml', '.yml', '.yaml', '.txt'}
 
 BASELINE_FILENAME = '.forensics-baseline.json'
+SIGNING_KEY_FILENAME = '.forensics-key'
+
+
+def _get_or_create_signing_key(repo_path):
+    """Get or create a 32-byte HMAC signing key for baseline integrity verification."""
+    key_path = os.path.join(repo_path, SIGNING_KEY_FILENAME)
+    if os.path.exists(key_path):
+        with open(key_path, 'rb') as f:
+            return f.read()
+    key = secrets.token_bytes(32)
+    with open(key_path, 'wb') as f:
+        f.write(key)
+    os.chmod(key_path, 0o600)
+    return key
 
 
 def sha256_file(filepath):
@@ -170,25 +181,76 @@ def check_executable_configs(repo_path, critical_files):
 
 
 def load_baseline(repo_path):
-    """Load existing baseline from .forensics-baseline.json."""
+    """Load existing baseline from .forensics-baseline.json with HMAC verification.
+
+    Returns (baseline_data, integrity_findings) tuple.
+    integrity_findings contains any HMAC-related warnings/errors.
+    """
     baseline_path = os.path.join(repo_path, BASELINE_FILENAME)
-    if os.path.exists(baseline_path):
-        try:
-            with open(baseline_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except (json.JSONDecodeError, OSError):
-            return None
-    return None
+    integrity_findings = []
+
+    if not os.path.exists(baseline_path):
+        return None, integrity_findings
+
+    try:
+        with open(baseline_path, 'r', encoding='utf-8') as f:
+            baseline = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return None, integrity_findings
+
+    stored_hmac = baseline.pop('_hmac', None)
+
+    if stored_hmac is not None:
+        # Baseline has an HMAC, verify it
+        key_path = os.path.join(repo_path, SIGNING_KEY_FILENAME)
+        if not os.path.exists(key_path):
+            integrity_findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="high",
+                title="Signing key missing for HMAC-signed baseline",
+                description="Baseline has HMAC signature but signing key is missing - cannot verify integrity",
+                file=BASELINE_FILENAME, line=0,
+                snippet="",
+                category="integrity-hmac"
+            ))
+        else:
+            key = _get_or_create_signing_key(repo_path)
+            content = json.dumps(baseline, sort_keys=True)
+            expected = hmac.new(key, content.encode('utf-8'), hashlib.sha256).hexdigest()
+            if not hmac.compare_digest(stored_hmac, expected):
+                integrity_findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="critical",
+                    title="Baseline integrity compromised",
+                    description="HMAC verification failed - baseline may have been tampered with",
+                    file=BASELINE_FILENAME, line=0,
+                    snippet=f"stored: {stored_hmac[:16]}... expected: {expected[:16]}...",
+                    category="integrity-hmac"
+                ))
+    elif baseline:
+        # Baseline exists but has no HMAC (legacy or tampered)
+        integrity_findings.append(core.Finding(
+            scanner=SCANNER_NAME, severity="high",
+            title="Unsigned baseline detected",
+            description="Baseline exists without HMAC signature - may be legacy or tampered",
+            file=BASELINE_FILENAME, line=0,
+            snippet="",
+            category="integrity-hmac"
+        ))
+
+    return baseline, integrity_findings
 
 
 def save_baseline(repo_path, baseline_data):
-    """Save baseline to .forensics-baseline.json."""
+    """Save baseline to .forensics-baseline.json with HMAC-SHA256 signature."""
     baseline_path = os.path.join(repo_path, BASELINE_FILENAME)
     baseline_data['_meta'] = {
         'created': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
         'tool': 'repo-forensics/scan_integrity',
         'version': 'v1',
     }
+    # Compute HMAC-SHA256 over the canonical JSON content
+    key = _get_or_create_signing_key(repo_path)
+    content = json.dumps(baseline_data, sort_keys=True)
+    baseline_data['_hmac'] = hmac.new(key, content.encode('utf-8'), hashlib.sha256).hexdigest()
     with open(baseline_path, 'w', encoding='utf-8') as f:
         json.dump(baseline_data, f, indent=2)
 
@@ -196,7 +258,8 @@ def save_baseline(repo_path, baseline_data):
 def watch_mode(repo_path, critical_files):
     """--watch mode: store baselines on first run, detect drift on subsequent runs."""
     findings = []
-    existing = load_baseline(repo_path)
+    existing, integrity_findings = load_baseline(repo_path)
+    findings.extend(integrity_findings)
 
     current_hashes = {}
     for rel_path, full_path in critical_files.items():

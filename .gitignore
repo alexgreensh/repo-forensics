@@ -12,3 +12,7 @@ Thumbs.db
 # Python artifacts (top-level only)
 __pycache__/
 *.py[cod]
+
+# Forensics runtime files (security-sensitive)
+.forensics-key
+.forensics-baseline.json

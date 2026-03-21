@@ -2,6 +2,7 @@
 
 import os
 import json
+import stat
 import pytest
 import scan_integrity as scanner
 
@@ -105,3 +106,94 @@ class TestSHA256:
 
     def test_nonexistent_file(self):
         assert scanner.sha256_file("/nonexistent/path") is None
+
+
+class TestHMACSigning:
+    """Tests for HMAC-SHA256 baseline signing and verification."""
+
+    def test_baseline_includes_hmac(self, repo_with_hooks):
+        """Saving a baseline should produce a JSON file with an _hmac field."""
+        files = scanner.find_critical_files(str(repo_with_hooks))
+        scanner.watch_mode(str(repo_with_hooks), files)
+        baseline_path = repo_with_hooks / scanner.BASELINE_FILENAME
+        with open(str(baseline_path), 'r') as f:
+            data = json.load(f)
+        assert '_hmac' in data
+        assert len(data['_hmac']) == 64  # SHA256 hex length
+
+    def test_signing_key_created(self, repo_with_hooks):
+        """Saving a baseline should create the signing key file with 0600 permissions."""
+        files = scanner.find_critical_files(str(repo_with_hooks))
+        scanner.watch_mode(str(repo_with_hooks), files)
+        key_path = repo_with_hooks / scanner.SIGNING_KEY_FILENAME
+        assert key_path.exists()
+        mode = key_path.stat().st_mode
+        assert stat.S_IMODE(mode) == 0o600
+
+    def test_valid_hmac_no_findings(self, repo_with_hooks):
+        """Loading an untampered baseline should produce no HMAC findings."""
+        files = scanner.find_critical_files(str(repo_with_hooks))
+        scanner.watch_mode(str(repo_with_hooks), files)
+        # Load again - should verify cleanly
+        _, integrity_findings = scanner.load_baseline(str(repo_with_hooks))
+        hmac_findings = [f for f in integrity_findings if f.category == "integrity-hmac"]
+        assert len(hmac_findings) == 0
+
+    def test_tampered_baseline_critical_finding(self, repo_with_hooks):
+        """Modifying the baseline file should trigger a CRITICAL finding."""
+        files = scanner.find_critical_files(str(repo_with_hooks))
+        scanner.watch_mode(str(repo_with_hooks), files)
+        # Tamper with the baseline
+        baseline_path = repo_with_hooks / scanner.BASELINE_FILENAME
+        with open(str(baseline_path), 'r') as f:
+            data = json.load(f)
+        data['files']['injected_file'] = 'deadbeef' * 8
+        with open(str(baseline_path), 'w') as f:
+            json.dump(data, f)
+        # Load should detect tampering
+        _, integrity_findings = scanner.load_baseline(str(repo_with_hooks))
+        critical = [f for f in integrity_findings if f.severity == "critical"]
+        assert len(critical) == 1
+        assert "Baseline integrity compromised" in critical[0].title
+
+    def test_missing_key_high_finding(self, repo_with_hooks):
+        """Deleting the signing key when baseline has HMAC should trigger a HIGH finding."""
+        files = scanner.find_critical_files(str(repo_with_hooks))
+        scanner.watch_mode(str(repo_with_hooks), files)
+        # Delete the signing key
+        key_path = repo_with_hooks / scanner.SIGNING_KEY_FILENAME
+        key_path.unlink()
+        # Load should detect missing key
+        _, integrity_findings = scanner.load_baseline(str(repo_with_hooks))
+        high = [f for f in integrity_findings if f.severity == "high"]
+        assert len(high) == 1
+        assert "Signing key missing" in high[0].title
+
+    def test_unsigned_baseline_high_finding(self, repo_with_hooks):
+        """A baseline without _hmac (legacy) should trigger a HIGH finding."""
+        # Write a baseline manually without HMAC
+        baseline_path = repo_with_hooks / scanner.BASELINE_FILENAME
+        legacy_baseline = {
+            'files': {'CLAUDE.md': 'abc123'},
+            '_meta': {'created': '2025-01-01T00:00:00Z', 'tool': 'legacy', 'version': 'v0'}
+        }
+        with open(str(baseline_path), 'w') as f:
+            json.dump(legacy_baseline, f)
+        # Load should flag as unsigned
+        _, integrity_findings = scanner.load_baseline(str(repo_with_hooks))
+        high = [f for f in integrity_findings if f.severity == "high"]
+        assert len(high) == 1
+        assert "Unsigned baseline detected" in high[0].title
+
+    def test_signing_key_reused_across_saves(self, repo_with_hooks):
+        """The same signing key should be reused for subsequent baseline saves."""
+        files = scanner.find_critical_files(str(repo_with_hooks))
+        scanner.watch_mode(str(repo_with_hooks), files)
+        key_path = repo_with_hooks / scanner.SIGNING_KEY_FILENAME
+        with open(str(key_path), 'rb') as f:
+            key1 = f.read()
+        # Save again (simulates re-run)
+        scanner.watch_mode(str(repo_with_hooks), files)
+        with open(str(key_path), 'rb') as f:
+            key2 = f.read()
+        assert key1 == key2

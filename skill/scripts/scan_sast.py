@@ -78,6 +78,10 @@ SAST_PATTERNS = {
     ".sh": [
         {"name": "Eval in Shell", "severity": "high", "regex": re.compile(r'\beval\s+'), "category": "code-execution"},
         {"name": "Curl Pipe Bash", "severity": "critical", "regex": re.compile(r'curl\s+.*\|\s*(ba)?sh'), "category": "shell-injection"},
+        {"name": "Pipe Exfiltration: env to network", "severity": "critical", "regex": re.compile(r'(env|printenv|cat\s+\.env|cat\s+~/\.ssh|cat\s+~/\.aws)\s*\|.*\b(curl|wget|nc|ncat|socat)\b', re.IGNORECASE), "category": "exfiltration"},
+        {"name": "Pipe Exfiltration: sensitive file to network", "severity": "critical", "regex": re.compile(r'cat\s+[^\|]*(?:\.env|credential|password|secret|\.ssh|\.aws|\.gnupg|id_rsa|shadow)[^\|]*\|.*\b(curl|wget|nc|ncat)\b', re.IGNORECASE), "category": "exfiltration"},
+        {"name": "Redirect to /dev/tcp", "severity": "critical", "regex": re.compile(r'>\s*/dev/tcp/', re.IGNORECASE), "category": "exfiltration"},
+        {"name": "Reverse shell pattern", "severity": "critical", "regex": re.compile(r'bash\s+-i\s+>&\s*/dev/tcp/|nc\s+(-e|--exec)\s+/bin/(ba)?sh', re.IGNORECASE), "category": "exfiltration"},
     ],
 }
 
