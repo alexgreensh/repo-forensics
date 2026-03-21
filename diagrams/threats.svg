@@ -1,0 +1,165 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 468" fill="none">
+  <defs>
+    <linearGradient id="tbg" x1="0" y1="0" x2="900" y2="468" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0a0e14"/>
+      <stop offset="100%" stop-color="#111921"/>
+    </linearGradient>
+    <filter id="tg">
+      <feGaussianBlur stdDeviation="3" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect width="900" height="468" rx="12" fill="url(#tbg)"/>
+
+  <!-- Title -->
+  <text x="450" y="34" font-family="'SF Mono',Consolas,monospace" font-size="14" fill="#00f0ff"
+        text-anchor="middle" letter-spacing="6" font-weight="600" opacity="0.8">
+    WHAT IT CATCHES
+  </text>
+  <line x1="330" y1="44" x2="570" y2="44" stroke="#00f0ff" stroke-width="1" opacity="0.3"/>
+
+  <!-- Row 1: AI/MCP threats (red) - 4 equal-width cards -->
+  <g transform="translate(24, 58)">
+    <!-- Card 1: Prompt Injection (w=202) -->
+    <g opacity="1">
+      <rect width="202" height="92" rx="8" fill="#151b23" stroke="#f8514940" stroke-width="1"/>
+      <rect width="202" height="3" rx="1" fill="#f85149" opacity="0.6"/>
+      <text x="14" y="30" font-family="'SF Mono',Consolas,monospace" font-size="11" fill="#f85149" font-weight="700">Prompt Injection</text>
+      <text x="14" y="48" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">Hidden directives, persona</text>
+      <text x="14" y="62" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">hijack, DAN patterns, stealth</text>
+      <text x="14" y="76" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">instructions in metadata</text>
+    </g>
+
+    <!-- Card 2: Tool Poisoning -->
+    <g transform="translate(216, 0)" opacity="1">
+      <rect width="202" height="92" rx="8" fill="#151b23" stroke="#f8514940" stroke-width="1"/>
+      <rect width="202" height="3" rx="1" fill="#f85149" opacity="0.6"/>
+      <text x="14" y="30" font-family="'SF Mono',Consolas,monospace" font-size="11" fill="#f85149" font-weight="700">Tool Poisoning</text>
+      <text x="14" y="48" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">MCP description injection,</text>
+      <text x="14" y="62" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">tool shadowing, full-schema</text>
+      <text x="14" y="76" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">poisoning, &lt;IMPORTANT&gt; tag</text>
+    </g>
+
+    <!-- Card 3: Unicode Smuggling -->
+    <g transform="translate(432, 0)" opacity="1">
+      <rect width="202" height="92" rx="8" fill="#151b23" stroke="#f8514940" stroke-width="1"/>
+      <rect width="202" height="3" rx="1" fill="#f85149" opacity="0.6"/>
+      <text x="14" y="30" font-family="'SF Mono',Consolas,monospace" font-size="11" fill="#f85149" font-weight="700">Unicode Smuggling</text>
+      <text x="14" y="48" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">Zero-width chars, RTL</text>
+      <text x="14" y="62" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">override, Cyrillic + Greek</text>
+      <text x="14" y="76" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">homoglyphs in code/docs</text>
+    </g>
+
+    <!-- Card 4: Hook Exploitation (SAME width as others) -->
+    <g transform="translate(648, 0)" opacity="1">
+      <rect width="204" height="92" rx="8" fill="#151b23" stroke="#f8514940" stroke-width="1"/>
+      <rect width="204" height="3" rx="1" fill="#f85149" opacity="0.6"/>
+      <text x="14" y="30" font-family="'SF Mono',Consolas,monospace" font-size="11" fill="#f85149" font-weight="700">Hook Exploitation</text>
+      <text x="14" y="48" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">DAST: 8 malicious payloads</text>
+      <text x="14" y="62" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">against hooks (sandboxed)</text>
+      <text x="14" y="76" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">CVE-2025-59536 detection</text>
+    </g>
+  </g>
+
+  <!-- Row 2: Supply chain / code (orange) -->
+  <g transform="translate(24, 164)">
+    <g opacity="1">
+      <rect width="202" height="92" rx="8" fill="#151b23" stroke="#d2992230" stroke-width="1"/>
+      <rect width="202" height="3" rx="1" fill="#d29922" opacity="0.5"/>
+      <text x="14" y="30" font-family="'SF Mono',Consolas,monospace" font-size="11" fill="#d29922" font-weight="700">Supply Chain</text>
+      <text x="14" y="48" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">Typosquatting (500+ pkgs),</text>
+      <text x="14" y="62" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">SANDWORM IOCs, version</text>
+      <text x="14" y="76" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">confusion, bad registries</text>
+    </g>
+
+    <g transform="translate(216, 0)" opacity="1">
+      <rect width="202" height="92" rx="8" fill="#151b23" stroke="#d2992230" stroke-width="1"/>
+      <rect width="202" height="3" rx="1" fill="#d29922" opacity="0.5"/>
+      <text x="14" y="30" font-family="'SF Mono',Consolas,monospace" font-size="11" fill="#d29922" font-weight="700">Credential Theft</text>
+      <text x="14" y="48" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">Secrets, env exfiltration,</text>
+      <text x="14" y="62" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">source-to-sink taint tracking,</text>
+      <text x="14" y="76" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">cross-file import chains</text>
+    </g>
+
+    <g transform="translate(432, 0)" opacity="1">
+      <rect width="202" height="92" rx="8" fill="#151b23" stroke="#d2992230" stroke-width="1"/>
+      <rect width="202" height="3" rx="1" fill="#d29922" opacity="0.5"/>
+      <text x="14" y="30" font-family="'SF Mono',Consolas,monospace" font-size="11" fill="#d29922" font-weight="700">Obfuscation</text>
+      <text x="14" y="48" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">AST-level exec chains,</text>
+      <text x="14" y="62" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">base64+eval combos, pickle</text>
+      <text x="14" y="76" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">backdoors, entropy anomalies</text>
+    </g>
+
+    <g transform="translate(648, 0)" opacity="1">
+      <rect width="204" height="92" rx="8" fill="#151b23" stroke="#d2992230" stroke-width="1"/>
+      <rect width="204" height="3" rx="1" fill="#d29922" opacity="0.5"/>
+      <text x="14" y="30" font-family="'SF Mono',Consolas,monospace" font-size="11" fill="#d29922" font-weight="700">Infra Misconfig</text>
+      <text x="14" y="48" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">Docker, K8s, GitHub Actions</text>
+      <text x="14" y="62" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">expression injection, privileged</text>
+      <text x="14" y="76" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">containers, unpinned actions</text>
+    </g>
+  </g>
+
+  <!-- Row 3: Runtime/integrity (teal) -->
+  <g transform="translate(24, 270)">
+    <!-- Card 1: Runtime Behavior -->
+    <g opacity="1">
+      <rect width="202" height="92" rx="8" fill="#151b23" stroke="#00bcd440" stroke-width="1"/>
+      <rect width="202" height="3" rx="1" fill="#00bcd4" opacity="0.5"/>
+      <text x="14" y="30" font-family="'SF Mono',Consolas,monospace" font-size="11" fill="#00bcd4" font-weight="700">Runtime Behavior</text>
+      <text x="14" y="48" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">Time bombs, deferred payloads,</text>
+      <text x="14" y="62" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">self-modification, MCP rug</text>
+      <text x="14" y="76" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">pulls, dynamic tool descs</text>
+    </g>
+
+    <!-- Card 2: Manifest Drift -->
+    <g transform="translate(216, 0)" opacity="1">
+      <rect width="202" height="92" rx="8" fill="#151b23" stroke="#00bcd440" stroke-width="1"/>
+      <rect width="202" height="3" rx="1" fill="#00bcd4" opacity="0.5"/>
+      <text x="14" y="30" font-family="'SF Mono',Consolas,monospace" font-size="11" fill="#00bcd4" font-weight="700">Manifest Drift</text>
+      <text x="14" y="48" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">Phantom dependencies, runtime</text>
+      <text x="14" y="62" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">installs, conditional import</text>
+      <text x="14" y="76" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">fallbacks, declared-unused</text>
+    </g>
+
+    <!-- Card 3: File Integrity -->
+    <g transform="translate(432, 0)" opacity="1">
+      <rect width="202" height="92" rx="8" fill="#151b23" stroke="#00bcd440" stroke-width="1"/>
+      <rect width="202" height="3" rx="1" fill="#00bcd4" opacity="0.5"/>
+      <text x="14" y="30" font-family="'SF Mono',Consolas,monospace" font-size="11" fill="#00bcd4" font-weight="700">File Integrity</text>
+      <text x="14" y="48" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">Config tampering, SHA256</text>
+      <text x="14" y="62" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">baselines, hook modification,</text>
+      <text x="14" y="76" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">unauthorized drift detection</text>
+    </g>
+
+    <!-- Card 4: Git Manipulation -->
+    <g transform="translate(648, 0)" opacity="1">
+      <rect width="204" height="92" rx="8" fill="#151b23" stroke="#00bcd440" stroke-width="1"/>
+      <rect width="204" height="3" rx="1" fill="#00bcd4" opacity="0.5"/>
+      <text x="14" y="30" font-family="'SF Mono',Consolas,monospace" font-size="11" fill="#00bcd4" font-weight="700">Git Manipulation</text>
+      <text x="14" y="48" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">Timestamp spoofing, identity</text>
+      <text x="14" y="62" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">forgery, bad GPG signatures,</text>
+      <text x="14" y="76" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">multi-persona detection</text>
+    </g>
+  </g>
+
+  <!-- Correlation engine bar - full border (perimeter ~1840) -->
+  <g transform="translate(24, 376)" opacity="1">
+    <rect width="852" height="76" rx="10" fill="#151b23" stroke="#a78bfa" stroke-width="1.5"/>
+    <text x="426" y="28" font-family="'SF Mono',Consolas,monospace" font-size="14" fill="#a78bfa"
+          text-anchor="middle" font-weight="700" filter="url(#tg)">CORRELATION ENGINE</text>
+    <text x="426" y="48" font-family="-apple-system,sans-serif" font-size="11" fill="#c9d1d9" text-anchor="middle">
+      Connects findings across scanners to expose compound attack chains
+    </text>
+    <text x="426" y="66" font-family="'SF Mono',Consolas,monospace" font-size="10" fill="#8b949e" text-anchor="middle">
+      env_read + network = exfil  |  prompt_injection + exec = RCE  |  hook + curl = install-time theft
+    </text>
+    <!-- Pulse border -->
+    <rect width="852" height="76" rx="10" fill="none" stroke="#a78bfa" stroke-width="2" opacity="0.15">
+      <animate attributeName="opacity" values="0.15;0.3;0.15" dur="3s" repeatCount="indefinite"/>
+    </rect>
+  </g>
+
+  <rect width="900" height="468" rx="12" fill="none" stroke="#1c2940" stroke-width="1"/>
+</svg>

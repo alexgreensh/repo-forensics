@@ -1,0 +1,32 @@
+{
+  "version": "v1",
+  "generator": "repo-forensics/verify_install",
+  "file_count": 25,
+  "files": {
+    ".gitignore": "8b2598a3359a556874b8069d42dea2686f07d46c3ca1b540c4025788b258180a",
+    "SKILL.md": "edeb0e5dcfdc5cce4c08f7a2c6b1d43988b4538460179ba94f534cc3bad7705d",
+    "references/mcp-attack-patterns.md": "b433fc7e819fdb6d1d8f0d1d266facdf30233a620d5789217a8a6ed27e293ca9",
+    "references/research_sources.md": "cbf07116ed04d87436fc1c9daf43ffb3ec2f513713f5fc882d089b53bcd7c629",
+    "references/threat_patterns.md": "d30291526b46637351a173bbc627569fe160c8053d833eea60821504d70fa035",
+    "scripts/forensics_core.py": "2093b1052ef86b29043b5bf72199bbe41f60553bc12149de8fc6fb0a1a773e2f",
+    "scripts/ioc_manager.py": "46a9bdf05515e750f2951f97b843ff7063370b2c5ddd7d79ac60b654e9bcb504",
+    "scripts/run_forensics.sh": "e15e8335f71b0411ac53ade1b813df3b838dc124ecf74dd0588d8db8d3b8f207",
+    "scripts/scan_ast.py": "919cee706bac36aeb812a7063d6454eb0ea1740881a75f488c9d3ead5dcb7110",
+    "scripts/scan_binary.py": "31d51935478250dd3f52f96c4dad75515d5f780e06ebe455867b1adcb75cb950",
+    "scripts/scan_dast.py": "c38ddcc1af588b832cac5203505bd538a863307ac9aa8be8bac98a45190bf5ab",
+    "scripts/scan_dataflow.py": "26ad60beca6cfa1b5c8f8a6d27e057866bede5337499b3bac78453b72a495db2",
+    "scripts/scan_dependencies.py": "69919fa1197096c7fdc7c5531dba7bf5240f6d59c3d3173cee1ec780491b3fb1",
+    "scripts/scan_entropy.py": "ab0dd3e3036c88e704ed6bbe9b3d128a7b2e535864ecc992d816a636cfa278f6",
+    "scripts/scan_git_forensics.py": "c5310ffee9a27b8c4d27b3ecc0c02751af6a68351ad2d5b9700f94367a419b01",
+    "scripts/scan_infra.py": "1caa377c976fa1cdd564c01cc090f231d63389fc69d015727275f24801723696",
+    "scripts/scan_integrity.py": "688c03232a1c5a0bf5460ff2f62e7942fa81b97cf32908b62cc2c8dac525e19e",
+    "scripts/scan_lifecycle.py": "3f7437a5705c32b876560c4e80bfa624f0d8088844eb1913ee7ac04b94f05b37",
+    "scripts/scan_manifest_drift.py": "5774ca52b1766bce1463daf95730702baf62e939152cbf272469f3379d058425",
+    "scripts/scan_mcp_security.py": "4cf9e43eeb9abc3e8476b73424c93e61bc7ec00f7ebbd68e83037a976da54466",
+    "scripts/scan_runtime_dynamism.py": "1cdda472feb6426cfdbf705f2ca2605481ebf9ce1146f0039dcb6232d79f6f75",
+    "scripts/scan_sast.py": "de61b07a8ec85249ee7ad65880fd4ec0aeb363a0c3d7e2a94fea42392bc74b10",
+    "scripts/scan_secrets.py": "407234e3e5717b52ffc92512a48c9ad8e9b48cb3fe4a1807573f3e033f0c3121",
+    "scripts/scan_skill_threats.py": "b2a0cd89d36fb9c8417a1a73bff9262d7cae6ef74c76916f0f28fbf4b0d6e363",
+    "scripts/verify_install.py": "ac6c2dd331a6bf9de499a5028daf2acf305af412f1748453cf995aa4c95cf44b"
+  }
+}

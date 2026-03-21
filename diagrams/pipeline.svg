@@ -1,0 +1,301 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 500" fill="none">
+  <defs>
+    <linearGradient id="pbg" x1="0" y1="0" x2="900" y2="500" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0a0e14"/>
+      <stop offset="100%" stop-color="#111921"/>
+    </linearGradient>
+    <filter id="pg">
+      <feGaussianBlur stdDeviation="2" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pg2">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect width="900" height="500" rx="12" fill="url(#pbg)"/>
+
+  <!-- Title with line drawing animation -->
+  <text x="450" y="36" font-family="'SF Mono',Consolas,monospace" font-size="14" fill="#00f0ff"
+        text-anchor="middle" letter-spacing="6" font-weight="600" opacity="0.8">
+    HOW IT WORKS
+  </text>
+  <!-- Decorative lines under title -->
+  <line x1="340" y1="46" x2="560" y2="46" stroke="#00f0ff" stroke-width="1" opacity="0.3"/>
+
+  <!-- ═══ PHASE 1: INPUT ═══ -->
+  <g transform="translate(24, 68)" opacity="1">
+
+    <rect width="160" height="185" rx="10" fill="#151b23" stroke="#1c2940" stroke-width="1"/>
+    <!-- Header bar -->
+    <rect width="160" height="32" rx="10" fill="#1c2940"/>
+    <rect y="20" width="160" height="12" fill="#1c2940"/>
+    <text x="80" y="22" font-family="'SF Mono',Consolas,monospace" font-size="12" fill="#00f0ff"
+          text-anchor="middle" font-weight="700">INPUT</text>
+
+    <!-- File items slide in one by one -->
+    <g transform="translate(12, 42)">
+      <g opacity="1">
+        <rect width="136" height="28" rx="5" fill="#0d1117" stroke="#1c2940" stroke-width="1"/>
+        <text x="12" y="19" font-family="'SF Mono',Consolas,monospace" font-size="11" fill="#79c0ff">📦 GitHub repo</text>
+      </g>
+      <g opacity="1">
+        <rect y="34" width="136" height="28" rx="5" fill="#0d1117" stroke="#1c2940" stroke-width="1"/>
+        <text x="12" y="53" font-family="'SF Mono',Consolas,monospace" font-size="11" fill="#79c0ff">🔌 MCP server</text>
+      </g>
+      <g opacity="1">
+        <rect y="68" width="136" height="28" rx="5" fill="#0d1117" stroke="#1c2940" stroke-width="1"/>
+        <text x="12" y="87" font-family="'SF Mono',Consolas,monospace" font-size="11" fill="#79c0ff">⚡ Claude skill</text>
+      </g>
+      <g opacity="1">
+        <rect y="102" width="136" height="28" rx="5" fill="#0d1117" stroke="#1c2940" stroke-width="1"/>
+        <text x="12" y="121" font-family="'SF Mono',Consolas,monospace" font-size="11" fill="#79c0ff">📋 npm/PyPI pkg</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- Animated data flow arrow 1 -->
+  <g filter="url(#pg)" opacity="1">
+    <!-- Arrow shaft with flowing particles -->
+    <line x1="188" y1="160" x2="234" y2="160" stroke="#00f0ff" stroke-width="2" opacity="0.4"/>
+    <circle r="3" fill="#00f0ff" opacity="0.9">
+      <animateMotion path="M188,160 L234,160" dur="0.8s" repeatCount="indefinite"/>
+    </circle>
+    <polygon points="232,155 242,160 232,165" fill="#00f0ff" opacity="0.8"/>
+  </g>
+
+  <!-- ═══ PHASE 2: SCANNERS ═══ -->
+  <g transform="translate(244, 56)" opacity="1">
+
+    <!-- Main container -->
+    <rect width="400" height="430" rx="10" fill="#151b23" stroke="#1f6feb" stroke-width="1.5"/>
+    <!-- Header -->
+    <rect width="400" height="36" rx="10" fill="#1c2940"/>
+    <rect y="24" width="400" height="12" fill="#1c2940"/>
+    <text x="200" y="24" font-family="'SF Mono',Consolas,monospace" font-size="12" fill="#58a6ff"
+          text-anchor="middle" font-weight="700">16 PARALLEL SCANNERS</text>
+    <!-- Spinning indicator -->
+    <g transform="translate(352, 18)">
+      <circle r="5" fill="none" stroke="#00f0ff" stroke-width="1.5" stroke-dasharray="20,12" opacity="0.6">
+        <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="2s" repeatCount="indefinite"/>
+      </circle>
+    </g>
+
+    <!-- Scanner grid - each row loads progressively with a scan effect -->
+    <g transform="translate(10, 46)">
+      <!-- Left column (8 scanners) -->
+      <g>
+        <!-- Row 0: skill_threats (red) -->
+        <g opacity="1">
+          <rect y="0" width="184" height="24" rx="5" fill="#0d1117" stroke="#f8514930" stroke-width="1"/>
+          <rect y="0" width="184" height="24" rx="5" fill="#f8514908"/>
+          <circle cx="14" cy="12" r="4" fill="#f85149"><animate attributeName="opacity" values="0.4;1;0.4" dur="1.5s" repeatCount="indefinite"/></circle>
+          <text x="26" y="16" font-family="'SF Mono',Consolas,monospace" font-size="10" fill="#f85149" font-weight="600">skill_threats</text>
+          <text x="174" y="16" font-family="'SF Mono',Consolas,monospace" font-size="9" fill="#8b949e" text-anchor="end">10 cats</text>
+        </g>
+        <!-- Row 1: mcp_security (red) -->
+        <g opacity="1">
+          <rect y="27" width="184" height="24" rx="5" fill="#0d1117" stroke="#f8514930" stroke-width="1"/>
+          <rect y="27" width="184" height="24" rx="5" fill="#f8514908"/>
+          <circle cx="14" cy="39" r="4" fill="#f85149"><animate attributeName="opacity" values="0.4;1;0.4" dur="1.5s" repeatCount="indefinite"/></circle>
+          <text x="26" y="43" font-family="'SF Mono',Consolas,monospace" font-size="10" fill="#f85149" font-weight="600">mcp_security</text>
+          <text x="174" y="43" font-family="'SF Mono',Consolas,monospace" font-size="9" fill="#8b949e" text-anchor="end">6 cats</text>
+        </g>
+        <!-- Row 2: dast (red) -->
+        <g opacity="1">
+          <rect y="54" width="184" height="24" rx="5" fill="#0d1117" stroke="#f8514930" stroke-width="1"/>
+          <rect y="54" width="184" height="24" rx="5" fill="#f8514908"/>
+          <circle cx="14" cy="66" r="4" fill="#f85149"><animate attributeName="opacity" values="0.4;1;0.4" dur="1.5s" repeatCount="indefinite"/></circle>
+          <text x="26" y="70" font-family="'SF Mono',Consolas,monospace" font-size="10" fill="#f85149" font-weight="600">dast</text>
+          <text x="174" y="70" font-family="'SF Mono',Consolas,monospace" font-size="9" fill="#8b949e" text-anchor="end">8 payloads</text>
+        </g>
+        <!-- Row 3: runtime_dyn (red) — NEW -->
+        <g opacity="1">
+          <rect y="81" width="184" height="24" rx="5" fill="#0d1117" stroke="#f8514930" stroke-width="1"/>
+          <rect y="81" width="184" height="24" rx="5" fill="#f8514908"/>
+          <circle cx="14" cy="93" r="4" fill="#f85149"><animate attributeName="opacity" values="0.4;1;0.4" dur="1.5s" repeatCount="indefinite"/></circle>
+          <text x="26" y="97" font-family="'SF Mono',Consolas,monospace" font-size="10" fill="#f85149" font-weight="600">runtime_dyn</text>
+          <text x="174" y="97" font-family="'SF Mono',Consolas,monospace" font-size="9" fill="#8b949e" text-anchor="end">5 cats</text>
+        </g>
+        <!-- Row 4: dataflow (orange) -->
+        <g opacity="1">
+          <rect y="108" width="184" height="24" rx="5" fill="#0d1117" stroke="#d2992230" stroke-width="1"/>
+          <rect y="108" width="184" height="24" rx="5" fill="#d2992208"/>
+          <circle cx="14" cy="120" r="4" fill="#d29922"><animate attributeName="opacity" values="0.4;1;0.4" dur="1.5s" repeatCount="indefinite"/></circle>
+          <text x="26" y="124" font-family="'SF Mono',Consolas,monospace" font-size="10" fill="#d29922" font-weight="600">dataflow</text>
+          <text x="174" y="124" font-family="'SF Mono',Consolas,monospace" font-size="9" fill="#8b949e" text-anchor="end">taint track</text>
+        </g>
+        <!-- Row 5: secrets (orange) -->
+        <g opacity="1">
+          <rect y="135" width="184" height="24" rx="5" fill="#0d1117" stroke="#d2992230" stroke-width="1"/>
+          <rect y="135" width="184" height="24" rx="5" fill="#d2992208"/>
+          <circle cx="14" cy="147" r="4" fill="#d29922"><animate attributeName="opacity" values="0.4;1;0.4" dur="1.5s" repeatCount="indefinite"/></circle>
+          <text x="26" y="151" font-family="'SF Mono',Consolas,monospace" font-size="10" fill="#d29922" font-weight="600">secrets</text>
+          <text x="174" y="151" font-family="'SF Mono',Consolas,monospace" font-size="9" fill="#8b949e" text-anchor="end">40+ pats</text>
+        </g>
+        <!-- Row 6: sast (orange) -->
+        <g opacity="1">
+          <rect y="162" width="184" height="24" rx="5" fill="#0d1117" stroke="#d2992230" stroke-width="1"/>
+          <rect y="162" width="184" height="24" rx="5" fill="#d2992208"/>
+          <circle cx="14" cy="174" r="4" fill="#d29922"><animate attributeName="opacity" values="0.4;1;0.4" dur="1.5s" repeatCount="indefinite"/></circle>
+          <text x="26" y="178" font-family="'SF Mono',Consolas,monospace" font-size="10" fill="#d29922" font-weight="600">sast</text>
+          <text x="174" y="178" font-family="'SF Mono',Consolas,monospace" font-size="9" fill="#8b949e" text-anchor="end">8 langs</text>
+        </g>
+        <!-- Row 7: integrity (orange) -->
+        <g opacity="1">
+          <rect y="189" width="184" height="24" rx="5" fill="#0d1117" stroke="#d2992230" stroke-width="1"/>
+          <rect y="189" width="184" height="24" rx="5" fill="#d2992208"/>
+          <circle cx="14" cy="201" r="4" fill="#d29922"><animate attributeName="opacity" values="0.4;1;0.4" dur="1.5s" repeatCount="indefinite"/></circle>
+          <text x="26" y="205" font-family="'SF Mono',Consolas,monospace" font-size="10" fill="#d29922" font-weight="600">integrity</text>
+          <text x="174" y="205" font-family="'SF Mono',Consolas,monospace" font-size="9" fill="#8b949e" text-anchor="end">SHA256</text>
+        </g>
+      </g>
+
+      <!-- Right column (8 scanners) -->
+      <g transform="translate(196, 0)">
+        <!-- Row 0: manifest_drift (orange) — NEW -->
+        <g opacity="1">
+          <rect y="0" width="184" height="24" rx="5" fill="#0d1117" stroke="#d2992230" stroke-width="1"/>
+          <rect y="0" width="184" height="24" rx="5" fill="#d2992208"/>
+          <circle cx="14" cy="12" r="4" fill="#d29922"><animate attributeName="opacity" values="0.4;1;0.4" dur="1.5s" repeatCount="indefinite"/></circle>
+          <text x="26" y="16" font-family="'SF Mono',Consolas,monospace" font-size="10" fill="#d29922" font-weight="600">manif_drift</text>
+          <text x="174" y="16" font-family="'SF Mono',Consolas,monospace" font-size="9" fill="#8b949e" text-anchor="end">phantom deps</text>
+        </g>
+        <!-- Row 1: lifecycle (orange) -->
+        <g opacity="1">
+          <rect y="27" width="184" height="24" rx="5" fill="#0d1117" stroke="#d2992230" stroke-width="1"/>
+          <rect y="27" width="184" height="24" rx="5" fill="#d2992208"/>
+          <circle cx="14" cy="39" r="4" fill="#d29922"><animate attributeName="opacity" values="0.4;1;0.4" dur="1.5s" repeatCount="indefinite"/></circle>
+          <text x="26" y="43" font-family="'SF Mono',Consolas,monospace" font-size="10" fill="#d29922" font-weight="600">lifecycle</text>
+          <text x="174" y="43" font-family="'SF Mono',Consolas,monospace" font-size="9" fill="#8b949e" text-anchor="end">hooks</text>
+        </g>
+        <!-- Row 2: dependencies (orange) -->
+        <g opacity="1">
+          <rect y="54" width="184" height="24" rx="5" fill="#0d1117" stroke="#d2992230" stroke-width="1"/>
+          <rect y="54" width="184" height="24" rx="5" fill="#d2992208"/>
+          <circle cx="14" cy="66" r="4" fill="#d29922"><animate attributeName="opacity" values="0.4;1;0.4" dur="1.5s" repeatCount="indefinite"/></circle>
+          <text x="26" y="70" font-family="'SF Mono',Consolas,monospace" font-size="10" fill="#d29922" font-weight="600">dependencies</text>
+          <text x="174" y="70" font-family="'SF Mono',Consolas,monospace" font-size="9" fill="#8b949e" text-anchor="end">500+ pkgs</text>
+        </g>
+        <!-- Row 3: entropy (orange) -->
+        <g opacity="1">
+          <rect y="81" width="184" height="24" rx="5" fill="#0d1117" stroke="#d2992230" stroke-width="1"/>
+          <rect y="81" width="184" height="24" rx="5" fill="#d2992208"/>
+          <circle cx="14" cy="93" r="4" fill="#d29922"><animate attributeName="opacity" values="0.4;1;0.4" dur="1.5s" repeatCount="indefinite"/></circle>
+          <text x="26" y="97" font-family="'SF Mono',Consolas,monospace" font-size="10" fill="#d29922" font-weight="600">entropy</text>
+          <text x="174" y="97" font-family="'SF Mono',Consolas,monospace" font-size="9" fill="#8b949e" text-anchor="end">Shannon</text>
+        </g>
+        <!-- Row 4: ast_analysis (grey) -->
+        <g opacity="1">
+          <rect y="108" width="184" height="24" rx="5" fill="#0d1117" stroke="#8b949e30" stroke-width="1"/>
+          <rect y="108" width="184" height="24" rx="5" fill="#8b949e06"/>
+          <circle cx="14" cy="120" r="4" fill="#8b949e"><animate attributeName="opacity" values="0.4;1;0.4" dur="1.5s" repeatCount="indefinite"/></circle>
+          <text x="26" y="124" font-family="'SF Mono',Consolas,monospace" font-size="10" fill="#c9d1d9" font-weight="600">ast_analysis</text>
+          <text x="174" y="124" font-family="'SF Mono',Consolas,monospace" font-size="9" fill="#8b949e" text-anchor="end">AST walk</text>
+        </g>
+        <!-- Row 5: infra (grey) -->
+        <g opacity="1">
+          <rect y="135" width="184" height="24" rx="5" fill="#0d1117" stroke="#8b949e30" stroke-width="1"/>
+          <rect y="135" width="184" height="24" rx="5" fill="#8b949e06"/>
+          <circle cx="14" cy="147" r="4" fill="#8b949e"><animate attributeName="opacity" values="0.4;1;0.4" dur="1.5s" repeatCount="indefinite"/></circle>
+          <text x="26" y="151" font-family="'SF Mono',Consolas,monospace" font-size="10" fill="#c9d1d9" font-weight="600">infra</text>
+          <text x="174" y="151" font-family="'SF Mono',Consolas,monospace" font-size="9" fill="#8b949e" text-anchor="end">Docker/K8s</text>
+        </g>
+        <!-- Row 6: binary (grey) -->
+        <g opacity="1">
+          <rect y="162" width="184" height="24" rx="5" fill="#0d1117" stroke="#8b949e30" stroke-width="1"/>
+          <rect y="162" width="184" height="24" rx="5" fill="#8b949e06"/>
+          <circle cx="14" cy="174" r="4" fill="#8b949e"><animate attributeName="opacity" values="0.4;1;0.4" dur="1.5s" repeatCount="indefinite"/></circle>
+          <text x="26" y="178" font-family="'SF Mono',Consolas,monospace" font-size="10" fill="#c9d1d9" font-weight="600">binary</text>
+          <text x="174" y="178" font-family="'SF Mono',Consolas,monospace" font-size="9" fill="#8b949e" text-anchor="end">camouflage</text>
+        </g>
+        <!-- Row 7: git_forensics (grey) -->
+        <g opacity="1">
+          <rect y="189" width="184" height="24" rx="5" fill="#0d1117" stroke="#8b949e30" stroke-width="1"/>
+          <rect y="189" width="184" height="24" rx="5" fill="#8b949e06"/>
+          <circle cx="14" cy="201" r="4" fill="#8b949e"><animate attributeName="opacity" values="0.4;1;0.4" dur="1.5s" repeatCount="indefinite"/></circle>
+          <text x="26" y="205" font-family="'SF Mono',Consolas,monospace" font-size="10" fill="#c9d1d9" font-weight="600">git_forensics</text>
+          <text x="174" y="205" font-family="'SF Mono',Consolas,monospace" font-size="9" fill="#8b949e" text-anchor="end">history</text>
+        </g>
+      </g>
+    </g>
+
+    <!-- Correlation engine - draws in -->
+    <g transform="translate(16, 300)" opacity="1">
+      <rect width="368" height="48" rx="8" fill="#0d1117" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="184" y="30" font-family="'SF Mono',Consolas,monospace" font-size="12" fill="#a78bfa"
+            text-anchor="middle" font-weight="700">⚡ CORRELATION ENGINE</text>
+      <!-- Energy pulse -->
+      <rect width="368" height="48" rx="8" fill="none" stroke="#a78bfa" stroke-width="2" opacity="0.25">
+        <animate attributeName="opacity" values="0.25;0.5;0.25" dur="2s" repeatCount="indefinite"/>
+      </rect>
+    </g>
+
+    <!-- Legend -->
+    <g transform="translate(16, 366)" opacity="0.8">
+      <circle cx="6" cy="6" r="4" fill="#f85149"/><text x="16" y="10" font-family="'SF Mono',Consolas,monospace" font-size="9" fill="#8b949e">AI/MCP threats</text>
+      <circle cx="120" cy="6" r="4" fill="#d29922"/><text x="130" y="10" font-family="'SF Mono',Consolas,monospace" font-size="9" fill="#8b949e">Code analysis</text>
+      <circle cx="240" cy="6" r="4" fill="#8b949e"/><text x="250" y="10" font-family="'SF Mono',Consolas,monospace" font-size="9" fill="#8b949e">Infrastructure</text>
+    </g>
+  </g>
+
+  <!-- Animated data flow arrow 2 -->
+  <g filter="url(#pg)" opacity="1">
+    <line x1="648" y1="256" x2="694" y2="256" stroke="#00f0ff" stroke-width="2" opacity="0.4"/>
+    <circle r="3" fill="#00f0ff" opacity="0.9">
+      <animateMotion path="M648,256 L694,256" dur="0.8s" repeatCount="indefinite"/>
+    </circle>
+    <polygon points="692,251 702,256 692,261" fill="#00f0ff" opacity="0.8"/>
+  </g>
+
+  <!-- ═══ PHASE 3: VERDICT ═══ -->
+  <g transform="translate(706, 68)" opacity="1">
+
+    <rect width="170" height="300" rx="10" fill="#151b23" stroke="#1c2940" stroke-width="1"/>
+    <rect width="170" height="32" rx="10" fill="#1c2940"/>
+    <rect y="20" width="170" height="12" fill="#1c2940"/>
+    <text x="85" y="22" font-family="'SF Mono',Consolas,monospace" font-size="12" fill="#00f0ff"
+          text-anchor="middle" font-weight="700">VERDICT</text>
+
+    <!-- Exit 2 - critical -->
+    <g transform="translate(12, 46)" opacity="1">
+      <rect width="146" height="56" rx="6" fill="#f8514910" stroke="#f85149" stroke-width="1.5"/>
+      <text x="73" y="26" font-family="'SF Mono',Consolas,monospace" font-size="24" fill="#f85149"
+            text-anchor="middle" font-weight="800">EXIT 2</text>
+      <text x="73" y="44" font-family="'SF Mono',Consolas,monospace" font-size="10" fill="#f85149"
+            text-anchor="middle" opacity="0.8">CRITICAL — block</text>
+      <!-- Alert pulse -->
+      <rect width="146" height="56" rx="6" fill="none" stroke="#f85149" stroke-width="2" opacity="0.35">
+        <animate attributeName="opacity" values="0.35;0.7;0.35" dur="1.5s" repeatCount="indefinite"/>
+      </rect>
+    </g>
+
+    <!-- Exit 1 - warn -->
+    <g transform="translate(12, 114)" opacity="1">
+      <rect width="146" height="56" rx="6" fill="#d2992210" stroke="#d29922" stroke-width="1"/>
+      <text x="73" y="26" font-family="'SF Mono',Consolas,monospace" font-size="24" fill="#d29922"
+            text-anchor="middle" font-weight="800">EXIT 1</text>
+      <text x="73" y="44" font-family="'SF Mono',Consolas,monospace" font-size="10" fill="#d29922"
+            text-anchor="middle" opacity="0.8">HIGH/MED — warn</text>
+    </g>
+
+    <!-- Exit 0 - clean -->
+    <g transform="translate(12, 182)" opacity="1">
+      <rect width="146" height="56" rx="6" fill="#3fb95010" stroke="#3fb950" stroke-width="1"/>
+      <text x="73" y="26" font-family="'SF Mono',Consolas,monospace" font-size="24" fill="#3fb950"
+            text-anchor="middle" font-weight="800">EXIT 0</text>
+      <text x="73" y="44" font-family="'SF Mono',Consolas,monospace" font-size="10" fill="#3fb950"
+            text-anchor="middle" opacity="0.8">CLEAN — pass</text>
+    </g>
+
+    <!-- Formats -->
+    <g transform="translate(12, 252)" opacity="0.8">
+      <text x="0" y="14" font-family="'SF Mono',Consolas,monospace" font-size="9" fill="#7d8590">--format</text>
+      <text x="0" y="30" font-family="'SF Mono',Consolas,monospace" font-size="9" fill="#58a6ff">text | json | summary</text>
+    </g>
+  </g>
+
+  <!-- Border -->
+  <rect width="900" height="500" rx="12" fill="none" stroke="#1c2940" stroke-width="1"/>
+</svg>

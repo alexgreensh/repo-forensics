@@ -1,0 +1,80 @@
+name: 'Repo Forensics'
+description: 'Deep security auditing for repositories, AI agent skills, and MCP servers'
+author: 'Alex Greenshpun'
+
+branding:
+  icon: 'shield'
+  color: 'red'
+
+inputs:
+  path:
+    description: 'Path to repository to scan (default: workspace root)'
+    required: false
+    default: '.'
+  mode:
+    description: 'Scan mode: full or skill-scan'
+    required: false
+    default: 'full'
+  format:
+    description: 'Output format: text, json, or summary'
+    required: false
+    default: 'text'
+  update-iocs:
+    description: 'Pull latest IOC database before scanning'
+    required: false
+    default: 'false'
+  watch:
+    description: 'Enable file integrity baseline tracking'
+    required: false
+    default: 'false'
+
+outputs:
+  exit-code:
+    description: 'Scanner exit code (0=clean, 1=high/medium, 2=critical)'
+  findings-count:
+    description: 'Total number of findings'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Run Repo Forensics
+      id: scan
+      shell: bash
+      run: |
+        SCAN_PATH="${{ inputs.path }}"
+        if [ "$SCAN_PATH" = "." ]; then
+          SCAN_PATH="${{ github.workspace }}"
+        fi
+
+        ARGS=""
+        if [ "${{ inputs.mode }}" = "skill-scan" ]; then
+          ARGS="$ARGS --skill-scan"
+        fi
+        ARGS="$ARGS --format ${{ inputs.format }}"
+        if [ "${{ inputs.update-iocs }}" = "true" ]; then
+          ARGS="$ARGS --update-iocs"
+        fi
+        if [ "${{ inputs.watch }}" = "true" ]; then
+          ARGS="$ARGS --watch"
+        fi
+
+        set +e
+        bash "${{ github.action_path }}/skill/scripts/run_forensics.sh" "$SCAN_PATH" $ARGS
+        EXIT_CODE=$?
+        set -e
+
+        echo "exit-code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+        echo "::set-output name=exit-code::$EXIT_CODE"
+
+        if [ "$EXIT_CODE" -eq 2 ]; then
+          echo "::error::Repo Forensics found CRITICAL findings"
+        elif [ "$EXIT_CODE" -eq 1 ]; then
+          echo "::warning::Repo Forensics found HIGH/MEDIUM findings"
+        fi
+
+        exit $EXIT_CODE

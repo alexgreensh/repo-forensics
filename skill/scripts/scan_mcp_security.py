@@ -133,6 +133,26 @@ LOG_EXFIL_PATTERNS = [
     (re.compile(r'(?i)(audit_log|access_log|call_log)\s*=.*https?://'), "Audit log URL pointing to remote server"),
 ]
 
+# ============================================================
+# Category G: Rug Pull Enablers (high)
+# Tool descriptions sourced from mutable/external data.
+# These don't prove malicious intent but flag that tool behavior
+# can change without code changes.
+# Source: Lukas Kania "Your MCP Server's Tool Descriptions Changed Last Night" (March 2026)
+# OWASP MCP03 (Tool Poisoning), MCP07 (Rug Pull)
+# ============================================================
+RUG_PULL_PATTERNS = [
+    (re.compile(r'description\s*[=:]\s*(cursor|db|conn|session)\.\w*(query|execute|fetch|get)'), "Rug Pull Enabler: tool description from database query"),
+    (re.compile(r'description\s*[=:]\s*(requests\.(get|post)|fetch|urllib|http)'), "Rug Pull Enabler: tool description fetched from network"),
+    (re.compile(r'description\s*[=:]\s*(os\.environ|os\.getenv|process\.env)'), "Rug Pull Enabler: tool description from environment variable"),
+    (re.compile(r'description\s*[=:]\s*(open|json\.load|yaml\.load|toml\.load)\s*\('), "Rug Pull Enabler: tool description loaded from file at runtime"),
+    (re.compile(r'if\b.*:\s*\n\s*.*description\s*='), "Rug Pull Enabler: conditional tool description assignment"),
+    (re.compile(r'(tools|tool_list)\s*=\s*(requests|fetch|db\.|cursor\.)'), "Rug Pull Enabler: tool list from external source"),
+    # OWASP MCP07: inputSchema and annotations can also be rug-pulled
+    (re.compile(r'inputSchema\s*[=:]\s*(requests|fetch|db\.|cursor\.|os\.environ|os\.getenv)'), "Rug Pull Enabler: inputSchema from external source"),
+    (re.compile(r'annotations\s*[=:]\s*(requests|fetch|db\.|cursor\.|os\.environ|os\.getenv)'), "Rug Pull Enabler: annotations from external source"),
+]
+
 # MCP framework signals for file heuristic
 MCP_SIGNALS = [
     '@mcp.tool', 'mcp.Server', 'McpServer', 'ModelContextProtocol',
@@ -215,23 +235,8 @@ def scan_tool_shadowing(content, rel_path):
 
 
 def scan_patterns(content, rel_path, patterns, category, default_severity):
-    """Generic line-based pattern scanner."""
-    findings = []
-    lines = content.split('\n')
-    for i, line in enumerate(lines):
-        if len(line) > core.MAX_LINE_LENGTH:
-            continue
-        for pattern, title in patterns:
-            if pattern.search(line):
-                findings.append(core.Finding(
-                    scanner=SCANNER_NAME, severity=default_severity,
-                    title=title,
-                    description=f"Matched in {category} scan",
-                    file=rel_path, line=i + 1,
-                    snippet=line.strip()[:120],
-                    category=category
-                ))
-    return findings
+    """Delegate to shared scan_patterns in forensics_core."""
+    return core.scan_patterns(content, rel_path, patterns, category, default_severity, SCANNER_NAME)
 
 
 def is_mcp_related(file_path, rel_path, content_sample):
@@ -283,6 +288,8 @@ def scan_file(file_path, rel_path):
             findings.extend(scan_patterns(content, rel_path, LOG_EXFIL_PATTERNS, "log-to-leak", "high"))
             findings.extend(scan_tool_shadowing(content, rel_path))
             findings.extend(scan_patterns(content, rel_path, MCP_CONFIG_RISKS, "mcp-config-risk", "critical"))
+            # Category G: Rug Pull Enablers - dynamic tool descriptions
+            findings.extend(scan_patterns(content, rel_path, RUG_PULL_PATTERNS, "rug-pull-enabler", "high"))
 
     # MCP config files (.json) — check for enableAllProjectMcpServers, ANTHROPIC_BASE_URL
     if ext == '.json' or basename in ('settings.json', 'claude_desktop_config.json', '.mcp.json'):

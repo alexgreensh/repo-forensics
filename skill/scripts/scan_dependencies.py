@@ -241,8 +241,22 @@ def scan_package_json(filepath, rel_path):
                     category="dependency-confusion"
                 ))
 
-    except Exception:
-        pass
+    except (json.JSONDecodeError, KeyError, TypeError) as e:
+        findings.append(core.Finding(
+            scanner=SCANNER_NAME, severity="low",
+            title="Package manifest parse error",
+            description=f"Could not fully parse package.json: {e}",
+            file=rel_path, line=0, snippet=str(e)[:120],
+            category="parse-error"
+        ))
+    except OSError as e:
+        findings.append(core.Finding(
+            scanner=SCANNER_NAME, severity="low",
+            title="Package manifest read error",
+            description=f"Could not read package.json: {e}",
+            file=rel_path, line=0, snippet=str(e)[:120],
+            category="parse-error"
+        ))
     return findings
 
 
@@ -289,8 +303,14 @@ def scan_python_deps(filepath, rel_path):
                 category="typosquatting"
             ))
 
-    except Exception:
-        pass
+    except (UnicodeDecodeError, OSError) as e:
+        findings.append(core.Finding(
+            scanner=SCANNER_NAME, severity="low",
+            title="Requirements file read error",
+            description=f"Could not fully parse requirements: {e}",
+            file=rel_path, line=0, snippet=str(e)[:120],
+            category="parse-error"
+        ))
     return findings
 
 
@@ -318,8 +338,14 @@ def scan_lockfile(filepath, rel_path):
                     category="untrusted-registry"
                 ))
 
-    except Exception:
-        pass
+    except (UnicodeDecodeError, OSError) as e:
+        findings.append(core.Finding(
+            scanner=SCANNER_NAME, severity="low",
+            title="Lockfile read error",
+            description=f"Could not read lockfile: {e}",
+            file=rel_path, line=0, snippet=str(e)[:120],
+            category="parse-error"
+        ))
     return findings
 
 

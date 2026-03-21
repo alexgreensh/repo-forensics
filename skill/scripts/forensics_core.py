@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-forensics_core.py - Core framework for repo-forensics v2
+forensics_core.py - Core framework for repo-forensics v1
 Provides Finding dataclass, severity system, output formatting,
 correlation engine, and .forensicsignore support.
 
@@ -224,6 +224,11 @@ def correlate(findings):
     sensitive_read_keywords = {".env", ".ssh", ".aws", "credential", "keychain", "browser data", "config"}
     prompt_keywords = {"prompt injection", "instruction override", "persona reassignment", "confirmation bypass"}
     lifecycle_keywords = {"lifecycle", "hook", "postinstall", "preinstall", "cmdclass", "setup.py"}
+    dynamic_import_keywords = {"dynamic import", "importlib", "import_module", "dynamic-import"}
+    time_bomb_keywords = {"time bomb", "time-bomb", "datetime comparison", "activation trigger", "unix timestamp"}
+    dynamic_desc_keywords = {"dynamic-description", "rug-pull", "rug pull enabler", "dynamic tool description"}
+    mcp_server_keywords = {"mcp", "tool-poisoning", "mcp_security", "mcp-config", "rug-pull-enabler"}
+    phantom_dep_keywords = {"phantom-dependency", "phantom dep", "shadow dependency"}
 
     def has_category(file_findings, keywords):
         for f in file_findings:
@@ -348,6 +353,58 @@ def correlate(findings):
                     category="compound-attack"
                 ))
 
+        # Rule 9: Dynamic import/eval + network fetch = "Deferred Payload Loading"
+        if has_category(file_findings, dynamic_import_keywords) and has_category(file_findings, network_keywords):
+            correlated.append(Finding(
+                scanner="correlation",
+                severity="critical",
+                title="Deferred Payload Loading",
+                description="Dynamic import combined with network fetch in the same file. Code can download and load arbitrary modules at runtime.",
+                file=filepath,
+                line=0,
+                snippet="[compound: dynamic import + network fetch]",
+                category="deferred-payload"
+            ))
+
+        # Rule 10: Date/counter comparison + exec/eval = "Time-Triggered Malware"
+        if has_category(file_findings, time_bomb_keywords) and has_category(file_findings, exec_keywords):
+            correlated.append(Finding(
+                scanner="correlation",
+                severity="critical",
+                title="Time-Triggered Malware",
+                description="Time/counter-based activation combined with code execution. Classic time bomb pattern (Socket.dev NuGet, Nov 2025).",
+                file=filepath,
+                line=0,
+                snippet="[compound: time bomb + code execution]",
+                category="time-triggered-malware"
+            ))
+
+        # Rule 11: Dynamic tool description + MCP server signals = "MCP Rug Pull Enabler"
+        if has_category(file_findings, dynamic_desc_keywords) and has_category(file_findings, mcp_server_keywords):
+            correlated.append(Finding(
+                scanner="correlation",
+                severity="high",
+                title="MCP Rug Pull Enabler",
+                description="MCP server with dynamic tool descriptions. Tool behavior can change without code changes (Lukas Kania, March 2026).",
+                file=filepath,
+                line=0,
+                snippet="[compound: dynamic description + MCP server]",
+                category="rug-pull"
+            ))
+
+        # Rule 12: Phantom dependency + network call = "Shadow Dependency with Network"
+        if has_category(file_findings, phantom_dep_keywords) and has_category(file_findings, network_keywords):
+            correlated.append(Finding(
+                scanner="correlation",
+                severity="critical",
+                title="Shadow Dependency with Network Access",
+                description="Undeclared dependency combined with network access. Potential supply chain attack via shadow dependency.",
+                file=filepath,
+                line=0,
+                snippet="[compound: phantom dependency + network call]",
+                category="shadow-dependency"
+            ))
+
     return correlated
 
 
@@ -375,6 +432,26 @@ def format_findings(findings, output_format="text"):
         # Sort by severity (critical first)
         sorted_findings = sorted(findings, key=lambda f: -f.severity_score())
         return "\n\n".join(f.format_text() for f in sorted_findings)
+
+
+def scan_patterns(content, rel_path, patterns, category, default_severity, scanner_name):
+    """Generic line-based pattern scanner. Shared by scan_skill_threats and scan_mcp_security."""
+    findings = []
+    lines = content.split('\n')
+    for i, line in enumerate(lines):
+        if len(line) > MAX_LINE_LENGTH:
+            continue
+        for pattern, title in patterns:
+            if pattern.search(line):
+                findings.append(Finding(
+                    scanner=scanner_name, severity=default_severity,
+                    title=title,
+                    description=f"Matched in {category} scan",
+                    file=rel_path, line=i + 1,
+                    snippet=line.strip()[:120],
+                    category=category
+                ))
+    return findings
 
 
 def parse_common_args(argv, scanner_name):

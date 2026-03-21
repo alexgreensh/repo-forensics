@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 420" width="900" height="420">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 475" width="900" height="475">
   <defs>
     <style>
       text { font-family: 'JetBrains Mono', 'Courier New', monospace; }
@@ -36,7 +36,7 @@
   </defs>
 
   <!-- Background -->
-  <rect width="900" height="420" fill="url(#bg2)" rx="12"/>
+  <rect width="900" height="475" fill="url(#bg2)" rx="12"/>
 
   <!-- Grid -->
   <g opacity="0.03" stroke="#4fc3f7" stroke-width="0.5">
@@ -59,8 +59,8 @@
   <text x="450" y="70" text-anchor="middle" fill="#546e7a" font-size="8" letter-spacing="1.5">SCANNER</text>
   <text x="787" y="70" text-anchor="middle" fill="#546e7a" font-size="8" letter-spacing="1.5">VERDICT</text>
   <line x1="30" y1="55" x2="870" y2="55" stroke="#1e3a5f" stroke-width="1"/>
-  <line x1="290" y1="55" x2="290" y2="390" stroke="#1e3a5f" stroke-width="0.8" stroke-dasharray="3,6"/>
-  <line x1="610" y1="55" x2="610" y2="390" stroke="#1e3a5f" stroke-width="0.8" stroke-dasharray="3,6"/>
+  <line x1="290" y1="55" x2="290" y2="445" stroke="#1e3a5f" stroke-width="0.8" stroke-dasharray="3,6"/>
+  <line x1="610" y1="55" x2="610" y2="445" stroke="#1e3a5f" stroke-width="0.8" stroke-dasharray="3,6"/>
 
   <!-- ROW 1: Prompt injection / MCP tool poisoning -->
   <!-- Attack box -->
@@ -119,38 +119,51 @@
   <text x="705" y="265" text-anchor="middle" fill="#ff4444" font-size="9" font-weight="700">CRITICAL</text>
   <text x="705" y="277" text-anchor="middle" fill="#ff6666" font-size="7">exit 2</text>
 
-  <!-- ROW 5: Infrastructure misconfiguration -->
-  <rect x="30" y="300" width="240" height="40" rx="5" fill="#050d1a" stroke="#2196f3" stroke-width="1.2" filter="url(#boxglow)"/>
-  <text x="150" y="317" text-anchor="middle" fill="#64b5f6" font-size="8.5" font-weight="600">infra misconfiguration</text>
-  <text x="150" y="331" text-anchor="middle" fill="#1976d2" font-size="7.5">Docker, GHA injection, CVE configs</text>
-  <line x1="270" y1="320" x2="350" y2="320" stroke="#2196f3" stroke-width="1.5" stroke-opacity="0.7" marker-end="url(#arrowBlue)"/>
-  <rect x="350" y="300" width="240" height="40" rx="5" fill="#020810" stroke="#2196f3" stroke-width="1" opacity="0.9"/>
-  <text x="470" y="317" text-anchor="middle" fill="#1976d2" font-size="8.5" font-weight="600">infra</text>
-  <text x="470" y="331" text-anchor="middle" fill="#0d47a1" font-size="7">CVE-2025-59536, CVE-2026-21852, K8s priv</text>
-  <line x1="590" y1="320" x2="655" y2="320" stroke="#2196f3" stroke-width="1.5" stroke-opacity="0.7" marker-end="url(#arrowBlue)"/>
-  <rect x="655" y="305" width="100" height="30" rx="4" fill="#1a0028" stroke="#ff8c00" stroke-width="1.5"/>
-  <text x="705" y="320" text-anchor="middle" fill="#ff8c00" font-size="9" font-weight="700">HIGH</text>
-  <text x="705" y="332" text-anchor="middle" fill="#ffa726" font-size="7">exit 1</text>
+  <!-- ROW 5: Runtime behavior prediction -->
+  <rect x="30" y="300" width="240" height="40" rx="5" fill="#031213" stroke="#00bcd4" stroke-width="1.2" filter="url(#boxglow)"/>
+  <text x="150" y="317" text-anchor="middle" fill="#80deea" font-size="8.5" font-weight="600">runtime behavior</text>
+  <text x="150" y="331" text-anchor="middle" fill="#00838f" font-size="7.5">time bombs, rug pulls, deferred payloads</text>
+  <line x1="270" y1="320" x2="350" y2="320" stroke="#00bcd4" stroke-width="1.5" stroke-opacity="0.7" marker-end="url(#arrowTeal)"/>
+  <rect x="350" y="300" width="240" height="40" rx="5" fill="#010a0b" stroke="#00bcd4" stroke-width="1" opacity="0.9"/>
+  <text x="470" y="317" text-anchor="middle" fill="#00838f" font-size="8.5" font-weight="600">runtime_dynamism + manifest_drift</text>
+  <text x="470" y="331" text-anchor="middle" fill="#006064" font-size="7">AST + regex, 5 detection categories</text>
+  <line x1="590" y1="320" x2="655" y2="320" stroke="#00bcd4" stroke-width="1.5" stroke-opacity="0.7" marker-end="url(#arrowTeal)"/>
+  <rect x="655" y="305" width="100" height="30" rx="4" fill="#2d0000" stroke="#ff4444" stroke-width="1.5"/>
+  <text x="705" y="320" text-anchor="middle" fill="#ff4444" font-size="9" font-weight="700">CRITICAL</text>
+  <text x="705" y="332" text-anchor="middle" fill="#ff6666" font-size="7">exit 2</text>
 
-  <!-- ROW 6: Repo integrity / binary masquerade -->
-  <rect x="30" y="355" width="240" height="40" rx="5" fill="#031213" stroke="#00bcd4" stroke-width="1.2" filter="url(#boxglow)"/>
-  <text x="150" y="372" text-anchor="middle" fill="#80deea" font-size="8.5" font-weight="600">repo integrity attack</text>
-  <text x="150" y="386" text-anchor="middle" fill="#00838f" font-size="7.5">timestamp spoof, binary masquerade</text>
-  <line x1="270" y1="375" x2="350" y2="375" stroke="#00bcd4" stroke-width="1.5" stroke-opacity="0.7" marker-end="url(#arrowTeal)"/>
-  <rect x="350" y="355" width="240" height="40" rx="5" fill="#010a0b" stroke="#00bcd4" stroke-width="1" opacity="0.9"/>
-  <text x="470" y="372" text-anchor="middle" fill="#00838f" font-size="8.5" font-weight="600">git_forensics + binary</text>
-  <text x="470" y="386" text-anchor="middle" fill="#006064" font-size="7">GPG, identity spoofing, ELF/PE/Mach-O detection</text>
-  <line x1="590" y1="375" x2="655" y2="375" stroke="#00bcd4" stroke-width="1.5" stroke-opacity="0.7" marker-end="url(#arrowTeal)"/>
-  <rect x="655" y="360" width="100" height="30" rx="4" fill="#001a1a" stroke="#ff8c00" stroke-width="1.5"/>
-  <text x="705" y="375" text-anchor="middle" fill="#ff8c00" font-size="9" font-weight="700">MEDIUM</text>
+  <!-- ROW 6: Infrastructure misconfiguration -->
+  <rect x="30" y="355" width="240" height="40" rx="5" fill="#050d1a" stroke="#2196f3" stroke-width="1.2" filter="url(#boxglow)"/>
+  <text x="150" y="372" text-anchor="middle" fill="#64b5f6" font-size="8.5" font-weight="600">infra misconfiguration</text>
+  <text x="150" y="386" text-anchor="middle" fill="#1976d2" font-size="7.5">Docker, GHA injection, CVE configs</text>
+  <line x1="270" y1="375" x2="350" y2="375" stroke="#2196f3" stroke-width="1.5" stroke-opacity="0.7" marker-end="url(#arrowBlue)"/>
+  <rect x="350" y="355" width="240" height="40" rx="5" fill="#020810" stroke="#2196f3" stroke-width="1" opacity="0.9"/>
+  <text x="470" y="372" text-anchor="middle" fill="#1976d2" font-size="8.5" font-weight="600">infra</text>
+  <text x="470" y="386" text-anchor="middle" fill="#0d47a1" font-size="7">CVE-2025-59536, CVE-2026-21852, K8s priv</text>
+  <line x1="590" y1="375" x2="655" y2="375" stroke="#2196f3" stroke-width="1.5" stroke-opacity="0.7" marker-end="url(#arrowBlue)"/>
+  <rect x="655" y="360" width="100" height="30" rx="4" fill="#1a0028" stroke="#ff8c00" stroke-width="1.5"/>
+  <text x="705" y="375" text-anchor="middle" fill="#ff8c00" font-size="9" font-weight="700">HIGH</text>
   <text x="705" y="387" text-anchor="middle" fill="#ffa726" font-size="7">exit 1</text>
 
+  <!-- ROW 7: Repo integrity / binary masquerade -->
+  <rect x="30" y="410" width="240" height="40" rx="5" fill="#031213" stroke="#00bcd4" stroke-width="1.2" filter="url(#boxglow)"/>
+  <text x="150" y="427" text-anchor="middle" fill="#80deea" font-size="8.5" font-weight="600">repo integrity attack</text>
+  <text x="150" y="441" text-anchor="middle" fill="#00838f" font-size="7.5">timestamp spoof, binary masquerade</text>
+  <line x1="270" y1="430" x2="350" y2="430" stroke="#00bcd4" stroke-width="1.5" stroke-opacity="0.7" marker-end="url(#arrowTeal)"/>
+  <rect x="350" y="410" width="240" height="40" rx="5" fill="#010a0b" stroke="#00bcd4" stroke-width="1" opacity="0.9"/>
+  <text x="470" y="427" text-anchor="middle" fill="#00838f" font-size="8.5" font-weight="600">git_forensics + binary</text>
+  <text x="470" y="441" text-anchor="middle" fill="#006064" font-size="7">GPG, identity spoofing, ELF/PE/Mach-O detection</text>
+  <line x1="590" y1="430" x2="655" y2="430" stroke="#00bcd4" stroke-width="1.5" stroke-opacity="0.7" marker-end="url(#arrowTeal)"/>
+  <rect x="655" y="415" width="100" height="30" rx="4" fill="#001a1a" stroke="#ff8c00" stroke-width="1.5"/>
+  <text x="705" y="430" text-anchor="middle" fill="#ff8c00" font-size="9" font-weight="700">MEDIUM</text>
+  <text x="705" y="442" text-anchor="middle" fill="#ffa726" font-size="7">exit 1</text>
+
   <!-- Right side: correlation engine note -->
-  <rect x="765" y="80" width="110" height="315" rx="6" fill="#0a1520" stroke="#1e3a5f" stroke-width="1" opacity="0.6"/>
+  <rect x="765" y="80" width="110" height="370" rx="6" fill="#0a1520" stroke="#1e3a5f" stroke-width="1" opacity="0.6"/>
   <text x="820" y="100" text-anchor="middle" fill="#546e7a" font-size="7" letter-spacing="1">CORRELATION</text>
   <text x="820" y="112" text-anchor="middle" fill="#546e7a" font-size="7" letter-spacing="1">ENGINE</text>
   <line x1="785" y1="118" x2="855" y2="118" stroke="#1e3a5f" stroke-width="0.8"/>
-  <text x="820" y="133" text-anchor="middle" fill="#37474f" font-size="7">8 compound</text>
+  <text x="820" y="133" text-anchor="middle" fill="#37474f" font-size="7">12 compound</text>
   <text x="820" y="145" text-anchor="middle" fill="#37474f" font-size="7">threat rules</text>
   <text x="820" y="163" text-anchor="middle" fill="#546e7a" font-size="7">env access</text>
   <text x="820" y="175" text-anchor="middle" fill="#546e7a" font-size="7">+ network =</text>
@@ -168,7 +181,15 @@
   <text x="820" y="322" text-anchor="middle" fill="#546e7a" font-size="7">+ MCP =</text>
   <text x="820" y="334" text-anchor="middle" fill="#ff4444" font-size="7" font-weight="600">stored PI</text>
   <line x1="800" y1="344" x2="840" y2="344" stroke="#1e3a5f" stroke-width="0.5"/>
-  <text x="820" y="360" text-anchor="middle" fill="#37474f" font-size="6.5">+ 4 more rules</text>
-  <text x="820" y="374" text-anchor="middle" fill="#37474f" font-size="6.5">correlating</text>
-  <text x="820" y="386" text-anchor="middle" fill="#37474f" font-size="6.5">across all 12</text>
+  <text x="820" y="359" text-anchor="middle" fill="#546e7a" font-size="7">dyn import</text>
+  <text x="820" y="371" text-anchor="middle" fill="#546e7a" font-size="7">+ network =</text>
+  <text x="820" y="383" text-anchor="middle" fill="#ff4444" font-size="7" font-weight="600">deferred load</text>
+  <line x1="800" y1="393" x2="840" y2="393" stroke="#1e3a5f" stroke-width="0.5"/>
+  <text x="820" y="408" text-anchor="middle" fill="#546e7a" font-size="7">time trigger</text>
+  <text x="820" y="420" text-anchor="middle" fill="#546e7a" font-size="7">+ exec =</text>
+  <text x="820" y="432" text-anchor="middle" fill="#ff4444" font-size="7" font-weight="600">time bomb</text>
+  <line x1="800" y1="442" x2="840" y2="442" stroke="#1e3a5f" stroke-width="0.5"/>
+  <text x="820" y="455" text-anchor="middle" fill="#37474f" font-size="6.5">+ 6 more rules</text>
+  <text x="820" y="467" text-anchor="middle" fill="#37474f" font-size="6.5">correlating</text>
+  <text x="820" y="479" text-anchor="middle" fill="#37474f" font-size="6.5">across all 16</text>
 </svg>

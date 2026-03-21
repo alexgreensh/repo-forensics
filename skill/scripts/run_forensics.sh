@@ -1,22 +1,24 @@
 #!/bin/bash
 
-# Repo Forensics Suite Runner v3
+# Repo Forensics Suite Runner v1
 # Created by Alex Greenshpun
 # Usage: ./run_forensics.sh <repo_path> [--skill-scan] [--format text|json|summary]
 
 set -euo pipefail
 
 if [ -z "${1:-}" ]; then
-    echo "Usage: $0 <repo_path> [--skill-scan] [--format text|json|summary]"
+    echo "Usage: $0 <repo_path> [--skill-scan] [--format text|json|summary] [--update-iocs] [--watch]"
     echo ""
     echo "Modes:"
-    echo "  (default)      Full audit - all 12 scanners"
+    echo "  (default)      Full audit - all 16 scanners"
     echo "  --skill-scan   Focused on AI skill threats (6 scanners, faster)"
     echo ""
-    echo "Output formats:"
+    echo "Options:"
     echo "  --format text     Human-readable with severity colors (default)"
     echo "  --format json     Machine-readable JSON"
     echo "  --format summary  Counts only (for CI/CD)"
+    echo "  --update-iocs     Pull latest IOC database before scanning"
+    echo "  --watch           Enable file integrity baseline tracking"
     exit 1
 fi
 
@@ -26,20 +28,38 @@ shift
 # Parse remaining args
 SKILL_SCAN=false
 FORMAT="text"
+UPDATE_IOCS=false
+WATCH_MODE=false
+VERIFY_INSTALL=false
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --skill-scan) SKILL_SCAN=true; shift ;;
         --format) FORMAT="$2"; shift 2 ;;
+        --update-iocs) UPDATE_IOCS=true; shift ;;
+        --watch) WATCH_MODE=true; shift ;;
+        --verify-install) VERIFY_INSTALL=true; shift ;;
         *) echo "Unknown arg: $1"; exit 1 ;;
     esac
 done
 
 SKILL_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Handle --verify-install (standalone, exits after)
+if $VERIFY_INSTALL; then
+    python3 "$SKILL_DIR/verify_install.py" --verify
+    exit $?
+fi
+
+# Handle --update-iocs before scanning
+if $UPDATE_IOCS; then
+    echo "[*] Updating IOC database..."
+    python3 "$SKILL_DIR/ioc_manager.py" --update
+fi
 TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
 
 echo "=========================================="
-echo "  REPO FORENSICS v3"
+echo "  REPO FORENSICS v1"
 echo "  Target: $REPO_PATH"
 echo "  Mode: $(if $SKILL_SCAN; then echo 'Skill Scan (focused)'; else echo 'Full Audit'; fi)"
 echo "  Format: $FORMAT"
@@ -59,21 +79,22 @@ fi
 run_scanner() {
     local name="$1"
     local script="$2"
+    local extra_args="${3:-}"
     local output_file="$TMPDIR/$name.out"
     local exit_file="$TMPDIR/$name.exit"
 
     if [ -n "$TIMEOUT_CMD" ]; then
-        $TIMEOUT_CMD "$SCANNER_TIMEOUT" python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$FORMAT" > "$output_file" 2>&1
+        $TIMEOUT_CMD "$SCANNER_TIMEOUT" python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$FORMAT" $extra_args > "$output_file" 2>&1
     else
-        python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$FORMAT" > "$output_file" 2>&1
+        python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$FORMAT" $extra_args > "$output_file" 2>&1
     fi
     echo $? > "$exit_file"
 }
 
 if $SKILL_SCAN; then
-    # Focused mode: 6 scanners most relevant to vetting skills
+    # Focused mode: 8 scanners most relevant to vetting skills
     echo ""
-    echo "[*] Running focused skill scan (6 scanners)..."
+    echo "[*] Running focused skill scan (8 scanners)..."
 
     run_scanner "skill_threats" "scan_skill_threats.py" &
     run_scanner "secrets" "scan_secrets.py" &
@@ -81,12 +102,14 @@ if $SKILL_SCAN; then
     run_scanner "sast" "scan_sast.py" &
     run_scanner "lifecycle" "scan_lifecycle.py" &
     run_scanner "mcp_security" "scan_mcp_security.py" &
+    run_scanner "runtime_dynamism" "scan_runtime_dynamism.py" &
+    run_scanner "manifest_drift" "scan_manifest_drift.py" &
     wait
 
 else
     # Full audit: all scanners in parallel
     echo ""
-    echo "[*] Running all 12 scanners in parallel..."
+    echo "[*] Running all 16 scanners in parallel..."
     run_scanner "entropy" "scan_entropy.py" &
     run_scanner "binary" "scan_binary.py" &
     run_scanner "git_forensics" "scan_git_forensics.py" &
@@ -99,6 +122,14 @@ else
     run_scanner "dataflow" "scan_dataflow.py" &
     run_scanner "mcp_security" "scan_mcp_security.py" &
     run_scanner "ast_analysis" "scan_ast.py" &
+    run_scanner "runtime_dynamism" "scan_runtime_dynamism.py" &
+    run_scanner "manifest_drift" "scan_manifest_drift.py" &
+    if $WATCH_MODE; then
+        run_scanner "integrity" "scan_integrity.py" "--watch" &
+    else
+        run_scanner "integrity" "scan_integrity.py" &
+    fi
+    run_scanner "dast" "scan_dast.py" &
     wait
 fi
 

@@ -261,23 +261,8 @@ def scan_unicode_smuggling(content, rel_path):
 
 
 def scan_patterns(content, rel_path, patterns, category, default_severity):
-    """Generic pattern scanner for categories 1, 3-7."""
-    findings = []
-    lines = content.split('\n')
-    for i, line in enumerate(lines):
-        if len(line) > core.MAX_LINE_LENGTH:
-            continue
-        for pattern, title in patterns:
-            if pattern.search(line):
-                findings.append(core.Finding(
-                    scanner=SCANNER_NAME, severity=default_severity,
-                    title=title,
-                    description=f"Matched in {category} scan",
-                    file=rel_path, line=i + 1,
-                    snippet=line.strip()[:120],
-                    category=category
-                ))
-    return findings
+    """Delegate to shared scan_patterns in forensics_core."""
+    return core.scan_patterns(content, rel_path, patterns, category, default_severity, SCANNER_NAME)
 
 
 def scan_known_iocs(content, rel_path):

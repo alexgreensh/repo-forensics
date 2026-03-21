@@ -25,7 +25,7 @@ SENSITIVE_MODULES = {'os', 'subprocess', 'shutil', 'sys', 'socket', 'builtins', 
 DANGEROUS_ATTRS = {'system', 'popen', 'Popen', 'call', 'run', 'check_output',
                    'exec', 'eval', 'execve', 'execvp', 'spawnl', 'spawnle'}
 # Encoding/decoding functions that precede obfuscated exec
-DECODE_FUNCS = {'b64decode', 'b64decode', 'decodebytes', 'decodestring',
+DECODE_FUNCS = {'b64decode', 'decodebytes', 'decodestring',
                 'decompress', 'loads', 'fromhex', 'decode', 'unhexlify'}
 
 
@@ -147,12 +147,111 @@ class ObfuscationVisitor(ast.NodeVisitor):
                             category="shell-injection"
                         )
 
+        # Pattern 6: importlib.import_module(variable) - dynamic import with non-literal arg
+        if (isinstance(node.func, ast.Attribute) and
+                node.func.attr == 'import_module' and
+                isinstance(node.func.value, ast.Name) and
+                node.func.value.id == 'importlib'):
+            _str_types = (ast.Constant,) + ((ast.Str,) if hasattr(ast, 'Str') else ())
+            if node.args and not isinstance(node.args[0], _str_types):
+                self._add(
+                    severity="critical",
+                    title="Dynamic Import: importlib.import_module(variable)",
+                    description="importlib.import_module() with non-literal argument. Actual module unknown at analysis time.",
+                    lineno=lineno,
+                    category="obfuscated-exec"
+                )
+
+        # Pattern 7: importlib.reload() - runtime code replacement
+        if (isinstance(node.func, ast.Attribute) and
+                node.func.attr == 'reload' and
+                isinstance(node.func.value, ast.Name) and
+                node.func.value.id == 'importlib'):
+            self._add(
+                severity="high",
+                title="Runtime Module Reload: importlib.reload()",
+                description="Module reloaded at runtime. Code can change between invocations.",
+                lineno=lineno,
+                category="obfuscated-exec"
+            )
+
+        # Pattern 8: marshal.loads() / marshal.load() - bytecode deserialization
+        if (isinstance(node.func, ast.Attribute) and
+                node.func.attr in ('loads', 'load') and
+                isinstance(node.func.value, ast.Name) and
+                node.func.value.id == 'marshal'):
+            self._add(
+                severity="critical",
+                title=f"Bytecode Deserialization: marshal.{node.func.attr}()",
+                description="Python bytecode deserialized at runtime. Can contain arbitrary code invisible to source analysis.",
+                lineno=lineno,
+                category="obfuscated-exec"
+            )
+
+        # Pattern 9: types.FunctionType() / types.CodeType() - runtime code construction
+        if (isinstance(node.func, ast.Attribute) and
+                node.func.attr in ('FunctionType', 'CodeType') and
+                isinstance(node.func.value, ast.Name) and
+                node.func.value.id == 'types'):
+            self._add(
+                severity="critical",
+                title=f"Runtime Code Construction: types.{node.func.attr}()",
+                description=f"types.{node.func.attr}() constructs executable code from raw bytecode at runtime.",
+                lineno=lineno,
+                category="obfuscated-exec"
+            )
+
+        # Pattern 10: sys.addaudithook() - audit system manipulation
+        if (isinstance(node.func, ast.Attribute) and
+                node.func.attr == 'addaudithook' and
+                isinstance(node.func.value, ast.Name) and
+                node.func.value.id == 'sys'):
+            self._add(
+                severity="critical",
+                title="Audit Hook Manipulation: sys.addaudithook()",
+                description="Adding audit hook can suppress or intercept security events (CVE-2026-2297 related).",
+                lineno=lineno,
+                category="obfuscated-exec"
+            )
+
+        # Pattern 11: bytes([int, int, ...]).decode() - string obfuscation via byte array
+        if (isinstance(node.func, ast.Attribute) and
+                node.func.attr == 'decode'):
+            val = node.func.value
+            if isinstance(val, ast.Call):
+                if isinstance(val.func, ast.Name) and val.func.id in ('bytes', 'bytearray'):
+                    if val.args and isinstance(val.args[0], ast.List):
+                        if val.args[0].elts and isinstance(val.args[0].elts[0], ast.Constant):
+                            self._add(
+                                severity="high",
+                                title="String Obfuscation: bytes([int_list]).decode()",
+                                description="String constructed from integer byte array. Evades string-matching scanners.",
+                                lineno=lineno,
+                                category="obfuscated-exec"
+                            )
+
+        # Pattern 12: open(__file__, 'w') - self-modification
+        if isinstance(node.func, ast.Name) and node.func.id == 'open':
+            if len(node.args) >= 2:
+                first_arg = node.args[0]
+                second_arg = node.args[1]
+                if isinstance(first_arg, ast.Name) and first_arg.id == '__file__':
+                    if isinstance(second_arg, ast.Constant) and isinstance(second_arg.value, str):
+                        if 'w' in second_arg.value or 'a' in second_arg.value:
+                            self._add(
+                                severity="critical",
+                                title="Self-Modification: open(__file__, 'w')",
+                                description="Code opens its own source file for writing. Can rewrite itself at runtime.",
+                                lineno=lineno,
+                                category="obfuscated-exec"
+                            )
+
         self.generic_visit(node)
 
     def visit_ClassDef(self, node):
         """Detect __reduce__ overrides - classic pickle deserialization backdoor."""
         for item in node.body:
-            if isinstance(item, ast.FunctionDef) and item.name == '__reduce__':
+            if isinstance(item, ast.FunctionDef) and item.name in ('__reduce__', '__reduce_ex__', '__setstate__'):
                 lineno = getattr(item, 'lineno', None)
                 # Check if the function body references dangerous modules/functions
                 for sub in ast.walk(item):
