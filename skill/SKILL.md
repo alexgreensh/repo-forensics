@@ -8,7 +8,7 @@ user-invocable: true
 argument-hint: <repo_path> [--skill-scan] [--format text|json|summary] [--update-iocs] [--watch] [--verify-install]
 ---
 
-<!-- repo-forensics v1 | built by Alex Greenshpun | https://linkedin.com/in/alexgreensh | Co-Intelligent.ai -->
+<!-- repo-forensics v1 | built by Alex Greenshpun | https://linkedin.com/in/alexgreensh -->
 
 # Repo Forensics v1
 

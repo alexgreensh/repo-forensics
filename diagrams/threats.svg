@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 468" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 574" fill="none">
   <defs>
-    <linearGradient id="tbg" x1="0" y1="0" x2="900" y2="468" gradientUnits="userSpaceOnUse">
+    <linearGradient id="tbg" x1="0" y1="0" x2="900" y2="574" gradientUnits="userSpaceOnUse">
       <stop offset="0%" stop-color="#0a0e14"/>
       <stop offset="100%" stop-color="#111921"/>
     </linearGradient>
@@ -10,7 +10,7 @@
     </filter>
   </defs>
 
-  <rect width="900" height="468" rx="12" fill="url(#tbg)"/>
+  <rect width="900" height="574" rx="12" fill="url(#tbg)"/>
 
   <!-- Title -->
   <text x="450" y="34" font-family="'SF Mono',Consolas,monospace" font-size="14" fill="#00f0ff"
@@ -144,16 +144,55 @@
     </g>
   </g>
 
-  <!-- Correlation engine bar - full border (perimeter ~1840) -->
-  <g transform="translate(24, 376)" opacity="1">
+  <!-- Row 4: Agent skill ecosystem (green) -->
+  <g transform="translate(24, 376)">
+    <g opacity="1">
+      <rect width="202" height="92" rx="8" fill="#151b23" stroke="#3fb95040" stroke-width="1"/>
+      <rect width="202" height="3" rx="1" fill="#3fb950" opacity="0.5"/>
+      <text x="14" y="30" font-family="'SF Mono',Consolas,monospace" font-size="11" fill="#3fb950" font-weight="700">Skill Frontmatter</text>
+      <text x="14" y="48" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">Missing author, broad triggers,</text>
+      <text x="14" y="62" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">description injection, ClawHub</text>
+      <text x="14" y="76" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">search poisoning (OpenClaw)</text>
+    </g>
+
+    <g transform="translate(216, 0)" opacity="1">
+      <rect width="202" height="92" rx="8" fill="#151b23" stroke="#3fb95040" stroke-width="1"/>
+      <rect width="202" height="3" rx="1" fill="#3fb950" opacity="0.5"/>
+      <text x="14" y="30" font-family="'SF Mono',Consolas,monospace" font-size="11" fill="#3fb950" font-weight="700">Schema Poisoning</text>
+      <text x="14" y="48" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">tools.json Full-Schema</text>
+      <text x="14" y="62" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">Poisoning (FSP), hidden</text>
+      <text x="14" y="76" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">instructions in inputSchema</text>
+    </g>
+
+    <g transform="translate(432, 0)" opacity="1">
+      <rect width="202" height="92" rx="8" fill="#151b23" stroke="#3fb95040" stroke-width="1"/>
+      <rect width="202" height="3" rx="1" fill="#3fb950" opacity="0.5"/>
+      <text x="14" y="30" font-family="'SF Mono',Consolas,monospace" font-size="11" fill="#3fb950" font-weight="700">Agent Config</text>
+      <text x="14" y="48" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">SOUL.md, AGENTS.md,</text>
+      <text x="14" y="62" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">CLAUDE.md injection, memory</text>
+      <text x="14" y="76" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">file safety overrides</text>
+    </g>
+
+    <g transform="translate(648, 0)" opacity="1">
+      <rect width="204" height="92" rx="8" fill="#151b23" stroke="#3fb95040" stroke-width="1"/>
+      <rect width="204" height="3" rx="1" fill="#3fb950" opacity="0.5"/>
+      <text x="14" y="30" font-family="'SF Mono',Consolas,monospace" font-size="11" fill="#3fb950" font-weight="700">ClawHavoc IOCs</text>
+      <text x="14" y="48" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">AMOS stealer delivery, fake</text>
+      <text x="14" y="62" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">prerequisites, known C2 IPs,</text>
+      <text x="14" y="76" font-family="-apple-system,sans-serif" font-size="10" fill="#c9d1d9">malicious authors/domains</text>
+    </g>
+  </g>
+
+  <!-- Correlation engine bar -->
+  <g transform="translate(24, 482)" opacity="1">
     <rect width="852" height="76" rx="10" fill="#151b23" stroke="#a78bfa" stroke-width="1.5"/>
     <text x="426" y="28" font-family="'SF Mono',Consolas,monospace" font-size="14" fill="#a78bfa"
           text-anchor="middle" font-weight="700" filter="url(#tg)">CORRELATION ENGINE</text>
     <text x="426" y="48" font-family="-apple-system,sans-serif" font-size="11" fill="#c9d1d9" text-anchor="middle">
-      Connects findings across scanners to expose compound attack chains
+      14 rules connecting findings across scanners to expose compound attack chains
     </text>
     <text x="426" y="66" font-family="'SF Mono',Consolas,monospace" font-size="10" fill="#8b949e" text-anchor="middle">
-      env_read + network = exfil  |  prompt_injection + exec = RCE  |  hook + curl = install-time theft
+      env + network = exfil  |  prompt_inj + exec = RCE  |  tools.json + injection = compound
     </text>
     <!-- Pulse border -->
     <rect width="852" height="76" rx="10" fill="none" stroke="#a78bfa" stroke-width="2" opacity="0.15">
@@ -161,5 +200,5 @@
     </rect>
   </g>
 
-  <rect width="900" height="468" rx="12" fill="none" stroke="#1c2940" stroke-width="1"/>
+  <rect width="900" height="574" rx="12" fill="none" stroke="#1c2940" stroke-width="1"/>
 </svg>

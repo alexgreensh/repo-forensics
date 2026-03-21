@@ -320,10 +320,6 @@ Note: `.forensicsignore` is itself scanned. Broad wildcard patterns like `*` are
 
 <p align="center">
   Built by <a href="https://linkedin.com/in/alexgreensh">Alex Greenshpun</a>
-  &nbsp;&middot;&nbsp;
-  <a href="https://co-intelligent.ai">Co-Intelligent.ai</a>
-  &nbsp;&middot;&nbsp;
-  <a href="https://10xcompany.ai">10x Company</a>
   <br><br>
   <sub>Run it before you install anything.</sub>
 </p>
