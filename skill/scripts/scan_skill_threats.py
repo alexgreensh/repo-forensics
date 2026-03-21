@@ -159,12 +159,14 @@ STEALTH_PATTERNS = [
 # Based on published Koi + Snyk research + 2026 updates
 # ============================================================
 KNOWN_C2_IPS = [
-    "91.92.242.30", "54.91.154.110", "157.245.55.238",
+    "91.92.242.30",  # ClawHavoc primary C2 (Koi Security, Jan-Feb 2026)
+    "54.91.154.110", "157.245.55.238",
     "45.77.240.42", "104.248.30.47", "159.65.147.111",
 ]
 
 KNOWN_MALICIOUS_DOMAINS = [
-    "install.app-distribution.net",
+    "install.app-distribution.net",  # AMOS stealer delivery
+    "app-distribution.net",          # AMOS variant
     "dl.dropboxusercontent.com",  # Commonly abused for malware hosting
     "raw.githubusercontent.com",   # When combined with obfuscation
     # 2026 IOCs from ClawHavoc campaign + active threat research
@@ -175,6 +177,12 @@ KNOWN_MALICIOUS_DOMAINS = [
     "api.telegram.org/bot",       # Telegram bot API (primary exfil channel 2025-2026)
     "discord.com/api/webhooks",   # Discord webhook exfil (VVS Stealer, ChaosBot 2026)
     "hooks.slack.com/services",   # Slack webhook as exfil channel
+]
+
+# Known malicious ClawHub authors (ClawHavoc campaign, Koi Security 2026)
+KNOWN_MALICIOUS_AUTHORS = [
+    "zaycv",         # ClawHavoc uploader
+    "linhui1010",    # Comment-based AMOS delivery
 ]
 
 # ============================================================
@@ -190,6 +198,9 @@ CLICKFIX_PATTERNS = [
     (re.compile(r'(?i)(curl|wget)\s+.*-s\s+.*\|\s*(python|python3)\s+-'), "Silent download piped to Python interpreter"),
     (re.compile(r'(?i)eval\s*\(\s*(atob|Buffer\.from|base64_decode|base64\.b64decode)'), "eval(decode(...)) pattern"),
     (re.compile(r'(?i)echo\s+[A-Za-z0-9+/]{30,}={0,2}\s*\|\s*base64\s+(-d|--decode)'), "Inline base64 payload in shell command"),
+    # AMOS stealer delivery patterns (ClawHavoc campaign)
+    (re.compile(r'(?i)(OpenClawDriver|ClawDriver)'), "Fake prerequisite name (AMOS stealer delivery)"),
+    (re.compile(r'(?i)(pass|password)\s*:\s*openclaw'), "Password-protected ZIP with known AMOS password"),
 ]
 
 # ============================================================

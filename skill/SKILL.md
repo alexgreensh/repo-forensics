@@ -26,7 +26,8 @@ Deep security auditing for repositories, AI agent skills, and MCP servers.
 - **MCP rug pull detection**: Tool descriptions sourced from database, network, env vars, or conditional logic
 - **Enhanced AST analysis**: 12 patterns including marshal.loads, types.CodeType, sys.addaudithook, bytes decode obfuscation, self-modification
 - **Test suite**: 173 pytest tests covering all scanners
-- **16 scanners** with 13 correlation rules
+- **OpenClaw/ClawHub scanning**: Auto-detects OpenClaw skills, validates frontmatter, tools.json, SOUL.md, .clawhubignore
+- **17 scanners** with 14 correlation rules
 
 ## When to Use
 
@@ -40,7 +41,7 @@ Deep security auditing for repositories, AI agent skills, and MCP servers.
 
 ## Quick Start
 
-Full audit (all 16 scanners):
+Full audit (all 17 scanners):
 ```bash
 ./scripts/run_forensics.sh /path/to/repo
 ```
@@ -81,6 +82,7 @@ JSON output for automation:
 | **runtime_dynamism** | Dynamic imports, fetch-then-execute, self-modification, time bombs, dynamic tool descriptions | skill + full |
 | **manifest_drift** | Phantom dependencies, runtime package installs, conditional import+install, declared-but-unused deps | skill + full |
 | **skill_threats** | Prompt injection, unicode smuggling, prerequisite attacks, ClickFix, MCP tool injection | skill + full |
+| **openclaw_skills** | SKILL.md frontmatter abuse, tools.json FSP, SOUL.md/AGENTS.md injection, .clawhubignore bypass, ClawHavoc IOCs | skill + full |
 | **mcp_security** | SQL injection to prompt escalation, tool poisoning, rug pull enablers, config CVEs | skill + full |
 | **dataflow** | Source-to-sink taint tracking (env vars to network calls), cross-file import taint | skill + full |
 | **secrets** | 40+ patterns: API keys, tokens, private keys, database URIs, JWTs | skill + full |
@@ -200,7 +202,7 @@ Supports Python (requirements.txt, pyproject.toml, setup.py) and Node.js (packag
 
 ## Correlation Engine
 
-The correlation engine (`forensics_core.py`) identifies compound threats across 13 rules:
+The correlation engine (`forensics_core.py`) identifies compound threats across 14 rules:
 
 1. Environment/credential access + network call = **Potential Data Exfiltration** (critical)
 2. Base64 encoding + exec/eval = **Obfuscated Code Execution** (critical)
@@ -215,6 +217,7 @@ The correlation engine (`forensics_core.py`) identifies compound threats across 
 11. Dynamic tool description + MCP server = **MCP Rug Pull Enabler** (high)
 12. Phantom dependency + network call = **Shadow Dependency with Network Access** (critical)
 13. Pipe exfiltration + network sink = **Shell Script Data Exfiltration Chain** (critical)
+14. Tools.json poisoning + prompt injection = **Agent Skill Compound Attack** (critical)
 
 ## Configuration
 

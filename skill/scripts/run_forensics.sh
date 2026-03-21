@@ -10,8 +10,8 @@ if [ -z "${1:-}" ]; then
     echo "Usage: $0 <repo_path> [--skill-scan] [--format text|json|summary] [--update-iocs] [--watch]"
     echo ""
     echo "Modes:"
-    echo "  (default)      Full audit - all 16 scanners"
-    echo "  --skill-scan   Focused on AI skill threats (6 scanners, faster)"
+    echo "  (default)      Full audit - all 17 scanners"
+    echo "  --skill-scan   Focused on AI skill threats (9 scanners, faster)"
     echo ""
     echo "Options:"
     echo "  --format text     Human-readable with severity colors (default)"
@@ -92,9 +92,9 @@ run_scanner() {
 }
 
 if $SKILL_SCAN; then
-    # Focused mode: 8 scanners most relevant to vetting skills
+    # Focused mode: 9 scanners most relevant to vetting skills
     echo ""
-    echo "[*] Running focused skill scan (8 scanners)..."
+    echo "[*] Running focused skill scan (9 scanners)..."
 
     run_scanner "skill_threats" "scan_skill_threats.py" &
     run_scanner "secrets" "scan_secrets.py" &
@@ -104,12 +104,13 @@ if $SKILL_SCAN; then
     run_scanner "mcp_security" "scan_mcp_security.py" &
     run_scanner "runtime_dynamism" "scan_runtime_dynamism.py" &
     run_scanner "manifest_drift" "scan_manifest_drift.py" &
+    run_scanner "openclaw_skills" "scan_openclaw_skills.py" &
     wait
 
 else
     # Full audit: all scanners in parallel
     echo ""
-    echo "[*] Running all 16 scanners in parallel..."
+    echo "[*] Running all 17 scanners in parallel..."
     run_scanner "entropy" "scan_entropy.py" &
     run_scanner "binary" "scan_binary.py" &
     run_scanner "git_forensics" "scan_git_forensics.py" &
@@ -124,6 +125,7 @@ else
     run_scanner "ast_analysis" "scan_ast.py" &
     run_scanner "runtime_dynamism" "scan_runtime_dynamism.py" &
     run_scanner "manifest_drift" "scan_manifest_drift.py" &
+    run_scanner "openclaw_skills" "scan_openclaw_skills.py" &
     if $WATCH_MODE; then
         run_scanner "integrity" "scan_integrity.py" "--watch" &
     else

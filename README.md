@@ -7,8 +7,8 @@
   <img src="https://img.shields.io/badge/version-v1-1f6feb.svg" alt="v1">
   <img src="https://img.shields.io/badge/python-3.8%2B-blue.svg" alt="Python 3.8+">
   <img src="https://img.shields.io/badge/dependencies-zero-brightgreen.svg" alt="Zero Dependencies">
-  <img src="https://img.shields.io/badge/scanners-16-orange.svg" alt="16 Scanners">
-  <img src="https://img.shields.io/badge/patterns-400%2B-red.svg" alt="400+ Patterns">
+  <img src="https://img.shields.io/badge/scanners-17-orange.svg" alt="17 Scanners">
+  <img src="https://img.shields.io/badge/patterns-450%2B-red.svg" alt="450+ Patterns">
   <img src="https://img.shields.io/badge/tests-173%20passing-brightgreen.svg" alt="173 Tests">
   <img src="https://img.shields.io/badge/2026%20CVEs-covered-critical.svg" alt="2026 CVEs">
 </p>
@@ -23,7 +23,7 @@ Nobody does. The vetting step doesn't exist. You find something useful, you inst
 
 You won't feel it. There are no symptoms.
 
-**Repo Forensics is the vetting step.** Audit any repo, skill, MCP server, or plugin before it touches your machine. 16 scanners, including runtime behavior prediction. Nothing phones home. Runs in seconds.
+**Repo Forensics is the vetting step.** Audit any repo, skill, MCP server, or plugin before it touches your machine. 17 scanners, including runtime behavior prediction and OpenClaw/ClawHub skill analysis. Nothing phones home. Runs in seconds.
 
 ---
 
@@ -34,7 +34,7 @@ $ ./run_forensics.sh ./suspicious-skill
 
 ==========================================
   REPO FORENSICS v1
-  Mode: Full Audit (16 scanners)
+  Mode: Full Audit (17 scanners)
 ==========================================
 
   [CRITICAL] MCP Tool Description Injection
@@ -74,10 +74,10 @@ $ ./run_forensics.sh ./suspicious-skill
 ## How It Works
 
 <p align="center">
-  <img src="diagrams/pipeline.svg" alt="Scanning pipeline: input → 16 scanners → correlation → verdict" width="900"/>
+  <img src="diagrams/pipeline.svg" alt="Scanning pipeline: input → 17 scanners → correlation → verdict" width="900"/>
 </p>
 
-Point it at any repository. 16 scanners run in parallel, each checking a different attack surface. The correlation engine then cross-references findings across 13 rules to detect compound threats that no single scanner would catch (like dynamic import + network fetch = deferred payload loading).
+Point it at any repository. 17 scanners run in parallel, each checking a different attack surface. The correlation engine then cross-references findings across 14 rules to detect compound threats that no single scanner would catch (like dynamic import + network fetch = deferred payload loading).
 
 The result is a severity-ranked verdict with exit codes designed for CI/CD gating.
 
@@ -91,13 +91,14 @@ The result is a severity-ranked verdict with exit codes designed for CI/CD gatin
 
 ---
 
-## The 16 Scanners
+## The 17 Scanners
 
 | Scanner | What It Detects | Approach |
 |---------|----------------|----------|
 | **runtime_dynamism** | Dynamic imports, fetch-then-execute, self-modification, time bombs, dynamic tool descriptions | Regex + Python AST, 5 detection categories |
 | **manifest_drift** | Phantom dependencies, runtime installs, conditional import+install, declared-but-unused deps | AST import extraction vs manifest parsing |
 | **skill_threats** | Prompt injection, unicode smuggling, ClickFix delivery, MCP injection, known campaign IOCs | 10 detection categories, 150+ regex patterns |
+| **openclaw_skills** | SKILL.md frontmatter abuse, tools.json Full-Schema Poisoning, SOUL.md/AGENTS.md injection, .clawhubignore bypass, ClawHavoc IOCs | Regex + JSON parsing, 5 detection categories |
 | **mcp_security** | SQL → prompt escalation, tool poisoning, tool shadowing, rug pull enablers, config CVEs | Schema field inspection, Invariant Labs TPA patterns |
 | **dast** | Hook exploitation: env leaks, timeouts, command injection, path traversal | 8 malicious payloads, sandboxed subprocess execution |
 | **integrity** | Unauthorized config changes, tampered hooks, drift from baseline | SHA256 checksums, `--watch` mode for continuous monitoring |
@@ -161,6 +162,23 @@ Then just ask:
 
 ---
 
+## OpenClaw / ClawHub / NanoClaw
+
+Scan any skill from ClawHub or the OpenClaw ecosystem before installing:
+
+```bash
+./skill/scripts/run_forensics.sh ~/downloads/suspicious-skill --skill-scan
+```
+
+Auto-detects OpenClaw skills (SKILL.md frontmatter, tools.json, SOUL.md) and runs targeted checks:
+- **Frontmatter validation**: missing author, overly broad triggers, description injection
+- **tools.json Full-Schema Poisoning**: hidden instructions in tool definitions and input schemas
+- **Agent config injection**: prompt injection in SOUL.md, AGENTS.md, memory files
+- **ClawHavoc campaign IOCs**: known C2 IPs, AMOS stealer delivery patterns, malicious authors
+- **.clawhubignore bypass**: patterns that hide malicious code from ClawHub's own scanner
+
+---
+
 ## GitHub Actions
 
 ```yaml
@@ -193,12 +211,13 @@ Then just ask:
 | **Manifest drift detection** | Compares declared dependencies vs actual imports. Catches phantom deps, runtime installs, and conditional import+install fallbacks. |
 | **173 pytest tests** | Full test coverage across 10 test files with fixture repos containing known vulnerabilities. |
 | **Shared core** | Duplicated `scan_patterns()` extracted to `forensics_core.py`. Silent exceptions replaced with structured findings. |
+| **OpenClaw/ClawHub scanning** | Auto-detects OpenClaw skills and checks frontmatter, tools.json, SOUL.md, .clawhubignore for ClawHavoc patterns and Full-Schema Poisoning. |
 
 ---
 
 ## Correlation Engine
 
-Individual findings are useful. Compound findings are devastating. The correlation engine connects dots across scanners with 13 rules:
+Individual findings are useful. Compound findings are devastating. The correlation engine connects dots across scanners with 14 rules:
 
 | Pattern | Finding | Severity |
 |---------|---------|----------|
@@ -215,6 +234,7 @@ Individual findings are useful. Compound findings are devastating. The correlati
 | dynamic tool description + MCP server | **MCP Rug Pull Enabler** | high |
 | phantom dependency + network call | **Shadow Dependency with Network** | critical |
 | pipe exfiltration + network sink | **Shell Script Data Exfiltration Chain** | critical |
+| tools.json poisoning + prompt injection | **Agent Skill Compound Attack** | critical |
 
 ---
 
@@ -244,9 +264,10 @@ Research basis: CVE-2026-2297 (SourcelessFileLoader), PylangGhost RAT (March 202
 | `mcp-scan` | MCP server audit | Uploads your code to a cloud API. |
 | GuardDog | Python package scanning | Python only. No MCP, no skills, no source-level analysis. |
 | ClawSec | OpenClaw security suite | 8 external dependencies. Wrapper around semgrep/bandit. No correlation engine. |
+| VirusTotal + ClawHub | ClawHub signature scanning | Surface-level. Signature-based, not structural. No prompt injection detection, no taint tracking. |
 | Manual review | Reading code | Misses zero-width unicode, cross-file taint flows, tool description injection. |
 
-**repo-forensics:** 16 scanners. Zero dependencies. Fully offline. Runtime behavior prediction. Built for the AI agent ecosystem.
+**repo-forensics:** 17 scanners. Zero dependencies. Fully offline. Runtime behavior prediction. Built for the AI agent ecosystem.
 
 ---
 
@@ -259,6 +280,7 @@ Detection patterns are original work informed by published research:
 | [Invariant Labs: Tool Poisoning](https://invariantlabs.ai/blog/mcp-security-notification-tool-poisoning-attacks) | 2025 | `<IMPORTANT>` tag as canonical TPA | mcp_security |
 | [Trend Micro: SQL → Prompt Escalation](https://www.trendmicro.com/en_us/research/25/e/mcp-security.html) | 2025 | SQL injection stores malicious prompts | mcp_security |
 | [Koi Security: ClawHavoc Campaign](https://koisecurity.com) | 2026 | 1,184 malicious skills, AMOS stealer delivery | skill_threats |
+| [Koi Security: ClawHavoc Campaign](https://koi.ai) | 2026 | 1,184 malicious skills, AMOS stealer delivery | skill_threats, openclaw_skills |
 | [Socket Research: SANDWORM_MODE](https://socket.dev) | 2026 | McpInject npm worm, 17 known-malicious packages | dependencies |
 | [Snyk: ToxicSkills](https://snyk.io/blog/toxic-ai-agent-skills/) | 2025 | 36.8% of skills have flaws, 91% combine code + prompt injection | skill_threats |
 | [Repello AI: Tool Poisoning](https://repello.ai) | 2026 | 72.8% success rate for tool poisoning attacks | runtime_dynamism |

@@ -222,7 +222,8 @@ def correlate(findings):
     exec_keywords = {"eval", "exec", "system", "subprocess", "code execution", "shell"}
     encoding_keywords = {"base64", "obfuscat", "encoding", "hex string"}
     sensitive_read_keywords = {".env", ".ssh", ".aws", "credential", "keychain", "browser data", "config"}
-    prompt_keywords = {"prompt injection", "instruction override", "persona reassignment", "confirmation bypass"}
+    prompt_injection_keywords = {"prompt injection", "instruction override", "persona reassignment", "confirmation bypass"}
+    prompt_keywords = prompt_injection_keywords  # backward compat alias
     lifecycle_keywords = {"lifecycle", "hook", "postinstall", "preinstall", "cmdclass", "setup.py"}
     dynamic_import_keywords = {"dynamic import", "importlib", "import_module", "dynamic-import"}
     time_bomb_keywords = {"time bomb", "time-bomb", "datetime comparison", "activation trigger", "unix timestamp"}
@@ -230,9 +231,12 @@ def correlate(findings):
     mcp_server_keywords = {"mcp", "tool-poisoning", "mcp_security", "mcp-config", "rug-pull-enabler"}
     phantom_dep_keywords = {"phantom-dependency", "phantom dep", "shadow dependency"}
     pipe_exfil_keywords = {"pipe exfiltration", "reverse shell", "/dev/tcp", "pipe-exfiltration"}
+    openclaw_keywords = {"tool-poisoning", "agent-injection", "frontmatter", "clawhavoc-delivery", "clawhubignore-bypass"}
 
-    def has_category(file_findings, keywords):
+    def has_category(file_findings, keywords, exclude_scanner=None):
         for f in file_findings:
+            if exclude_scanner and f.scanner == exclude_scanner:
+                continue
             desc_lower = (f.description + " " + f.title + " " + f.category).lower()
             for kw in keywords:
                 if kw in desc_lower:
@@ -417,6 +421,19 @@ def correlate(findings):
                 line=0,
                 snippet="[compound: pipe exfiltration + network sink]",
                 category="pipe-exfiltration"
+            ))
+
+        # Rule 14: OpenClaw skill compound attack (cross-scanner signal only)
+        if has_category(file_findings, openclaw_keywords) and has_category(file_findings, prompt_injection_keywords, exclude_scanner="openclaw_skills"):
+            correlated.append(Finding(
+                scanner="correlation",
+                severity="critical",
+                title="Agent Skill Compound Attack",
+                description="Multiple attack vectors in agent skill: tool poisoning combined with prompt injection. Matches ClawHavoc campaign pattern.",
+                file=filepath,
+                line=0,
+                snippet="[compound: tool/config poisoning + prompt injection]",
+                category="openclaw-compound"
             ))
 
     return correlated
