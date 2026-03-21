@@ -15,15 +15,15 @@
 
 ---
 
-That ClawHub skill with 50 installs. The MCP server someone linked in Discord. The OpenClaw brain your agent auto-installed. The npm package in your lockfile.
+That MCP server with 500 downloads. The Claude Code skill someone linked in Discord. The ClawHub extension your OpenClaw agent auto-installed. The npm package Cursor added to your lockfile. The Codex plugin you grabbed from GitHub.
 
 Did you vet any of them?
 
-Nobody does. The vetting step doesn't exist. [1,184 malicious skills](https://www.koi.ai/blog/clawhavoc-341-malicious-clawedbot-skills-found-by-the-bot-they-were-targeting) found on ClawHub in one campaign. [36.8% of agent skills](https://snyk.io/blog/toxic-ai-agent-skills/) have security flaws. You install something useful, it runs with your credentials, your file access, your session context. If it's designed to exfiltrate data, it does it quietly while you're using it for something else entirely.
+Nobody does. The vetting step doesn't exist. [1,184 malicious skills](https://www.koi.ai/blog/clawhavoc-341-malicious-clawedbot-skills-found-by-the-bot-they-were-targeting) found on ClawHub in one campaign. [36.8% of agent skills](https://snyk.io/blog/toxic-ai-agent-skills/) have security flaws. You find something useful, you install it. It runs with your credentials, your file access, your session context. If it's designed to exfiltrate data, it does it quietly while you're using it for something else entirely.
 
 You won't feel it. There are no symptoms.
 
-**Repo Forensics is the vetting step.** Audit any repo, OpenClaw/ClawHub skill, MCP server, or plugin before it touches your machine. 17 scanners with ClawHavoc campaign detection, Full-Schema Poisoning analysis, and runtime behavior prediction. Nothing phones home. Runs in seconds.
+**Repo Forensics is the vetting step.** Audit any repo, skill, MCP server, or plugin before it touches your machine. Works across the AI agent ecosystem: Claude Code, OpenClaw, Codex, Cursor, NanoClaw, or anything that installs third-party code. 17 scanners, runtime behavior prediction, ClawHavoc campaign detection. Nothing phones home. Runs in seconds.
 
 ---
 
