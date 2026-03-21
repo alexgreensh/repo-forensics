@@ -9,7 +9,6 @@
   <img src="https://img.shields.io/badge/dependencies-zero-brightgreen.svg" alt="Zero Dependencies">
   <img src="https://img.shields.io/badge/scanners-17-orange.svg" alt="17 Scanners">
   <img src="https://img.shields.io/badge/patterns-450%2B-red.svg" alt="450+ Patterns">
-  <img src="https://img.shields.io/badge/tests-223%20passing-brightgreen.svg" alt="223 Tests">
   <img src="https://img.shields.io/badge/2026%20CVEs-covered-critical.svg" alt="2026 CVEs">
 </p>
 
