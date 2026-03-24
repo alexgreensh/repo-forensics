@@ -210,7 +210,7 @@ Auto-detects OpenClaw skills (SKILL.md frontmatter, tools.json, SOUL.md) and run
 | **GitHub Action** | `action.yml` for CI/CD integration with exit code gating. |
 | **Runtime behavior prediction** | Detects code that will change behavior after install: time bombs, dynamic imports, fetch-then-execute, self-modification, rug pull enablers. |
 | **Manifest drift detection** | Compares declared dependencies vs actual imports. Catches phantom deps, runtime installs, and conditional import+install fallbacks. |
-| **173 pytest tests** | Full test coverage across 10 test files with fixture repos containing known vulnerabilities. |
+| **223 pytest tests** | Full test coverage across 14 test files with fixture repos containing known vulnerabilities. |
 | **Shared core** | Duplicated `scan_patterns()` extracted to `forensics_core.py`. Silent exceptions replaced with structured findings. |
 | **OpenClaw/ClawHub scanning** | Auto-detects OpenClaw skills and checks frontmatter, tools.json, SOUL.md, .clawhubignore for ClawHavoc patterns and Full-Schema Poisoning. |
 

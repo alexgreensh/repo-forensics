@@ -1,0 +1,19 @@
+# Test fixtures contain intentionally malicious patterns for scanner validation
+skill/tests/*
+
+# Integrity checksums (SHA256 hashes trigger entropy scanner)
+skill/checksums.json
+
+# Threat pattern references (documentation describes the attacks we detect)
+skill/references/threat_patterns.md
+
+# Scanner scripts and core (contain regex patterns for the attacks they detect)
+skill/scripts/scan_*.py
+skill/scripts/forensics_core.py
+skill/scripts/ioc_manager.py
+
+# SKILL.md (documents the attack types we catch)
+skill/SKILL.md
+
+# GitHub Action (controlled input interpolation)
+action.yml
