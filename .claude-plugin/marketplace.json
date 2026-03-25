@@ -1,0 +1,36 @@
+{
+  "name": "repo-forensics-marketplace",
+  "owner": {
+    "name": "Alex Greenshpun",
+    "url": "https://github.com/alexgreensh"
+  },
+  "metadata": {
+    "description": "Zero-dependency security scanner for AI agent ecosystems",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "repo-forensics",
+      "description": "Auto-scan repos, skills, MCP servers, and packages for security threats. 17 scanners, 16 correlation rules, PostToolUse auto-scan hook. Detects prompt injection, supply chain attacks, credential theft, and 2026 attack patterns.",
+      "version": "2.0.0",
+      "author": {
+        "name": "Alex Greenshpun",
+        "url": "https://linkedin.com/in/alexgreensh"
+      },
+      "homepage": "https://github.com/alexgreensh/repo-forensics",
+      "repository": "https://github.com/alexgreensh/repo-forensics",
+      "license": "AGPL-3.0-only",
+      "tags": [
+        "security",
+        "scanning",
+        "supply-chain",
+        "mcp",
+        "ai-agent",
+        "forensics",
+        "hooks",
+        "auto-scan"
+      ],
+      "source": "./"
+    }
+  ]
+}
