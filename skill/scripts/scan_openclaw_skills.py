@@ -62,21 +62,34 @@ def _read(path):
 
 
 def is_openclaw_skill(repo_path):
-    """Return True if repo looks like an OpenClaw/NanoClaw/ClawHub skill.
+    """Return True if repo looks like an OpenClaw/NanoClaw/ClawHub skill or plugin.
     Requires at least one OpenClaw-specific marker. SKILL.md alone needs
     frontmatter (---) to distinguish from generic Claude skills.
     """
     # OpenClaw-specific markers (not found in generic repos)
-    for name in ('.clawhubignore', 'SOUL.md', 'AGENTS.md'):
+    for name in ('.clawhubignore', '.clawdhubignore', 'SOUL.md', 'AGENTS.md',
+                 'USER.md', 'IDENTITY.md', 'HEARTBEAT.md', 'BOOT.md', 'BOOTSTRAP.md',
+                 'openclaw.plugin.json'):
         if os.path.isfile(os.path.join(repo_path, name)):
             return True
+    # package.json with openclaw namespace = native plugin
+    pkg_json = os.path.join(repo_path, 'package.json')
+    if os.path.isfile(pkg_json):
+        content = _read(pkg_json)
+        if content:
+            try:
+                data = json.loads(content)
+                if 'openclaw' in data and 'extensions' in data.get('openclaw', {}):
+                    return True
+            except (json.JSONDecodeError, TypeError):
+                pass
     # SKILL.md with frontmatter = OpenClaw/NanoClaw style
     skill_md = os.path.join(repo_path, 'SKILL.md')
     if os.path.isfile(skill_md):
         content = _read(skill_md)
         if content and content.startswith('---'):
             return True
-    # tools.json with tool definitions (not generic config)
+    # tools.json with MCP-style tool definitions (relevant to OpenClaw MCP integrations)
     tools_json = os.path.join(repo_path, 'tools.json')
     if os.path.isfile(tools_json):
         content = _read(tools_json)
@@ -110,8 +123,11 @@ def scan_frontmatter(repo_path):
         findings.append(_F(SCANNER_NAME, "high", "Missing skill name in frontmatter",
             "SKILL.md frontmatter has no 'name' field.", "SKILL.md", 1, fm_text[:120], "frontmatter"))
     if not fields.get('author'):
-        findings.append(_F(SCANNER_NAME, "high", "Missing skill author in frontmatter (unattributed skill)",
-            "Unattributed skills are a supply-chain risk.", "SKILL.md", 1, fm_text[:120], "frontmatter"))
+        # Note: 'author' is not an official OpenClaw frontmatter field (identity comes from
+        # ClawHub account), but unattributed skills in the wild are a supply-chain signal.
+        findings.append(_F(SCANNER_NAME, "medium", "Missing skill author in frontmatter (unattributed skill)",
+            "No author field in frontmatter. In OpenClaw, author comes from ClawHub account, but standalone skills should declare authorship.",
+            "SKILL.md", 1, fm_text[:120], "frontmatter"))
     if 'triggers' in fields:
         raw = fields['triggers']
         for w in re.findall(r'[\w]+', raw.lower()):
@@ -196,9 +212,12 @@ def scan_agent_configs(repo_path):
 
 
 def scan_clawhubignore(repo_path):
-    """Cat 4: Check .clawhubignore for patterns that hide executable code."""
+    """Cat 4: Check .clawhubignore (or legacy .clawdhubignore) for patterns that hide executable code."""
     findings = []
+    # Support both current and legacy spelling
     content = _read(os.path.join(repo_path, '.clawhubignore'))
+    if not content:
+        content = _read(os.path.join(repo_path, '.clawdhubignore'))
     if not content:
         return findings
     for i, raw in enumerate(content.split('\n')):
@@ -243,6 +262,37 @@ def scan_clawhavoc(repo_path):
     return findings
 
 
+def scan_plugin_manifest(repo_path):
+    """Cat 6: Check openclaw.plugin.json for suspicious patterns."""
+    findings = []
+    content = _read(os.path.join(repo_path, 'openclaw.plugin.json'))
+    if not content:
+        return findings
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError:
+        findings.append(_F(SCANNER_NAME, "medium", "Unparseable openclaw.plugin.json",
+            "Plugin manifest could not be parsed.", "openclaw.plugin.json", 0, content[:80], "plugin-manifest"))
+        return findings
+    # Check for missing required fields
+    if not data.get('id'):
+        findings.append(_F(SCANNER_NAME, "high", "Missing plugin id in manifest",
+            "openclaw.plugin.json missing required 'id' field.", "openclaw.plugin.json", 0, "", "plugin-manifest"))
+    if not data.get('configSchema'):
+        findings.append(_F(SCANNER_NAME, "medium", "Missing configSchema in manifest",
+            "openclaw.plugin.json missing required 'configSchema' field.", "openclaw.plugin.json", 0, "", "plugin-manifest"))
+    # Check description/name for injection
+    for fld in ('name', 'description'):
+        val = data.get(fld, '')
+        if isinstance(val, str):
+            for pat in PROMPT_INJECTION_RE:
+                if pat.search(val):
+                    findings.append(_F(SCANNER_NAME, "critical", f"Prompt injection in plugin manifest {fld}",
+                        f"Plugin manifest '{fld}' contains injection pattern.", "openclaw.plugin.json", 0, val[:120], "plugin-manifest"))
+                    break
+    return findings
+
+
 def main(args):
     """Run all OpenClaw skill checks. Returns list[Finding].
     Args can be a namespace with .repo_path or a string path (for testing).
@@ -258,6 +308,7 @@ def main(args):
     findings.extend(scan_agent_configs(repo_path))
     findings.extend(scan_clawhubignore(repo_path))
     findings.extend(scan_clawhavoc(repo_path))
+    findings.extend(scan_plugin_manifest(repo_path))
     return findings
 
 

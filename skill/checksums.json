@@ -24,7 +24,7 @@
     "scripts/scan_lifecycle.py": "e424b53ecaf77ad6f24cf53b271f5eaec7f953bde03ba74e672c7154bca7a821",
     "scripts/scan_manifest_drift.py": "5774ca52b1766bce1463daf95730702baf62e939152cbf272469f3379d058425",
     "scripts/scan_mcp_security.py": "4cf9e43eeb9abc3e8476b73424c93e61bc7ec00f7ebbd68e83037a976da54466",
-    "scripts/scan_openclaw_skills.py": "793ca11737592f92be0e00e7c731874b2e8174cec823febb67ebdfac002647a7",
+    "scripts/scan_openclaw_skills.py": "29996bd41d5817bd6cc33c04ffb45e6dbd2b0579668afc564fccb82608a1ca74",
     "scripts/scan_runtime_dynamism.py": "1cdda472feb6426cfdbf705f2ca2605481ebf9ce1146f0039dcb6232d79f6f75",
     "scripts/scan_sast.py": "a35570376fc1d00bd3ee4aeb1907854ce709f2f286a99d43f3f3b340d5fb3997",
     "scripts/scan_secrets.py": "407234e3e5717b52ffc92512a48c9ad8e9b48cb3fe4a1807573f3e033f0c3121",
