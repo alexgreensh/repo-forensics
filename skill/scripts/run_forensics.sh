@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Repo Forensics Suite Runner v1
+# Repo Forensics Suite Runner v2
 # Created by Alex Greenshpun
 # Usage: ./run_forensics.sh <repo_path> [--skill-scan] [--format text|json|summary]
 
@@ -34,7 +34,7 @@ VERIFY_INSTALL=false
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --skill-scan) SKILL_SCAN=true; shift ;;
-        --format) FORMAT="$2"; shift 2 ;;
+        --format) [[ $# -ge 2 ]] || { echo "Error: --format requires a value"; exit 1; }; FORMAT="$2"; shift 2 ;;
         --update-iocs) UPDATE_IOCS=true; shift ;;
         --watch) WATCH_MODE=true; shift ;;
         --verify-install) VERIFY_INSTALL=true; shift ;;
@@ -59,7 +59,7 @@ TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
 
 echo "=========================================="
-echo "  REPO FORENSICS v1"
+echo "  REPO FORENSICS v2"
 echo "  Target: $REPO_PATH"
 echo "  Mode: $(if $SKILL_SCAN; then echo 'Skill Scan (focused)'; else echo 'Full Audit'; fi)"
 echo "  Format: $FORMAT"
@@ -84,9 +84,9 @@ run_scanner() {
     local exit_file="$TMPDIR/$name.exit"
 
     if [ -n "$TIMEOUT_CMD" ]; then
-        $TIMEOUT_CMD "$SCANNER_TIMEOUT" python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$FORMAT" $extra_args > "$output_file" 2>&1
+        $TIMEOUT_CMD "$SCANNER_TIMEOUT" python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$FORMAT" ${extra_args:+"$extra_args"} > "$output_file" 2>&1
     else
-        python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$FORMAT" $extra_args > "$output_file" 2>&1
+        python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$FORMAT" ${extra_args:+"$extra_args"} > "$output_file" 2>&1
     fi
     echo $? > "$exit_file"
 }

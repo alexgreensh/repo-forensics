@@ -1,0 +1,12 @@
+{
+  "hooks": [
+    {
+      "event": "PostToolUse",
+      "matcher": {
+        "tool_name": "Bash"
+      },
+      "script": "skill/scripts/auto_scan.py",
+      "timeout": 30000
+    }
+  ]
+}

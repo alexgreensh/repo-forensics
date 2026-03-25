@@ -1,10 +1,10 @@
 <p align="center">
-  <img src="diagrams/hero.svg" alt="Repo Forensics v1" width="900"/>
+  <img src="diagrams/hero.svg" alt="Repo Forensics v2" width="900"/>
 </p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg" alt="License: AGPL-3.0"></a>
-  <img src="https://img.shields.io/badge/version-v1-1f6feb.svg" alt="v1">
+  <img src="https://img.shields.io/badge/version-v2-1f6feb.svg" alt="v2">
   <img src="https://img.shields.io/badge/python-3.8%2B-blue.svg" alt="Python 3.8+">
   <img src="https://img.shields.io/badge/dependencies-zero-brightgreen.svg" alt="Zero Dependencies">
   <img src="https://img.shields.io/badge/scanners-17-orange.svg" alt="17 Scanners">
@@ -32,7 +32,7 @@ You won't feel it. There are no symptoms.
 $ ./run_forensics.sh ./suspicious-skill
 
 ==========================================
-  REPO FORENSICS v1
+  REPO FORENSICS v2
   Mode: Full Audit (17 scanners)
 ==========================================
 
@@ -78,7 +78,7 @@ $ ./run_forensics.sh ./suspicious-skill
   <img src="diagrams/pipeline.svg" alt="Scanning pipeline: input → 17 scanners → correlation → verdict" width="900"/>
 </p>
 
-Point it at any repository. 17 scanners run in parallel, each checking a different attack surface. The correlation engine then cross-references findings across 14 rules to detect compound threats that no single scanner would catch (like dynamic import + network fetch = deferred payload loading).
+Point it at any repository. 17 scanners run in parallel, each checking a different attack surface. The correlation engine then cross-references findings across 16 rules to detect compound threats that no single scanner would catch (like dynamic import + network fetch = deferred payload loading).
 
 The result is a severity-ranked verdict with exit codes designed for CI/CD gating.
 
@@ -107,8 +107,8 @@ The result is a severity-ranked verdict with exit codes designed for CI/CD gatin
 | **secrets** | API keys, tokens, private keys, database URIs, JWTs | 40+ patterns with entropy + format combo detection |
 | **sast** | Dangerous functions, injection, deserialization, shell execution | 8 languages: Python, JS, TS, Ruby, PHP, Java, Go, Bash |
 | **ast_analysis** | Obfuscated exec chains, `__reduce__` backdoors, marshal/types bytecode, audit hook abuse | Python AST walking, 12 detection patterns |
-| **dependencies** | Typosquatting, version confusion, SANDWORM_MODE IOC packages | 500+ popular packages, l33t normalization, lockfile registry checks |
-| **lifecycle** | Malicious install hooks in npm and pip (the #1 supply chain vector) | `postinstall`, `preinstall`, `cmdclass` detection |
+| **dependencies** | Typosquatting, version confusion, SANDWORM_MODE IOC packages, transitive supply chain | 500+ popular packages, l33t normalization, lockfile deep parsing (npm/yarn/poetry/pipfile) |
+| **lifecycle** | Malicious install hooks in npm and pip, `.pth` file injection (liteLLM-style) | `postinstall`, `preinstall`, `cmdclass`, `.pth` exec/base64/IOC detection |
 | **entropy** | Hidden payloads in base64 blocks, hex strings, high-entropy content | Per-string Shannon entropy with format-aware thresholds |
 | **infra** | Docker misconfig, K8s breakouts, GHA expression injection, Claude config CVEs | Dockerfile, YAML, workflow, and settings.json analysis |
 | **binary** | Executables disguised as images, text files, or documentation | Magic number detection vs. file extension |
@@ -142,6 +142,30 @@ No pip install. No API keys. No Docker. No dependencies.
 # Verify your own installation hasn't been tampered with
 ./skill/scripts/run_forensics.sh /path/to/repo --verify-install
 ```
+
+---
+
+## Auto-Scan Hook (v2)
+
+v2 adds a PostToolUse hook that automatically scans when you install or clone anything. No manual invocation needed.
+
+**What triggers it:**
+- `git clone`, `pip install`, `npm install`, `yarn add`, `gem install`, `cargo install`, `go get`, `brew install`
+- `curl ... | sh` or `wget ... | sh` (instant CRITICAL, no scan needed)
+
+**What it does:**
+1. Detects install/clone commands in Bash tool calls (<10ms for non-matching commands)
+2. Checks package names against the IOC database (known malicious packages)
+3. For cloned repos: runs 6 targeted scanners in parallel (dependencies, secrets, lifecycle, skill_threats, manifest_drift, runtime_dynamism)
+4. Returns findings as inline context in Claude Code
+
+**Setup as a plugin:**
+```bash
+# From the repo-forensics directory:
+ln -s $(pwd) ~/.claude/plugins/repo-forensics
+```
+
+The hook fires automatically on every Bash command. Non-matching commands exit in <10ms with zero overhead.
 
 ---
 
@@ -184,7 +208,7 @@ Auto-detects OpenClaw skills (SKILL.md frontmatter, tools.json, SOUL.md) and run
 
 ```yaml
 - name: Security gate
-  uses: alexgreensh/repo-forensics@v1
+  uses: alexgreensh/repo-forensics@v2
   with:
     mode: full           # or skill-scan
     format: text         # or json, summary
@@ -218,7 +242,7 @@ Auto-detects OpenClaw skills (SKILL.md frontmatter, tools.json, SOUL.md) and run
 
 ## Correlation Engine
 
-Individual findings are useful. Compound findings are devastating. The correlation engine connects dots across scanners with 14 rules:
+Individual findings are useful. Compound findings are devastating. The correlation engine connects dots across scanners with 16 rules:
 
 | Pattern | Finding | Severity |
 |---------|---------|----------|
@@ -236,6 +260,8 @@ Individual findings are useful. Compound findings are devastating. The correlati
 | phantom dependency + network call | **Shadow Dependency with Network** | critical |
 | pipe exfiltration + network sink | **Shell Script Data Exfiltration Chain** | critical |
 | tools.json poisoning + prompt injection | **Agent Skill Compound Attack** | critical |
+| .pth file + base64/exec | **Python Startup Injection (liteLLM-style)** | critical |
+| .pth file + known IOC | **Known Supply Chain .pth Attack** | critical |
 
 ---
 
@@ -294,6 +320,7 @@ Detection patterns are original work informed by published research:
 | CVE-2025-6514 (CVSS 9.6) | 2025 | mcp-remote OAuth command injection | mcp_security |
 | Socket.dev NuGet time bombs | 2025 | Hardcoded activation dates years in future | runtime_dynamism |
 | PylangGhost RAT | 2026 | Benign v1.0.0 weaponized in v1.0.1 | manifest_drift, runtime_dynamism |
+| liteLLM .pth injection | 2026 | Malicious `.pth` file in PyPI package auto-exfiltrates credentials on `pip install`. 97M monthly downloads. Spread transitively via dspy. | lifecycle, dependencies |
 
 ---
 

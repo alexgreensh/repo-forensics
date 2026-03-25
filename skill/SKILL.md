@@ -8,14 +8,17 @@ user-invocable: true
 argument-hint: <repo_path> [--skill-scan] [--format text|json|summary] [--update-iocs] [--watch] [--verify-install]
 ---
 
-<!-- repo-forensics v1 | built by Alex Greenshpun | https://linkedin.com/in/alexgreensh -->
+<!-- repo-forensics v2 | built by Alex Greenshpun | https://linkedin.com/in/alexgreensh -->
 
-# Repo Forensics v1
+# Repo Forensics v2
 
 Deep security auditing for repositories, AI agent skills, and MCP servers.
 
 ## Highlights
 
+- **Auto-scan hook** (v2): PostToolUse hook auto-triggers on `git clone`, `pip install`, `npm install`, etc. Zero-overhead for non-matching commands.
+- **.pth file injection detection** (v2): Detects liteLLM-style Python startup injection attacks (exec/eval/base64/known IOC filenames)
+- **Transitive dependency scanning** (v2): Deep-parses `package-lock.json`, `yarn.lock`, `poetry.lock`, `Pipfile.lock` for supply chain IOCs
 - **DAST scanner** (`scan_dast.py`): Dynamic analysis of Claude Code hooks with 8 malicious payload types, sandboxed execution
 - **File integrity monitor** (`scan_integrity.py`): SHA256 baselines for critical config files, drift detection with `--watch`
 - **IOC auto-update** (`--update-iocs`): Pull latest indicators of compromise from remote feed
@@ -25,9 +28,9 @@ Deep security auditing for repositories, AI agent skills, and MCP servers.
 - **Manifest drift detection** (`scan_manifest_drift.py`): Compares declared vs actual dependencies, catches phantom deps, runtime installs, conditional import+install fallbacks
 - **MCP rug pull detection**: Tool descriptions sourced from database, network, env vars, or conditional logic
 - **Enhanced AST analysis**: 12 patterns including marshal.loads, types.CodeType, sys.addaudithook, bytes decode obfuscation, self-modification
-- **Test suite**: 173 pytest tests covering all scanners
+- **Test suite**: 223 pytest tests covering all scanners
 - **OpenClaw/ClawHub scanning**: Auto-detects OpenClaw skills, validates frontmatter, tools.json, SOUL.md, .clawhubignore
-- **17 scanners** with 14 correlation rules
+- **17 scanners** with 16 correlation rules
 
 ## When to Use
 

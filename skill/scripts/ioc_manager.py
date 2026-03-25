@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ioc_manager.py - IOC (Indicators of Compromise) management for repo-forensics v1.
+ioc_manager.py - IOC (Indicators of Compromise) management for repo-forensics v2.
 Handles loading, caching, and updating IOC lists from a hosted JSON feed.
 
 Usage:
@@ -52,6 +52,8 @@ HARDCODED_MALICIOUS_DOMAINS = [
     "api.telegram.org/bot",
     "discord.com/api/webhooks",
     "hooks.slack.com/services",
+    # liteLLM supply chain attack C2 (March 2026)
+    "eo1n0jq9qgggt.m.pipedream.net",
 ]
 
 HARDCODED_MALICIOUS_NPM = {
@@ -62,6 +64,11 @@ HARDCODED_MALICIOUS_NPM = {
 
 HARDCODED_MALICIOUS_PYPI = {
     "anthopic", "antrhopic", "claudes", "mcp-python-sdk",
+}
+
+HARDCODED_MALICIOUS_PTH_FILES = {
+    "litellm_init.pth", "litellm-init.pth", "litellm.pth",
+    "llm_init.pth", "init_hook.pth", "startup.pth",
 }
 
 
@@ -91,12 +98,13 @@ def _load_cache(cache_dir=None):
 
 
 def _save_cache(data, cache_dir=None):
-    """Save IOCs to local cache."""
+    """Save IOCs to local cache. Does not mutate the input dict."""
     path = _cache_path(cache_dir)
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    data['_cached_at'] = time.time()
+    to_save = dict(data)
+    to_save['_cached_at'] = time.time()
     with open(path, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=2)
+        json.dump(to_save, f, indent=2)
 
 
 def fetch_remote_iocs(feed_url=None):
@@ -105,9 +113,9 @@ def fetch_remote_iocs(feed_url=None):
     try:
         import urllib.request
         import urllib.error
-        req = urllib.request.Request(url, headers={'User-Agent': 'repo-forensics/v1'})
+        req = urllib.request.Request(url, headers={'User-Agent': 'repo-forensics/v2'})
         with urllib.request.urlopen(req, timeout=10) as resp:
-            data = json.loads(resp.read().decode('utf-8'))
+            data = json.loads(resp.read(5_000_000).decode('utf-8'))  # 5MB max
         return data
     except Exception:
         return None
@@ -139,6 +147,7 @@ def get_iocs(cache_dir=None):
         'malicious_domains': list(HARDCODED_MALICIOUS_DOMAINS),
         'malicious_npm': set(HARDCODED_MALICIOUS_NPM),
         'malicious_pypi': set(HARDCODED_MALICIOUS_PYPI),
+        'malicious_pth_files': set(HARDCODED_MALICIOUS_PTH_FILES),
     }
 
     # Merge remote IOCs if available
@@ -172,6 +181,7 @@ def main():
         print(f"Malicious domains: {len(iocs['malicious_domains'])}")
         print(f"Malicious NPM: {len(iocs['malicious_npm'])}")
         print(f"Malicious PyPI: {len(iocs['malicious_pypi'])}")
+        print(f"Malicious .pth files: {len(iocs.get('malicious_pth_files', set()))}")
         cached = _load_cache(args.cache_dir)
         if cached:
             age = (time.time() - cached.get('_cached_at', 0)) / 3600

@@ -45,26 +45,34 @@ runs:
     - name: Run Repo Forensics
       id: scan
       shell: bash
+      env:
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_MODE: ${{ inputs.mode }}
+        INPUT_FORMAT: ${{ inputs.format }}
+        INPUT_UPDATE_IOCS: ${{ inputs.update-iocs }}
+        INPUT_WATCH: ${{ inputs.watch }}
+        ACTION_PATH: ${{ github.action_path }}
+        WORKSPACE: ${{ github.workspace }}
       run: |
-        SCAN_PATH="${{ inputs.path }}"
+        SCAN_PATH="$INPUT_PATH"
         if [ "$SCAN_PATH" = "." ]; then
-          SCAN_PATH="${{ github.workspace }}"
+          SCAN_PATH="$WORKSPACE"
         fi
 
         ARGS=""
-        if [ "${{ inputs.mode }}" = "skill-scan" ]; then
+        if [ "$INPUT_MODE" = "skill-scan" ]; then
           ARGS="$ARGS --skill-scan"
         fi
-        ARGS="$ARGS --format ${{ inputs.format }}"
-        if [ "${{ inputs.update-iocs }}" = "true" ]; then
+        ARGS="$ARGS --format $INPUT_FORMAT"
+        if [ "$INPUT_UPDATE_IOCS" = "true" ]; then
           ARGS="$ARGS --update-iocs"
         fi
-        if [ "${{ inputs.watch }}" = "true" ]; then
+        if [ "$INPUT_WATCH" = "true" ]; then
           ARGS="$ARGS --watch"
         fi
 
         set +e
-        bash "${{ github.action_path }}/skill/scripts/run_forensics.sh" "$SCAN_PATH" $ARGS
+        bash "$ACTION_PATH/skill/scripts/run_forensics.sh" "$SCAN_PATH" $ARGS
         EXIT_CODE=$?
         set -e
 

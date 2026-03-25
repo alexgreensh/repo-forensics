@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-verify_install.py - Skill Installation Integrity Verifier (v1)
+verify_install.py - Skill Installation Integrity Verifier (v2)
 Verifies that repo-forensics itself hasn't been tampered with.
 
 Modes:
@@ -63,7 +63,7 @@ def generate_checksums(skill_root):
         checksums[rel] = sha256_file(fp)
 
     output = {
-        'version': 'v1',
+        'version': '2',
         'generator': 'repo-forensics/verify_install',
         'file_count': len(checksums),
         'files': checksums,

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-forensics_core.py - Core framework for repo-forensics v1
+forensics_core.py - Core framework for repo-forensics v2
 Provides Finding dataclass, severity system, output formatting,
 correlation engine, and .forensicsignore support.
 
@@ -12,7 +12,6 @@ import sys
 import json
 import fnmatch
 from dataclasses import dataclass, field, asdict
-from typing import Optional
 
 # --- Severity System ---
 SEVERITY = {"critical": 4, "high": 3, "medium": 2, "low": 1}
@@ -223,7 +222,6 @@ def correlate(findings):
     encoding_keywords = {"base64", "obfuscat", "encoding", "hex string"}
     sensitive_read_keywords = {".env", ".ssh", ".aws", "credential", "keychain", "browser data", "config"}
     prompt_injection_keywords = {"prompt injection", "instruction override", "persona reassignment", "confirmation bypass"}
-    prompt_keywords = prompt_injection_keywords  # backward compat alias
     lifecycle_keywords = {"lifecycle", "hook", "postinstall", "preinstall", "cmdclass", "setup.py"}
     dynamic_import_keywords = {"dynamic import", "importlib", "import_module", "dynamic-import"}
     time_bomb_keywords = {"time bomb", "time-bomb", "datetime comparison", "activation trigger", "unix timestamp"}
@@ -287,7 +285,7 @@ def correlate(findings):
                 ))
 
         # Rule 4: prompt injection + code execution (91% of malicious skills per Snyk)
-        if has_category(file_findings, prompt_keywords) and has_category(file_findings, exec_keywords):
+        if has_category(file_findings, prompt_injection_keywords) and has_category(file_findings, exec_keywords):
             correlated.append(Finding(
                 scanner="correlation",
                 severity="critical",
@@ -343,7 +341,7 @@ def correlate(findings):
 
         # Rule 8: Unicode smuggling + prompt injection in documentation
         ext_lower = os.path.splitext(filepath)[1].lower()
-        if ext_lower in ('.md', '.txt', ''):
+        if ext_lower in ('.md', '.txt', '.rst', '.adoc'):
             smuggling_keywords = {"unicode-smuggling", "zero-width", "rtl override", "homoglyph"}
             pi_keywords = {"prompt-injection", "prompt injection"}
             if has_category(file_findings, smuggling_keywords) and has_category(file_findings, pi_keywords):
@@ -434,6 +432,35 @@ def correlate(findings):
                 line=0,
                 snippet="[compound: tool/config poisoning + prompt injection]",
                 category="openclaw-compound"
+            ))
+
+        # Rule 15: .pth file + base64/exec = "Python Startup Injection (liteLLM-style)"
+        pth_keywords = {"pth-injection", ".pth file", "pth file"}
+        pth_exec_keywords = {"exec", "eval", "compile", "base64", "obfuscat"}
+        if has_category(file_findings, pth_keywords) and has_category(file_findings, pth_exec_keywords):
+            correlated.append(Finding(
+                scanner="correlation",
+                severity="critical",
+                title="Python Startup Injection (liteLLM-style)",
+                description=".pth file with code execution or obfuscated payload. Matches March 2026 liteLLM supply chain attack pattern: .pth files execute on Python startup, exfiltrating credentials without user action.",
+                file=filepath,
+                line=0,
+                snippet="[compound: .pth file + exec/base64]",
+                category="pth-injection"
+            ))
+
+        # Rule 16: .pth file + known IOC = "Known Supply Chain .pth Attack"
+        known_ioc_keywords = {"known-ioc", "known malicious", "ioc match", "ioc database"}
+        if has_category(file_findings, pth_keywords) and has_category(file_findings, known_ioc_keywords):
+            correlated.append(Finding(
+                scanner="correlation",
+                severity="critical",
+                title="Known Supply Chain .pth Attack",
+                description="Known malicious .pth file from IOC database. Confirmed supply chain attack vector.",
+                file=filepath,
+                line=0,
+                snippet="[compound: .pth file + known IOC match]",
+                category="pth-injection"
             ))
 
     return correlated
