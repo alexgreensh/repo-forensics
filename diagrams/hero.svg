@@ -90,11 +90,6 @@
           font-size="54" font-weight="800" fill="#58a6ff" letter-spacing="5">FORENSICS</text>
   </g>
 
-  <!-- v1 badge -->
-  <rect x="706" y="108" width="52" height="26" rx="6" fill="#1f6feb"/>
-  <text x="732" y="126" font-family="'SF Mono',Consolas,monospace" font-size="14" font-weight="700"
-        fill="#fff" text-anchor="middle">v1</text>
-
   <!-- Tagline -->
   <text x="230" y="222" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif"
         font-size="16" fill="#8b949e" letter-spacing="0.5">
