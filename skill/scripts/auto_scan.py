@@ -38,6 +38,10 @@ INSTALL_PATTERNS = [
     (re.compile(r'go\s+(?:get|install)\s+(.+)'), 'go_install'),
     # brew install
     (re.compile(r'brew\s+install\s+(.+)'), 'brew_install'),
+    # openclaw skills/plugins install
+    (re.compile(r'openclaw\s+(?:skills|plugins)\s+install\s+(.+)'), 'openclaw_install'),
+    # clawhub install
+    (re.compile(r'clawhub\s+(?:install|publish)\s+(.+)'), 'openclaw_install'),
 ]
 
 # Pipe-to-shell patterns (instant CRITICAL)
@@ -99,7 +103,7 @@ def detect_install_command(command):
 def extract_package_names(pattern_type, match):
     """Extract package names from install command match."""
     if pattern_type in ('pip_install', 'npm_install', 'yarn_add', 'gem_install',
-                        'cargo_install', 'go_install', 'brew_install'):
+                        'cargo_install', 'go_install', 'brew_install', 'openclaw_install'):
         raw = match.group(1)
         # Strip flags
         cleaned = INSTALL_FLAGS.sub('', raw).strip()

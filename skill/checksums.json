@@ -8,7 +8,7 @@
     "references/mcp-attack-patterns.md": "b433fc7e819fdb6d1d8f0d1d266facdf30233a620d5789217a8a6ed27e293ca9",
     "references/research_sources.md": "cbf07116ed04d87436fc1c9daf43ffb3ec2f513713f5fc882d089b53bcd7c629",
     "references/threat_patterns.md": "d30291526b46637351a173bbc627569fe160c8053d833eea60821504d70fa035",
-    "scripts/auto_scan.py": "13b7135e28290b4a47e6bde1512dd061cbca272f53c31aceb1b0d65af0c7f033",
+    "scripts/auto_scan.py": "c7a3f337458188bfb1564b1f8ae510ec4e01735504d00b785445f87b3c89209e",
     "scripts/forensics_core.py": "a35ecc258df6279eb737045ee406470d23366eebf7b06acfb5af3b5b3f1180d2",
     "scripts/ioc_manager.py": "6cc76ba9dec178d594f0c03de76aa59e11cd24506270ecb2db40e9ad669b3ae1",
     "scripts/run_forensics.sh": "42609e7d4a0d866cd8f1728ff85793c4c3fed2b8b43ceaaf54f8e9726e7eda1c",
