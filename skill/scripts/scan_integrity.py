@@ -17,6 +17,7 @@ Created by Alex Greenshpun
 """
 
 import os
+import re
 import sys
 import json
 import hashlib
@@ -317,6 +318,69 @@ def watch_mode(repo_path, critical_files):
     return findings
 
 
+def check_hardcoded_plugin_paths(repo_path):
+    """Detect plugin scripts that resolve __file__ and write to settings.json.
+
+    When a plugin runs from the Claude plugin cache (/plugins/cache/name/version/...),
+    Path(__file__).resolve() produces a version-specific absolute path. If that path
+    gets written to settings.json (e.g. as a hook command), it breaks when the plugin
+    version bumps and the cache directory changes.
+
+    Fix: use ${CLAUDE_PLUGIN_ROOT}/relative/path instead of the resolved absolute path.
+    """
+    findings = []
+    ignore_patterns = core.load_ignore_patterns(repo_path)
+
+    # Patterns that resolve __file__ to an absolute path
+    file_resolve_patterns = [
+        re.compile(r'''Path\s*\(\s*__file__\s*\)\s*\.resolve\s*\('''),
+        re.compile(r'''os\.path\.abspath\s*\(\s*__file__\s*\)'''),
+        re.compile(r'''os\.path\.realpath\s*\(\s*__file__\s*\)'''),
+        re.compile(r'''os\.path\.dirname\s*\(\s*os\.path\.(abspath|realpath)\s*\(\s*__file__\s*\)\s*\)'''),
+    ]
+
+    # Patterns that write to settings.json or other persistent config
+    config_write_patterns = [
+        re.compile(r'''settings\.json'''),
+        re.compile(r'''settings\.local\.json'''),
+        re.compile(r'''claude_desktop_config\.json'''),
+    ]
+
+    # The safe escape hatch
+    safe_pattern = re.compile(r'''CLAUDE_PLUGIN_ROOT''')
+
+    for file_path, rel_path in core.walk_repo(repo_path, ignore_patterns, skip_binary=True):
+        if not rel_path.endswith('.py'):
+            continue
+
+        try:
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+        except OSError:
+            continue
+
+        has_file_resolve = any(p.search(content) for p in file_resolve_patterns)
+        has_config_write = any(p.search(content) for p in config_write_patterns)
+        has_safe_escape = safe_pattern.search(content)
+
+        if has_file_resolve and has_config_write and not has_safe_escape:
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="high",
+                title=f"Hardcoded plugin path risk: {rel_path}",
+                description=(
+                    "Script resolves __file__ to absolute path AND references settings.json, "
+                    "but does not use ${CLAUDE_PLUGIN_ROOT}. If running from plugin cache, "
+                    "the resolved path includes a version-specific directory that breaks on "
+                    "version bumps. Use ${CLAUDE_PLUGIN_ROOT}/relative/path instead."
+                ),
+                file=rel_path, line=0,
+                snippet="__file__ resolve + settings.json write without CLAUDE_PLUGIN_ROOT",
+                category="hardcoded-plugin-path"
+            ))
+
+    return findings
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="repo-forensics: File Integrity Monitor")
@@ -350,6 +414,9 @@ def main():
 
     # Check for executable config files
     all_findings.extend(check_executable_configs(repo_path, critical_files))
+
+    # Check for hardcoded plugin paths (version-specific cache paths in config)
+    all_findings.extend(check_hardcoded_plugin_paths(repo_path))
 
     # Watch mode: baseline comparison
     if args.watch:

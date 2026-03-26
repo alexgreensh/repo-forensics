@@ -12,7 +12,7 @@
     {
       "name": "repo-forensics",
       "description": "Auto-scan repos, skills, MCP servers, and packages for security threats. 17 scanners, 16 correlation rules, PostToolUse auto-scan hook. Detects prompt injection, supply chain attacks, credential theft, and 2026 attack patterns.",
-      "version": "2.0.0",
+      "version": "2.0.1",
       "author": {
         "name": "Alex Greenshpun",
         "url": "https://linkedin.com/in/alexgreensh"
