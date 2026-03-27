@@ -254,13 +254,17 @@ def run_targeted_scan(repo_path):
         finding_objs = []
         for f in all_findings:
             if isinstance(f, dict):
+                try:
+                    line_val = int(f.get('line', 0))
+                except (ValueError, TypeError):
+                    line_val = 0
                 finding_objs.append(core.Finding(
                     scanner=f.get('scanner', ''),
                     severity=f.get('severity', 'low'),
                     title=f.get('title', ''),
                     description=f.get('description', ''),
                     file=f.get('file', ''),
-                    line=int(f.get('line', 0)),
+                    line=line_val,
                     snippet=f.get('snippet', ''),
                     category=f.get('category', ''),
                 ))

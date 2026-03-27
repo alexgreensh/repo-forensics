@@ -171,6 +171,8 @@ _FALLBACK_MALICIOUS_DOMAINS = [
     "socifiapp.com", "hackmoltrepeat.com", "giftshop.club",
     "glot.io", "api.telegram.org/bot", "discord.com/api/webhooks",
     "hooks.slack.com/services",
+    # liteLLM supply chain attack C2 (March 2026)
+    "eo1n0jq9qgggt.m.pipedream.net",
 ]
 
 

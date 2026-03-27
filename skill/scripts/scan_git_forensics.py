@@ -37,6 +37,7 @@ def get_git_log(repo_path):
     env = {
         "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
         "HOME": os.environ.get("HOME", "/tmp"),
+        "LANG": "C.UTF-8",
         "GIT_PAGER": "cat",
         "GIT_CONFIG_NOSYSTEM": "1",
         "GIT_CONFIG_GLOBAL": "/dev/null",
