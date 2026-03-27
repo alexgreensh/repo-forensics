@@ -44,7 +44,9 @@ HARDCODED_C2_IPS = [
 HARDCODED_MALICIOUS_DOMAINS = [
     "install.app-distribution.net",
     "dl.dropboxusercontent.com",
-    "raw.githubusercontent.com",
+    # raw.githubusercontent.com intentionally excluded: legitimate CDN used by this
+    # tool's own IOC feed. Flag only when combined with obfuscation/exec patterns
+    # (handled by correlation engine rules 1, 2, 9).
     "socifiapp.com",
     "hackmoltrepeat.com",
     "giftshop.club",
@@ -117,7 +119,8 @@ def fetch_remote_iocs(feed_url=None):
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read(5_000_000).decode('utf-8'))  # 5MB max
         return data
-    except Exception:
+    except (urllib.error.URLError, json.JSONDecodeError, OSError, ValueError) as e:
+        print(f"[!] IOC fetch failed: {e}", file=sys.stderr)
         return None
 
 

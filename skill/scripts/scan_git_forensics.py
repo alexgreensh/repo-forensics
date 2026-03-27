@@ -20,9 +20,28 @@ SCANNER_NAME = "git_forensics"
 
 def get_git_log(repo_path):
     # Use null byte delimiter to prevent author name spoofing with '|'
-    # Set GIT_PAGER=cat to prevent malicious .git/config pager execution
-    cmd = ["git", "log", "--pretty=format:%H%x00%an%x00%ae%x00%aI%x00%cI%x00%G?", "-n", "1000"]
-    env = dict(os.environ, GIT_PAGER="cat")
+    # Minimal env prevents malicious .git/config from executing code via
+    # core.fsmonitor, core.hooksPath, pager.*, credential.helper, etc.
+    # -c flags override local .git/config to prevent RCE via core.fsmonitor,
+    # credential.helper, core.hooksPath, or core.sshCommand in malicious repos.
+    # This pattern is used by GitHub Actions runners for the same reason.
+    cmd = [
+        "git",
+        "-c", "core.fsmonitor=",
+        "-c", "core.hooksPath=",
+        "-c", "credential.helper=",
+        "-c", "core.sshCommand=",
+        "-c", "safe.directory=*",
+        "log", "--pretty=format:%H%x00%an%x00%ae%x00%aI%x00%cI%x00%G?", "-n", "1000",
+    ]
+    env = {
+        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+        "HOME": os.environ.get("HOME", "/tmp"),
+        "GIT_PAGER": "cat",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_TERMINAL_PROMPT": "0",
+    }
     try:
         result = subprocess.run(cmd, cwd=repo_path, capture_output=True, text=True, check=True, env=env)
         return result.stdout.strip().split('\n')

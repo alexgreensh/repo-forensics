@@ -46,7 +46,6 @@ def scan_package_json(file_path, rel_path):
 
                 for pattern, desc in SUSPICIOUS_COMMANDS:
                     if pattern.search(cmd):
-                        severity = "critical"
                         findings.append(core.Finding(
                             scanner=SCANNER_NAME, severity="critical",
                             title=f"NPM Hook: Suspicious '{hook}'",
@@ -67,8 +66,8 @@ def scan_package_json(file_path, rel_path):
                         category="lifecycle-hook"
                     ))
 
-    except Exception:
-        pass
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as e:
+        print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)
     return findings
 
 
@@ -107,8 +106,8 @@ def scan_setup_py(file_path, rel_path):
                     category="lifecycle-hook"
                 ))
 
-    except Exception:
-        pass
+    except (OSError, UnicodeDecodeError) as e:
+        print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)
     return findings
 
 
@@ -129,22 +128,33 @@ def scan_pyproject_toml(file_path, rel_path):
                 category="lifecycle-hook"
             ))
 
-    except Exception:
-        pass
+    except (OSError, UnicodeDecodeError) as e:
+        print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)
     return findings
 
 
 # --- .pth File Injection Detection (liteLLM-style attack, March 2026) ---
 
-# Known malicious .pth filenames from ioc_manager (single source of truth)
-try:
-    import ioc_manager as _ioc
-    KNOWN_MALICIOUS_PTH = _ioc.get_iocs().get('malicious_pth_files', set())
-except ImportError:
-    KNOWN_MALICIOUS_PTH = {
-        'litellm_init.pth', 'litellm-init.pth', 'litellm.pth',
-        'llm_init.pth', 'init_hook.pth', 'startup.pth',
-    }
+# Known malicious .pth filenames - lazy loaded from ioc_manager
+_KNOWN_MALICIOUS_PTH = None
+
+_FALLBACK_MALICIOUS_PTH = {
+    'litellm_init.pth', 'litellm-init.pth', 'litellm.pth',
+    'llm_init.pth', 'init_hook.pth', 'startup.pth',
+}
+
+
+def _get_known_malicious_pth():
+    """Lazy-load known malicious .pth filenames from ioc_manager."""
+    global _KNOWN_MALICIOUS_PTH
+    if _KNOWN_MALICIOUS_PTH is None:
+        try:
+            import ioc_manager as _ioc
+            _KNOWN_MALICIOUS_PTH = _ioc.get_iocs().get('malicious_pth_files', _FALLBACK_MALICIOUS_PTH)
+        except (ImportError, OSError, json.JSONDecodeError, ValueError) as e:
+            print(f"[!] IOC loading failed, using fallback: {e}", file=sys.stderr)
+            _KNOWN_MALICIOUS_PTH = _FALLBACK_MALICIOUS_PTH
+    return _KNOWN_MALICIOUS_PTH
 
 PTH_EXEC_PATTERNS = [
     (re.compile(r'\bexec\s*\('), "exec() call"),
@@ -175,7 +185,7 @@ def scan_pth_files(file_path, rel_path):
     lines = content.strip().split('\n')
 
     # Check for known malicious filenames (CRITICAL)
-    if basename.lower() in KNOWN_MALICIOUS_PTH:
+    if basename.lower() in _get_known_malicious_pth():
         findings.append(core.Finding(
             scanner=SCANNER_NAME, severity="critical",
             title=f"Known Malicious .pth Filename: {basename}",

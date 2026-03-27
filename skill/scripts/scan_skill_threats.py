@@ -16,6 +16,7 @@ All detection patterns are original, informed by published research from:
 Created by Alex Greenshpun
 """
 
+import json
 import os
 import re
 import sys
@@ -156,28 +157,37 @@ STEALTH_PATTERNS = [
 
 # ============================================================
 # Category 8: Known Campaign IOCs (high, IOC match = critical)
-# Based on published Koi + Snyk research + 2026 updates
+# Lazy loaded from ioc_manager (single source of truth)
 # ============================================================
-KNOWN_C2_IPS = [
-    "91.92.242.30",  # ClawHavoc primary C2 (Koi Security, Jan-Feb 2026)
-    "54.91.154.110", "157.245.55.238",
+_KNOWN_C2_IPS = None
+_KNOWN_MALICIOUS_DOMAINS = None
+
+_FALLBACK_C2_IPS = [
+    "91.92.242.30", "54.91.154.110", "157.245.55.238",
     "45.77.240.42", "104.248.30.47", "159.65.147.111",
 ]
-
-KNOWN_MALICIOUS_DOMAINS = [
-    "install.app-distribution.net",  # AMOS stealer delivery
-    "app-distribution.net",          # AMOS variant
-    "dl.dropboxusercontent.com",  # Commonly abused for malware hosting
-    "raw.githubusercontent.com",   # When combined with obfuscation
-    # 2026 IOCs from ClawHavoc campaign + active threat research
-    "socifiapp.com",              # ClawHavoc campaign C2 (Jan 2026)
-    "hackmoltrepeat.com",         # ClawHavoc campaign IOC (Feb 2026)
-    "giftshop.club",              # ClawHavoc campaign IOC
-    "glot.io",                    # Code paste site used for payload hosting (active 2026)
-    "api.telegram.org/bot",       # Telegram bot API (primary exfil channel 2025-2026)
-    "discord.com/api/webhooks",   # Discord webhook exfil (VVS Stealer, ChaosBot 2026)
-    "hooks.slack.com/services",   # Slack webhook as exfil channel
+_FALLBACK_MALICIOUS_DOMAINS = [
+    "install.app-distribution.net", "dl.dropboxusercontent.com",
+    "socifiapp.com", "hackmoltrepeat.com", "giftshop.club",
+    "glot.io", "api.telegram.org/bot", "discord.com/api/webhooks",
+    "hooks.slack.com/services",
 ]
+
+
+def _get_ioc_lists():
+    """Lazy-load IOC lists from ioc_manager."""
+    global _KNOWN_C2_IPS, _KNOWN_MALICIOUS_DOMAINS
+    if _KNOWN_C2_IPS is None:
+        try:
+            import ioc_manager as _ioc
+            _ioc_data = _ioc.get_iocs()
+            _KNOWN_C2_IPS = _ioc_data.get('c2_ips', _FALLBACK_C2_IPS)
+            _KNOWN_MALICIOUS_DOMAINS = _ioc_data.get('malicious_domains', _FALLBACK_MALICIOUS_DOMAINS)
+        except (ImportError, OSError, json.JSONDecodeError, ValueError) as e:
+            print(f"[!] IOC loading failed, using fallback: {e}", file=sys.stderr)
+            _KNOWN_C2_IPS = _FALLBACK_C2_IPS
+            _KNOWN_MALICIOUS_DOMAINS = _FALLBACK_MALICIOUS_DOMAINS
+    return _KNOWN_C2_IPS, _KNOWN_MALICIOUS_DOMAINS
 
 # Known malicious ClawHub authors (ClawHavoc campaign, Koi Security 2026)
 KNOWN_MALICIOUS_AUTHORS = [
@@ -280,9 +290,10 @@ def scan_known_iocs(content, rel_path):
     """Category 8: Check for known campaign indicators."""
     findings = []
     lines = content.split('\n')
+    c2_ips, malicious_domains = _get_ioc_lists()
 
     for i, line in enumerate(lines):
-        for ip in KNOWN_C2_IPS:
+        for ip in c2_ips:
             if ip in line:
                 findings.append(core.Finding(
                     scanner=SCANNER_NAME, severity="critical",
@@ -293,7 +304,7 @@ def scan_known_iocs(content, rel_path):
                     category="known-ioc"
                 ))
 
-        for domain in KNOWN_MALICIOUS_DOMAINS:
+        for domain in malicious_domains:
             if domain in line:
                 findings.append(core.Finding(
                     scanner=SCANNER_NAME, severity="high",
@@ -312,7 +323,7 @@ def scan_file(file_path, rel_path):
     try:
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             content = f.read()
-    except Exception:
+    except (OSError, UnicodeDecodeError):
         return []
 
     findings = []

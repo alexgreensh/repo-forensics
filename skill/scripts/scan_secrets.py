@@ -116,30 +116,32 @@ def scan_file(file_path, rel_path):
     findings = []
     try:
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-            # Filter out mega-lines to prevent O(n^2) regex backtracking
             lines = f.readlines()
-            content = ''.join(line for line in lines if len(line) <= core.MAX_LINE_LENGTH)
 
-        for pattern in PATTERNS:
-            for match in pattern['regex'].finditer(content):
-                start = match.start()
-                line_no = content.count('\n', 0, start) + 1
-                snippet = match.group(0)
-                if len(snippet) > 80:
-                    snippet = snippet[:77] + "..."
+        for i, line in enumerate(lines):
+            # Skip mega-lines to prevent O(n^2) regex backtracking
+            if len(line) > core.MAX_LINE_LENGTH:
+                continue
 
-                findings.append(core.Finding(
-                    scanner=SCANNER_NAME,
-                    severity=pattern['severity'],
-                    title=pattern['name'],
-                    description=f"Potential hardcoded secret detected",
-                    file=rel_path,
-                    line=line_no,
-                    snippet=snippet,
-                    category="secret"
-                ))
-    except Exception:
-        pass
+            for pattern in PATTERNS:
+                match = pattern['regex'].search(line)
+                if match:
+                    snippet = match.group(0)
+                    if len(snippet) > 80:
+                        snippet = snippet[:77] + "..."
+
+                    findings.append(core.Finding(
+                        scanner=SCANNER_NAME,
+                        severity=pattern['severity'],
+                        title=pattern['name'],
+                        description=f"Potential hardcoded secret detected",
+                        file=rel_path,
+                        line=i + 1,
+                        snippet=snippet,
+                        category="secret"
+                    ))
+    except (OSError, UnicodeDecodeError) as e:
+        print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)
     return findings
 
 

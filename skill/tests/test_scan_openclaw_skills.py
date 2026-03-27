@@ -49,12 +49,13 @@ class TestAutoDetection:
 
 class TestFrontmatterValidation:
     def test_missing_author_flagged(self, tmp_path):
-        """SKILL.md missing 'author' field should produce a HIGH finding."""
+        """SKILL.md missing 'author' field should produce a MEDIUM finding."""
         _write(tmp_path, "SKILL.md", "---\nname: test\nversion: 1.0\n---\nContent\n")
         findings = scanner.main(str(tmp_path))
-        high_findings = [f for f in findings if f.severity == "high"]
-        assert any("author" in f.title.lower() or "author" in f.description.lower()
-                    for f in high_findings), f"Expected HIGH finding about missing author, got: {[f.title for f in findings]}"
+        # Scanner correctly rates this MEDIUM (OpenClaw identity comes from ClawHub account)
+        author_findings = [f for f in findings if "author" in f.title.lower() or "author" in f.description.lower()]
+        assert len(author_findings) > 0, f"Expected finding about missing author, got: {[f.title for f in findings]}"
+        assert author_findings[0].severity == "medium"
 
     def test_missing_name_flagged(self, tmp_path):
         """SKILL.md missing 'name' field should produce a HIGH finding."""

@@ -7,6 +7,7 @@ Added: unpinned GitHub Actions detection, secrets in run blocks.
 Created by Alex Greenshpun
 """
 
+import json
 import os
 import re
 import sys
@@ -63,8 +64,8 @@ def scan_dockerfile(file_path, rel_path):
                 file=rel_path, line=0, snippet="Missing USER directive",
                 category="container-config"
             ))
-    except Exception:
-        pass
+    except (OSError, UnicodeDecodeError) as e:
+        print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)
     return findings
 
 
@@ -100,8 +101,8 @@ def scan_kubernetes(file_path, rel_path):
                     file=rel_path, line=i+1, snippet=line.strip()[:120],
                     category="container-config"
                 ))
-    except Exception:
-        pass
+    except (OSError, UnicodeDecodeError) as e:
+        print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)
     return findings
 
 
@@ -182,8 +183,8 @@ def scan_github_actions(file_path, rel_path):
                     category="ci-cd"
                 ))
 
-    except Exception:
-        pass
+    except (OSError, UnicodeDecodeError) as e:
+        print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)
     return findings
 
 
@@ -237,8 +238,8 @@ def scan_claude_config(file_path, rel_path):
                 category="mcp-config-risk"
             ))
 
-    except Exception:
-        pass
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as e:
+        print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)
     return findings
 
 
@@ -267,7 +268,7 @@ def main():
                         yaml_content = f.read()
                     if any(marker in yaml_content for marker in ('apiVersion:', 'kind:', 'metadata:')):
                         all_findings.extend(scan_kubernetes(file_path, rel_path))
-                except Exception:
+                except (OSError, UnicodeDecodeError):
                     pass
 
         # Claude Code / MCP config files (CVE-2025-59536, CVE-2026-21852)

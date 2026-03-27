@@ -110,8 +110,8 @@ def scan_file(file_path, rel_path):
                             snippet=line.strip()[:120],
                             category=pattern['category']
                         ))
-    except Exception:
-        pass
+    except (OSError, UnicodeDecodeError) as e:
+        print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)
     return findings
 
 

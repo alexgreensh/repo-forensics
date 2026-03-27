@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Zero-dependency security scanner for AI agent ecosystems",
-    "version": "1.0.0"
+    "version": "2.0.1"
   },
   "plugins": [
     {

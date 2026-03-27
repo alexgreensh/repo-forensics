@@ -118,10 +118,16 @@ def extract_package_names(pattern_type, match):
 
 def _is_safe_scan_path(resolved_path):
     """Ensure resolved path is within CWD to prevent scanning sensitive directories."""
+    from pathlib import PurePath
     cwd = os.getcwd()
-    # Allow scanning within cwd or /tmp
-    return (resolved_path.startswith(cwd + os.sep) or resolved_path == cwd
-            or resolved_path.startswith('/tmp/') or resolved_path.startswith('/private/tmp/'))
+    try:
+        # PurePath.is_relative_to handles all edge cases (cwd='/', symlinks, etc.)
+        p = PurePath(resolved_path)
+        return (p.is_relative_to(cwd)
+                or p.is_relative_to('/tmp')
+                or p.is_relative_to('/private/tmp'))
+    except (TypeError, ValueError):
+        return False
 
 
 def extract_clone_target(match):
@@ -248,8 +254,16 @@ def run_targeted_scan(repo_path):
         finding_objs = []
         for f in all_findings:
             if isinstance(f, dict):
-                finding_objs.append(core.Finding(**{k: f.get(k, '') for k in
-                    ['scanner', 'severity', 'title', 'description', 'file', 'line', 'snippet', 'category']}))
+                finding_objs.append(core.Finding(
+                    scanner=f.get('scanner', ''),
+                    severity=f.get('severity', 'low'),
+                    title=f.get('title', ''),
+                    description=f.get('description', ''),
+                    file=f.get('file', ''),
+                    line=int(f.get('line', 0)),
+                    snippet=f.get('snippet', ''),
+                    category=f.get('category', ''),
+                ))
         if finding_objs:
             correlated = core.correlate(finding_objs)
             for cf in correlated:

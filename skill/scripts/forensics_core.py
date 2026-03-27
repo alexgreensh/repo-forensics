@@ -10,6 +10,7 @@ Created by Alex Greenshpun
 import os
 import sys
 import json
+import hashlib
 import fnmatch
 from dataclasses import dataclass, field, asdict
 
@@ -144,6 +145,18 @@ LOCKFILES = {'pnpm-lock.yaml', 'package-lock.json', 'yarn.lock', 'go.sum', 'Carg
              'Gemfile.lock', 'poetry.lock', 'Pipfile.lock', 'composer.lock'}
 MAX_FILE_SIZE_MB = 10
 MAX_LINE_LENGTH = 10000  # Skip/truncate lines longer than this to prevent ReDoS
+
+
+def sha256_file(filepath):
+    """Compute SHA256 hash of a file. Returns hex digest or None on error."""
+    h = hashlib.sha256()
+    try:
+        with open(filepath, 'rb') as f:
+            for chunk in iter(lambda: f.read(8192), b''):
+                h.update(chunk)
+        return h.hexdigest()
+    except (OSError, PermissionError):
+        return None
 
 
 def is_binary_file(file_path):

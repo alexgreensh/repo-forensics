@@ -30,6 +30,9 @@ import forensics_core as core
 
 SCANNER_NAME = "integrity"
 
+# Use shared sha256_file from forensics_core
+sha256_file = core.sha256_file
+
 # Critical files that attackers target for persistence/RCE
 CRITICAL_FILES = [
     '.claude/settings.json',
@@ -58,18 +61,6 @@ def _get_or_create_signing_key(repo_path):
         f.write(key)
     os.chmod(key_path, 0o600)
     return key
-
-
-def sha256_file(filepath):
-    """Compute SHA256 hash of a file."""
-    h = hashlib.sha256()
-    try:
-        with open(filepath, 'rb') as f:
-            for chunk in iter(lambda: f.read(8192), b''):
-                h.update(chunk)
-        return h.hexdigest()
-    except (OSError, PermissionError):
-        return None
 
 
 def find_critical_files(repo_path):

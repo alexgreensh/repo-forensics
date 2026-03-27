@@ -132,19 +132,29 @@ TRUSTED_REGISTRIES = [
 ]
 
 
-# IOC packages loaded from ioc_manager (single source of truth)
-try:
-    import ioc_manager as _ioc
-    _iocs = _ioc.get_iocs()
-    SANDWORM_KNOWN_IOC_PACKAGES = _iocs.get('malicious_npm', set()) | _iocs.get('malicious_pypi', set())
-except ImportError:
-    # Fallback if ioc_manager unavailable
-    SANDWORM_KNOWN_IOC_PACKAGES = {
-        "rimarf", "yarsg", "suport-color", "naniod", "opencraw",
-        "claud-code", "cloude-code", "cloude", "mcp-cliient", "mcp-serever",
-        "anthropic-sdk-node", "claude-code-cli", "clawclient",
-        "anthopic", "antrhopic", "claudes", "mcp-python-sdk",
-    }
+# IOC packages - lazy loaded from ioc_manager (single source of truth)
+_SANDWORM_KNOWN_IOC_PACKAGES = None
+
+_FALLBACK_IOC_PACKAGES = {
+    "rimarf", "yarsg", "suport-color", "naniod", "opencraw",
+    "claud-code", "cloude-code", "cloude", "mcp-cliient", "mcp-serever",
+    "anthropic-sdk-node", "claude-code-cli", "clawclient",
+    "anthopic", "antrhopic", "claudes", "mcp-python-sdk",
+}
+
+
+def _get_ioc_packages():
+    """Lazy-load IOC packages from ioc_manager."""
+    global _SANDWORM_KNOWN_IOC_PACKAGES
+    if _SANDWORM_KNOWN_IOC_PACKAGES is None:
+        try:
+            import ioc_manager as _ioc
+            _iocs = _ioc.get_iocs()
+            _SANDWORM_KNOWN_IOC_PACKAGES = _iocs.get('malicious_npm', set()) | _iocs.get('malicious_pypi', set())
+        except (ImportError, OSError, json.JSONDecodeError, ValueError) as e:
+            print(f"[!] IOC loading failed, using fallback: {e}", file=sys.stderr)
+            _SANDWORM_KNOWN_IOC_PACKAGES = _FALLBACK_IOC_PACKAGES
+    return _SANDWORM_KNOWN_IOC_PACKAGES
 
 
 def _apply_l33t(name):
@@ -198,7 +208,7 @@ def check_known_ioc_packages(dependencies, rel_path):
     """Flag packages matching SANDWORM_MODE campaign known-IOC list (critical)."""
     findings = []
     for dep in dependencies:
-        if dep.lower() in SANDWORM_KNOWN_IOC_PACKAGES:
+        if dep.lower() in _get_ioc_packages():
             findings.append(core.Finding(
                 scanner=SCANNER_NAME, severity="critical",
                 title=f"Known Malicious Package: '{dep}'",

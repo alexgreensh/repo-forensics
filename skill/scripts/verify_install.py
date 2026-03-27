@@ -16,16 +16,11 @@ Created by Alex Greenshpun
 import os
 import sys
 import json
-import hashlib
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import forensics_core as core
 
-def sha256_file(filepath):
-    """Compute SHA256 hash of a file."""
-    h = hashlib.sha256()
-    with open(filepath, 'rb') as f:
-        for chunk in iter(lambda: f.read(8192), b''):
-            h.update(chunk)
-    return h.hexdigest()
+sha256_file = core.sha256_file
 
 
 def get_skill_root():
