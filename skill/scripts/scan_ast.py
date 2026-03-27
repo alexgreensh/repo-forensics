@@ -275,7 +275,7 @@ def scan_file(file_path, rel_path):
     try:
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             source = f.read()
-    except Exception:
+    except (OSError, UnicodeDecodeError):
         return []
 
     if not source.strip():
@@ -294,7 +294,7 @@ def scan_file(file_path, rel_path):
             snippet="SyntaxError during ast.parse()",
             category="obfuscated-exec"
         )]
-    except Exception:
+    except (ValueError, RecursionError):
         return []
 
     source_lines = source.split('\n')

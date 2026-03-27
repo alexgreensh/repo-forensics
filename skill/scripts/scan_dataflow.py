@@ -98,7 +98,7 @@ def analyze_file(file_path, rel_path):
     try:
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             lines = f.readlines()
-    except Exception:
+    except (OSError, UnicodeDecodeError):
         return []
 
     sources = PYTHON_SOURCES if lang == 'python' else JS_SOURCES
@@ -164,7 +164,7 @@ def build_import_graph(repo_path, ignore_patterns):
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                 # Filter mega-lines to prevent O(n^2) regex backtracking
                 content = ''.join(line for line in f if len(line) <= core.MAX_LINE_LENGTH)
-        except Exception:
+        except (OSError, UnicodeDecodeError):
             continue
 
         if lang == 'python':
@@ -206,7 +206,7 @@ def main():
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                 # Filter mega-lines to prevent O(n^2) regex backtracking
                 content = ''.join(line for line in f if len(line) <= core.MAX_LINE_LENGTH)
-        except Exception:
+        except (OSError, UnicodeDecodeError):
             continue
 
         sources = PYTHON_SOURCES if lang == 'python' else JS_SOURCES
@@ -228,7 +228,7 @@ def main():
                     with open(file_path_full, 'r', encoding='utf-8', errors='ignore') as f:
                         # Filter mega-lines to prevent O(n^2) regex backtracking
                         content = ''.join(line for line in f if len(line) <= core.MAX_LINE_LENGTH)
-                except Exception:
+                except (OSError, UnicodeDecodeError):
                     continue
 
                 content_lines = content.split('\n')

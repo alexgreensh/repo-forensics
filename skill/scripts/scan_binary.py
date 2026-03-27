@@ -35,7 +35,7 @@ def get_file_type(filepath):
             if header.startswith(signature):
                 return description
         return None
-    except Exception:
+    except (OSError, UnicodeDecodeError):
         return None
 
 

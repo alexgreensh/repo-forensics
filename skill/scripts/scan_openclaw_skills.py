@@ -57,7 +57,7 @@ def _read(path):
     try:
         with open(path, 'r', encoding='utf-8', errors='ignore') as f:
             return f.read()
-    except Exception:
+    except (OSError, UnicodeDecodeError):
         return None
 
 

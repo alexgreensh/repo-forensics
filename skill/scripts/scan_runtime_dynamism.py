@@ -225,7 +225,7 @@ def scan_file_regex(file_path, rel_path):
     try:
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             content = f.read()
-    except Exception:
+    except (OSError, UnicodeDecodeError):
         return []
 
     if not content.strip():
@@ -270,7 +270,7 @@ def scan_file_ast(file_path, rel_path):
     try:
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             source = f.read()
-    except Exception:
+    except (OSError, UnicodeDecodeError):
         return []
 
     if not source.strip():
@@ -278,9 +278,7 @@ def scan_file_ast(file_path, rel_path):
 
     try:
         tree = ast.parse(source, filename=file_path)
-    except SyntaxError:
-        return []
-    except Exception:
+    except (SyntaxError, ValueError, RecursionError):
         return []
 
     source_lines = source.split('\n')

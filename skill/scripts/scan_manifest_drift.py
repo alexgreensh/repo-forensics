@@ -110,7 +110,7 @@ def parse_python_requirements(repo_path):
                             if pkg:
                                 # Normalize: underscores and hyphens are equivalent in pip
                                 declared.add(pkg.replace('-', '_'))
-            except Exception:
+            except (OSError, UnicodeDecodeError):
                 pass
 
     # pyproject.toml (basic parsing)
@@ -123,7 +123,7 @@ def parse_python_requirements(repo_path):
             dep_matches = re.findall(r'"([a-zA-Z0-9_-]+)(?:[><=!~\[].*?)?"', content)
             for pkg in dep_matches:
                 declared.add(pkg.lower().replace('-', '_'))
-        except Exception:
+        except (OSError, UnicodeDecodeError):
             pass
 
     # setup.py (basic parsing)
@@ -135,7 +135,7 @@ def parse_python_requirements(repo_path):
             dep_matches = re.findall(r'["\']([a-zA-Z0-9_-]+)(?:[><=!~\[].*?)?["\']', content)
             for pkg in dep_matches:
                 declared.add(pkg.lower().replace('-', '_'))
-        except Exception:
+        except (OSError, UnicodeDecodeError):
             pass
 
     return declared
@@ -154,7 +154,7 @@ def parse_node_dependencies(repo_path):
                 if dep_key in data and isinstance(data[dep_key], dict):
                     for pkg in data[dep_key]:
                         declared.add(pkg.lower())
-        except Exception:
+        except (OSError, json.JSONDecodeError):
             pass
 
     return declared
@@ -189,7 +189,7 @@ def extract_python_imports(file_path):
         extractor = ImportExtractor()
         extractor.visit(tree)
         return extractor.imports
-    except Exception:
+    except (OSError, SyntaxError, ValueError, RecursionError):
         return set()
 
 
@@ -198,7 +198,7 @@ def extract_js_imports(file_path):
     try:
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             content = f.read()
-    except Exception:
+    except (OSError, UnicodeDecodeError):
         return set()
 
     imports = set()
@@ -237,14 +237,14 @@ def detect_conditional_install(file_path, rel_path):
     try:
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             source = f.read()
-    except Exception:
+    except (OSError, UnicodeDecodeError):
         return []
 
     findings = []
 
     try:
         tree = ast.parse(source)
-    except Exception:
+    except (SyntaxError, ValueError, RecursionError):
         return []
 
     source_lines = source.split('\n')
@@ -370,7 +370,7 @@ def scan_runtime_installs(repo_path):
         try:
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                 content = f.read()
-        except Exception:
+        except (OSError, UnicodeDecodeError):
             continue
 
         findings.extend(core.scan_patterns(
@@ -396,7 +396,7 @@ def scan_file(file_path, rel_path):
     try:
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             content = f.read()
-    except Exception:
+    except (OSError, UnicodeDecodeError):
         return []
 
     findings.extend(core.scan_patterns(

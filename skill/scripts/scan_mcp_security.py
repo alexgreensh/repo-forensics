@@ -266,7 +266,7 @@ def scan_file(file_path, rel_path):
     try:
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             content = f.read()
-    except Exception:
+    except (OSError, UnicodeDecodeError):
         return []
 
     findings = []
