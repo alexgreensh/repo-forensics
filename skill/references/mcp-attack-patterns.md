@@ -205,6 +205,7 @@ class UnifiedMCPServer:
 | CVE-2025-59536 | 8.7 | Claude Code | Hooks RCE — `.claude/settings.json` hooks execute before trust dialog | Patched 1.3.x |
 | CVE-2026-21852 | 7.5 | Claude Code | `ANTHROPIC_BASE_URL` override → API key exfiltration via proxy | Patched |
 | CVE-2025-49596 | 9.4 | MCP Inspector | 0.0.0.0 binding → DNS rebinding + CSRF attack surface | Patched |
+| CVE-2026-33068 | 7.7 | Claude Code | Workspace trust bypass via `bypassPermissions` in `.claude/settings.json` | Active |
 
 ---
 

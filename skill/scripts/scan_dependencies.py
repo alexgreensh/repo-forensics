@@ -11,6 +11,7 @@ import os
 import json
 import difflib
 import re
+from urllib.parse import urlparse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import forensics_core as core
@@ -140,6 +141,10 @@ _FALLBACK_IOC_PACKAGES = {
     "claud-code", "cloude-code", "cloude", "mcp-cliient", "mcp-serever",
     "anthropic-sdk-node", "claude-code-cli", "clawclient",
     "anthopic", "antrhopic", "claudes", "mcp-python-sdk",
+    # Axios supply chain RAT dropper (March 31, 2026)
+    "plain-crypto-js",
+    # Companion malware packages (March 2026)
+    "@shadanai/openclaw", "@qqbrowser/openclaw-qbot",
 }
 
 
@@ -150,7 +155,7 @@ def _get_ioc_packages():
         try:
             import ioc_manager as _ioc
             _iocs = _ioc.get_iocs()
-            _SANDWORM_KNOWN_IOC_PACKAGES = _iocs.get('malicious_npm', set()) | _iocs.get('malicious_pypi', set())
+            _SANDWORM_KNOWN_IOC_PACKAGES = {p.lower() for p in (_iocs.get('malicious_npm', set()) | _iocs.get('malicious_pypi', set()))}
         except (ImportError, OSError, json.JSONDecodeError, ValueError) as e:
             print(f"[!] IOC loading failed, using fallback: {e}", file=sys.stderr)
             _SANDWORM_KNOWN_IOC_PACKAGES = _FALLBACK_IOC_PACKAGES
@@ -219,6 +224,62 @@ def check_known_ioc_packages(dependencies, rel_path):
     return findings
 
 
+# Compromised versions of legitimate packages (supply chain hijack, not typosquatting)
+COMPROMISED_PACKAGE_VERSIONS = {
+    # Axios supply chain compromise (March 31, 2026)
+    "axios": {"1.14.1", "0.30.4"},
+    # plain-crypto-js RAT dropper (March 31, 2026)
+    "plain-crypto-js": {"4.2.1"},
+    # Companion malware packages (March 2026)
+    "@shadanai/openclaw": {"2026.3.28-2", "2026.3.28-3", "2026.3.31-1", "2026.3.31-2"},
+    "@qqbrowser/openclaw-qbot": {"0.0.130"},
+    # liteLLM supply chain attack (March 24, 2026)
+    "litellm": {"1.82.8"},
+}
+
+# Suspicious npm scopes (systematic MCP server forking campaigns)
+SUSPICIOUS_NPM_SCOPES = {
+    "@iflow-mcp",   # Systematic MCP server forking campaign (March 2026)
+}
+
+
+def check_compromised_versions(all_deps_with_versions, rel_path):
+    """Flag specific compromised versions of legitimate packages."""
+    findings = []
+    for pkg, version in all_deps_with_versions.items():
+        pkg_lower = pkg.lower()
+        if pkg_lower in COMPROMISED_PACKAGE_VERSIONS:
+            # Strip version prefix chars (^, ~, =)
+            clean_version = re.sub(r'^[~^>=<]+', '', str(version))
+            if clean_version in COMPROMISED_PACKAGE_VERSIONS[pkg_lower]:
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="critical",
+                    title=f"Compromised Package Version: {pkg}@{clean_version}",
+                    description=f"Version {clean_version} of '{pkg}' is known compromised (supply chain attack IOC)",
+                    file=rel_path, line=0,
+                    snippet=f"{pkg}@{clean_version} (known compromised)",
+                    category="supply-chain"
+                ))
+    return findings
+
+
+def check_suspicious_scopes(dependencies, rel_path):
+    """Flag packages from suspicious npm scopes (systematic forking campaigns)."""
+    findings = []
+    for dep in dependencies:
+        for scope in SUSPICIOUS_NPM_SCOPES:
+            if dep.lower().startswith(scope + "/"):
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="high",
+                    title=f"Suspicious Scope Package: '{dep}'",
+                    description=f"Package from '{scope}' scope (systematic MCP server forking campaign, March 2026)",
+                    file=rel_path, line=0,
+                    snippet=f"'{dep}' from suspicious scope '{scope}'",
+                    category="suspicious-scope"
+                ))
+    return findings
+
+
 def scan_package_json(filepath, rel_path):
     findings = []
     try:
@@ -233,6 +294,12 @@ def scan_package_json(filepath, rel_path):
 
         # Known IOC check (critical, before typosquatting)
         findings.extend(check_known_ioc_packages(dep_names, rel_path))
+
+        # Compromised versions of legitimate packages
+        findings.extend(check_compromised_versions(all_deps, rel_path))
+
+        # Suspicious npm scopes (forking campaigns)
+        findings.extend(check_suspicious_scopes(dep_names, rel_path))
 
         # Typosquatting
         typos = check_typosquatting(dep_names, POPULAR_NPM)
@@ -339,8 +406,10 @@ def scan_lockfile(filepath, rel_path):
         suspicious = set()
 
         for url in urls:
-            is_trusted = any(t in url for t in TRUSTED_REGISTRIES)
-            if not is_trusted and "schema.org" not in url:
+            # Check hostname only to prevent path-based bypass (e.g., evil.com/registry.npmjs.org/)
+            hostname = urlparse(url).hostname or ''
+            is_trusted = any(t in hostname for t in TRUSTED_REGISTRIES)
+            if not is_trusted and "schema.org" not in hostname:
                 suspicious.add(url)
 
         if suspicious:
@@ -398,16 +467,20 @@ def parse_package_lock_json(filepath, rel_path):
         if all_packages:
             findings.extend(check_known_ioc_packages(list(all_packages), rel_path))
 
-            # Specific liteLLM version check (npm wrapper packages)
+            # Suspicious npm scopes in transitive deps
+            findings.extend(check_suspicious_scopes(list(all_packages), rel_path))
+
+            # Check compromised versions of legitimate packages in transitive deps
             for pkg in all_packages:
-                if 'litellm' in pkg.lower():
+                pkg_lower = pkg.lower()
+                if pkg_lower in COMPROMISED_PACKAGE_VERSIONS:
                     pkg_info = _find_package_info(data, pkg)
                     version = pkg_info.get('version', '') if pkg_info else ''
-                    if version == '1.82.8':
+                    if version in COMPROMISED_PACKAGE_VERSIONS[pkg_lower]:
                         findings.append(core.Finding(
                             scanner=SCANNER_NAME, severity="critical",
-                            title=f"Compromised liteLLM Version: {pkg}@{version}",
-                            description="liteLLM v1.82.8 contains malicious .pth file injection (March 2026 supply chain attack)",
+                            title=f"Compromised Package Version: {pkg}@{version}",
+                            description=f"Transitive dep {pkg}@{version} is a known compromised version (supply chain attack IOC)",
                             file=rel_path, line=0,
                             snippet=f"{pkg}@{version} (known compromised)",
                             category="supply-chain"
@@ -425,8 +498,8 @@ def parse_package_lock_json(filepath, rel_path):
                     category="typosquatting"
                 ))
 
-    except (json.JSONDecodeError, KeyError, TypeError, OSError):
-        pass
+    except (json.JSONDecodeError, KeyError, TypeError, OSError) as e:
+        print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)
     return findings
 
 
@@ -470,6 +543,20 @@ def parse_yarn_lock(filepath, rel_path):
 
         if all_packages:
             findings.extend(check_known_ioc_packages(list(all_packages), rel_path))
+            findings.extend(check_suspicious_scopes(list(all_packages), rel_path))
+
+            # Extract version info for compromised version checks
+            pkg_versions = {}
+            for match in re.finditer(
+                r'^"?(@?[^@\s"]+)@[~^]?(\d+\.\d+\.\d+[^",:]*)',
+                content, re.MULTILINE
+            ):
+                name, version = match.group(1), match.group(2)
+                if name and not name.startswith('#'):
+                    pkg_versions[name] = version
+            if pkg_versions:
+                findings.extend(check_compromised_versions(pkg_versions, rel_path))
+
             typos = check_typosquatting(list(all_packages), POPULAR_NPM)
             for suspect, target, score in typos:
                 findings.append(core.Finding(
@@ -481,8 +568,8 @@ def parse_yarn_lock(filepath, rel_path):
                     category="typosquatting"
                 ))
 
-    except (UnicodeDecodeError, OSError):
-        pass
+    except (UnicodeDecodeError, OSError) as e:
+        print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)
     return findings
 
 
@@ -494,28 +581,25 @@ def parse_poetry_lock(filepath, rel_path):
             content = f.read()
 
         all_packages = set()
-        # poetry.lock format: [[package]]\nname = "package-name"
+        pkg_versions = {}
+        # poetry.lock format: [[package]]\nname = "package-name"\nversion = "x.y.z"
+        for match in re.finditer(
+            r'^\[\[package\]\]\s*\nname\s*=\s*"([^"]+)"\s*\nversion\s*=\s*"([^"]+)"',
+            content, re.MULTILINE
+        ):
+            name, version = match.group(1), match.group(2)
+            all_packages.add(name)
+            pkg_versions[name] = version
+        # Also catch packages without version on next line
         for match in re.finditer(r'^\s*name\s*=\s*"([^"]+)"', content, re.MULTILINE):
             all_packages.add(match.group(1))
 
         if all_packages:
             findings.extend(check_known_ioc_packages(list(all_packages), rel_path))
 
-            # Check for liteLLM specifically with version
-            for match in re.finditer(
-                r'^\[\[package\]\]\s*\nname\s*=\s*"([^"]*litellm[^"]*)"\s*\nversion\s*=\s*"([^"]+)"',
-                content, re.MULTILINE
-            ):
-                name, version = match.group(1), match.group(2)
-                if version == '1.82.8':
-                    findings.append(core.Finding(
-                        scanner=SCANNER_NAME, severity="critical",
-                        title=f"Compromised liteLLM Version: {name}@{version}",
-                        description="liteLLM v1.82.8 contains malicious .pth file injection (March 2026)",
-                        file=rel_path, line=0,
-                        snippet=f"{name}=={version} (known compromised)",
-                        category="supply-chain"
-                    ))
+            # Check all packages against known compromised versions
+            if pkg_versions:
+                findings.extend(check_compromised_versions(pkg_versions, rel_path))
 
             typos = check_typosquatting(list(all_packages), POPULAR_PYPI)
             for suspect, target, score in typos:
@@ -528,8 +612,8 @@ def parse_poetry_lock(filepath, rel_path):
                     category="typosquatting"
                 ))
 
-    except (UnicodeDecodeError, OSError):
-        pass
+    except (UnicodeDecodeError, OSError) as e:
+        print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)
     return findings
 
 
@@ -541,25 +625,18 @@ def parse_pipfile_lock(filepath, rel_path):
             data = json.load(f)
 
         all_packages = set()
+        pkg_versions = {}
         for section in ('default', 'develop'):
-            for pkg_name in data.get(section, {}).keys():
+            for pkg_name, pkg_info in data.get(section, {}).items():
                 all_packages.add(pkg_name)
-
-                # Check for liteLLM version
-                pkg_info = data[section][pkg_name]
-                if 'litellm' in pkg_name.lower():
-                    version = pkg_info.get('version', '').lstrip('=')
-                    if version == '1.82.8':
-                        findings.append(core.Finding(
-                            scanner=SCANNER_NAME, severity="critical",
-                            title=f"Compromised liteLLM Version: {pkg_name}@{version}",
-                            description="liteLLM v1.82.8 contains malicious .pth file injection (March 2026)",
-                            file=rel_path, line=0,
-                            snippet=f"{pkg_name}=={version} (known compromised)",
-                            category="supply-chain"
-                        ))
+                version = pkg_info.get('version', '').lstrip('=')
+                if version:
+                    pkg_versions[pkg_name] = version
 
         if all_packages:
+            # Check all packages against known compromised versions
+            if pkg_versions:
+                findings.extend(check_compromised_versions(pkg_versions, rel_path))
             findings.extend(check_known_ioc_packages(list(all_packages), rel_path))
             typos = check_typosquatting(list(all_packages), POPULAR_PYPI)
             for suspect, target, score in typos:
@@ -572,8 +649,8 @@ def parse_pipfile_lock(filepath, rel_path):
                     category="typosquatting"
                 ))
 
-    except (json.JSONDecodeError, KeyError, TypeError, OSError):
-        pass
+    except (json.JSONDecodeError, KeyError, TypeError, OSError) as e:
+        print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)
     return findings
 
 

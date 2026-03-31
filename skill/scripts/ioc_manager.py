@@ -39,6 +39,7 @@ CACHE_MAX_AGE_HOURS = 24
 HARDCODED_C2_IPS = [
     "91.92.242.30", "54.91.154.110", "157.245.55.238",
     "45.77.240.42", "104.248.30.47", "159.65.147.111",
+    "142.11.206.73",  # Axios supply chain RAT C2 (March 2026)
 ]
 
 HARDCODED_MALICIOUS_DOMAINS = [
@@ -56,12 +57,14 @@ HARDCODED_MALICIOUS_DOMAINS = [
     "hooks.slack.com/services",
     # liteLLM supply chain attack C2 (March 2026)
     "eo1n0jq9qgggt.m.pipedream.net",
+    "sfrclak.com",  # Axios supply chain RAT C2 domain (March 2026)
 ]
 
 HARDCODED_MALICIOUS_NPM = {
     "rimarf", "yarsg", "suport-color", "naniod", "opencraw",
     "claud-code", "cloude-code", "cloude", "mcp-cliient", "mcp-serever",
     "anthropic-sdk-node", "claude-code-cli", "clawclient",
+    "plain-crypto-js",  # Axios supply chain RAT dropper (March 2026)
 }
 
 HARDCODED_MALICIOUS_PYPI = {

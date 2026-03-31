@@ -31,6 +31,16 @@ SUSPICIOUS_COMMANDS = [
     (re.compile(r'>\s*/dev/null.*2>&1'), "output suppression"),
 ]
 
+# Anti-forensics patterns: self-destructing installers (Axios supply chain, March 2026)
+ANTI_FORENSICS_PATTERNS = [
+    (re.compile(r'(?i)\brm\s+([-rf\s]*)(setup\.js|install\.js|postinstall\.js|preinstall\.js)'), "Self-deleting installer script"),
+    (re.compile(r'(?i)fs\.unlinkSync\s*\(\s*__filename\s*\)'), "Script deletes itself after execution (fs.unlinkSync(__filename))"),
+    (re.compile(r'(?i)fs\.unlink(Sync)?\s*\(\s*(path\.)?(resolve|join)\s*\(.*?(setup|install|postinstall)'), "Script deletes installer file after execution"),
+    (re.compile(r'(?i)fs\.writeFileSync\s*\(\s*.*?package\.json'), "Script overwrites package.json (post-execution cleanup)"),
+    (re.compile(r'(?i)(fs\.rename|fs\.copyFile)(Sync)?\s*\(.*?package\.json'), "Script replaces package.json (anti-forensics)"),
+    (re.compile(r'(?i)child_process.*\brm\s'), "child_process used to remove files (anti-forensics)"),
+]
+
 
 def scan_package_json(file_path, rel_path):
     """Check NPM lifecycle scripts for suspicious commands."""
@@ -44,6 +54,8 @@ def scan_package_json(file_path, rel_path):
             if hook in scripts:
                 cmd = scripts[hook]
 
+                # Check for suspicious commands
+                found_suspicious = False
                 for pattern, desc in SUSPICIOUS_COMMANDS:
                     if pattern.search(cmd):
                         findings.append(core.Finding(
@@ -54,8 +66,10 @@ def scan_package_json(file_path, rel_path):
                             snippet=f"{hook}: {cmd[:120]}",
                             category="lifecycle-hook"
                         ))
+                        found_suspicious = True
                         break
-                else:
+
+                if not found_suspicious:
                     # Hook exists but no obviously malicious command
                     findings.append(core.Finding(
                         scanner=SCANNER_NAME, severity="medium",
@@ -66,7 +80,52 @@ def scan_package_json(file_path, rel_path):
                         category="lifecycle-hook"
                     ))
 
+                # Check for anti-forensics patterns
+                for pattern, desc in ANTI_FORENSICS_PATTERNS:
+                    if pattern.search(cmd):
+                        findings.append(core.Finding(
+                            scanner=SCANNER_NAME, severity="critical",
+                            title=f"Anti-Forensics in '{hook}' Hook",
+                            description=f"Lifecycle hook contains self-destructing pattern: {desc} (Axios supply chain attack pattern, March 2026)",
+                            file=rel_path, line=0,
+                            snippet=f"{hook}: {cmd[:120]}",
+                            category="anti-forensics"
+                        ))
+                        break
+
     except (OSError, json.JSONDecodeError, UnicodeDecodeError) as e:
+        print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)
+    return findings
+
+
+def scan_js_anti_forensics(file_path, rel_path):
+    """Detect anti-forensics patterns in JS files referenced by lifecycle hooks.
+
+    Patterns include: self-deleting scripts (fs.unlinkSync(__filename)),
+    package.json overwrite after execution, and version mismatch indicators.
+    Source: Axios supply chain compromise, March 31, 2026.
+    """
+    findings = []
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        lines = content.split('\n')
+        for i, line in enumerate(lines):
+            if len(line) > 10000:
+                continue  # MAX_LINE_LENGTH guard
+            for pattern, desc in ANTI_FORENSICS_PATTERNS:
+                if pattern.search(line):
+                    findings.append(core.Finding(
+                        scanner=SCANNER_NAME, severity="critical",
+                        title=f"Anti-Forensics Pattern: {desc}",
+                        description="Script contains self-destructing or evidence-cleanup pattern (supply chain attack indicator)",
+                        file=rel_path, line=i + 1,
+                        snippet=line.strip()[:120],
+                        category="anti-forensics"
+                    ))
+
+    except (OSError, UnicodeDecodeError) as e:
         print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)
     return findings
 
@@ -196,12 +255,17 @@ def scan_pth_files(file_path, rel_path):
         ))
 
     # Check for base64 content (CRITICAL)
-    # Require at least one + or = to distinguish from filesystem paths
-    base64_pattern = re.compile(r'(?=.*[+/=])[A-Za-z0-9+/]{40,}={0,2}')
+    # Pre-filter with simple 'in' check to avoid ReDoS on long alphanumeric lines
+    base64_pattern = re.compile(r'[A-Za-z0-9+/]{40,}={0,2}')
     for i, line in enumerate(lines):
         stripped = line.strip()
+        if len(stripped) > 10000:
+            continue  # MAX_LINE_LENGTH guard against ReDoS
         # Skip filesystem paths (legitimate .pth content)
         if stripped.startswith('/') or stripped.startswith('.') or 'site-packages' in stripped:
+            continue
+        # Require at least one +, /, or = to distinguish from plain alphanumeric
+        if not any(c in stripped for c in ('+', '/', '=')):
             continue
         if base64_pattern.search(stripped):
             findings.append(core.Finding(
@@ -278,6 +342,8 @@ def main():
             all_findings.extend(scan_pyproject_toml(file_path, rel_path))
         elif basename.endswith('.pth'):
             all_findings.extend(scan_pth_files(file_path, rel_path))
+        elif basename in ('setup.js', 'install.js', 'postinstall.js', 'preinstall.js'):
+            all_findings.extend(scan_js_anti_forensics(file_path, rel_path))
 
     core.output_findings(all_findings, args.format, SCANNER_NAME)
 

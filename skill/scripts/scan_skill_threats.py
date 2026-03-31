@@ -165,6 +165,8 @@ _KNOWN_MALICIOUS_DOMAINS = None
 _FALLBACK_C2_IPS = [
     "91.92.242.30", "54.91.154.110", "157.245.55.238",
     "45.77.240.42", "104.248.30.47", "159.65.147.111",
+    # Axios supply chain RAT C2 (March 2026)
+    "142.11.206.73",
 ]
 _FALLBACK_MALICIOUS_DOMAINS = [
     "install.app-distribution.net", "dl.dropboxusercontent.com",
@@ -173,7 +175,20 @@ _FALLBACK_MALICIOUS_DOMAINS = [
     "hooks.slack.com/services",
     # liteLLM supply chain attack C2 (March 2026)
     "eo1n0jq9qgggt.m.pipedream.net",
+    # Axios supply chain RAT C2 domain (March 2026)
+    "sfrclak.com",
 ]
+
+# Known malicious binary paths (host IOCs)
+KNOWN_RAT_BINARY_PATHS = [
+    "/Library/Caches/com.apple.act.mond",  # Axios supply chain RAT (March 2026)
+]
+
+# Known malicious file hashes (SHA256)
+KNOWN_MALICIOUS_HASHES = {
+    # Axios supply chain RAT binary (March 2026)
+    "92ff08773995ebc8d55ec4b8e1a225d0d1e51efa4ef88b8849d0071230c9645a",
+}
 
 
 def _get_ioc_lists():
@@ -289,7 +304,7 @@ def scan_patterns(content, rel_path, patterns, category, default_severity):
 
 
 def scan_known_iocs(content, rel_path):
-    """Category 8: Check for known campaign indicators."""
+    """Category 8: Check for known campaign indicators (C2 IPs, domains, binary paths, hashes)."""
     findings = []
     lines = content.split('\n')
     c2_ips, malicious_domains = _get_ioc_lists()
@@ -312,6 +327,30 @@ def scan_known_iocs(content, rel_path):
                     scanner=SCANNER_NAME, severity="high",
                     title=f"Suspicious Domain: {domain}",
                     description="Domain associated with malware distribution (source: published threat intelligence)",
+                    file=rel_path, line=i + 1,
+                    snippet=line.strip()[:120],
+                    category="known-ioc"
+                ))
+
+        # Host IOC: known RAT binary paths
+        for rat_path in KNOWN_RAT_BINARY_PATHS:
+            if rat_path in line:
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="critical",
+                    title=f"Known RAT Binary Path: {rat_path}",
+                    description="File path matches known RAT installation location (Axios supply chain, March 2026)",
+                    file=rel_path, line=i + 1,
+                    snippet=line.strip()[:120],
+                    category="known-ioc"
+                ))
+
+        # Host IOC: known malicious file hashes
+        for mal_hash in KNOWN_MALICIOUS_HASHES:
+            if mal_hash in line.lower():
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="critical",
+                    title=f"Known Malicious Hash: {mal_hash[:16]}...",
+                    description="SHA256 hash matches known malware binary (Axios supply chain RAT, March 2026)",
                     file=rel_path, line=i + 1,
                     snippet=line.strip()[:120],
                     category="known-ioc"
