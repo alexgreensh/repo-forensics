@@ -28,14 +28,16 @@ Deep security auditing for repositories, AI agent skills, and MCP servers.
 - **Manifest drift detection** (`scan_manifest_drift.py`): Compares declared vs actual dependencies, catches phantom deps, runtime installs, conditional import+install fallbacks
 - **MCP rug pull detection**: Tool descriptions sourced from database, network, env vars, or conditional logic
 - **Enhanced AST analysis**: 12 patterns including marshal.loads, types.CodeType, sys.addaudithook, bytes decode obfuscation, self-modification
-- **Test suite**: 223 pytest tests covering all scanners
+- **Test suite**: 263 pytest tests covering all scanners
 - **OpenClaw/ClawHub scanning**: Auto-detects OpenClaw skills, validates frontmatter, tools.json, SOUL.md, .clawhubignore
 - **Anti-forensics detection** (v2): Self-deleting installers, package.json overwrite, version mismatch (Axios supply chain pattern)
 - **Compromised version detection** (v2): Flags known-bad versions of legitimate packages (Axios 1.14.1/0.30.4, liteLLM 1.82.8)
 - **Suspicious npm scope detection** (v2): Flags systematic MCP server forking campaigns (iflow-mcp)
 - **Host IOC scanning** (v2): Known RAT binary paths, C2 domains, malicious file hashes
 - **CVE-2026-33068 detection** (v2): Workspace trust bypass via bypassPermissions in Claude Code settings
-- **17 scanners** with 16 correlation rules
+- **Post-incident forensics** (v2.2): npm cache/log artifacts, RAT binary detection, C2 persistence, node_modules traces that survive dropper self-cleanup
+- **Supply chain hardening** (v2.2): .npmrc scanning, missing lockfile detection, git/HTTP dep flagging, hostname bypass fix, unbounded Python range detection, install script severity elevation
+- **18 scanners** with 18 correlation rules
 
 ## When to Use
 
