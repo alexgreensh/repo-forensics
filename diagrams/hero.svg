@@ -99,7 +99,7 @@
   <!-- Stats bar -->
   <g transform="translate(230, 252)">
     <rect x="0" y="0" width="120" height="30" rx="6" fill="#21262d" stroke="#30363d" stroke-width="1"/>
-    <text x="60" y="20" font-family="'SF Mono',Consolas,monospace" font-size="12" fill="#58a6ff" text-anchor="middle" font-weight="600">17 scanners</text>
+    <text x="60" y="20" font-family="'SF Mono',Consolas,monospace" font-size="12" fill="#58a6ff" text-anchor="middle" font-weight="600">18 scanners</text>
 
     <rect x="134" y="0" width="100" height="30" rx="6" fill="#21262d" stroke="#30363d" stroke-width="1"/>
     <text x="184" y="20" font-family="'SF Mono',Consolas,monospace" font-size="12" fill="#3fb950" text-anchor="middle" font-weight="600">0 deps</text>
