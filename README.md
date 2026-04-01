@@ -34,7 +34,7 @@ $ ./run_forensics.sh ./suspicious-skill
 
 ==========================================
   REPO FORENSICS v2
-  Mode: Full Audit (17 scanners)
+  Mode: Full Audit (18 scanners)
 ==========================================
 
   [CRITICAL] ClawHavoc Delivery: Fake prerequisite driver
