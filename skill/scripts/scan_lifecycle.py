@@ -70,15 +70,30 @@ def scan_package_json(file_path, rel_path):
                         break
 
                 if not found_suspicious:
-                    # Hook exists but no obviously malicious command
-                    findings.append(core.Finding(
-                        scanner=SCANNER_NAME, severity="medium",
-                        title=f"NPM Hook: '{hook}' Present",
-                        description=f"Lifecycle hook exists (common malware vector)",
-                        file=rel_path, line=0,
-                        snippet=f"{hook}: {cmd[:120]}",
-                        category="lifecycle-hook"
-                    ))
+                    # Check for filename relay pattern: node/python/sh/bash <file>
+                    # This is THE standard supply chain attack entry point
+                    relay_pattern = re.compile(
+                        r'^(node|python|python3|sh|bash|bun|deno)\s+\w+\.(js|mjs|cjs|py|sh)$'
+                    )
+                    if relay_pattern.match(cmd.strip()):
+                        findings.append(core.Finding(
+                            scanner=SCANNER_NAME, severity="high",
+                            title=f"NPM Hook: '{hook}' Runs External Script",
+                            description=f"Lifecycle hook executes external file (standard supply chain attack pattern)",
+                            file=rel_path, line=0,
+                            snippet=f"{hook}: {cmd[:120]}",
+                            category="lifecycle-hook"
+                        ))
+                    else:
+                        # Hook exists but no obviously malicious command
+                        findings.append(core.Finding(
+                            scanner=SCANNER_NAME, severity="medium",
+                            title=f"NPM Hook: '{hook}' Present",
+                            description=f"Lifecycle hook exists (common malware vector)",
+                            file=rel_path, line=0,
+                            snippet=f"{hook}: {cmd[:120]}",
+                            category="lifecycle-hook"
+                        ))
 
                 # Check for anti-forensics patterns
                 for pattern, desc in ANTI_FORENSICS_PATTERNS:
@@ -344,6 +359,15 @@ def main():
             all_findings.extend(scan_pth_files(file_path, rel_path))
         elif basename in ('setup.js', 'install.js', 'postinstall.js', 'preinstall.js'):
             all_findings.extend(scan_js_anti_forensics(file_path, rel_path))
+        elif basename == 'binding.gyp':
+            all_findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="high",
+                title="binding.gyp: Implicit Native Build",
+                description="binding.gyp triggers node-gyp rebuild on install without explicit install script (native code execution)",
+                file=rel_path, line=0,
+                snippet="binding.gyp present (implicit install-time execution)",
+                category="lifecycle-hook"
+            ))
 
     core.output_findings(all_findings, args.format, SCANNER_NAME)
 

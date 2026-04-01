@@ -100,3 +100,135 @@ class TestLockfile:
         }))
         findings = scanner.scan_lockfile(str(lock), "package-lock.json")
         assert len(findings) == 0
+
+    def test_hostname_bypass_evil_subdomain(self, tmp_path):
+        """Evil subdomain like evil-registry.npmjs.org.attacker.com must be flagged."""
+        lock = tmp_path / "package-lock.json"
+        lock.write_text(json.dumps({
+            "packages": {
+                "evil-pkg": {
+                    "resolved": "https://evil-registry.npmjs.org.attacker.com/pkg.tgz"
+                }
+            }
+        }))
+        findings = scanner.scan_lockfile(str(lock), "package-lock.json")
+        assert any("untrusted" in f.title.lower() for f in findings), \
+            "Hostname substring bypass: evil-registry.npmjs.org.attacker.com should be flagged"
+
+    def test_hostname_bypass_path_trick(self, tmp_path):
+        """evil.com/registry.npmjs.org/ should be flagged (path-based bypass)."""
+        lock = tmp_path / "package-lock.json"
+        lock.write_text(json.dumps({
+            "packages": {
+                "evil-pkg": {
+                    "resolved": "https://evil.com/registry.npmjs.org/pkg.tgz"
+                }
+            }
+        }))
+        findings = scanner.scan_lockfile(str(lock), "package-lock.json")
+        assert any("untrusted" in f.title.lower() for f in findings)
+
+    def test_git_dependency_flagged(self, tmp_path):
+        """git+ dependencies should be flagged as HIGH."""
+        pkg = tmp_path / "package.json"
+        pkg.write_text(json.dumps({
+            "name": "test",
+            "dependencies": {
+                "private-lib": "git+https://github.com/org/repo.git"
+            }
+        }))
+        findings = scanner.scan_package_json(str(pkg), "package.json")
+        assert any(f.category == "git-dependency" for f in findings)
+
+    def test_http_dependency_flagged_critical(self, tmp_path):
+        """http:// dependencies should be flagged as CRITICAL."""
+        pkg = tmp_path / "package.json"
+        pkg.write_text(json.dumps({
+            "name": "test",
+            "dependencies": {
+                "unsafe-lib": "http://example.com/lib.tgz"
+            }
+        }))
+        findings = scanner.scan_package_json(str(pkg), "package.json")
+        assert any(f.severity == "critical" and f.category == "insecure-protocol" for f in findings)
+
+    def test_file_dependency_flagged(self, tmp_path):
+        """file: dependencies should be flagged as MEDIUM."""
+        pkg = tmp_path / "package.json"
+        pkg.write_text(json.dumps({
+            "name": "test",
+            "dependencies": {
+                "local-lib": "file:../lib"
+            }
+        }))
+        findings = scanner.scan_package_json(str(pkg), "package.json")
+        assert any(f.category == "local-dependency" for f in findings)
+
+
+class TestMissingLockfile:
+    def test_no_lockfile_flagged(self, tmp_path):
+        """package.json with deps but no lockfile should be flagged."""
+        pkg = tmp_path / "package.json"
+        pkg.write_text(json.dumps({
+            "name": "test",
+            "dependencies": {"react": "^18.0.0"}
+        }))
+        findings = scanner.scan_package_json(str(pkg), "package.json")
+        assert any(f.category == "missing-lockfile" for f in findings)
+
+    def test_lockfile_present_no_flag(self, tmp_path):
+        """package.json with a sibling lockfile should NOT be flagged."""
+        pkg = tmp_path / "package.json"
+        pkg.write_text(json.dumps({
+            "name": "test",
+            "dependencies": {"react": "^18.0.0"}
+        }))
+        lock = tmp_path / "package-lock.json"
+        lock.write_text("{}")
+        findings = scanner.scan_package_json(str(pkg), "package.json")
+        assert not any(f.category == "missing-lockfile" for f in findings)
+
+    def test_monorepo_parent_lockfile_ok(self, tmp_path):
+        """Monorepo: lockfile in parent dir should suppress the finding."""
+        sub = tmp_path / "packages" / "sub"
+        sub.mkdir(parents=True)
+        pkg = sub / "package.json"
+        pkg.write_text(json.dumps({
+            "name": "sub",
+            "dependencies": {"lodash": "^4.0.0"}
+        }))
+        # Parent lockfile
+        lock = tmp_path / "package-lock.json"
+        lock.write_text("{}")
+        findings = scanner.scan_package_json(str(pkg), "packages/sub/package.json")
+        assert not any(f.category == "missing-lockfile" for f in findings)
+
+
+class TestPythonUnboundedRanges:
+    def test_unbounded_gte_flagged(self, tmp_path):
+        """>=X.Y.Z with no upper bound should be flagged as MEDIUM."""
+        req = tmp_path / "requirements.txt"
+        req.write_text("requests>=2.28.0\n")
+        findings = scanner.scan_python_deps(str(req), "requirements.txt")
+        assert any(f.category == "unbounded-range" for f in findings)
+
+    def test_compatible_release_not_flagged(self, tmp_path):
+        """~=X.Y.Z (compatible release) should NOT be flagged."""
+        req = tmp_path / "requirements.txt"
+        req.write_text("requests~=2.28.0\n")
+        findings = scanner.scan_python_deps(str(req), "requirements.txt")
+        assert not any(f.category == "unbounded-range" for f in findings)
+
+    def test_pinned_not_flagged(self, tmp_path):
+        """==X.Y.Z should NOT be flagged."""
+        req = tmp_path / "requirements.txt"
+        req.write_text("requests==2.28.0\n")
+        findings = scanner.scan_python_deps(str(req), "requirements.txt")
+        assert not any(f.category == "unbounded-range" for f in findings)
+
+    def test_bare_package_flagged(self, tmp_path):
+        """Bare package name with no version should be flagged HIGH."""
+        req = tmp_path / "requirements.txt"
+        req.write_text("requests\n")
+        findings = scanner.scan_python_deps(str(req), "requirements.txt")
+        assert any(f.category == "no-version-constraint" for f in findings)

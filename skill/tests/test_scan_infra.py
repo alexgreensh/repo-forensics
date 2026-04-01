@@ -48,6 +48,62 @@ class TestGitHubActions:
         assert any("expression" in f.title.lower() or "github.event" in f.snippet for f in findings)
 
 
+class TestNpmrc:
+    def test_detects_strict_ssl_false(self, tmp_path):
+        npmrc = tmp_path / ".npmrc"
+        npmrc.write_text("strict-ssl=false\n")
+        findings = scanner.scan_npmrc(str(npmrc), ".npmrc")
+        assert any(f.severity == "critical" and "ssl" in f.title.lower() for f in findings)
+
+    def test_detects_package_lock_false(self, tmp_path):
+        npmrc = tmp_path / ".npmrc"
+        npmrc.write_text("package-lock=false\n")
+        findings = scanner.scan_npmrc(str(npmrc), ".npmrc")
+        assert any(f.severity == "high" and "lockfile" in f.title.lower() for f in findings)
+
+    def test_detects_missing_ignore_scripts(self, tmp_path):
+        npmrc = tmp_path / ".npmrc"
+        npmrc.write_text("registry=https://registry.npmjs.org/\n")
+        findings = scanner.scan_npmrc(str(npmrc), ".npmrc")
+        assert any("ignore-scripts" in f.title.lower() for f in findings)
+
+    def test_ignore_scripts_true_no_finding(self, tmp_path):
+        npmrc = tmp_path / ".npmrc"
+        npmrc.write_text("ignore-scripts=true\n")
+        findings = scanner.scan_npmrc(str(npmrc), ".npmrc")
+        assert not any("ignore-scripts" in f.title.lower() for f in findings)
+
+    def test_detects_custom_git_override(self, tmp_path):
+        npmrc = tmp_path / ".npmrc"
+        npmrc.write_text("git=/tmp/evil-git\n")
+        findings = scanner.scan_npmrc(str(npmrc), ".npmrc")
+        assert any(f.severity == "critical" and "git" in f.title.lower() for f in findings)
+
+    def test_system_git_path_ok(self, tmp_path):
+        npmrc = tmp_path / ".npmrc"
+        npmrc.write_text("git=/usr/bin/git\n")
+        findings = scanner.scan_npmrc(str(npmrc), ".npmrc")
+        assert not any("git" in f.title.lower() and "override" in f.title.lower() for f in findings)
+
+    def test_elevated_severity_with_hooks(self, tmp_path):
+        """Missing ignore-scripts should be HIGH when lifecycle hooks exist."""
+        npmrc = tmp_path / ".npmrc"
+        npmrc.write_text("registry=https://registry.npmjs.org/\n")
+        pkg = tmp_path / "package.json"
+        pkg.write_text('{"scripts":{"postinstall":"node setup.js"}}')
+        findings = scanner.scan_npmrc(str(npmrc), ".npmrc")
+        ignore_findings = [f for f in findings if "ignore-scripts" in f.title.lower()]
+        assert any(f.severity == "high" for f in ignore_findings)
+
+
+class TestPnpmWorkspace:
+    def test_detects_dangerously_allow_all_builds(self, tmp_path):
+        ws = tmp_path / "pnpm-workspace.yaml"
+        ws.write_text("packages:\n  - apps/*\nonlyBuiltDependencies:\n  dangerouslyAllowAllBuilds: true\n")
+        findings = scanner.scan_pnpm_workspace(str(ws), "pnpm-workspace.yaml")
+        assert any(f.severity == "critical" for f in findings)
+
+
 class TestCleanRepo:
     def test_clean_repo_minimal_findings(self, clean_repo):
         findings = _scan_repo(clean_repo)

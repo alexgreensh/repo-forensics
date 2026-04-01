@@ -143,12 +143,40 @@ def scan_github_actions(file_path, rel_path):
                     ))
                 elif not is_sha_pinned and is_official:
                     findings.append(core.Finding(
-                        scanner=SCANNER_NAME, severity="low",
+                        scanner=SCANNER_NAME, severity="medium",
                         title=f"GHA: Unpinned Official Action",
-                        description=f"Action '{action}@{ref}' not pinned to commit SHA",
+                        description=f"Action '{action}@{ref}' not pinned to commit SHA (official action compromise is a real vector)",
                         file=rel_path, line=i+1, snippet=stripped[:120],
                         category="ci-cd"
                     ))
+
+            # Dangerous permissions
+            if re.search(r'contents\s*:\s*write', stripped):
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="medium",
+                    title="GHA: contents: write Permission",
+                    description="Workflow has write access to repository contents (can push code, create releases)",
+                    file=rel_path, line=i+1, snippet=stripped[:120],
+                    category="ci-cd"
+                ))
+            if re.search(r'permissions\s*:\s*write-all', stripped):
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="high",
+                    title="GHA: write-all Permissions",
+                    description="Workflow has full write permissions to all scopes",
+                    file=rel_path, line=i+1, snippet=stripped[:120],
+                    category="ci-cd"
+                ))
+
+            # Self-hosted runners
+            if re.search(r'runs-on\s*:\s*self-hosted', stripped):
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="medium",
+                    title="GHA: Self-Hosted Runner",
+                    description="Workflow runs on self-hosted runner (persistent environment, credential exposure risk)",
+                    file=rel_path, line=i+1, snippet=stripped[:120],
+                    category="ci-cd"
+                ))
 
             if '${{ secrets.' in stripped and ('run:' in stripped or 'run: |' in stripped):
                 findings.append(core.Finding(
@@ -193,6 +221,105 @@ def scan_github_actions(file_path, rel_path):
                         category="ci-cd"
                     ))
                     break
+
+    except (OSError, UnicodeDecodeError) as e:
+        print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)
+    return findings
+
+
+def scan_npmrc(file_path, rel_path):
+    """Scan .npmrc for security-relevant configuration."""
+    findings = []
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        lines = content.split('\n')
+
+        has_ignore_scripts = False
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if not stripped or stripped.startswith('#') or stripped.startswith(';'):
+                continue
+
+            if re.match(r'ignore-scripts\s*=\s*true', stripped):
+                has_ignore_scripts = True
+
+            if re.match(r'strict-ssl\s*=\s*false', stripped, re.IGNORECASE):
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="critical",
+                    title=".npmrc: SSL Verification Disabled",
+                    description="strict-ssl=false allows MITM attacks on registry connections",
+                    file=rel_path, line=i + 1, snippet=stripped[:120],
+                    category="npmrc-config"
+                ))
+
+            if re.match(r'package-lock\s*=\s*false', stripped, re.IGNORECASE):
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="high",
+                    title=".npmrc: Lockfile Generation Disabled",
+                    description="package-lock=false prevents lockfile creation (no dependency pinning)",
+                    file=rel_path, line=i + 1, snippet=stripped[:120],
+                    category="npmrc-config"
+                ))
+
+            # git= override pointing to non-system paths (PackageGate bypass)
+            git_match = re.match(r'git\s*=\s*(.+)', stripped)
+            if git_match:
+                git_path = git_match.group(1).strip()
+                system_git_paths = ('/usr/bin/git', '/usr/local/bin/git', '/opt/homebrew/bin/git', 'git')
+                if git_path not in system_git_paths:
+                    findings.append(core.Finding(
+                        scanner=SCANNER_NAME, severity="critical",
+                        title=".npmrc: Custom git Binary Override",
+                        description=f"git= points to non-system path (PackageGate .npmrc injection bypass vector)",
+                        file=rel_path, line=i + 1, snippet=stripped[:120],
+                        category="npmrc-config"
+                    ))
+
+        if not has_ignore_scripts:
+            # Check if project has lifecycle hooks (elevate severity if so)
+            pkg_json = os.path.join(os.path.dirname(file_path), 'package.json')
+            has_hooks = False
+            if os.path.exists(pkg_json):
+                try:
+                    with open(pkg_json, 'r') as pf:
+                        pkg_data = json.load(pf)
+                    scripts = pkg_data.get('scripts', {})
+                    hook_names = {'preinstall', 'postinstall', 'install', 'prepare', 'prepublish'}
+                    has_hooks = bool(hook_names & set(scripts.keys()))
+                except (json.JSONDecodeError, OSError):
+                    pass
+
+            sev = "high" if has_hooks else "medium"
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity=sev,
+                title=".npmrc: Missing ignore-scripts",
+                description="ignore-scripts=true not set (install scripts will execute)",
+                file=rel_path, line=0, snippet="ignore-scripts not found",
+                category="npmrc-config"
+            ))
+
+    except (OSError, UnicodeDecodeError) as e:
+        print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)
+    return findings
+
+
+def scan_pnpm_workspace(file_path, rel_path):
+    """Scan pnpm-workspace.yaml for security-relevant configuration."""
+    findings = []
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        for i, line in enumerate(content.split('\n')):
+            if re.search(r'dangerouslyAllowAllBuilds\s*:\s*true', line):
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="critical",
+                    title="pnpm: dangerouslyAllowAllBuilds Enabled",
+                    description="All package build scripts allowed to run (bypasses pnpm safety)",
+                    file=rel_path, line=i + 1, snippet=line.strip()[:120],
+                    category="pnpm-config"
+                ))
 
     except (OSError, UnicodeDecodeError) as e:
         print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)
@@ -293,7 +420,12 @@ def main():
         if basename == "Dockerfile" or basename.endswith(".dockerfile"):
             all_findings.extend(scan_dockerfile(file_path, rel_path))
 
-        if basename.endswith((".yaml", ".yml")):
+        if basename == '.npmrc':
+            all_findings.extend(scan_npmrc(file_path, rel_path))
+
+        if basename == 'pnpm-workspace.yaml':
+            all_findings.extend(scan_pnpm_workspace(file_path, rel_path))
+        elif basename.endswith((".yaml", ".yml")):
             if ".github/workflows" in file_path:
                 all_findings.extend(scan_github_actions(file_path, rel_path))
             else:

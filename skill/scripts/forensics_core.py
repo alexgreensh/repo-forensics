@@ -447,7 +447,36 @@ def correlate(findings):
                 category="openclaw-compound"
             ))
 
-        # Rule 15: .pth file + base64/exec = "Python Startup Injection (liteLLM-style)"
+        # Rule 15: git dependency + lifecycle hook = npmrc injection risk
+        git_dep_keywords = {"git-dependency", "git dependency", "git+"}
+        if has_category(file_findings, git_dep_keywords) and has_category(file_findings, lifecycle_keywords):
+            correlated.append(Finding(
+                scanner="correlation",
+                severity="high",
+                title="Git Dependency with Lifecycle Hook",
+                description="Git dependency combined with lifecycle hook in the same package.json. Git deps can inject .npmrc to override git binary (PackageGate bypass, npm unfixed).",
+                file=filepath,
+                line=0,
+                snippet="[compound: git dependency + lifecycle hook]",
+                category="npmrc-injection-risk"
+            ))
+
+        # Rule 16: missing integrity + untrusted URL = lockfile tampering
+        missing_integrity_keywords = {"missing-integrity", "missing integrity", "no integrity"}
+        untrusted_url_keywords = {"untrusted-registry", "untrusted registry", "insecure-protocol"}
+        if has_category(file_findings, missing_integrity_keywords) and has_category(file_findings, untrusted_url_keywords):
+            correlated.append(Finding(
+                scanner="correlation",
+                severity="critical",
+                title="Lockfile Tampering Indicator",
+                description="Missing integrity hashes combined with untrusted registry URLs. Strong indicator of lockfile manipulation.",
+                file=filepath,
+                line=0,
+                snippet="[compound: missing integrity + untrusted URL]",
+                category="lockfile-tampering"
+            ))
+
+        # Rule 17: .pth file + base64/exec = "Python Startup Injection (liteLLM-style)"
         pth_keywords = {"pth-injection", ".pth file", "pth file"}
         pth_exec_keywords = {"exec", "eval", "compile", "base64", "obfuscat"}
         if has_category(file_findings, pth_keywords) and has_category(file_findings, pth_exec_keywords):

@@ -292,6 +292,58 @@ def scan_package_json(filepath, rel_path):
 
         dep_names = list(all_deps.keys())
 
+        # Missing lockfile detection
+        if all_deps:
+            pkg_dir = os.path.dirname(filepath)
+            lockfile_names = ('package-lock.json', 'yarn.lock', 'pnpm-lock.yaml', 'bun.lockb', 'bun.lock')
+            has_lockfile = any(os.path.exists(os.path.join(pkg_dir, lf)) for lf in lockfile_names)
+            # Monorepo check: look up 2 parent directories
+            if not has_lockfile:
+                parent = os.path.dirname(pkg_dir)
+                for _ in range(2):
+                    if any(os.path.exists(os.path.join(parent, lf)) for lf in lockfile_names):
+                        has_lockfile = True
+                        break
+                    parent = os.path.dirname(parent)
+            if not has_lockfile:
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="high",
+                    title="Missing Lockfile",
+                    description="No lockfile found (package-lock.json, yarn.lock, pnpm-lock.yaml, bun.lockb). Dependencies resolve to latest in range on every install.",
+                    file=rel_path, line=0,
+                    snippet=f"{len(all_deps)} dependencies without lockfile",
+                    category="missing-lockfile"
+                ))
+
+        # Git/HTTP/file dependency flagging
+        for pkg, ver in all_deps.items():
+            if not isinstance(ver, str):
+                continue
+            if ver.startswith(('git+', 'git://', 'github:')):
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="high",
+                    title=f"Git Dependency: {pkg}",
+                    description="Git dependency bypasses registry integrity checks (PackageGate .npmrc injection vector)",
+                    file=rel_path, line=0, snippet=f"{pkg}: {ver[:120]}",
+                    category="git-dependency"
+                ))
+            elif ver.startswith('http://'):
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="critical",
+                    title=f"HTTP Dependency: {pkg}",
+                    description="Dependency fetched over unencrypted HTTP (MITM attack vector)",
+                    file=rel_path, line=0, snippet=f"{pkg}: {ver[:120]}",
+                    category="insecure-protocol"
+                ))
+            elif ver.startswith('file:'):
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="medium",
+                    title=f"Local File Dependency: {pkg}",
+                    description="Dependency references local filesystem path",
+                    file=rel_path, line=0, snippet=f"{pkg}: {ver[:120]}",
+                    category="local-dependency"
+                ))
+
         # Known IOC check (critical, before typosquatting)
         findings.extend(check_known_ioc_packages(dep_names, rel_path))
 
@@ -350,11 +402,16 @@ def scan_python_deps(filepath, rel_path):
 
         deps = []
         basename = os.path.basename(filepath)
+        # Check for companion lockfiles (suppress unbounded-range warnings if locked)
+        lock_dir = os.path.dirname(filepath)
+        py_lockfiles = ('requirements.lock', 'requirements-lock.txt', 'Pipfile.lock', 'poetry.lock')
+        has_py_lockfile = any(os.path.exists(os.path.join(lock_dir, lf)) for lf in py_lockfiles)
+
         if basename in ('requirements.txt', 'requirements-dev.txt', 'requirements-test.txt', 'constraints.txt'):
             for line in content.split('\n'):
                 line = line.strip()
                 if line and not line.startswith('#') and not line.startswith('-'):
-                    pkg = re.split(r'[>=<!\[\];]', line)[0].strip()
+                    pkg = re.split(r'[>=<!\[\];~]', line)[0].strip()
                     if pkg:
                         deps.append(pkg)
                     # Check version
@@ -367,6 +424,27 @@ def scan_python_deps(filepath, rel_path):
                             file=rel_path, line=0, snippet=line[:120],
                             category="dependency-confusion"
                         ))
+
+                    # Unbounded range detection (only if no lockfile)
+                    if not has_py_lockfile and pkg:
+                        # Bare package name with no version constraint
+                        if pkg and line.strip() == pkg:
+                            findings.append(core.Finding(
+                                scanner=SCANNER_NAME, severity="high",
+                                title=f"No Version Constraint: {pkg}",
+                                description="Package has no version constraint (installs latest on every install)",
+                                file=rel_path, line=0, snippet=line[:120],
+                                category="no-version-constraint"
+                            ))
+                        # >= without upper bound
+                        elif '>=' in line and '<' not in line and '~=' not in line and '==' not in line:
+                            findings.append(core.Finding(
+                                scanner=SCANNER_NAME, severity="medium",
+                                title=f"Unbounded Version Range: {pkg}",
+                                description=">=X.Y.Z with no upper bound allows arbitrary future versions",
+                                file=rel_path, line=0, snippet=line[:120],
+                                category="unbounded-range"
+                            ))
 
         elif basename in ('pyproject.toml', 'Pipfile'):
             for m in re.finditer(r'["\']([a-zA-Z0-9_-]+)["\']', content):
@@ -408,9 +486,28 @@ def scan_lockfile(filepath, rel_path):
         for url in urls:
             # Check hostname only to prevent path-based bypass (e.g., evil.com/registry.npmjs.org/)
             hostname = urlparse(url).hostname or ''
-            is_trusted = any(t in hostname for t in TRUSTED_REGISTRIES)
+            is_trusted = any(hostname == t or hostname.endswith('.' + t) for t in TRUSTED_REGISTRIES)
             if not is_trusted and "schema.org" not in hostname:
                 suspicious.add(url)
+
+        # Flag git+ and http:// resolved URLs in lockfiles
+        for url in urls:
+            if url.startswith('git+') or url.startswith('git://'):
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="high",
+                    title="Lockfile: Git-Resolved Dependency",
+                    description="Lockfile resolves dependency via git (bypasses registry integrity)",
+                    file=rel_path, line=0, snippet=url[:120],
+                    category="git-dependency"
+                ))
+            elif url.startswith('http://'):
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="critical",
+                    title="Lockfile: HTTP-Resolved Dependency",
+                    description="Lockfile resolves dependency over unencrypted HTTP (MITM risk)",
+                    file=rel_path, line=0, snippet=url[:120],
+                    category="insecure-protocol"
+                ))
 
         if suspicious:
             for url in list(suspicious)[:5]:
@@ -458,6 +555,20 @@ def parse_package_lock_json(filepath, rel_path):
                     name = parts[-1]
                     if name:
                         all_packages.add(name)
+
+                # Integrity hash verification (v2/v3 only)
+                # Skip workspace links and root package
+                if pkg_info.get('link'):
+                    continue
+                if 'integrity' not in pkg_info and pkg_path:
+                    findings.append(core.Finding(
+                        scanner=SCANNER_NAME, severity="medium",
+                        title=f"Missing Integrity Hash: {name if parts else pkg_path}",
+                        description="Package in lockfile has no integrity hash (tampered lockfile indicator)",
+                        file=rel_path, line=0,
+                        snippet=f"{pkg_path}: no integrity field",
+                        category="missing-integrity"
+                    ))
 
         # v1 format: "dependencies" key with nested structure
         if 'dependencies' in data:
