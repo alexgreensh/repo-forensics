@@ -6,7 +6,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg" alt="License: AGPL-3.0"></a>
   <img src="https://img.shields.io/badge/python-3.8%2B-blue.svg" alt="Python 3.8+">
   <img src="https://img.shields.io/badge/dependencies-zero-brightgreen.svg" alt="Zero Dependencies">
-  <img src="https://img.shields.io/badge/scanners-17-orange.svg" alt="17 Scanners">
+  <img src="https://img.shields.io/badge/scanners-18-orange.svg" alt="18 Scanners">
   <img src="https://img.shields.io/badge/patterns-450%2B-red.svg" alt="450+ Patterns">
   <img src="https://img.shields.io/badge/2026%20CVEs-covered-critical.svg" alt="2026 CVEs">
 </p>
@@ -21,7 +21,9 @@ Nobody does. The vetting step doesn't exist. [1,184 malicious skills](https://ww
 
 You won't feel it. There are no symptoms.
 
-**Repo Forensics is the vetting step.** Audit any repo, skill, MCP server, or plugin before it touches your machine. Works across the AI agent ecosystem: Claude Code, OpenClaw, Codex, Cursor, NanoClaw, or anything that installs third-party code. 17 scanners, runtime behavior prediction, ClawHavoc campaign detection. Nothing phones home. Runs in seconds.
+**Repo Forensics is the vetting step.** Audit any repo, skill, MCP server, or plugin before it touches your machine. Works across the AI agent ecosystem: Claude Code, OpenClaw, Codex, Cursor, NanoClaw, or anything that installs third-party code. 18 scanners, runtime behavior prediction, ClawHavoc campaign detection. Nothing phones home. Runs in seconds.
+
+**Already installed something you're not sure about?** Run it on your existing projects too. The post-incident scanner checks npm cache, install logs, node_modules, and your machine for traces of known supply chain attacks (axios RAT, liteLLM .pth injection, SANDWORM campaign) even after the malware has cleaned up after itself.
 
 ---
 
@@ -77,7 +79,7 @@ $ ./run_forensics.sh ./suspicious-skill
   <img src="diagrams/pipeline.svg" alt="Scanning pipeline: input → 17 scanners → correlation → verdict" width="900"/>
 </p>
 
-Point it at any repository. 17 scanners run in parallel, each checking a different attack surface. The correlation engine then cross-references findings across 16 rules to detect compound threats that no single scanner would catch (like dynamic import + network fetch = deferred payload loading).
+Point it at any repository. 18 scanners run in parallel, each checking a different attack surface. The correlation engine then cross-references findings across 18 rules to detect compound threats that no single scanner would catch (like dynamic import + network fetch = deferred payload loading).
 
 The result is a severity-ranked verdict with exit codes designed for CI/CD gating.
 
@@ -111,6 +113,7 @@ The result is a severity-ranked verdict with exit codes designed for CI/CD gatin
 | **entropy** | Hidden payloads in base64 blocks, hex strings, high-entropy content | Per-string Shannon entropy with format-aware thresholds |
 | **infra** | Docker misconfig, K8s breakouts, GHA expression injection, Claude config CVEs | Dockerfile, YAML, workflow, and settings.json analysis |
 | **binary** | Executables disguised as images, text files, or documentation | Magic number detection vs. file extension |
+| **post_incident** | npm cache artifacts, RAT binaries, C2 persistence, install log traces, compromised node_modules | File existence checks, npm cache/log scanning, LaunchAgent grep |
 | **git_forensics** | Timestamp manipulation, identity spoofing, bad GPG signatures | Commit history analysis, multi-identity detection |
 
 ---
@@ -141,6 +144,32 @@ No pip install. No API keys. No Docker. No dependencies.
 # Verify your own installation hasn't been tampered with
 ./skill/scripts/run_forensics.sh /path/to/repo --verify-install
 ```
+
+---
+
+## Scan Your Own Projects
+
+Already have projects installed? Run repo-forensics on your existing codebase to check for compromised dependencies, supply chain artifacts, and post-incident traces.
+
+```bash
+# Scan a single project
+./skill/scripts/run_forensics.sh ~/my-app
+
+# Scan your entire projects folder
+./skill/scripts/run_forensics.sh ~/Projects
+
+# Check if you were hit by the axios attack (March 31, 2026)
+# or liteLLM .pth injection, or any SANDWORM campaign package
+./skill/scripts/run_forensics.sh ~/Projects
+```
+
+The post-incident scanner automatically checks:
+- **node_modules** for known malicious package directories (even after dropper self-cleanup)
+- **npm cache** (`~/.npm/_cacache/`) for cached compromised tarballs
+- **npm install logs** (`~/.npm/_logs/`) for references to compromised packages or C2 domains
+- **Host artifacts**: RAT binaries, LaunchAgent/LaunchDaemon persistence (macOS)
+
+This catches attacks that designed to evade detection. The axios dropper deletes itself and rewrites package.json to hide its tracks, but the npm cache and node_modules directory survive.
 
 ---
 
@@ -233,7 +262,7 @@ Auto-detects OpenClaw skills (SKILL.md frontmatter, tools.json, SOUL.md) and run
 | **GitHub Action** | `action.yml` for CI/CD integration with exit code gating. |
 | **Runtime behavior prediction** | Detects code that will change behavior after install: time bombs, dynamic imports, fetch-then-execute, self-modification, rug pull enablers. |
 | **Manifest drift detection** | Compares declared dependencies vs actual imports. Catches phantom deps, runtime installs, and conditional import+install fallbacks. |
-| **223 pytest tests** | Full test coverage across 14 test files with fixture repos containing known vulnerabilities. |
+| **260+ pytest tests** | Full test coverage across 16 test files with fixture repos containing known vulnerabilities. |
 | **Shared core** | Duplicated `scan_patterns()` extracted to `forensics_core.py`. Silent exceptions replaced with structured findings. |
 | **OpenClaw/ClawHub scanning** | Auto-detects OpenClaw skills and checks frontmatter, tools.json, SOUL.md, .clawhubignore for ClawHavoc patterns and Full-Schema Poisoning. |
 
@@ -241,7 +270,7 @@ Auto-detects OpenClaw skills (SKILL.md frontmatter, tools.json, SOUL.md) and run
 
 ## Correlation Engine
 
-Individual findings are useful. Compound findings are devastating. The correlation engine connects dots across scanners with 16 rules:
+Individual findings are useful. Compound findings are devastating. The correlation engine connects dots across scanners with 18 rules:
 
 | Pattern | Finding | Severity |
 |---------|---------|----------|
@@ -261,6 +290,8 @@ Individual findings are useful. Compound findings are devastating. The correlati
 | tools.json poisoning + prompt injection | **Agent Skill Compound Attack** | critical |
 | .pth file + base64/exec | **Python Startup Injection (liteLLM-style)** | critical |
 | .pth file + known IOC | **Known Supply Chain .pth Attack** | critical |
+| git dependency + lifecycle hook | **Git Dependency with Lifecycle Hook** | high |
+| missing integrity + untrusted URL | **Lockfile Tampering Indicator** | critical |
 
 ---
 
@@ -293,7 +324,7 @@ Research basis: CVE-2026-2297 (SourcelessFileLoader), PylangGhost RAT (March 202
 | VirusTotal + ClawHub | ClawHub signature scanning | Surface-level. Signature-based, not structural. No prompt injection detection, no taint tracking. |
 | Manual review | Reading code | Misses zero-width unicode, cross-file taint flows, tool description injection. |
 
-**repo-forensics:** 17 scanners. Zero dependencies. Fully offline. Runtime behavior prediction. Built for the AI agent ecosystem.
+**repo-forensics:** 18 scanners. Zero dependencies. Fully offline. Runtime behavior prediction. Post-incident forensics. Built for the AI agent ecosystem.
 
 ---
 
@@ -320,6 +351,7 @@ Detection patterns are original work informed by published research:
 | Socket.dev NuGet time bombs | 2025 | Hardcoded activation dates years in future | runtime_dynamism |
 | PylangGhost RAT | 2026 | Benign v1.0.0 weaponized in v1.0.1 | manifest_drift, runtime_dynamism |
 | liteLLM .pth injection | 2026 | Malicious `.pth` file in PyPI package auto-exfiltrates credentials on `pip install`. 97M monthly downloads. Spread transitively via dspy. | lifecycle, dependencies |
+| Axios supply chain compromise | 2026 | Hijacked maintainer account published RAT dropper via `plain-crypto-js`. Self-deleting postinstall, anti-forensics version swap. 100M+ weekly downloads. | dependencies, lifecycle, post_incident |
 
 ---
 

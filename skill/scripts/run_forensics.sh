@@ -110,7 +110,7 @@ if $SKILL_SCAN; then
 else
     # Full audit: all scanners in parallel
     echo ""
-    echo "[*] Running all 17 scanners in parallel..."
+    echo "[*] Running all 18 scanners in parallel..."
     run_scanner "entropy" "scan_entropy.py" &
     run_scanner "binary" "scan_binary.py" &
     run_scanner "git_forensics" "scan_git_forensics.py" &
@@ -132,6 +132,7 @@ else
         run_scanner "integrity" "scan_integrity.py" &
     fi
     run_scanner "dast" "scan_dast.py" &
+    run_scanner "post_incident" "scan_post_incident.py" &
     wait
 fi
 

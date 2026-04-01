@@ -132,6 +132,13 @@ TRUSTED_REGISTRIES = [
     "proxy.golang.org", "sum.golang.org",
 ]
 
+# Funding/sponsorship domains that appear in lockfile metadata (not registries)
+KNOWN_BENIGN_DOMAINS = [
+    "opencollective.com", "tidelift.com", "paulmillr.com",
+    "feross.org", "patreon.com", "buymeacoffee.com",
+    "eslint.org", "ko-fi.com", "paypal.me",
+]
+
 
 # IOC packages - lazy loaded from ioc_manager (single source of truth)
 _SANDWORM_KNOWN_IOC_PACKAGES = None
@@ -487,7 +494,8 @@ def scan_lockfile(filepath, rel_path):
             # Check hostname only to prevent path-based bypass (e.g., evil.com/registry.npmjs.org/)
             hostname = urlparse(url).hostname or ''
             is_trusted = any(hostname == t or hostname.endswith('.' + t) for t in TRUSTED_REGISTRIES)
-            if not is_trusted and "schema.org" not in hostname:
+            is_benign = any(hostname == d or hostname.endswith('.' + d) for d in KNOWN_BENIGN_DOMAINS)
+            if not is_trusted and not is_benign and "schema.org" not in hostname:
                 suspicious.add(url)
 
         # Flag git+ and http:// resolved URLs in lockfiles
