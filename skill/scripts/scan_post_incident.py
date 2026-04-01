@@ -30,6 +30,7 @@ MALICIOUS_PACKAGES = {
 RAT_BINARY_PATHS = [
     "/Library/Caches/com.apple.act.mond",              # macOS axios RAT
     os.path.expandvars("%PROGRAMDATA%/wt.exe"),         # Windows axios RAT
+    os.path.expanduser("~/.config/sysmon/sysmon.py"),   # liteLLM persistence
 ]
 
 # C2 domains/IPs to check in npm logs

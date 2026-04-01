@@ -241,7 +241,7 @@ COMPROMISED_PACKAGE_VERSIONS = {
     "@shadanai/openclaw": {"2026.3.28-2", "2026.3.28-3", "2026.3.31-1", "2026.3.31-2"},
     "@qqbrowser/openclaw-qbot": {"0.0.130"},
     # liteLLM supply chain attack (March 24, 2026)
-    "litellm": {"1.82.8"},
+    "litellm": {"1.82.7", "1.82.8"},
 }
 
 # Suspicious npm scopes (systematic MCP server forking campaigns)
