@@ -47,6 +47,22 @@ class TestGitHubActions:
         findings = scanner.scan_github_actions(ci_path, ".github/workflows/ci.yml")
         assert any("expression" in f.title.lower() or "github.event" in f.snippet for f in findings)
 
+    def test_detects_npm_install_in_run_block(self, tmp_path):
+        workflow = tmp_path / ".github" / "workflows"
+        workflow.mkdir(parents=True)
+        ci = workflow / "ci.yml"
+        ci.write_text(
+            "name: CI\n"
+            "on: [push]\n"
+            "jobs:\n"
+            "  build:\n"
+            "    runs-on: ubuntu-latest\n"
+            "    steps:\n"
+            "      - run: npm install\n"
+        )
+        findings = scanner.scan_github_actions(str(ci), ".github/workflows/ci.yml")
+        assert any("npm install" in f.title.lower() for f in findings)
+
 
 class TestNpmrc:
     def test_detects_strict_ssl_false(self, tmp_path):
@@ -69,9 +85,33 @@ class TestNpmrc:
 
     def test_ignore_scripts_true_no_finding(self, tmp_path):
         npmrc = tmp_path / ".npmrc"
-        npmrc.write_text("ignore-scripts=true\n")
+        npmrc.write_text("ignore-scripts=true\nallow-git=none\nmin-release-age=3\n")
         findings = scanner.scan_npmrc(str(npmrc), ".npmrc")
         assert not any("ignore-scripts" in f.title.lower() for f in findings)
+
+    def test_detects_missing_allow_git_none(self, tmp_path):
+        npmrc = tmp_path / ".npmrc"
+        npmrc.write_text("ignore-scripts=true\n")
+        findings = scanner.scan_npmrc(str(npmrc), ".npmrc")
+        assert any("allow-git" in f.title.lower() for f in findings)
+
+    def test_allow_git_none_no_finding(self, tmp_path):
+        npmrc = tmp_path / ".npmrc"
+        npmrc.write_text("ignore-scripts=true\nallow-git=none\nmin-release-age=3\n")
+        findings = scanner.scan_npmrc(str(npmrc), ".npmrc")
+        assert not any("allow-git" in f.title.lower() for f in findings)
+
+    def test_detects_missing_min_release_age(self, tmp_path):
+        npmrc = tmp_path / ".npmrc"
+        npmrc.write_text("ignore-scripts=true\nallow-git=none\n")
+        findings = scanner.scan_npmrc(str(npmrc), ".npmrc")
+        assert any("min-release-age" in f.title.lower() for f in findings)
+
+    def test_min_release_age_three_no_finding(self, tmp_path):
+        npmrc = tmp_path / ".npmrc"
+        npmrc.write_text("ignore-scripts=true\nallow-git=none\nmin-release-age=3\n")
+        findings = scanner.scan_npmrc(str(npmrc), ".npmrc")
+        assert not any("min-release-age" in f.title.lower() for f in findings)
 
     def test_detects_custom_git_override(self, tmp_path):
         npmrc = tmp_path / ".npmrc"

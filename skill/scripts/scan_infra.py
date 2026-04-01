@@ -197,6 +197,15 @@ def scan_github_actions(file_path, rel_path):
                     category="ci-cd"
                 ))
 
+            if re.search(r'\brun\s*:\s*(?:.+\s)?npm\s+(?:install|i)\b', stripped):
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="medium",
+                    title="GHA: npm install in Workflow",
+                    description="Workflow uses npm install instead of npm ci (non-deterministic install, weaker lockfile enforcement)",
+                    file=rel_path, line=i+1, snippet=stripped[:120],
+                    category="ci-cd"
+                ))
+
         # Multi-line run block check
         content = ''.join(lines)
         for m in re.finditer(r'run:\s*\|\n((?:\s+.*\n)+)', content):
@@ -236,6 +245,8 @@ def scan_npmrc(file_path, rel_path):
         lines = content.split('\n')
 
         has_ignore_scripts = False
+        has_allow_git_none = False
+        has_min_release_age = False
         for i, line in enumerate(lines):
             stripped = line.strip()
             if not stripped or stripped.startswith('#') or stripped.startswith(';'):
@@ -243,6 +254,11 @@ def scan_npmrc(file_path, rel_path):
 
             if re.match(r'ignore-scripts\s*=\s*true', stripped):
                 has_ignore_scripts = True
+            if re.match(r'allow-git\s*=\s*none', stripped, re.IGNORECASE):
+                has_allow_git_none = True
+            min_release_match = re.match(r'min-release-age\s*=\s*(\d+)', stripped, re.IGNORECASE)
+            if min_release_match and int(min_release_match.group(1)) >= 3:
+                has_min_release_age = True
 
             if re.match(r'strict-ssl\s*=\s*false', stripped, re.IGNORECASE):
                 findings.append(core.Finding(
@@ -296,6 +312,24 @@ def scan_npmrc(file_path, rel_path):
                 title=".npmrc: Missing ignore-scripts",
                 description="ignore-scripts=true not set (install scripts will execute)",
                 file=rel_path, line=0, snippet="ignore-scripts not found",
+                category="npmrc-config"
+            ))
+
+        if not has_allow_git_none:
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="medium",
+                title=".npmrc: Missing allow-git=none",
+                description="allow-git=none not set (git dependencies can bypass ignore-scripts protections)",
+                file=rel_path, line=0, snippet="allow-git=none not found",
+                category="npmrc-config"
+            ))
+
+        if not has_min_release_age:
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="low",
+                title=".npmrc: Missing min-release-age",
+                description="min-release-age>=3 not set (newly published packages are installed without cooldown)",
+                file=rel_path, line=0, snippet="min-release-age>=3 not found",
                 category="npmrc-config"
             ))
 
