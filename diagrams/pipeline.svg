@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 554" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 527" fill="none">
   <defs>
     <linearGradient id="pbg" x1="0" y1="0" x2="900" y2="500" gradientUnits="userSpaceOnUse">
       <stop offset="0%" stop-color="#0a0e14"/>
@@ -14,7 +14,7 @@
     </filter>
   </defs>
 
-  <rect width="900" height="554" rx="12" fill="url(#pbg)"/>
+  <rect width="900" height="527" rx="12" fill="url(#pbg)"/>
 
   <!-- Title with line drawing animation -->
   <text x="450" y="36" font-family="'SF Mono',Consolas,monospace" font-size="14" fill="#00f0ff"
@@ -69,7 +69,7 @@
   <g transform="translate(244, 56)" opacity="1">
 
     <!-- Main container -->
-    <rect width="400" height="484" rx="10" fill="#151b23" stroke="#1f6feb" stroke-width="1.5"/>
+    <rect width="400" height="457" rx="10" fill="#151b23" stroke="#1f6feb" stroke-width="1.5"/>
     <!-- Header -->
     <rect width="400" height="36" rx="10" fill="#1c2940"/>
     <rect y="24" width="400" height="12" fill="#1c2940"/>
@@ -150,6 +150,14 @@
           <text x="26" y="205" font-family="'SF Mono',Consolas,monospace" font-size="10" fill="#d29922" font-weight="600">integrity</text>
           <text x="174" y="205" font-family="'SF Mono',Consolas,monospace" font-size="9" fill="#8b949e" text-anchor="end">SHA256</text>
         </g>
+        <!-- Row 8: openclaw_skills (red) -->
+        <g opacity="1">
+          <rect y="216" width="184" height="24" rx="5" fill="#0d1117" stroke="#f8514930" stroke-width="1"/>
+          <rect y="216" width="184" height="24" rx="5" fill="#f8514908"/>
+          <circle cx="14" cy="228" r="4" fill="#f85149"><animate attributeName="opacity" values="0.4;1;0.4" dur="1.5s" repeatCount="indefinite"/></circle>
+          <text x="26" y="232" font-family="'SF Mono',Consolas,monospace" font-size="10" fill="#f85149" font-weight="600">openclaw</text>
+          <text x="174" y="232" font-family="'SF Mono',Consolas,monospace" font-size="9" fill="#8b949e" text-anchor="end">ClawHavoc</text>
+        </g>
       </g>
 
       <!-- Right column (8 scanners) -->
@@ -218,27 +226,19 @@
           <text x="26" y="205" font-family="'SF Mono',Consolas,monospace" font-size="10" fill="#c9d1d9" font-weight="600">git_forensics</text>
           <text x="174" y="205" font-family="'SF Mono',Consolas,monospace" font-size="9" fill="#8b949e" text-anchor="end">history</text>
         </g>
-        <!-- Row 8: openclaw_skills (red) -->
+        <!-- Row 8: post_incident (orange) -->
         <g opacity="1">
-          <rect y="216" width="184" height="24" rx="5" fill="#0d1117" stroke="#f8514930" stroke-width="1"/>
-          <rect y="216" width="184" height="24" rx="5" fill="#f8514908"/>
-          <circle cx="14" cy="228" r="4" fill="#f85149"><animate attributeName="opacity" values="0.4;1;0.4" dur="1.5s" repeatCount="indefinite"/></circle>
-          <text x="26" y="232" font-family="'SF Mono',Consolas,monospace" font-size="10" fill="#f85149" font-weight="600">openclaw</text>
-          <text x="174" y="232" font-family="'SF Mono',Consolas,monospace" font-size="9" fill="#8b949e" text-anchor="end">ClawHavoc</text>
-        </g>
-        <!-- Row 9: post_incident (orange) -->
-        <g opacity="1">
-          <rect y="243" width="184" height="24" rx="5" fill="#0d1117" stroke="#d2992230" stroke-width="1"/>
-          <rect y="243" width="184" height="24" rx="5" fill="#d2992208"/>
-          <circle cx="14" cy="255" r="4" fill="#d29922"><animate attributeName="opacity" values="0.4;1;0.4" dur="1.5s" repeatCount="indefinite"/></circle>
-          <text x="26" y="259" font-family="'SF Mono',Consolas,monospace" font-size="10" fill="#d29922" font-weight="600">post_incident</text>
-          <text x="174" y="259" font-family="'SF Mono',Consolas,monospace" font-size="9" fill="#8b949e" text-anchor="end">artifacts</text>
+          <rect y="216" width="184" height="24" rx="5" fill="#0d1117" stroke="#d2992230" stroke-width="1"/>
+          <rect y="216" width="184" height="24" rx="5" fill="#d2992208"/>
+          <circle cx="14" cy="228" r="4" fill="#d29922"><animate attributeName="opacity" values="0.4;1;0.4" dur="1.5s" repeatCount="indefinite"/></circle>
+          <text x="26" y="232" font-family="'SF Mono',Consolas,monospace" font-size="10" fill="#d29922" font-weight="600">post_incident</text>
+          <text x="174" y="232" font-family="'SF Mono',Consolas,monospace" font-size="9" fill="#8b949e" text-anchor="end">artifacts</text>
         </g>
       </g>
     </g>
 
     <!-- Correlation engine - draws in -->
-    <g transform="translate(16, 354)" opacity="1">
+    <g transform="translate(16, 327)" opacity="1">
       <rect width="368" height="48" rx="8" fill="#0d1117" stroke="#a78bfa" stroke-width="1.5"/>
       <text x="184" y="30" font-family="'SF Mono',Consolas,monospace" font-size="12" fill="#a78bfa"
             text-anchor="middle" font-weight="700">⚡ CORRELATION ENGINE</text>
@@ -249,7 +249,7 @@
     </g>
 
     <!-- Legend -->
-    <g transform="translate(16, 420)" opacity="0.8">
+    <g transform="translate(16, 393)" opacity="0.8">
       <circle cx="6" cy="6" r="4" fill="#f85149"/><text x="16" y="10" font-family="'SF Mono',Consolas,monospace" font-size="9" fill="#8b949e">AI/MCP threats</text>
       <circle cx="120" cy="6" r="4" fill="#d29922"/><text x="130" y="10" font-family="'SF Mono',Consolas,monospace" font-size="9" fill="#8b949e">Code analysis</text>
       <circle cx="240" cy="6" r="4" fill="#8b949e"/><text x="250" y="10" font-family="'SF Mono',Consolas,monospace" font-size="9" fill="#8b949e">Infrastructure</text>
@@ -313,5 +313,5 @@
   </g>
 
   <!-- Border -->
-  <rect width="900" height="554" rx="12" fill="none" stroke="#1c2940" stroke-width="1"/>
+  <rect width="900" height="527" rx="12" fill="none" stroke="#1c2940" stroke-width="1"/>
 </svg>
