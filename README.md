@@ -93,7 +93,7 @@ The result is a severity-ranked verdict with exit codes designed for CI/CD gatin
 
 ---
 
-## The 17 Scanners
+## The 18 Scanners
 
 | Scanner | What It Detects | Approach |
 |---------|----------------|----------|

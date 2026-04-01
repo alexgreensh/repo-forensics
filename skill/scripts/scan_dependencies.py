@@ -498,17 +498,20 @@ def scan_lockfile(filepath, rel_path):
             if not is_trusted and not is_benign and "schema.org" not in hostname:
                 suspicious.add(url)
 
-        # Flag git+ and http:// resolved URLs in lockfiles
+        # Flag git+ and git:// resolved URLs in lockfiles (separate regex since https? doesn't match these)
+        git_urls = re.findall(r'(?:git\+https?://|git://)[^\s"\'}]+', content)
+        for url in git_urls:
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="high",
+                title="Lockfile: Git-Resolved Dependency",
+                description="Lockfile resolves dependency via git (bypasses registry integrity)",
+                file=rel_path, line=0, snippet=url[:120],
+                category="git-dependency"
+            ))
+
+        # Flag http:// resolved URLs (MITM risk)
         for url in urls:
-            if url.startswith('git+') or url.startswith('git://'):
-                findings.append(core.Finding(
-                    scanner=SCANNER_NAME, severity="high",
-                    title="Lockfile: Git-Resolved Dependency",
-                    description="Lockfile resolves dependency via git (bypasses registry integrity)",
-                    file=rel_path, line=0, snippet=url[:120],
-                    category="git-dependency"
-                ))
-            elif url.startswith('http://'):
+            if url.startswith('http://'):
                 findings.append(core.Finding(
                     scanner=SCANNER_NAME, severity="critical",
                     title="Lockfile: HTTP-Resolved Dependency",

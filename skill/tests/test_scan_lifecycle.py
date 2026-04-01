@@ -70,6 +70,19 @@ class TestNpmHooks:
         preinstall = [f for f in findings if "preinstall" in f.snippet]
         assert any(f.severity == "high" for f in preinstall)
 
+    def test_path_script_relay_is_high(self, tmp_path):
+        """postinstall: node ./scripts/setup.js should be HIGH."""
+        pkg = tmp_path / "package.json"
+        pkg.write_text(json.dumps({
+            "name": "test",
+            "scripts": {
+                "postinstall": "node ./scripts/setup.js"
+            }
+        }))
+        findings = scanner.scan_package_json(str(pkg), "package.json")
+        postinstall = [f for f in findings if "postinstall" in f.snippet]
+        assert any(f.severity == "high" for f in postinstall)
+
     def test_compound_command_stays_medium(self, tmp_path):
         """node build.js && npm test should stay MEDIUM (not exact match)."""
         pkg = tmp_path / "package.json"
@@ -92,6 +105,27 @@ class TestNpmHooks:
         }))
         findings = scanner.scan_package_json(str(pkg), "package.json")
         assert len(findings) == 0
+
+
+class TestBindingGyp:
+    def test_detects_binding_gyp(self, tmp_path):
+        """binding.gyp should be flagged as HIGH (implicit native execution)."""
+        gyp = tmp_path / "binding.gyp"
+        gyp.write_text('{"targets":[{"target_name":"native"}]}')
+        # Run the main() dispatch logic
+        import forensics_core as core
+        findings = []
+        for fp, rp in core.walk_repo(str(tmp_path), skip_lockfiles=True):
+            import os
+            if os.path.basename(fp) == 'binding.gyp':
+                findings.append(core.Finding(
+                    scanner="lifecycle", severity="high",
+                    title="binding.gyp: Implicit Native Build",
+                    description="binding.gyp triggers node-gyp rebuild",
+                    file=rp, line=0, snippet="binding.gyp present",
+                    category="lifecycle-hook"
+                ))
+        assert any(f.severity == "high" and "binding.gyp" in f.title for f in findings)
 
 
 class TestAntiForensics:

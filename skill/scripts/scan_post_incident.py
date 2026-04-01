@@ -44,7 +44,7 @@ VERSION_MISMATCHES = {
 }
 
 
-def scan_node_modules(repo_path, rel_base):
+def scan_node_modules(repo_path):
     """Check for known malicious package directories in node_modules."""
     findings = []
     for root, dirs, _files in os.walk(repo_path, followlinks=False):
@@ -116,7 +116,7 @@ def scan_npm_logs():
     for log_file in sorted(glob.glob(os.path.join(log_dir, "*.log")))[-50:]:
         try:
             with open(log_file, 'r', encoding='utf-8', errors='replace') as f:
-                content = f.read()
+                content = f.read(1024 * 1024)  # Cap at 1MB per log file
             for pkg_name, desc in MALICIOUS_PACKAGES.items():
                 if pkg_name in content:
                     findings.append(core.Finding(
@@ -206,7 +206,7 @@ def main():
     all_findings = []
 
     # Repo-level checks
-    all_findings.extend(scan_node_modules(repo_path, repo_path))
+    all_findings.extend(scan_node_modules(repo_path))
 
     # Host-level checks (run regardless of repo path)
     all_findings.extend(scan_npm_cache())

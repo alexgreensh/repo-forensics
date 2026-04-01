@@ -73,7 +73,7 @@ def scan_package_json(file_path, rel_path):
                     # Check for filename relay pattern: node/python/sh/bash <file>
                     # This is THE standard supply chain attack entry point
                     relay_pattern = re.compile(
-                        r'^(node|python|python3|sh|bash|bun|deno)\s+\w+\.(js|mjs|cjs|py|sh)$'
+                        r'^(node|python|python3|sh|bash|bun|deno)\s+[\w./-]+\.(js|mjs|cjs|py|sh)$'
                     )
                     if relay_pattern.match(cmd.strip()):
                         findings.append(core.Finding(

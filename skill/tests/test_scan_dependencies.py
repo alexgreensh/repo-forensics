@@ -232,3 +232,33 @@ class TestPythonUnboundedRanges:
         req.write_text("requests\n")
         findings = scanner.scan_python_deps(str(req), "requirements.txt")
         assert any(f.category == "no-version-constraint" for f in findings)
+
+
+class TestFundingUrlFalsePositives:
+    def test_opencollective_not_flagged(self, tmp_path):
+        """opencollective.com URLs in lockfiles should NOT be flagged."""
+        lock = tmp_path / "package-lock.json"
+        lock.write_text(json.dumps({
+            "packages": {
+                "express": {
+                    "resolved": "https://registry.npmjs.org/express/-/express-4.18.0.tgz",
+                    "funding": "https://opencollective.com/express"
+                }
+            }
+        }))
+        findings = scanner.scan_lockfile(str(lock), "package-lock.json")
+        assert not any("opencollective" in f.snippet for f in findings)
+
+    def test_tidelift_not_flagged(self, tmp_path):
+        """tidelift.com URLs in lockfiles should NOT be flagged."""
+        lock = tmp_path / "package-lock.json"
+        lock.write_text(json.dumps({
+            "packages": {
+                "pkg": {
+                    "resolved": "https://registry.npmjs.org/pkg/-/pkg-1.0.0.tgz",
+                    "funding": "https://tidelift.com/funding/github/npm/pkg"
+                }
+            }
+        }))
+        findings = scanner.scan_lockfile(str(lock), "package-lock.json")
+        assert not any("tidelift" in f.snippet for f in findings)

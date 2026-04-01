@@ -476,7 +476,7 @@ def correlate(findings):
                 category="lockfile-tampering"
             ))
 
-        # Rule 17: .pth file + base64/exec = "Python Startup Injection (liteLLM-style)"
+        # Rule 17: .pth file + base64/exec (liteLLM-style startup injection)
         pth_keywords = {"pth-injection", ".pth file", "pth file"}
         pth_exec_keywords = {"exec", "eval", "compile", "base64", "obfuscat"}
         if has_category(file_findings, pth_keywords) and has_category(file_findings, pth_exec_keywords):
