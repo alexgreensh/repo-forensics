@@ -43,6 +43,8 @@ def get_tracked_files(skill_root):
             if f.endswith(('.pyc', '.pyo')):
                 continue
             fp = os.path.join(root, f)
+            if os.path.islink(fp):
+                continue
             rel = os.path.relpath(fp, skill_root)
             tracked.append(rel)
 
@@ -89,14 +91,29 @@ def verify_checksums(skill_root):
     missing = []
     extra = []
 
+    skill_root_real = os.path.realpath(skill_root)
+
+    # Validate file_count matches actual entries
+    declared_count = data.get('file_count', -1)
+    if declared_count != len(expected):
+        report.append(f"  WARNING: file_count mismatch (manifest says {declared_count}, dict has {len(expected)} entries)")
+
     # Check all expected files
     for rel, expected_hash in expected.items():
-        fp = os.path.join(skill_root, rel)
-        if not os.path.exists(fp):
-            missing.append(rel)
-            report.append(f"  MISSING: {rel}")
+        fp = os.path.realpath(os.path.join(skill_root, rel))
+        if not fp.startswith(skill_root_real + os.sep):
+            tampered.append(rel)
+            report.append(f"  REJECTED: {rel} (path traversal attempt)")
+            continue
+        if not isinstance(expected_hash, str):
+            tampered.append(rel)
+            report.append(f"  REJECTED: {rel} (invalid hash type in manifest)")
             continue
         actual_hash = sha256_file(fp)
+        if actual_hash is None:
+            missing.append(rel)
+            report.append(f"  UNREADABLE: {rel} (missing or permission denied)")
+            continue
         if actual_hash != expected_hash:
             tampered.append(rel)
             report.append(f"  TAMPERED: {rel} (expected {expected_hash[:12]}..., got {actual_hash[:12]}...)")

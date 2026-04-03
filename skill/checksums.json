@@ -31,6 +31,6 @@
     "scripts/scan_sast.py": "d8664253c5bd112042357f396041bd745801e137bdc19675d3426452f20ac24a",
     "scripts/scan_secrets.py": "fc11ac9d5a3b076e11d17641813d2e437c1a39ed327ebf3bee1ccf5ef575e05c",
     "scripts/scan_skill_threats.py": "73ae9041ebc43ef130b3f870afcc540256b610a18a2bcab4488202b60b31ed71",
-    "scripts/verify_install.py": "26110eb1c28ce87ac83fb895c7a35304a49a0b0bee7e08cebd0c0c0b7fdcb0be"
+    "scripts/verify_install.py": "846893573e46138f2d260b48ef3e9a6f054314044444a155c8e25adab4eae30f"
   }
 }
