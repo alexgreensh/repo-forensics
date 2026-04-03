@@ -86,18 +86,14 @@ run_scanner() {
     local exit_file="$TMPDIR/$name.exit"
     local error_file="$TMPDIR/$name.err"
 
-    if [ "$FORMAT" = "json" ]; then
-        if [ -n "$TIMEOUT_CMD" ]; then
-            $TIMEOUT_CMD "$SCANNER_TIMEOUT" python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$FORMAT" ${extra_args:+"$extra_args"} > "$output_file" 2> "$error_file"
-        else
-            python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$FORMAT" ${extra_args:+"$extra_args"} > "$output_file" 2> "$error_file"
-        fi
+    # JSON mode: separate stderr so stdout is clean JSON. Otherwise merge for human readability.
+    local stderr_target="$output_file"
+    [ "$FORMAT" = "json" ] && stderr_target="$error_file"
+
+    if [ -n "$TIMEOUT_CMD" ]; then
+        $TIMEOUT_CMD "$SCANNER_TIMEOUT" python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$FORMAT" ${extra_args:+"$extra_args"} > "$output_file" 2>> "$stderr_target"
     else
-        if [ -n "$TIMEOUT_CMD" ]; then
-            $TIMEOUT_CMD "$SCANNER_TIMEOUT" python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$FORMAT" ${extra_args:+"$extra_args"} > "$output_file" 2>&1
-        else
-            python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$FORMAT" ${extra_args:+"$extra_args"} > "$output_file" 2>&1
-        fi
+        python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$FORMAT" ${extra_args:+"$extra_args"} > "$output_file" 2>> "$stderr_target"
     fi
     echo $? > "$exit_file"
 }

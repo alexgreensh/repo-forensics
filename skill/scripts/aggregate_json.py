@@ -92,10 +92,6 @@ def build_summary(findings):
     return summary
 
 
-def calculate_exit_code(summary):
-    return 2 if summary["critical"] > 0 else 1 if summary["high"] > 0 or summary["medium"] > 0 else 0
-
-
 def calculate_report_exit_code(summary, scanners):
     if any(scanner["parse_error"] for scanner in scanners):
         return 99
