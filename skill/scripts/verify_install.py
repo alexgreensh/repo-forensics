@@ -33,7 +33,7 @@ def get_tracked_files(skill_root):
     """Get all files that should be integrity-checked."""
     tracked = []
     skip_dirs = {'.git', '__pycache__', '.pytest_cache', 'tests', '.cache'}
-    skip_files = {'.forensics-baseline.json', '.forensics-iocs.json', 'checksums.json'}
+    skip_files = {'.DS_Store', '.forensics-baseline.json', '.forensics-iocs.json', 'checksums.json'}
 
     for root, dirs, files in os.walk(skill_root, followlinks=False):
         dirs[:] = [d for d in dirs if d not in skip_dirs]
