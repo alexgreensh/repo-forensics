@@ -341,7 +341,7 @@ def main():
     args = core.parse_common_args(sys.argv, "Lifecycle Script Scanner")
     repo_path = args.repo_path
 
-    print(f"[*] Scanning lifecycle scripts in {repo_path}...")
+    core.emit_status(args.format, f"[*] Scanning lifecycle scripts in {repo_path}...")
 
     ignore_patterns = core.load_ignore_patterns(repo_path)
     all_findings = []

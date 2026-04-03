@@ -413,7 +413,7 @@ def main():
     args = core.parse_common_args(sys.argv, "Manifest Drift Scanner")
     repo_path = args.repo_path
 
-    print(f"[*] Scanning {repo_path} for manifest drift...")
+    core.emit_status(args.format, f"[*] Scanning {repo_path} for manifest drift...")
 
     all_findings = []
 

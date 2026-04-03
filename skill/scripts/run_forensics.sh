@@ -58,13 +58,15 @@ fi
 TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
 
-echo "=========================================="
-echo "  REPO FORENSICS v2"
-echo "  Target: $REPO_PATH"
-echo "  Mode: $(if $SKILL_SCAN; then echo 'Skill Scan (focused)'; else echo 'Full Audit'; fi)"
-echo "  Format: $FORMAT"
-echo "  Date: $(date)"
-echo "=========================================="
+if [ "$FORMAT" != "json" ]; then
+    echo "=========================================="
+    echo "  REPO FORENSICS v2"
+    echo "  Target: $REPO_PATH"
+    echo "  Mode: $(if $SKILL_SCAN; then echo 'Skill Scan (focused)'; else echo 'Full Audit'; fi)"
+    echo "  Format: $FORMAT"
+    echo "  Date: $(date)"
+    echo "=========================================="
+fi
 
 SCANNER_TIMEOUT=120
 
@@ -82,19 +84,30 @@ run_scanner() {
     local extra_args="${3:-}"
     local output_file="$TMPDIR/$name.out"
     local exit_file="$TMPDIR/$name.exit"
+    local error_file="$TMPDIR/$name.err"
 
-    if [ -n "$TIMEOUT_CMD" ]; then
-        $TIMEOUT_CMD "$SCANNER_TIMEOUT" python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$FORMAT" ${extra_args:+"$extra_args"} > "$output_file" 2>&1
+    if [ "$FORMAT" = "json" ]; then
+        if [ -n "$TIMEOUT_CMD" ]; then
+            $TIMEOUT_CMD "$SCANNER_TIMEOUT" python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$FORMAT" ${extra_args:+"$extra_args"} > "$output_file" 2> "$error_file"
+        else
+            python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$FORMAT" ${extra_args:+"$extra_args"} > "$output_file" 2> "$error_file"
+        fi
     else
-        python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$FORMAT" ${extra_args:+"$extra_args"} > "$output_file" 2>&1
+        if [ -n "$TIMEOUT_CMD" ]; then
+            $TIMEOUT_CMD "$SCANNER_TIMEOUT" python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$FORMAT" ${extra_args:+"$extra_args"} > "$output_file" 2>&1
+        else
+            python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$FORMAT" ${extra_args:+"$extra_args"} > "$output_file" 2>&1
+        fi
     fi
     echo $? > "$exit_file"
 }
 
 if $SKILL_SCAN; then
     # Focused mode: 9 scanners most relevant to vetting skills
-    echo ""
-    echo "[*] Running focused skill scan (9 scanners)..."
+    if [ "$FORMAT" != "json" ]; then
+        echo ""
+        echo "[*] Running focused skill scan (9 scanners)..."
+    fi
 
     run_scanner "skill_threats" "scan_skill_threats.py" &
     run_scanner "secrets" "scan_secrets.py" &
@@ -109,8 +122,10 @@ if $SKILL_SCAN; then
 
 else
     # Full audit: all scanners in parallel
-    echo ""
-    echo "[*] Running all 18 scanners in parallel..."
+    if [ "$FORMAT" != "json" ]; then
+        echo ""
+        echo "[*] Running all 18 scanners in parallel..."
+    fi
     run_scanner "entropy" "scan_entropy.py" &
     run_scanner "binary" "scan_binary.py" &
     run_scanner "git_forensics" "scan_git_forensics.py" &
@@ -137,6 +152,19 @@ else
 fi
 
 # Collect and display results
+if [ "$FORMAT" = "json" ]; then
+    EXIT_CODE_FILE="$TMPDIR/aggregate.exit"
+    echo "99" > "$EXIT_CODE_FILE"
+    if ! python3 "$SKILL_DIR/aggregate_json.py" "$TMPDIR" "$REPO_PATH" "$SKILL_SCAN" "$EXIT_CODE_FILE"; then
+        :
+    fi
+    _rc=$(cat "$EXIT_CODE_FILE" 2>/dev/null || echo "99")
+    case "$_rc" in
+        0|1|2) exit "$_rc" ;;
+        *) exit 99 ;;
+    esac
+fi
+
 echo ""
 echo "=========================================="
 echo "  RESULTS"

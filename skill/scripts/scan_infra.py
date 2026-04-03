@@ -409,7 +409,7 @@ def main():
     args = core.parse_common_args(sys.argv, "Infrastructure Security Scanner")
     repo_path = args.repo_path
 
-    print(f"[*] Scanning Infrastructure in {repo_path}...")
+    core.emit_status(args.format, f"[*] Scanning Infrastructure in {repo_path}...")
 
     ignore_patterns = core.load_ignore_patterns(repo_path)
     all_findings = []

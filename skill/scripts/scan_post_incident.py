@@ -202,7 +202,7 @@ def main():
     args = core.parse_common_args(sys.argv, "Post-Incident Artifact Scanner")
     repo_path = args.repo_path
 
-    print(f"[*] Scanning for post-incident artifacts in {repo_path}...")
+    core.emit_status(args.format, f"[*] Scanning for post-incident artifacts in {repo_path}...")
 
     all_findings = []
 

@@ -309,7 +309,7 @@ def main():
     args = core.parse_common_args(sys.argv, "Runtime Behavior Prediction Scanner")
     repo_path = args.repo_path
 
-    print(f"[*] Scanning {repo_path} for runtime dynamism indicators...")
+    core.emit_status(args.format, f"[*] Scanning {repo_path} for runtime dynamism indicators...")
 
     ignore_patterns = core.load_ignore_patterns(repo_path)
     all_findings = []

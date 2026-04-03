@@ -145,16 +145,17 @@ def main():
     args = core.parse_common_args(sys.argv, "Git History Forensics")
     repo_path = args.repo_path
 
-    print(f"[*] Analyzing Git History in {repo_path}...")
+    core.emit_status(args.format, f"[*] Analyzing Git History in {repo_path}...")
 
     commits = get_git_log(repo_path)
     if not commits or commits == ['']:
-        print("[-] No git history found or not a git repo.")
+        core.emit_status(args.format, "[-] No git history found or not a git repo.")
+        core.output_findings([], args.format, SCANNER_NAME)
         return
 
     findings = analyze_commits(commits, repo_path)
 
-    print(f"[+] Analyzed {len(commits)} recent commits.")
+    core.emit_status(args.format, f"[+] Analyzed {len(commits)} recent commits.")
     core.output_findings(findings, args.format, SCANNER_NAME)
 
 

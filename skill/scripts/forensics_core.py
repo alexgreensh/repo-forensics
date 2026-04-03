@@ -71,12 +71,18 @@ def load_ignore_patterns(repo_path):
                     if line and not line.startswith('#'):
                         patterns.append(line)
         except Exception as e:
-            print(f"[!] Warning: Could not read .forensicsignore: {e}")
+            print(f"[!] Warning: Could not read .forensicsignore: {e}", file=sys.stderr)
 
     return patterns
 
 
 DANGEROUS_IGNORE_PATTERNS = {'*', '**', '**/*', '*.*', '.'}
+
+
+def emit_status(output_format, message):
+    """Emit human status lines only for non-JSON formats."""
+    if output_format != "json":
+        print(message)
 
 
 def warn_forensicsignore(repo_path):

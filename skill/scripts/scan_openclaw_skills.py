@@ -298,10 +298,11 @@ def main(args):
     Args can be a namespace with .repo_path or a string path (for testing).
     """
     repo_path = args if isinstance(args, str) else args.repo_path
+    output_format = "text" if isinstance(args, str) else getattr(args, "format", "text")
     if not is_openclaw_skill(repo_path):
-        print("[+] Not an OpenClaw skill. Skipping.")
+        core.emit_status(output_format, "[+] Not an OpenClaw skill. Skipping.")
         return []
-    print(f"[*] Scanning OpenClaw skill in {repo_path}...")
+    core.emit_status(output_format, f"[*] Scanning OpenClaw skill in {repo_path}...")
     findings = []
     findings.extend(scan_frontmatter(repo_path))
     findings.extend(scan_tools_json(repo_path))
