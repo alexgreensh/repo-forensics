@@ -149,11 +149,11 @@ def main():
     args = core.parse_common_args(sys.argv, "Secret Scanner")
     repo_path = args.repo_path
 
-    print(f"[*] Scanning for secrets in {repo_path}...")
+    core.emit_status(args.format, f"[*] Scanning for secrets in {repo_path}...")
 
     ignore_patterns = core.load_ignore_patterns(repo_path)
     if ignore_patterns:
-        print(f"[*] Loaded {len(ignore_patterns)} custom ignore patterns from .forensicsignore")
+        core.emit_status(args.format, f"[*] Loaded {len(ignore_patterns)} custom ignore patterns from .forensicsignore")
 
     all_findings = []
 

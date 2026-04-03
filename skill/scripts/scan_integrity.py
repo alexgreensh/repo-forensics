@@ -247,7 +247,7 @@ def save_baseline(repo_path, baseline_data):
         json.dump(baseline_data, f, indent=2)
 
 
-def watch_mode(repo_path, critical_files):
+def watch_mode(repo_path, critical_files, output_format):
     """--watch mode: store baselines on first run, detect drift on subsequent runs."""
     findings = []
     existing, integrity_findings = load_baseline(repo_path)
@@ -262,7 +262,7 @@ def watch_mode(repo_path, critical_files):
     if existing is None:
         # First run: create baseline
         save_baseline(repo_path, {'files': current_hashes})
-        print(f"[+] Baseline created: {len(current_hashes)} files tracked in {BASELINE_FILENAME}")
+        core.emit_status(output_format, f"[+] Baseline created: {len(current_hashes)} files tracked in {BASELINE_FILENAME}")
         return findings
 
     # Subsequent run: compare against baseline
@@ -304,7 +304,7 @@ def watch_mode(repo_path, critical_files):
 
     # Update baseline with current state
     save_baseline(repo_path, {'files': current_hashes})
-    print(f"[+] Baseline updated: {len(current_hashes)} files tracked")
+    core.emit_status(output_format, f"[+] Baseline updated: {len(current_hashes)} files tracked")
 
     return findings
 
@@ -383,15 +383,16 @@ def main():
     args = parser.parse_args()
     repo_path = os.path.abspath(args.repo_path)
 
-    print(f"[*] Scanning file integrity in {repo_path}...")
+    core.emit_status(args.format, f"[*] Scanning file integrity in {repo_path}...")
 
     critical_files = find_critical_files(repo_path)
 
     if not critical_files:
-        print("[+] No critical configuration files found.")
+        core.emit_status(args.format, "[+] No critical configuration files found.")
+        core.output_findings([], args.format, SCANNER_NAME)
         return
 
-    print(f"[*] Found {len(critical_files)} critical file(s)")
+    core.emit_status(args.format, f"[*] Found {len(critical_files)} critical file(s)")
 
     all_findings = []
 
@@ -411,7 +412,7 @@ def main():
 
     # Watch mode: baseline comparison
     if args.watch:
-        all_findings.extend(watch_mode(repo_path, critical_files))
+        all_findings.extend(watch_mode(repo_path, critical_files, args.format))
 
     core.output_findings(all_findings, args.format, SCANNER_NAME)
 

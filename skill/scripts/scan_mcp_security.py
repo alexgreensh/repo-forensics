@@ -302,7 +302,7 @@ def main():
     args = core.parse_common_args(sys.argv, "MCP Attack Surface Scanner")
     repo_path = args.repo_path
 
-    print(f"[*] Scanning {repo_path} for MCP security issues...")
+    core.emit_status(args.format, f"[*] Scanning {repo_path} for MCP security issues...")
 
     ignore_patterns = core.load_ignore_patterns(repo_path)
     all_findings = []

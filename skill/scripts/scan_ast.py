@@ -307,7 +307,7 @@ def main():
     args = core.parse_common_args(sys.argv, "Python AST Obfuscation Detector")
     repo_path = args.repo_path
 
-    print(f"[*] Running AST analysis on Python files in {repo_path}...")
+    core.emit_status(args.format, f"[*] Running AST analysis on Python files in {repo_path}...")
 
     ignore_patterns = core.load_ignore_patterns(repo_path)
     all_findings = []

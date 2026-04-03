@@ -43,7 +43,7 @@ def main():
     args = core.parse_common_args(sys.argv, "Binary Camouflage Scanner")
     repo_path = args.repo_path
 
-    print(f"[*] Scanning for masquerading binaries in {repo_path}...")
+    core.emit_status(args.format, f"[*] Scanning for masquerading binaries in {repo_path}...")
 
     ignore_patterns = core.load_ignore_patterns(repo_path)
     all_findings = []

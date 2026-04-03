@@ -319,19 +319,19 @@ def main():
     args = core.parse_common_args(sys.argv, "Dynamic Analysis Security Testing")
     repo_path = args.repo_path
 
-    print(f"[*] DAST scanning hooks in {repo_path}...")
+    core.emit_status(args.format, f"[*] DAST scanning hooks in {repo_path}...")
 
     hooks = find_hook_scripts(repo_path)
     if not hooks:
-        print("[+] No hook scripts found to test.")
+        core.emit_status(args.format, "[+] No hook scripts found to test.")
         core.output_findings([], args.format, SCANNER_NAME)
         return
 
-    print(f"[*] Found {len(hooks)} hook(s), testing with {len(PAYLOADS)} payload types...")
+    core.emit_status(args.format, f"[*] Found {len(hooks)} hook(s), testing with {len(PAYLOADS)} payload types...")
 
     all_findings = []
     for hook in hooks:
-        print(f"  Testing: {hook['event']} ({hook['source']})")
+        core.emit_status(args.format, f"  Testing: {hook['event']} ({hook['source']})")
         for payload in PAYLOADS:
             findings = execute_hook_with_payload(hook, payload, repo_path)
             all_findings.extend(findings)

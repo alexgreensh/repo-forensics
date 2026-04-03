@@ -416,7 +416,7 @@ def main():
     args = core.parse_common_args(sys.argv, "AI Skill Threat Scanner")
     repo_path = args.repo_path
 
-    print(f"[*] Scanning for AI skill threats in {repo_path}...")
+    core.emit_status(args.format, f"[*] Scanning for AI skill threats in {repo_path}...")
 
     ignore_patterns = core.load_ignore_patterns(repo_path)
     all_findings = []

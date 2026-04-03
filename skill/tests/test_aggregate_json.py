@@ -19,11 +19,18 @@ def test_parse_scanner_payload_empty_output():
     assert error is None
 
 
-def test_parse_scanner_payload_with_leading_banner():
-    raw = "[*] Scanning repo...\n" + json.dumps([{"severity": "high", "title": "A"}], indent=2)
+def test_parse_scanner_payload_valid_json_list():
+    raw = json.dumps([{"severity": "high", "title": "A"}], indent=2)
     findings, error = module.parse_scanner_payload(raw)
     assert error is None
     assert findings[0]["title"] == "A"
+
+
+def test_parse_scanner_payload_with_leading_banner_fails():
+    raw = "[*] Scanning repo...\n" + json.dumps([{"severity": "high", "title": "A"}], indent=2)
+    findings, error = module.parse_scanner_payload(raw)
+    assert findings == []
+    assert "Invalid JSON output" in error
 
 
 def test_parse_scanner_payload_malformed_json():

@@ -26,36 +26,8 @@ def parse_scanner_payload(raw_output):
     if not raw_output.strip():
         return [], None
 
-    start_positions = [index for index, char in enumerate(raw_output) if char in "[{"]
-    if not start_positions:
-        return [], "No JSON payload found in scanner stdout"
-
-    decoder = json.JSONDecoder()
-    parse_error = None
-
-    for start in start_positions:
-        candidate = raw_output[start:].lstrip()
-        if not candidate:
-            continue
-        try:
-            payload, end = decoder.raw_decode(candidate)
-        except json.JSONDecodeError as exc:
-            parse_error = f"Invalid JSON output: {exc.msg}"
-            continue
-
-        trailing = candidate[end:].strip()
-        if trailing:
-            return [], "Unexpected trailing data after JSON payload"
-        if not isinstance(payload, list):
-            return [], "Scanner JSON payload was not a list"
-        return payload, None
-
-    if parse_error:
-        return [], parse_error
-
-    candidate = raw_output.strip()
     try:
-        payload = json.loads(candidate)
+        payload = json.loads(raw_output.strip())
     except json.JSONDecodeError as exc:
         return [], f"Invalid JSON output: {exc.msg}"
 
