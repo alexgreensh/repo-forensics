@@ -84,11 +84,20 @@ run_scanner() {
     local extra_args="${3:-}"
     local output_file="$TMPDIR/$name.out"
     local exit_file="$TMPDIR/$name.exit"
+    local error_file="$TMPDIR/$name.err"
 
-    if [ -n "$TIMEOUT_CMD" ]; then
-        $TIMEOUT_CMD "$SCANNER_TIMEOUT" python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$FORMAT" ${extra_args:+"$extra_args"} > "$output_file" 2>&1
+    if [ "$FORMAT" = "json" ]; then
+        if [ -n "$TIMEOUT_CMD" ]; then
+            $TIMEOUT_CMD "$SCANNER_TIMEOUT" python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$FORMAT" ${extra_args:+"$extra_args"} > "$output_file" 2> "$error_file"
+        else
+            python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$FORMAT" ${extra_args:+"$extra_args"} > "$output_file" 2> "$error_file"
+        fi
     else
-        python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$FORMAT" ${extra_args:+"$extra_args"} > "$output_file" 2>&1
+        if [ -n "$TIMEOUT_CMD" ]; then
+            $TIMEOUT_CMD "$SCANNER_TIMEOUT" python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$FORMAT" ${extra_args:+"$extra_args"} > "$output_file" 2>&1
+        else
+            python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$FORMAT" ${extra_args:+"$extra_args"} > "$output_file" 2>&1
+        fi
     fi
     echo $? > "$exit_file"
 }
@@ -145,98 +154,15 @@ fi
 # Collect and display results
 if [ "$FORMAT" = "json" ]; then
     EXIT_CODE_FILE="$TMPDIR/aggregate.exit"
-    python3 - "$TMPDIR" "$REPO_PATH" "$SKILL_SCAN" "$EXIT_CODE_FILE" <<'PY'
-import json
-import os
-import sys
-
-tmpdir, repo_path, skill_scan, exit_code_file = sys.argv[1:5]
-severity_order = {"critical": 4, "high": 3, "medium": 2, "low": 1}
-
-summary = {"critical": 0, "high": 0, "medium": 0, "low": 0, "total": 0}
-scanners = []
-all_findings = []
-
-def extract_payload(raw_text):
-    candidates = []
-    offset = 0
-    for line in raw_text.splitlines(keepends=True):
-        stripped = line.lstrip()
-        if stripped.startswith('[') or stripped.startswith('{'):
-            candidates.append(offset + len(line) - len(stripped))
-        offset += len(line)
-    if raw_text.startswith('[') or raw_text.startswith('{'):
-        candidates.append(0)
-
-    for position in reversed(candidates):
-        candidate = raw_text[position:].strip()
-        if not candidate:
-            continue
-        try:
-            return json.loads(candidate), None
-        except json.JSONDecodeError:
-            continue
-    return [], "Could not extract JSON payload from scanner output"
-
-for filename in sorted(name for name in os.listdir(tmpdir) if name.endswith(".out")):
-    name = filename[:-4]
-    out_path = os.path.join(tmpdir, filename)
-    exit_path = os.path.join(tmpdir, f"{name}.exit")
-
-    with open(out_path, "r", encoding="utf-8") as handle:
-        raw_output = handle.read()
-
-    exit_code = 1
-    if os.path.exists(exit_path):
-        with open(exit_path, "r", encoding="utf-8") as handle:
-            try:
-                exit_code = int(handle.read().strip() or "1")
-            except ValueError:
-                exit_code = 1
-
-    findings, parse_error = extract_payload(raw_output)
-    if not isinstance(findings, list):
-        findings = []
-        parse_error = parse_error or "Scanner JSON payload was not a list"
-
-    scanners.append({
-        "name": name,
-        "exit_code": exit_code,
-        "parse_error": parse_error,
-        "finding_count": len(findings),
-        "findings": findings,
-    })
-    all_findings.extend(findings)
-
-for finding in all_findings:
-    severity = finding.get("severity", "low")
-    if severity in summary:
-        summary[severity] += 1
-    summary["total"] += 1
-
-all_findings.sort(key=lambda item: -severity_order.get(item.get("severity", "low"), 0))
-
-if summary["critical"] > 0:
-    exit_code = 2
-elif summary["high"] > 0 or summary["medium"] > 0:
-    exit_code = 1
-else:
-    exit_code = 0
-
-print(json.dumps({
-    "target": repo_path,
-    "mode": "skill" if skill_scan == "true" else "full",
-    "scanner_count": len(scanners),
-    "scanners": scanners,
-    "summary": summary,
-    "exit_code": exit_code,
-    "findings": all_findings,
-}, indent=2))
-
-with open(exit_code_file, "w", encoding="utf-8") as handle:
-    handle.write(str(exit_code))
-PY
-    exit "$(cat "$EXIT_CODE_FILE")"
+    echo "99" > "$EXIT_CODE_FILE"
+    if ! python3 "$SKILL_DIR/aggregate_json.py" "$TMPDIR" "$REPO_PATH" "$SKILL_SCAN" "$EXIT_CODE_FILE"; then
+        :
+    fi
+    _rc=$(cat "$EXIT_CODE_FILE" 2>/dev/null || echo "99")
+    case "$_rc" in
+        0|1|2) exit "$_rc" ;;
+        *) exit 99 ;;
+    esac
 fi
 
 echo ""
