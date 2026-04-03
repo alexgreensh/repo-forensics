@@ -67,6 +67,7 @@ def generate_checksums(skill_root):
     out_path = os.path.join(skill_root, 'checksums.json')
     with open(out_path, 'w', encoding='utf-8') as f:
         json.dump(output, f, indent=2)
+        f.write('\n')
 
     print(f"[+] Generated checksums.json: {len(checksums)} files tracked")
     return out_path
