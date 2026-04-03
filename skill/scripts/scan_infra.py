@@ -230,6 +230,14 @@ def scan_github_actions(file_path, rel_path):
                         category="ci-cd"
                     ))
                     break
+            if re.search(r'\bnpm\s+(?:install|i)\b', block):
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="medium",
+                    title="GHA: npm install in Multi-line Run Block",
+                    description="Workflow uses npm install instead of npm ci in a multi-line script (non-deterministic install, weaker lockfile enforcement)",
+                    file=rel_path, line=line_no, snippet=block.strip()[:120],
+                    category="ci-cd"
+                ))
 
     except (OSError, UnicodeDecodeError) as e:
         print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)
@@ -319,7 +327,7 @@ def scan_npmrc(file_path, rel_path):
             findings.append(core.Finding(
                 scanner=SCANNER_NAME, severity="medium",
                 title=".npmrc: Missing allow-git=none",
-                description="allow-git=none not set (git dependencies can bypass ignore-scripts protections)",
+                description="allow-git=none not set (npm 11+; git dependencies can bypass ignore-scripts protections)",
                 file=rel_path, line=0, snippet="allow-git=none not found",
                 category="npmrc-config"
             ))
@@ -328,7 +336,7 @@ def scan_npmrc(file_path, rel_path):
             findings.append(core.Finding(
                 scanner=SCANNER_NAME, severity="low",
                 title=".npmrc: Missing min-release-age",
-                description="min-release-age>=3 not set (newly published packages are installed without cooldown)",
+                description="min-release-age>=3 not set (npm 11+; newly published packages are installed without cooldown)",
                 file=rel_path, line=0, snippet="min-release-age>=3 not found",
                 category="npmrc-config"
             ))

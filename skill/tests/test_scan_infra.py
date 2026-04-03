@@ -63,6 +63,24 @@ class TestGitHubActions:
         findings = scanner.scan_github_actions(str(ci), ".github/workflows/ci.yml")
         assert any("npm install" in f.title.lower() for f in findings)
 
+    def test_detects_npm_install_in_multiline_run_block(self, tmp_path):
+        workflow = tmp_path / ".github" / "workflows"
+        workflow.mkdir(parents=True)
+        ci = workflow / "ci.yml"
+        ci.write_text(
+            "name: CI\n"
+            "on: [push]\n"
+            "jobs:\n"
+            "  build:\n"
+            "    runs-on: ubuntu-latest\n"
+            "    steps:\n"
+            "      - run: |\n"
+            "          npm install\n"
+            "          npm test\n"
+        )
+        findings = scanner.scan_github_actions(str(ci), ".github/workflows/ci.yml")
+        assert any("multi-line run block" in f.title.lower() for f in findings)
+
 
 class TestNpmrc:
     def test_detects_strict_ssl_false(self, tmp_path):
@@ -85,9 +103,17 @@ class TestNpmrc:
 
     def test_ignore_scripts_true_no_finding(self, tmp_path):
         npmrc = tmp_path / ".npmrc"
+        npmrc.write_text("ignore-scripts=true\n")
+        findings = scanner.scan_npmrc(str(npmrc), ".npmrc")
+        assert not any("ignore-scripts" in f.title.lower() for f in findings)
+
+    def test_all_hardening_present_no_findings(self, tmp_path):
+        npmrc = tmp_path / ".npmrc"
         npmrc.write_text("ignore-scripts=true\nallow-git=none\nmin-release-age=3\n")
         findings = scanner.scan_npmrc(str(npmrc), ".npmrc")
         assert not any("ignore-scripts" in f.title.lower() for f in findings)
+        assert not any("allow-git" in f.title.lower() for f in findings)
+        assert not any("min-release-age" in f.title.lower() for f in findings)
 
     def test_detects_missing_allow_git_none(self, tmp_path):
         npmrc = tmp_path / ".npmrc"
