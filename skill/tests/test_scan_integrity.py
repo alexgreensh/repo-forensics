@@ -49,7 +49,7 @@ class TestExecutableConfigs:
 class TestWatchMode:
     def test_creates_baseline(self, repo_with_hooks):
         files = scanner.find_critical_files(str(repo_with_hooks))
-        findings = scanner.watch_mode(str(repo_with_hooks), files)
+        findings = scanner.watch_mode(str(repo_with_hooks), files, "text")
         assert len(findings) == 0  # first run = no drift
         baseline_path = repo_with_hooks / scanner.BASELINE_FILENAME
         assert baseline_path.exists()
@@ -57,33 +57,33 @@ class TestWatchMode:
     def test_detects_drift(self, repo_with_hooks):
         files = scanner.find_critical_files(str(repo_with_hooks))
         # Create baseline
-        scanner.watch_mode(str(repo_with_hooks), files)
+        scanner.watch_mode(str(repo_with_hooks), files, "text")
         # Modify a file
         claude_md = repo_with_hooks / "CLAUDE.md"
         claude_md.write_text("# MODIFIED by attacker\n")
         # Re-scan
         files = scanner.find_critical_files(str(repo_with_hooks))
-        findings = scanner.watch_mode(str(repo_with_hooks), files)
+        findings = scanner.watch_mode(str(repo_with_hooks), files, "text")
         assert len(findings) > 0
         assert any("modified" in f.title.lower() for f in findings)
 
     def test_detects_new_file(self, repo_with_hooks):
         files = scanner.find_critical_files(str(repo_with_hooks))
-        scanner.watch_mode(str(repo_with_hooks), files)
+        scanner.watch_mode(str(repo_with_hooks), files, "text")
         # Add a new critical file
         mcp_json = repo_with_hooks / ".mcp.json"
         mcp_json.write_text('{"mcpServers": {}}')
         files = scanner.find_critical_files(str(repo_with_hooks))
-        findings = scanner.watch_mode(str(repo_with_hooks), files)
+        findings = scanner.watch_mode(str(repo_with_hooks), files, "text")
         assert any("New critical file" in f.title for f in findings)
 
     def test_detects_removed_file(self, repo_with_hooks):
         files = scanner.find_critical_files(str(repo_with_hooks))
-        scanner.watch_mode(str(repo_with_hooks), files)
+        scanner.watch_mode(str(repo_with_hooks), files, "text")
         # Remove CLAUDE.md
         (repo_with_hooks / "CLAUDE.md").unlink()
         files = scanner.find_critical_files(str(repo_with_hooks))
-        findings = scanner.watch_mode(str(repo_with_hooks), files)
+        findings = scanner.watch_mode(str(repo_with_hooks), files, "text")
         assert any("removed" in f.title.lower() for f in findings)
 
 
@@ -114,7 +114,7 @@ class TestHMACSigning:
     def test_baseline_includes_hmac(self, repo_with_hooks):
         """Saving a baseline should produce a JSON file with an _hmac field."""
         files = scanner.find_critical_files(str(repo_with_hooks))
-        scanner.watch_mode(str(repo_with_hooks), files)
+        scanner.watch_mode(str(repo_with_hooks), files, "text")
         baseline_path = repo_with_hooks / scanner.BASELINE_FILENAME
         with open(str(baseline_path), 'r') as f:
             data = json.load(f)
@@ -124,7 +124,7 @@ class TestHMACSigning:
     def test_signing_key_created(self, repo_with_hooks):
         """Saving a baseline should create the signing key file with 0600 permissions."""
         files = scanner.find_critical_files(str(repo_with_hooks))
-        scanner.watch_mode(str(repo_with_hooks), files)
+        scanner.watch_mode(str(repo_with_hooks), files, "text")
         key_path = repo_with_hooks / scanner.SIGNING_KEY_FILENAME
         assert key_path.exists()
         mode = key_path.stat().st_mode
@@ -133,7 +133,7 @@ class TestHMACSigning:
     def test_valid_hmac_no_findings(self, repo_with_hooks):
         """Loading an untampered baseline should produce no HMAC findings."""
         files = scanner.find_critical_files(str(repo_with_hooks))
-        scanner.watch_mode(str(repo_with_hooks), files)
+        scanner.watch_mode(str(repo_with_hooks), files, "text")
         # Load again - should verify cleanly
         _, integrity_findings = scanner.load_baseline(str(repo_with_hooks))
         hmac_findings = [f for f in integrity_findings if f.category == "integrity-hmac"]
@@ -142,7 +142,7 @@ class TestHMACSigning:
     def test_tampered_baseline_critical_finding(self, repo_with_hooks):
         """Modifying the baseline file should trigger a CRITICAL finding."""
         files = scanner.find_critical_files(str(repo_with_hooks))
-        scanner.watch_mode(str(repo_with_hooks), files)
+        scanner.watch_mode(str(repo_with_hooks), files, "text")
         # Tamper with the baseline
         baseline_path = repo_with_hooks / scanner.BASELINE_FILENAME
         with open(str(baseline_path), 'r') as f:
@@ -159,7 +159,7 @@ class TestHMACSigning:
     def test_missing_key_high_finding(self, repo_with_hooks):
         """Deleting the signing key when baseline has HMAC should trigger a HIGH finding."""
         files = scanner.find_critical_files(str(repo_with_hooks))
-        scanner.watch_mode(str(repo_with_hooks), files)
+        scanner.watch_mode(str(repo_with_hooks), files, "text")
         # Delete the signing key
         key_path = repo_with_hooks / scanner.SIGNING_KEY_FILENAME
         key_path.unlink()
@@ -188,12 +188,12 @@ class TestHMACSigning:
     def test_signing_key_reused_across_saves(self, repo_with_hooks):
         """The same signing key should be reused for subsequent baseline saves."""
         files = scanner.find_critical_files(str(repo_with_hooks))
-        scanner.watch_mode(str(repo_with_hooks), files)
+        scanner.watch_mode(str(repo_with_hooks), files, "text")
         key_path = repo_with_hooks / scanner.SIGNING_KEY_FILENAME
         with open(str(key_path), 'rb') as f:
             key1 = f.read()
         # Save again (simulates re-run)
-        scanner.watch_mode(str(repo_with_hooks), files)
+        scanner.watch_mode(str(repo_with_hooks), files, "text")
         with open(str(key_path), 'rb') as f:
             key2 = f.read()
         assert key1 == key2
