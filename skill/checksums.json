@@ -33,5 +33,5 @@
         "scripts/scan_skill_threats.py": "73ae9041ebc43ef130b3f870afcc540256b610a18a2bcab4488202b60b31ed71",
         "scripts/verify_install.py": "9a3b0b10db0aa35a78701b217387d297c4a0be4e9952f7793eceb129bd18453b"
     },
-    "scripts/scan_infra.py": "f6298aa0ea70ed8050e5c5272cc437982445769c51df5f99c26f614d773f5d93"
+    "scripts/scan_infra.py": "b4a334bf8627432eecc2c2e3506c446300e9bc510b0d4565f3f442915ae0e59b"
 }

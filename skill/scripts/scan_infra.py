@@ -20,6 +20,25 @@ SCANNER_NAME = "infra"
 MIN_RELEASE_AGE_DAYS = 3
 
 
+def _strip_shell_comment(line):
+    """Strip shell comments, respecting single and double quotes.
+
+    Naive '#.*$' fails on URLs (curl https://x.com/setup#v2 && npm install)
+    and quoted strings (echo "this # not a comment" && npm install).
+    """
+    in_single = False
+    in_double = False
+    for i, ch in enumerate(line):
+        if ch == "'" and not in_double:
+            in_single = not in_single
+        elif ch == '"' and not in_single:
+            in_double = not in_double
+        elif ch == '#' and not in_single and not in_double:
+            if i == 0 or line[i - 1] in (' ', '\t'):
+                return line[:i]
+    return line
+
+
 def scan_dockerfile(file_path, rel_path):
     findings = []
     try:
@@ -190,16 +209,19 @@ def scan_github_actions(file_path, rel_path):
                 ))
 
             # GHA expression injection: attacker-controlled inputs in run blocks
-            if '${{ github.event.' in stripped and ('run:' in stripped or 'run: |' in stripped):
-                findings.append(core.Finding(
-                    scanner=SCANNER_NAME, severity="critical",
-                    title="GHA: Expression Injection Risk",
-                    description="github.event.* is attacker-controlled in PRs and can inject shell commands",
-                    file=rel_path, line=i+1, snippet=stripped[:120],
-                    category="ci-cd"
-                ))
+            _injection_exprs = ('${{ github.event.', '${{ github.head_ref', '${{ github.event_path', '${{ inputs.')
+            for _expr in _injection_exprs:
+                if _expr in stripped and ('run:' in stripped or 'run: |' in stripped):
+                    findings.append(core.Finding(
+                        scanner=SCANNER_NAME, severity="critical",
+                        title="GHA: Expression Injection Risk",
+                        description=f"Attacker-controlled expression '{_expr}...' in run block can inject shell commands",
+                        file=rel_path, line=i+1, snippet=stripped[:120],
+                        category="ci-cd"
+                    ))
+                    break
 
-            if re.search(r'\brun\s*:\s*(?:.+\s)?npm\s+(?:install|i)(?=\s|$)', stripped):
+            if re.search(r'\brun\s*:\s*(?:.+\s)?npm\s+(?:install|i)(?=\s|$)', _strip_shell_comment(stripped)):
                 findings.append(core.Finding(
                     scanner=SCANNER_NAME, severity="medium",
                     title="GHA: npm install in Workflow",
@@ -210,7 +232,7 @@ def scan_github_actions(file_path, rel_path):
 
         # Multi-line run block check
         content = ''.join(lines)
-        for m in re.finditer(r'run:\s*\|\n((?:\s+.*\n)+)', content):
+        for m in re.finditer(r'run:\s*[|>]-?\s*\n((?:\s+.*\n)+)', content):
             block = m.group(1)
             line_no = content[:m.start()].count('\n') + 1
             if '${{ secrets.' in block:
@@ -222,7 +244,7 @@ def scan_github_actions(file_path, rel_path):
                     category="ci-cd"
                 ))
             # Check for expression injection in multi-line blocks (attacker-controlled inputs)
-            for expr in ('${{ github.event.', '${{ github.event_path', '${{ inputs.'):
+            for expr in ('${{ github.event.', '${{ github.head_ref', '${{ github.event_path', '${{ inputs.'):
                 if expr in block:
                     findings.append(core.Finding(
                         scanner=SCANNER_NAME, severity="high",
@@ -232,9 +254,10 @@ def scan_github_actions(file_path, rel_path):
                         category="ci-cd"
                     ))
                     break
-            # Check non-comment lines for npm install
+            # Strip comments (quote-aware) from each line before checking npm install
             block_code = "\n".join(
-                ln for ln in block.splitlines() if not ln.strip().startswith("#")
+                _strip_shell_comment(ln) for ln in block.splitlines()
+                if not ln.strip().startswith("#")
             )
             if re.search(r'\bnpm\s+(?:install|i)(?=\s|$)', block_code):
                 findings.append(core.Finding(

@@ -97,10 +97,8 @@ class TestGitHubActions:
         findings = scanner.scan_github_actions(str(ci), ".github/workflows/ci.yml")
         assert any("multi-line run block" in f.title.lower() for f in findings)
 
-    def test_flags_npm_install_in_shell_comment_as_acceptable_false_positive(self, tmp_path):
-        """Single-line comment stripping is intentionally skipped to avoid false negatives
-        on cases like: run: echo "this # not a comment" && npm install.
-        Accepting this false positive is safer for a security scanner."""
+    def test_does_not_flag_npm_install_in_shell_comment(self, tmp_path):
+        """Quote-aware comment stripping correctly handles # in comments."""
         workflow = tmp_path / ".github" / "workflows"
         workflow.mkdir(parents=True)
         ci = workflow / "ci.yml"
@@ -114,7 +112,23 @@ class TestGitHubActions:
             "      - run: echo test # npm install was here\n"
         )
         findings = scanner.scan_github_actions(str(ci), ".github/workflows/ci.yml")
-        # This IS flagged (accepted false positive, better than missing real threats)
+        assert not any("npm install" in f.title.lower() for f in findings)
+
+    def test_detects_npm_install_after_url_fragment(self, tmp_path):
+        """Quote-aware stripping does NOT strip # inside URLs without quotes."""
+        workflow = tmp_path / ".github" / "workflows"
+        workflow.mkdir(parents=True)
+        ci = workflow / "ci.yml"
+        ci.write_text(
+            "name: CI\n"
+            "on: [push]\n"
+            "jobs:\n"
+            "  build:\n"
+            "    runs-on: ubuntu-latest\n"
+            "    steps:\n"
+            '      - run: curl "https://example.com/setup#v2" && npm install\n'
+        )
+        findings = scanner.scan_github_actions(str(ci), ".github/workflows/ci.yml")
         assert any("npm install" in f.title.lower() for f in findings)
 
     def test_does_not_flag_npm_install_in_multiline_comment(self, tmp_path):
