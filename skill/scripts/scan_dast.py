@@ -42,6 +42,10 @@ SCANNER_NAME = "dast"
 EXEC_TIMEOUT = 5  # seconds
 MAX_OUTPUT_BYTES = 1024 * 100  # 100KB - anything more is amplification
 
+# macOS Seatbelt sandbox profile (denies network + restricts filesystem to /tmp)
+SANDBOX_PROFILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'dast_sandbox.sb')
+SANDBOX_AVAILABLE = os.path.exists('/usr/bin/sandbox-exec') and os.path.exists(SANDBOX_PROFILE)
+
 # 8 malicious payload types for hook testing
 PAYLOADS = [
     {
@@ -207,6 +211,10 @@ def execute_hook_with_payload(hook, payload, repo_path):
         exec_cmd = [sys.executable, script_path]
     else:
         exec_cmd = [script_path]
+
+    # Wrap in macOS Seatbelt sandbox (denies network, restricts filesystem to /tmp)
+    if SANDBOX_AVAILABLE:
+        exec_cmd = ['/usr/bin/sandbox-exec', '-f', SANDBOX_PROFILE] + exec_cmd
 
     start = time.monotonic()
     try:

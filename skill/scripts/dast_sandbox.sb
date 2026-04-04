@@ -1,0 +1,14 @@
+(version 1)
+
+;; Start permissive, then deny dangerous capabilities.
+;; (deny default) crashes processes before they can load shared libraries.
+(allow default)
+
+;; Deny all network access — prevents data exfiltration
+(deny network*)
+
+;; Deny reading user home directories — prevents credential/config theft
+(deny file-read* (subpath "/Users"))
+
+;; Deny writing to user home directories — prevents persistence
+(deny file-write* (subpath "/Users"))
