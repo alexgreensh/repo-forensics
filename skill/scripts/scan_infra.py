@@ -197,7 +197,7 @@ def scan_github_actions(file_path, rel_path):
                     category="ci-cd"
                 ))
 
-            if re.search(r'\brun\s*:\s*(?:.+\s)?npm\s+(?:install|i)\b', stripped):
+            if re.search(r'\brun\s*:\s*(?:.+\s)?npm\s+(?:install|i)(?=\s|$)', stripped):
                 findings.append(core.Finding(
                     scanner=SCANNER_NAME, severity="medium",
                     title="GHA: npm install in Workflow",
@@ -230,7 +230,7 @@ def scan_github_actions(file_path, rel_path):
                         category="ci-cd"
                     ))
                     break
-            if re.search(r'\bnpm\s+(?:install|i)\b', block):
+            if re.search(r'\bnpm\s+(?:install|i)(?=\s|$)', block):
                 findings.append(core.Finding(
                     scanner=SCANNER_NAME, severity="medium",
                     title="GHA: npm install in Multi-line Run Block",
