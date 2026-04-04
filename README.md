@@ -371,12 +371,9 @@ Note: `.forensicsignore` is itself scanned. Broad wildcard patterns like `*` are
 
 ## License
 
-This software is available under a dual license:
+**AGPL-3.0** (dual licensed). Free for personal and open source use. If you modify this software, you must make the modified source code publicly available under the same license.
 
-- **AGPL-3.0** for personal and open source use. If you modify this software, you must make the modified source code publicly available under the same license. See [LICENSE](LICENSE).
-- **Commercial License** for organizations that cannot comply with AGPL-3.0 terms, including internal business use and proprietary integration. See [LICENSE-COMMERCIAL](LICENSE-COMMERCIAL).
-
-For commercial licensing inquiries: me@alexgreenshpun.com
+Organizations using this commercially (including internal business use) need a commercial license. Contact me@alexgreenshpun.com for details.
 
 ---
 
