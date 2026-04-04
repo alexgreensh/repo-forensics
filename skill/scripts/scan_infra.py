@@ -16,6 +16,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import forensics_core as core
 
 SCANNER_NAME = "infra"
+# npm recommends >= 3 days to allow malware detection before install (npm 11+)
+MIN_RELEASE_AGE_DAYS = 3
 
 
 def scan_dockerfile(file_path, rel_path):
@@ -197,9 +199,7 @@ def scan_github_actions(file_path, rel_path):
                     category="ci-cd"
                 ))
 
-            # Strip shell comments before checking npm install
-            cmd_part = re.sub(r'#.*$', '', stripped)
-            if re.search(r'\brun\s*:\s*(?:.+\s)?npm\s+(?:install|i)(?=\s|$)', cmd_part):
+            if re.search(r'\brun\s*:\s*(?:.+\s)?npm\s+(?:install|i)(?=\s|$)', stripped):
                 findings.append(core.Finding(
                     scanner=SCANNER_NAME, severity="medium",
                     title="GHA: npm install in Workflow",
@@ -271,7 +271,7 @@ def scan_npmrc(file_path, rel_path):
             if re.match(r'allow-git\s*=\s*none', stripped, re.IGNORECASE):
                 has_allow_git_none = True
             min_release_match = re.match(r'min-release-age\s*=\s*(\d+)', stripped, re.IGNORECASE)
-            if min_release_match and int(min_release_match.group(1)) >= 3:
+            if min_release_match and int(min_release_match.group(1)) >= MIN_RELEASE_AGE_DAYS:
                 has_min_release_age = True
 
             if re.match(r'strict-ssl\s*=\s*false', stripped, re.IGNORECASE):
