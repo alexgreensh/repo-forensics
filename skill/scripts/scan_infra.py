@@ -197,7 +197,9 @@ def scan_github_actions(file_path, rel_path):
                     category="ci-cd"
                 ))
 
-            if re.search(r'\brun\s*:\s*(?:.+\s)?npm\s+(?:install|i)(?=\s|$)', stripped):
+            # Strip shell comments before checking npm install
+            cmd_part = re.sub(r'#.*$', '', stripped)
+            if re.search(r'\brun\s*:\s*(?:.+\s)?npm\s+(?:install|i)(?=\s|$)', cmd_part):
                 findings.append(core.Finding(
                     scanner=SCANNER_NAME, severity="medium",
                     title="GHA: npm install in Workflow",
@@ -230,7 +232,11 @@ def scan_github_actions(file_path, rel_path):
                         category="ci-cd"
                     ))
                     break
-            if re.search(r'\bnpm\s+(?:install|i)(?=\s|$)', block):
+            # Check non-comment lines for npm install
+            block_code = "\n".join(
+                ln for ln in block.splitlines() if not ln.strip().startswith("#")
+            )
+            if re.search(r'\bnpm\s+(?:install|i)(?=\s|$)', block_code):
                 findings.append(core.Finding(
                     scanner=SCANNER_NAME, severity="medium",
                     title="GHA: npm install in Multi-line Run Block",
