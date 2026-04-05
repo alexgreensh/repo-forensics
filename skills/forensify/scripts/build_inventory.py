@@ -662,8 +662,469 @@ def walk_skills_surface(
     return records
 
 
+def _walk_generic_files(
+    surface_config: Dict[str, Any],
+    env: Dict[str, str],
+    walk_depth_cap: int = 8,
+) -> List[Dict[str, Any]]:
+    """
+    Walk any surface config that declares `files` and/or `globs` and return
+    file records for every match. Generic walker used by commands, agents,
+    memory, plugins, and other glob-based surfaces.
+    """
+    records: List[Dict[str, Any]] = []
+    seen = set()
+
+    for f_tpl in surface_config.get("files", []) or []:
+        if not isinstance(f_tpl, str):
+            continue
+        resolved = expand_env_vars(f_tpl, env)
+        if os.path.exists(resolved) and resolved not in seen:
+            seen.add(resolved)
+            records.append(_file_record(resolved))
+
+    for tpl in surface_config.get("globs", []) or []:
+        if not isinstance(tpl, str):
+            continue
+        for match in safe_resolve_glob(tpl, env, walk_depth_cap):
+            if match not in seen:
+                seen.add(match)
+                records.append(_file_record(match))
+
+    for tpl in surface_config.get("precedence_chain", []) or []:
+        if not isinstance(tpl, str):
+            continue
+        for match in safe_resolve_glob(tpl, env, walk_depth_cap):
+            if match not in seen:
+                seen.add(match)
+                records.append(_file_record(match))
+
+    # walk_dirs: recursively walk directories and record every file
+    for d_tpl in surface_config.get("walk_dirs", []) or []:
+        if not isinstance(d_tpl, str):
+            continue
+        resolved_dir = expand_env_vars(d_tpl, env)
+        if not os.path.isdir(resolved_dir):
+            continue
+        for dirpath, _dirnames, filenames in os.walk(resolved_dir):
+            if _path_depth_under(dirpath, resolved_dir) > walk_depth_cap:
+                continue
+            for fn in filenames:
+                full = os.path.join(dirpath, fn)
+                try:
+                    normalized = normalize_text(full)
+                except BidiOverrideRejected:
+                    continue
+                if normalized not in seen:
+                    seen.add(normalized)
+                    records.append(_file_record(normalized))
+
+    return records
+
+
+def walk_commands_agents_memory(
+    eco_key: str,
+    eco_config: Dict[str, Any],
+    env: Dict[str, str],
+    walk_depth_cap: int = 8,
+) -> Dict[str, List[Dict[str, Any]]]:
+    """
+    Walk commands, agents, and memory surfaces for an ecosystem.
+    Returns a dict with keys: commands, agents, memory, brain_files.
+    """
+    surfaces = eco_config.get("surfaces", {})
+    workspace_env = dict(env)
+    workspace_path = _resolve_workspace_path(eco_config, env)
+    if workspace_path:
+        workspace_env["workspace"] = workspace_path
+
+    result: Dict[str, List[Dict[str, Any]]] = {}
+
+    for surface_name in ("commands", "agents"):
+        cfg = surfaces.get(surface_name) or {}
+        result[surface_name] = _walk_generic_files(cfg, workspace_env, walk_depth_cap)
+
+    # Memory: combine memory_files and brain_files from multiple config keys
+    mem_records: List[Dict[str, Any]] = []
+    seen_mem = set()
+
+    for mem_key in ("commands_and_memory", "memory"):
+        cfg = surfaces.get(mem_key) or {}
+        for sub_key in ("memory_files", "files", "globs"):
+            sub = cfg.get(sub_key)
+            if not sub:
+                continue
+            if isinstance(sub, list):
+                for tpl in sub:
+                    if not isinstance(tpl, str):
+                        continue
+                    resolved = expand_env_vars(tpl, workspace_env)
+                    # Could be a glob or a direct file
+                    matches = safe_resolve_glob(
+                        resolved if "*" in resolved or "?" in resolved else resolved,
+                        workspace_env,
+                        walk_depth_cap,
+                    )
+                    if not matches and os.path.exists(resolved):
+                        matches = [resolved]
+                    for m in matches:
+                        if m not in seen_mem:
+                            seen_mem.add(m)
+                            mem_records.append(_file_record(m))
+
+    result["memory"] = mem_records
+
+    # Brain files (OpenClaw workspace context files)
+    brain_cfg = surfaces.get("brain_files") or {}
+    result["brain_files"] = _walk_generic_files(brain_cfg, workspace_env, walk_depth_cap)
+
+    return result
+
+
+def walk_hooks_surface(
+    eco_key: str,
+    eco_config: Dict[str, Any],
+    env: Dict[str, str],
+    walk_depth_cap: int = 8,
+) -> List[Dict[str, Any]]:
+    """
+    Walk hooks surface. For Claude Code, walks both the hooks directory
+    (with realpath resolution for symlinks) and settings.json + plugin
+    hooks.json files. For Codex, extracts approval_policy and sandbox_mode
+    from config.toml via regex.
+    """
+    surfaces = eco_config.get("surfaces", {})
+    hooks_cfg = surfaces.get("hooks") or {}
+    records = _walk_generic_files(hooks_cfg, env, walk_depth_cap)
+
+    # Enrich Codex hook records with policy extraction from TOML
+    if hooks_cfg.get("parse_as") == "toml":
+        extract_keys = hooks_cfg.get("extract_keys") or []
+        for rec in records:
+            if rec.get("_error"):
+                continue
+            path = rec.get("path", "")
+            if path.endswith(".toml") and os.path.isfile(path):
+                policies = _extract_toml_keys(path, extract_keys)
+                if policies:
+                    rec["extracted_policies"] = policies
+
+    return records
+
+
+def _extract_toml_keys(path: str, keys: List[str]) -> Dict[str, str]:
+    """
+    Regex-based extraction of specific keys from a TOML file.
+    This is NOT a full TOML parser — it handles simple `key = "value"` and
+    `key = value` lines only. Used for Codex config.toml policy extraction
+    without adding a tomllib dependency.
+    """
+    import re
+
+    result: Dict[str, str] = {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read()
+    except OSError:
+        return result
+
+    for key in keys:
+        # Match: key = "value" or key = value (unquoted)
+        pattern = r'^\s*' + re.escape(key) + r'\s*=\s*"?([^"\n]+)"?'
+        match = re.search(pattern, content, re.MULTILINE)
+        if match:
+            result[key] = match.group(1).strip().strip('"')
+
+    return result
+
+
+def walk_mcp_surface(
+    eco_key: str,
+    eco_config: Dict[str, Any],
+    env: Dict[str, str],
+    walk_depth_cap: int = 8,
+) -> List[Dict[str, Any]]:
+    """
+    Walk MCP server configurations. For JSON config files (Claude Code
+    ~/.claude.json, plugin .mcp.json), counts MCP server entries. For TOML
+    (Codex config.toml), counts [mcp_servers.*] section headers via regex.
+    """
+    surfaces = eco_config.get("surfaces", {})
+    mcp_cfg = surfaces.get("mcp") or {}
+    records = _walk_generic_files(mcp_cfg, env, walk_depth_cap)
+
+    for rec in records:
+        if rec.get("_error"):
+            continue
+        path = rec.get("path", "")
+        if path.endswith(".json") and os.path.isfile(path):
+            rec["mcp_server_count"] = _count_json_mcp_servers(path)
+        elif path.endswith(".toml") and os.path.isfile(path):
+            rec["mcp_server_count"] = _count_toml_mcp_servers(path)
+
+    return records
+
+
+def _count_json_mcp_servers(path: str) -> int:
+    """Count MCP server entries in a JSON config (Claude Code format)."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return 0
+    # Claude Code: top-level mcpServers dict
+    servers = data.get("mcpServers") or data.get("mcp_servers") or {}
+    if isinstance(servers, dict):
+        return len(servers)
+    return 0
+
+
+def _count_toml_mcp_servers(path: str) -> int:
+    """Count [mcp_servers.*] section headers in a TOML file via regex."""
+    import re
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read()
+    except OSError:
+        return 0
+    return len(re.findall(r'^\s*\[mcp_servers\.\w+\]', content, re.MULTILINE))
+
+
+def walk_plugins_surface(
+    eco_key: str,
+    eco_config: Dict[str, Any],
+    env: Dict[str, str],
+    walk_depth_cap: int = 8,
+) -> List[Dict[str, Any]]:
+    """Walk plugin manifests and registry files."""
+    surfaces = eco_config.get("surfaces", {})
+    plugins_cfg = surfaces.get("plugins") or {}
+    return _walk_generic_files(plugins_cfg, env, walk_depth_cap)
+
+
+def walk_settings_surface(
+    eco_config: Dict[str, Any],
+    env: Dict[str, str],
+    walk_depth_cap: int = 8,
+) -> List[Dict[str, Any]]:
+    """Walk settings/config files."""
+    surfaces = eco_config.get("surfaces", {})
+    settings_cfg = surfaces.get("settings") or {}
+    return _walk_generic_files(settings_cfg, env, walk_depth_cap)
+
+
+def walk_credentials_surface(
+    eco_key: str,
+    eco_config: Dict[str, Any],
+    env: Dict[str, str],
+    walk_depth_cap: int = 8,
+) -> List[Dict[str, Any]]:
+    """
+    Walk credential files with structured metadata extraction.
+    NEVER reads credential values — stat and JSON-shape inspection only.
+    """
+    surfaces = eco_config.get("surfaces", {})
+    cred_cfg = surfaces.get("credentials") or {}
+    records = _walk_generic_files(cred_cfg, env, walk_depth_cap)
+
+    schema_mode = cred_cfg.get("schema_inspection", "stat_only")
+
+    for rec in records:
+        if rec.get("_error"):
+            continue
+        path = rec.get("path", "")
+        st = _safe_stat(path)
+        if st is None:
+            continue
+
+        # Permission analysis
+        mode = st.st_mode & 0o777
+        rec["is_world_readable"] = bool(mode & stat.S_IROTH)
+        rec["is_group_readable"] = bool(mode & stat.S_IRGRP)
+        rec["owner_uid_matches_current"] = st.st_uid == os.getuid()
+
+        if schema_mode == "shape_only" and path.endswith(".json"):
+            rec.update(_inspect_json_shape(path))
+        elif schema_mode == "line_count_only":
+            rec["line_count_non_comment"] = _count_non_comment_lines(path)
+
+    return records
+
+
+def _inspect_json_shape(path: str) -> Dict[str, Any]:
+    """
+    Read a JSON credential file and extract ONLY structural metadata.
+    Top-level key names, value types, and string lengths. NEVER captures
+    actual secret values — this is the shape_only policy.
+    """
+    result: Dict[str, Any] = {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        result["_shape_error"] = "parse_failed"
+        return result
+
+    if not isinstance(data, dict):
+        return result
+
+    shape: Dict[str, str] = {}
+    for k, v in data.items():
+        if isinstance(v, dict):
+            shape[k] = "dict(%d keys)" % len(v)
+        elif isinstance(v, list):
+            shape[k] = "list(%d items)" % len(v)
+        elif isinstance(v, str):
+            shape[k] = "str(len=%d)" % len(v)
+        elif v is None:
+            shape[k] = "null"
+        else:
+            shape[k] = type(v).__name__
+    result["json_shape"] = shape
+
+    # Codex-specific enrichment: auth_mode and staleness
+    auth_mode = data.get("auth_mode")
+    if isinstance(auth_mode, str):
+        result["auth_mode"] = auth_mode
+        risk_weights = {"apikey": "high", "chatgpt": "medium"}
+        result["auth_mode_risk_weight"] = risk_weights.get(auth_mode, "low")
+
+    last_refresh = data.get("last_refresh")
+    if isinstance(last_refresh, str):
+        result["token_last_refresh_iso"] = last_refresh
+        try:
+            from datetime import datetime as _dt
+
+            lr = _dt.fromisoformat(last_refresh.replace("Z", "+00:00"))
+            days = (datetime.now(timezone.utc) - lr).days
+            result["staleness_days"] = max(0, days)
+        except (ValueError, TypeError):
+            pass
+
+    return result
+
+
+def _count_non_comment_lines(path: str) -> int:
+    """Count non-empty, non-comment lines in a file (for .env files)."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return sum(
+                1
+                for line in f
+                if line.strip() and not line.strip().startswith("#")
+            )
+    except OSError:
+        return 0
+
+
+def walk_shadow_surfaces(
+    eco_key: str,
+    eco_config: Dict[str, Any],
+    env: Dict[str, str],
+    walk_depth_cap: int = 8,
+) -> List[Dict[str, Any]]:
+    """
+    Enumerate shadow surfaces (backups, caches, session DBs, file history).
+    Reports existence and stat metadata only — does not read contents.
+    Default scans skip this walker; opt-in via --include-shadows.
+    """
+    shadow_cfg = eco_config.get("shadow_surfaces") or {}
+    records: List[Dict[str, Any]] = []
+    seen = set()
+
+    for tpl in shadow_cfg.get("globs", []) or []:
+        if not isinstance(tpl, str):
+            continue
+        for match in safe_resolve_glob(tpl, env, walk_depth_cap):
+            if match not in seen:
+                seen.add(match)
+                st = _safe_stat(match)
+                rec = {"path": normalize_text(match)}
+                if st:
+                    rec["size_bytes"] = st.st_size
+                    rec["last_modified_iso"] = _iso_mtime(st)
+                    rec["is_dir"] = stat.S_ISDIR(st.st_mode)
+                records.append(rec)
+
+    for tpl in shadow_cfg.get("walk_dirs", []) or []:
+        if not isinstance(tpl, str):
+            continue
+        resolved = expand_env_vars(tpl, env)
+        if os.path.isdir(resolved) and resolved not in seen:
+            seen.add(resolved)
+            st = _safe_stat(resolved)
+            rec = {"path": normalize_text(resolved), "is_dir": True}
+            if st:
+                rec["last_modified_iso"] = _iso_mtime(st)
+            records.append(rec)
+
+    return records
+
+
+def evaluate_cross_tool_iocs(
+    config: Dict[str, Any],
+    detected_ecosystems: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """
+    Evaluate cross-tool IOC rules against the set of detected ecosystems.
+    Returns a list of triggered IOC records. Deterministic, no LLM.
+    """
+    detected_keys = {e["key"] for e in detected_ecosystems if e["detected"]}
+    triggered: List[Dict[str, Any]] = []
+
+    for ioc in config.get("cross_tool_iocs", []):
+        conditions = ioc.get("trigger_conditions", [])
+        all_met = True
+        for cond in conditions:
+            if not isinstance(cond, dict):
+                all_met = False
+                break
+            for key, required_val in cond.items():
+                # key format: eco_name_installed (e.g. codex_installed)
+                eco_name = key.replace("_installed", "")
+                if required_val is True and eco_name not in detected_keys:
+                    all_met = False
+                elif required_val is False and eco_name in detected_keys:
+                    all_met = False
+        if all_met:
+            triggered.append({
+                "id": ioc.get("id"),
+                "title": ioc.get("title"),
+                "severity": ioc.get("severity"),
+                "affected_file": ioc.get("affected_file"),
+                "reference": ioc.get("reference"),
+            })
+
+    return triggered
+
+
+def find_cross_ecosystem_agents_md(
+    detected_ecosystems: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """
+    Surface AGENTS.md files found across multiple ecosystems for
+    cross-ecosystem coordination risk analysis.
+    """
+    agents_md_records: List[Dict[str, Any]] = []
+    for eco in detected_ecosystems:
+        if not eco["detected"]:
+            continue
+        surfaces = eco.get("surfaces", {})
+        for surface_name in ("memory", "brain_files"):
+            for rec in surfaces.get(surface_name, []):
+                path = rec.get("path", "")
+                if os.path.basename(path) == "AGENTS.md":
+                    agents_md_records.append({
+                        "ecosystem": eco["key"],
+                        "path": path,
+                        "size_bytes": rec.get("size_bytes", 0),
+                    })
+    return agents_md_records
+
+
 # ---------------------------------------------------------------------------
-# Inventory assembly (skeleton — walkers land in later commits)
+# Inventory assembly
 # ---------------------------------------------------------------------------
 
 
@@ -671,13 +1132,11 @@ def build_inventory(
     config: Optional[Dict[str, Any]] = None,
     env: Optional[Dict[str, str]] = None,
     target_override: Optional[str] = None,
+    include_shadows: bool = False,
 ) -> Dict[str, Any]:
     """
     Build a structured inventory of the user's AI-agent stack.
-
-    For each detected ecosystem, walkers populate the `surfaces` subtree
-    with structured records (currently: skills). Additional surface walkers
-    land in subsequent commits.
+    Walks all six surface domains for each detected ecosystem.
     """
     if config is None:
         config = load_ecosystem_roots()
@@ -687,7 +1146,8 @@ def build_inventory(
     detected = detect_ecosystems(config, env=env, target_override=target_override)
     walk_cap = int(config.get("invariants", {}).get("walk_depth_cap", 8))
 
-    # Walk every surface domain for each detected ecosystem
+    shadow_all: Dict[str, List[Dict[str, Any]]] = {}
+
     for eco_record in detected:
         if not eco_record["detected"]:
             eco_record["surfaces"] = {}
@@ -696,11 +1156,47 @@ def build_inventory(
         eco_config = config["ecosystems"][eco_key]
         eco_env = _resolve_env_for_ecosystem(eco_config, env)
 
+        # Inject workspace for OpenClaw templates
+        workspace_path = _resolve_workspace_path(eco_config, eco_env)
+        if workspace_path:
+            eco_env["workspace"] = workspace_path
+
         surfaces: Dict[str, Any] = {}
         surfaces["skills"] = walk_skills_surface(
             eco_key, eco_config, eco_env, walk_depth_cap=walk_cap
         )
+        cam = walk_commands_agents_memory(
+            eco_key, eco_config, eco_env, walk_depth_cap=walk_cap
+        )
+        surfaces["commands"] = cam.get("commands", [])
+        surfaces["agents"] = cam.get("agents", [])
+        surfaces["memory"] = cam.get("memory", [])
+        surfaces["brain_files"] = cam.get("brain_files", [])
+        surfaces["hooks"] = walk_hooks_surface(
+            eco_key, eco_config, eco_env, walk_depth_cap=walk_cap
+        )
+        surfaces["mcp"] = walk_mcp_surface(
+            eco_key, eco_config, eco_env, walk_depth_cap=walk_cap
+        )
+        surfaces["plugins"] = walk_plugins_surface(
+            eco_key, eco_config, eco_env, walk_depth_cap=walk_cap
+        )
+        surfaces["settings"] = walk_settings_surface(
+            eco_config, eco_env, walk_depth_cap=walk_cap
+        )
+        surfaces["credentials"] = walk_credentials_surface(
+            eco_key, eco_config, eco_env, walk_depth_cap=walk_cap
+        )
         eco_record["surfaces"] = surfaces
+
+        if include_shadows:
+            shadow_all[eco_key] = walk_shadow_surfaces(
+                eco_key, eco_config, eco_env, walk_depth_cap=walk_cap
+            )
+
+    # Cross-ecosystem analysis
+    iocs = evaluate_cross_tool_iocs(config, detected)
+    agents_md = find_cross_ecosystem_agents_md(detected)
 
     return {
         "schema_version": SCHEMA_VERSION,
@@ -708,10 +1204,10 @@ def build_inventory(
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "invariants": config.get("invariants", {}),
         "ecosystems": detected,
-        "shadow_surfaces": {},  # populated by walker layer
+        "shadow_surfaces": shadow_all,
         "cross_ecosystem": {
-            "agents_md": [],
-            "iocs": [],
+            "agents_md": agents_md,
+            "iocs": iocs,
         },
     }
 
@@ -741,6 +1237,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         "suitable for shell scripting.",
     )
     parser.add_argument(
+        "--include-shadows",
+        action="store_true",
+        help="Include shadow surfaces (backups, caches, session DBs) in "
+        "the inventory. Off by default to preserve signal-to-noise.",
+    )
+    parser.add_argument(
         "--config",
         type=str,
         default=None,
@@ -750,7 +1252,11 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     config_path = Path(args.config) if args.config else None
     config = load_ecosystem_roots(config_path)
-    inventory = build_inventory(config=config, target_override=args.target)
+    inventory = build_inventory(
+        config=config,
+        target_override=args.target,
+        include_shadows=args.include_shadows,
+    )
 
     if args.list_ecosystems:
         for eco in inventory["ecosystems"]:
