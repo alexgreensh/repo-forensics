@@ -1,8 +1,6 @@
 {
   "name": "repo-forensics",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "description": "Auto-scan repositories and packages for security threats on install/clone",
-  "author": "Alex Greenshpun",
-  "hooks": "hooks/hooks.json",
-  "entrypoint": "skill/SKILL.md"
+  "author": "Alex Greenshpun"
 }

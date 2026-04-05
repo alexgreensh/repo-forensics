@@ -1,12 +1,27 @@
 {
-  "hooks": [
-    {
-      "event": "PostToolUse",
-      "matcher": {
-        "tool_name": "Bash"
-      },
-      "script": "skill/scripts/auto_scan.py",
-      "timeout": 30000
-    }
-  ]
+  "description": "repo-forensics PostToolUse auto-scan for install/clone commands + first-run auto-update nudge at SessionStart",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/skill/scripts/auto_scan.py\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/first-run-nudge.sh\""
+          }
+        ]
+      }
+    ]
+  }
 }
