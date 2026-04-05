@@ -35,10 +35,16 @@
     "scripts/scan_sast.py": "d8664253c5bd112042357f396041bd745801e137bdc19675d3426452f20ac24a",
     "scripts/scan_secrets.py": "fc11ac9d5a3b076e11d17641813d2e437c1a39ed327ebf3bee1ccf5ef575e05c",
     "scripts/scan_skill_threats.py": "73ae9041ebc43ef130b3f870afcc540256b610a18a2bcab4488202b60b31ed71",
-    "scripts/verify_install.py": "5cb66eb81d1ceb21489f4336599411a5f438267c12cbab06e690c449474e18b6"
+    "scripts/verify_install.py": "293cc37587bf289ed368338fcddbea77f60edf8ec4fb7a92069b3de3c59527b9"
   },
   "repo_symlinks": {
     "skill": "skills/repo-forensics"
   },
-  "symlink_count": 1
+  "symlink_count": 1,
+  "repo_hooks": {
+    "hooks/first-run-nudge.sh": "11028502673771799de560a0c2f857194564f208322ce9cdd7243f795dde2937",
+    "hooks/hooks.json": "0112cf51ea3a4df507df688da77eb3f298901e581263c3458b24b3017affbee4",
+    "hooks/run_auto_scan.sh": "c2d171acd564f5c1c911242f5ae44368260ce3fe627faee5f2e5cb43478139ac"
+  },
+  "hook_count": 3
 }

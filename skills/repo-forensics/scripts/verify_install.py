@@ -42,6 +42,39 @@ def get_repo_root(skill_root):
     return os.path.dirname(os.path.dirname(skill_root))
 
 
+def get_tracked_hook_files(repo_root):
+    """Get load-bearing hook scripts at the repo-root hooks/ directory.
+
+    These files live outside skill_root and are invisible to
+    get_tracked_files, but they are invoked by the plugin's hooks.json at
+    runtime. If an attacker tampers with hooks/first-run-nudge.sh or
+    hooks/run_auto_scan.sh, the checksum registry (scoped to skill_root)
+    would not detect the tamper.
+
+    This function enumerates files in the repo-root hooks/ directory so
+    their content hashes can be included in checksums.json under a
+    separate repo_hooks field. Same rationale as get_tracked_symlinks:
+    every load-bearing file invoked by the plugin manifest must be in
+    the integrity registry, even if it lives outside skill_root.
+    """
+    hooks_dir = os.path.join(repo_root, "hooks")
+    if not os.path.isdir(hooks_dir):
+        return []
+
+    tracked = []
+    skip_files = {'.DS_Store'}
+    for entry in sorted(os.listdir(hooks_dir)):
+        full_path = os.path.join(hooks_dir, entry)
+        if not os.path.isfile(full_path):
+            continue
+        if os.path.islink(full_path):
+            continue
+        if entry in skip_files:
+            continue
+        tracked.append(f"hooks/{entry}")
+    return tracked
+
+
 def get_tracked_symlinks(repo_root, skill_root):
     """Get top-level repo symlinks whose targets point into skill_root.
 
@@ -104,7 +137,7 @@ def get_tracked_files(skill_root):
 
 
 def generate_checksums(skill_root):
-    """Generate checksums.json for all skill files + root-level symlinks."""
+    """Generate checksums.json for skill files + root symlinks + repo hooks."""
     files = get_tracked_files(skill_root)
     checksums = {}
     for rel in files:
@@ -113,6 +146,16 @@ def generate_checksums(skill_root):
 
     repo_root = get_repo_root(skill_root)
     symlinks = get_tracked_symlinks(repo_root, skill_root)
+
+    # Hash repo-root hook scripts that the plugin manifest invokes. These
+    # files live outside skill_root but are load-bearing — tampering would
+    # compromise the plugin without being detected by the skill-local
+    # integrity check.
+    hook_files = get_tracked_hook_files(repo_root)
+    hook_checksums = {}
+    for rel in hook_files:
+        fp = os.path.join(repo_root, rel)
+        hook_checksums[rel] = sha256_file(fp)
 
     output = {
         'version': '2',
@@ -123,14 +166,22 @@ def generate_checksums(skill_root):
     if symlinks:
         output['repo_symlinks'] = symlinks
         output['symlink_count'] = len(symlinks)
+    if hook_checksums:
+        output['repo_hooks'] = hook_checksums
+        output['hook_count'] = len(hook_checksums)
 
     out_path = os.path.join(skill_root, 'checksums.json')
     with open(out_path, 'w', encoding='utf-8') as f:
         json.dump(output, f, indent=2)
         f.write('\n')
 
-    symlink_msg = f" + {len(symlinks)} symlinks" if symlinks else ""
-    print(f"[+] Generated checksums.json: {len(checksums)} files tracked{symlink_msg}")
+    extras = []
+    if symlinks:
+        extras.append(f"{len(symlinks)} symlinks")
+    if hook_checksums:
+        extras.append(f"{len(hook_checksums)} hook files")
+    extras_msg = f" + {' + '.join(extras)}" if extras else ""
+    print(f"[+] Generated checksums.json: {len(checksums)} files tracked{extras_msg}")
     return out_path
 
 
@@ -185,12 +236,35 @@ def verify_checksums(skill_root):
         extra.append(rel)
         report.append(f"  NEW FILE: {rel} (not in checksums.json)")
 
+    # Check repo-level hook files against manifest. Load-bearing hook
+    # scripts at the repo-root hooks/ directory live outside skill_root but
+    # are invoked by plugin manifest at runtime. Tampering would compromise
+    # the plugin without being detected by the skill-local check.
+    expected_hooks = data.get('repo_hooks', {})
+    repo_root = get_repo_root(skill_root)
+    tampered_hooks = []
+    missing_hooks = []
+    for rel, expected_hash in expected_hooks.items():
+        fp = os.path.realpath(os.path.join(repo_root, rel))
+        repo_root_real = os.path.realpath(repo_root)
+        if not fp.startswith(repo_root_real + os.sep):
+            tampered_hooks.append(rel)
+            report.append(f"  HOOK REJECTED: {rel} (path traversal attempt)")
+            continue
+        actual_hash = sha256_file(fp)
+        if actual_hash is None:
+            missing_hooks.append(rel)
+            report.append(f"  HOOK MISSING: {rel} (not found on disk)")
+            continue
+        if actual_hash != expected_hash:
+            tampered_hooks.append(rel)
+            report.append(f"  HOOK TAMPERED: {rel} (expected {expected_hash[:12]}..., got {actual_hash[:12]}...)")
+
     # Check repo-level symlinks against manifest. Caught by torture-room
     # security-sentinel Finding 3 — the backward-compat skill symlink at
     # repo root points into skills/repo-forensics/, but it lives outside
     # skill_root and would otherwise be invisible to verification.
     expected_symlinks = data.get('repo_symlinks', {})
-    repo_root = get_repo_root(skill_root)
     current_symlinks = get_tracked_symlinks(repo_root, skill_root)
 
     tampered_symlinks = []
@@ -214,14 +288,19 @@ def verify_checksums(skill_root):
         report.append(f"  NEW SYMLINK: {name} -> {current_symlinks[name]} (not in checksums.json)")
 
     # Summary
-    all_tampered = len(tampered) + len(tampered_symlinks)
-    all_missing = len(missing) + len(missing_symlinks)
+    all_tampered = len(tampered) + len(tampered_symlinks) + len(tampered_hooks)
+    all_missing = len(missing) + len(missing_symlinks) + len(missing_hooks)
     all_extra = len(extra) + len(extra_symlinks)
     passed = all_tampered == 0 and all_missing == 0
-    total_tracked = len(expected) + len(expected_symlinks)
+    total_tracked = len(expected) + len(expected_symlinks) + len(expected_hooks)
     if passed and all_extra == 0:
-        symlink_note = f" (+{len(expected_symlinks)} symlinks)" if expected_symlinks else ""
-        report.insert(0, f"[+] VERIFIED: All {len(expected)} files{symlink_note} match checksums.json (v{data.get('version', '?')})")
+        extras_note = []
+        if expected_symlinks:
+            extras_note.append(f"{len(expected_symlinks)} symlinks")
+        if expected_hooks:
+            extras_note.append(f"{len(expected_hooks)} hooks")
+        extras_str = f" (+{', '.join(extras_note)})" if extras_note else ""
+        report.insert(0, f"[+] VERIFIED: All {len(expected)} files{extras_str} match checksums.json (v{data.get('version', '?')})")
     elif passed:
         report.insert(0, f"[~] PARTIAL: All {total_tracked} tracked entries OK, but {all_extra} untracked entry/entries found")
     else:
