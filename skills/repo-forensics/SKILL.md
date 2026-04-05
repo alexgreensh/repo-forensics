@@ -56,7 +56,7 @@ Full audit (all 17 scanners):
 ./scripts/run_forensics.sh /path/to/repo
 ```
 
-Focused AI skill scan (8 scanners, faster):
+Focused AI skill scan (9 scanners, faster):
 ```bash
 ./scripts/run_forensics.sh /path/to/repo --skill-scan
 ```
