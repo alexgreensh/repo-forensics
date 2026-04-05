@@ -341,13 +341,190 @@ class TestBuildInventoryWithSurfaces:
 # ---------------------------------------------------------------------------
 
 
+class TestCommandsAgentsMemoryWalker:
+    def test_commands_and_agents_enumerated(self, tmp_path):
+        claude = tmp_path / ".claude"
+        cmds = claude / "commands"
+        cmds.mkdir(parents=True)
+        (cmds / "review.md").write_text("# review")
+        (cmds / "deploy.md").write_text("# deploy")
+        agents = claude / "agents"
+        agents.mkdir()
+        (agents / "coder.md").write_text("# coder")
+        (claude / "settings.json").write_text("{}")
+
+        config = load_ecosystem_roots()
+        env = {"HOME": str(tmp_path)}
+        from build_inventory import walk_commands_agents_memory, _resolve_env_for_ecosystem
+
+        eco_cfg = config["ecosystems"]["claude_code"]
+        eco_env = _resolve_env_for_ecosystem(eco_cfg, env)
+        result = walk_commands_agents_memory("claude_code", eco_cfg, eco_env)
+        assert len(result["commands"]) == 2
+        assert len(result["agents"]) == 1
+
+    def test_memory_files_found(self, tmp_path):
+        claude = tmp_path / ".claude"
+        claude.mkdir()
+        (claude / "CLAUDE.md").write_text("# global memory")
+        proj = claude / "projects" / "test" / "memory"
+        proj.mkdir(parents=True)
+        (proj / "MEMORY.md").write_text("# project memory")
+
+        config = load_ecosystem_roots()
+        env = {"HOME": str(tmp_path)}
+        from build_inventory import walk_commands_agents_memory, _resolve_env_for_ecosystem
+
+        eco_cfg = config["ecosystems"]["claude_code"]
+        eco_env = _resolve_env_for_ecosystem(eco_cfg, env)
+        result = walk_commands_agents_memory("claude_code", eco_cfg, eco_env)
+        assert len(result["memory"]) >= 1
+
+
+class TestHooksWalker:
+    def test_hooks_with_symlinks(self, tmp_path):
+        claude = tmp_path / ".claude"
+        hooks = claude / "hooks"
+        hooks.mkdir(parents=True)
+        real = tmp_path / "external" / "guard.sh"
+        real.parent.mkdir()
+        real.write_text("#!/bin/sh\necho guard")
+        link = hooks / "guard.sh"
+        link.symlink_to(real)
+
+        config = load_ecosystem_roots()
+        env = {"HOME": str(tmp_path)}
+        from build_inventory import walk_hooks_surface, _resolve_env_for_ecosystem
+
+        eco_cfg = config["ecosystems"]["claude_code"]
+        eco_env = _resolve_env_for_ecosystem(eco_cfg, env)
+        records = walk_hooks_surface("claude_code", eco_cfg, eco_env)
+        sym_records = [r for r in records if r.get("is_symlink")]
+        assert len(sym_records) >= 1
+        assert sym_records[0]["symlink_target"] == str(real.resolve())
+
+
+class TestMCPWalker:
+    def test_json_mcp_server_count(self, tmp_path):
+        claude_json = tmp_path / ".claude.json"
+        claude_json.write_text(json.dumps({
+            "mcpServers": {"fs": {}, "github": {}, "slack": {}}
+        }))
+
+        config = load_ecosystem_roots()
+        env = {"HOME": str(tmp_path)}
+        from build_inventory import walk_mcp_surface, _resolve_env_for_ecosystem
+
+        eco_cfg = config["ecosystems"]["claude_code"]
+        eco_env = _resolve_env_for_ecosystem(eco_cfg, env)
+        records = walk_mcp_surface("claude_code", eco_cfg, eco_env)
+        json_rec = next((r for r in records if r["path"].endswith(".claude.json")), None)
+        assert json_rec is not None
+        assert json_rec["mcp_server_count"] == 3
+
+    def test_toml_mcp_server_count(self, tmp_path):
+        codex_dir = tmp_path / ".codex"
+        codex_dir.mkdir()
+        (codex_dir / "config.toml").write_text(
+            '[mcp_servers.filesystem]\ncommand = "npx"\n\n'
+            '[mcp_servers.github]\ncommand = "npx"\n'
+        )
+        config = load_ecosystem_roots()
+        env = {"HOME": str(tmp_path)}
+        from build_inventory import walk_mcp_surface, _resolve_env_for_ecosystem
+
+        eco_cfg = config["ecosystems"]["codex"]
+        eco_env = _resolve_env_for_ecosystem(eco_cfg, env)
+        records = walk_mcp_surface("codex", eco_cfg, eco_env)
+        toml_rec = next((r for r in records if r["path"].endswith("config.toml")), None)
+        assert toml_rec is not None
+        assert toml_rec["mcp_server_count"] == 2
+
+
+class TestCredentialsWalker:
+    def test_auth_json_shape_inspection(self, tmp_path):
+        codex_dir = tmp_path / ".codex"
+        codex_dir.mkdir()
+        auth = codex_dir / "auth.json"
+        auth.write_text(json.dumps({
+            "auth_mode": "chatgpt",
+            "OPENAI_API_KEY": None,
+            "tokens": {"access_token": "x" * 100, "refresh_token": "y" * 50},
+            "last_refresh": "2026-04-01T12:00:00+00:00",
+        }))
+        os.chmod(str(auth), 0o600)
+
+        config = load_ecosystem_roots()
+        env = {"HOME": str(tmp_path)}
+        from build_inventory import walk_credentials_surface, _resolve_env_for_ecosystem
+
+        eco_cfg = config["ecosystems"]["codex"]
+        eco_env = _resolve_env_for_ecosystem(eco_cfg, env)
+        records = walk_credentials_surface("codex", eco_cfg, eco_env)
+        assert len(records) == 1
+        rec = records[0]
+        assert rec["auth_mode"] == "chatgpt"
+        assert rec["auth_mode_risk_weight"] == "medium"
+        assert rec["is_world_readable"] is False
+        assert "json_shape" in rec
+        # Shape must NOT contain actual token values
+        shape = rec["json_shape"]
+        assert "x" * 100 not in str(shape)
+        assert shape["tokens"] == "dict(2 keys)"
+
+    def test_world_readable_flagged(self, tmp_path):
+        codex_dir = tmp_path / ".codex"
+        codex_dir.mkdir()
+        auth = codex_dir / "auth.json"
+        auth.write_text(json.dumps({"auth_mode": "apikey", "OPENAI_API_KEY": "sk-test"}))
+        os.chmod(str(auth), 0o644)  # world-readable = bad
+
+        config = load_ecosystem_roots()
+        env = {"HOME": str(tmp_path)}
+        from build_inventory import walk_credentials_surface, _resolve_env_for_ecosystem
+
+        eco_cfg = config["ecosystems"]["codex"]
+        eco_env = _resolve_env_for_ecosystem(eco_cfg, env)
+        records = walk_credentials_surface("codex", eco_cfg, eco_env)
+        assert len(records) == 1
+        assert records[0]["is_world_readable"] is True
+        assert records[0]["auth_mode_risk_weight"] == "high"
+
+
+class TestCrossToolIOCs:
+    def test_ioc_fires_when_both_installed(self, tmp_path):
+        (tmp_path / ".claude").mkdir()
+        (tmp_path / ".claude" / "settings.json").write_text("{}")
+        (tmp_path / ".codex").mkdir()
+        (tmp_path / ".codex" / "config.toml").write_text("")
+        (tmp_path / ".agents" / "skills").mkdir(parents=True)
+
+        inv = build_inventory_fn(env={"HOME": str(tmp_path)})
+        iocs = inv["cross_ecosystem"]["iocs"]
+        assert len(iocs) >= 1
+        assert iocs[0]["id"] == "openai/codex#54506"
+        assert iocs[0]["severity"] == "high"
+
+    def test_ioc_does_not_fire_without_openclaw(self, tmp_path):
+        (tmp_path / ".codex").mkdir()
+        (tmp_path / ".codex" / "config.toml").write_text("")
+
+        inv = build_inventory_fn(env={"HOME": str(tmp_path)})
+        iocs = inv["cross_ecosystem"]["iocs"]
+        assert len(iocs) == 0
+
+
 class TestRealFilesystemWalkerSmoke:
-    def test_walker_runs_against_real_home_without_crashing(self):
+    def test_all_surfaces_populated_for_detected_ecosystems(self):
         inv = build_inventory_fn()
+        expected_surface_keys = {
+            "skills", "commands", "agents", "memory", "brain_files",
+            "hooks", "mcp", "plugins", "settings", "credentials",
+        }
         for eco in inv["ecosystems"]:
             if eco["detected"]:
                 assert "surfaces" in eco
-                # skills field must exist and be a list (possibly empty)
-                assert isinstance(eco["surfaces"].get("skills", []), list)
-        # Entire inventory must still be JSON-serializable
+                assert expected_surface_keys.issubset(set(eco["surfaces"].keys()))
+                for surface_name, surface_data in eco["surfaces"].items():
+                    assert isinstance(surface_data, list)
         json.dumps(inv)
