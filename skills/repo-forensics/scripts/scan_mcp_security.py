@@ -23,9 +23,37 @@ Created by Alex Greenshpun
 import os
 import re
 import sys
+import unicodedata
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import forensics_core as core
+
+
+def _normalize_for_keyword_match(text):
+    """Normalize text before substring matching against TOOL_INJECTION_KEYWORDS.
+
+    Two transformations, both required to prevent trivial bypasses:
+
+    1. Unicode NFKC normalization. Folds compatibility characters to their
+       canonical ASCII-ish equivalents so e.g. full-width Latin letters,
+       ligatures, and compatibility forms collapse to their base characters.
+       Without this, attackers can smuggle injection payloads past ASCII
+       keyword matches using visually identical Unicode variants.
+
+    2. Whitespace collapse. The keyword list contains anchored phrases like
+       "send to http" and "send credentials to" that require specific space
+       placement. Attackers can substitute ASCII spaces with non-breaking
+       space (U+00A0), narrow no-break space (U+202F), ideographic space
+       (U+3000), or any other Unicode whitespace to evade detection while
+       retaining visual identity for human readers. Collapsing all Unicode
+       whitespace runs to a single ASCII space defeats this class of bypass.
+
+    Case folding happens via .lower() AFTER normalization since NFKC can
+    change the casing of some compatibility characters.
+    """
+    normalized = unicodedata.normalize("NFKC", text)
+    collapsed = re.sub(r"\s+", " ", normalized)
+    return collapsed.lower()
 
 SCANNER_NAME = "mcp_security"
 
@@ -186,7 +214,7 @@ def scan_tool_metadata_poisoning(content, rel_path, ext):
 
     # Check description/title/summary fields
     for m in main_pattern.finditer(content):
-        field_value = m.group(1).lower()
+        field_value = _normalize_for_keyword_match(m.group(1))
         for keyword in TOOL_INJECTION_KEYWORDS:
             if keyword in field_value:
                 line_no = content[:m.start()].count('\n') + 1
@@ -203,7 +231,7 @@ def scan_tool_metadata_poisoning(content, rel_path, ext):
     # Check name fields for injection (FSP — shorter but still loaded into context)
     if ext == '.json':
         for m in TOOL_NAME_PATTERN.finditer(content):
-            name_val = m.group(1).lower()
+            name_val = _normalize_for_keyword_match(m.group(1))
             for keyword in TOOL_INJECTION_KEYWORDS:
                 if keyword in name_val:
                     line_no = content[:m.start()].count('\n') + 1
