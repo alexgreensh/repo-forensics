@@ -26,6 +26,3 @@ CHANGELOG.md
 # CLA workflow has a legitimate bot-signing webhook the scanner mis-flags
 # as install-time exfiltration (lifecycle + network keyword co-occurrence).
 .github/workflows/cla.yml
-
-# GitHub Action (controlled input interpolation)
-action.yml

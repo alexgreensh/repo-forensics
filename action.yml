@@ -59,20 +59,28 @@ runs:
           SCAN_PATH="$WORKSPACE"
         fi
 
-        ARGS=""
+        # Build argv as a bash array so every element is passed as a single
+        # argv entry. Previous versions used string concatenation + unquoted
+        # $ARGS expansion, which word-split on whitespace — an untrusted
+        # INPUT_FORMAT value like 'json --extra-flag=/etc/passwd' would
+        # inject additional scanner flags when CI workflows wire any
+        # untrusted source (issue body, PR title, workflow_dispatch input)
+        # into the format: input. The array form makes every element one
+        # argv entry regardless of embedded whitespace.
+        ARGS=()
         if [ "$INPUT_MODE" = "skill-scan" ]; then
-          ARGS="$ARGS --skill-scan"
+          ARGS+=("--skill-scan")
         fi
-        ARGS="$ARGS --format $INPUT_FORMAT"
+        ARGS+=("--format" "$INPUT_FORMAT")
         if [ "$INPUT_UPDATE_IOCS" = "true" ]; then
-          ARGS="$ARGS --update-iocs"
+          ARGS+=("--update-iocs")
         fi
         if [ "$INPUT_WATCH" = "true" ]; then
-          ARGS="$ARGS --watch"
+          ARGS+=("--watch")
         fi
 
         set +e
-        bash "$ACTION_PATH/skills/repo-forensics/scripts/run_forensics.sh" "$SCAN_PATH" $ARGS
+        bash "$ACTION_PATH/skills/repo-forensics/scripts/run_forensics.sh" "$SCAN_PATH" "${ARGS[@]}"
         EXIT_CODE=$?
         set -e
 
