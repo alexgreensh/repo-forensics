@@ -9,15 +9,16 @@ skills/forensify/
 ├── SKILL.md                        # Skill manifest, invocation contract
 ├── README.md                       # (this file)
 ├── config/
-│   ├── ecosystem_roots.yaml        # Canonical agent-stack root paths per ecosystem
-│   └── scanner_safety.yaml         # Per-scanner safety audit (lands in Session 3)
+│   ├── ecosystem_roots.json        # Canonical agent-stack root paths per ecosystem (stdlib-parseable)
+│   ├── ecosystem_roots.md          # Rationale, provenance, and schema invariants
+│   └── scanner_safety.json         # Per-scanner safety audit (lands in Session 3)
 ├── domains/
-│   ├── skills.yaml                 # Domain 1 — Skills surface filters
-│   ├── mcp.yaml                    # Domain 2 — MCP surface filters
-│   ├── hooks.yaml                  # Domain 3 — Hooks & auto-execution
-│   ├── plugins.yaml                # Domain 4 — Plugins & marketplace trust chain
-│   ├── commands.yaml               # Domain 5 — Commands, agents, memory, config
-│   └── credentials.yaml            # Domain 6 — Credentials & permissions
+│   ├── skills.json                 # Domain 1 — Skills surface filters
+│   ├── mcp.json                    # Domain 2 — MCP surface filters
+│   ├── hooks.json                  # Domain 3 — Hooks & auto-execution
+│   ├── plugins.json                # Domain 4 — Plugins & marketplace trust chain
+│   ├── commands.json               # Domain 5 — Commands, agents, memory, config
+│   └── credentials.json            # Domain 6 — Credentials & permissions
 ├── orchestrator/
 │   ├── scanner_driver.py           # scan → parse → dedupe → cap
 │   ├── analysis_dispatcher.py      # inventory → spawn → poll domain sub-agents
@@ -50,6 +51,7 @@ Full architecture in `plans/forensify.md` (955 lines, reviewed twice). Cross-age
 
 ## Key invariants
 
+- **Zero external dependencies.** Config files are JSON, parsed by `json` (stdlib). No PyYAML, no tomllib version constraint, no pip install. Preserves repo-forensics' trust promise.
 - **Read-only at runtime.** macOS Seatbelt sandbox profile for sub-agents. No writes outside the coord folder.
 - **Credentials are structured metadata.** Never read values. `auth_mode`, `file_mode_octal`, `staleness_days`, `known_cross_tool_contention` — all derived from `stat()` and JSON shape inspection.
 - **NFKC + bidi-override rejection** on every string that enters the inventory output.

@@ -1,0 +1,501 @@
+{
+  "schema_version": 1,
+  "version": "0.1.0",
+  "generated_for": "forensify v0.1",
+  "invariants": {
+    "path_normalization": "NFKC",
+    "bidi_override_policy": "reject",
+    "symlink_resolution": "realpath_before_hash",
+    "walk_depth_cap": 8,
+    "follow_symlinks_outside_root": true,
+    "credential_value_reads": "forbidden",
+    "shadow_surfaces_in_default_scan": false
+  },
+  "cross_ecosystem_conventions": {
+    "agents_md": {
+      "filename": "AGENTS.md",
+      "used_by": [
+        "claude_code",
+        "codex",
+        "openclaw"
+      ],
+      "purpose": "agent_instructions",
+      "report_under": "memory"
+    }
+  },
+  "cross_tool_iocs": [
+    {
+      "id": "openai/codex#54506",
+      "title": "OpenClaw models status overwrites fresh Codex OAuth credentials",
+      "affected_file": "~/.codex/auth.json",
+      "trigger_conditions": [
+        {
+          "codex_installed": true
+        },
+        {
+          "openclaw_installed": true
+        }
+      ],
+      "severity": "high",
+      "reference": "https://github.com/openclaw/openclaw/issues/54506",
+      "detection_logic": "If ~/.codex/auth.json exists AND ~/.openclaw/ has an active install\n(openclaw.json present OR ~/.agents/skills/ populated), emit a finding\nwith severity=high pointing to the upstream bug. Does not read token\nvalues \u2014 the presence of both installs is sufficient signal for the\nknown exploit vector.\n"
+    }
+  ],
+  "ecosystems": {
+    "claude_code": {
+      "display_name": "Claude Code",
+      "vendor": "Anthropic",
+      "docs_url": "https://docs.anthropic.com/claude/docs/claude-code",
+      "detection": {
+        "kind": "dotfolder",
+        "roots": [
+          "~/.claude",
+          "~/.claude.json"
+        ],
+        "required_signals_any": [
+          "~/.claude/CLAUDE.md",
+          "~/.claude/settings.json",
+          "~/.claude.json"
+        ]
+      },
+      "surfaces": {
+        "skills": {
+          "globs": [
+            "~/.claude/skills/*/SKILL.md",
+            "~/.claude/plugins/*/skills/*/SKILL.md",
+            "~/.claude/plugins/*/plugins/*/skills/*/SKILL.md"
+          ]
+        },
+        "agents": {
+          "globs": [
+            "~/.claude/agents/*.md",
+            "~/.claude/plugins/*/agents/*.md"
+          ]
+        },
+        "commands": {
+          "globs": [
+            "~/.claude/commands/**/*.md",
+            "~/.claude/plugins/*/commands/**/*.md"
+          ]
+        },
+        "hooks": {
+          "files": [
+            "~/.claude/settings.json",
+            "~/.claude/plugins/*/hooks/hooks.json"
+          ],
+          "walk_dirs": [
+            "~/.claude/hooks/"
+          ],
+          "realpath_required": true
+        },
+        "mcp": {
+          "files": [
+            "~/.claude.json",
+            "~/.claude/settings.json",
+            "~/.claude/plugins/*/.mcp.json"
+          ]
+        },
+        "plugins": {
+          "files": [
+            "~/.claude/plugins/installed_plugins.json",
+            "~/.claude/plugins/known_marketplaces.json",
+            "~/.claude/plugins/blocklist.json"
+          ],
+          "walk_dirs": [
+            "~/.claude/plugins/marketplaces/"
+          ]
+        },
+        "commands_and_memory": {
+          "memory_files": [
+            "~/.claude/CLAUDE.md",
+            "~/.claude/projects/*/memory/MEMORY.md"
+          ],
+          "brain_files": [
+            "~/.claude/AGENTS.md"
+          ]
+        },
+        "settings": {
+          "files": [
+            "~/.claude/settings.json"
+          ]
+        },
+        "credentials": {
+          "soft_paths": [
+            "~/.claude/anthropic*",
+            "~/.claude/*credentials*"
+          ]
+        }
+      },
+      "shadow_surfaces": {
+        "globs": [
+          "~/.claude-backup-*",
+          "~/.claude.full_backup_*",
+          "~/.claude.json.backup",
+          "~/.claude/backups/",
+          "~/.claude/_backups/",
+          "~/.claude/debug/",
+          "~/.claude/file-history/",
+          "~/.claude/cache/",
+          "~/.claude/downloads/"
+        ]
+      }
+    },
+    "codex": {
+      "display_name": "Codex CLI",
+      "vendor": "OpenAI",
+      "docs_url": "https://developers.openai.com/codex/",
+      "detection": {
+        "kind": "dotfolder",
+        "env_overrides": [
+          {
+            "name": "CODEX_HOME",
+            "default": "~/.codex"
+          }
+        ],
+        "roots": [
+          "${CODEX_HOME}"
+        ],
+        "required_signals_any": [
+          "${CODEX_HOME}/config.toml",
+          "${CODEX_HOME}/auth.json",
+          "${CODEX_HOME}/AGENTS.md"
+        ]
+      },
+      "surfaces": {
+        "skills": {
+          "globs": [
+            "${CODEX_HOME}/skills/*/SKILL.md"
+          ]
+        },
+        "agents": {
+          "globs": [
+            "${CODEX_HOME}/agents/*.md"
+          ]
+        },
+        "commands": {
+          "globs": [
+            "${CODEX_HOME}/commands/**/*.md"
+          ]
+        },
+        "prompts": {
+          "globs": [
+            "${CODEX_HOME}/prompts/**/*"
+          ]
+        },
+        "rules": {
+          "globs": [
+            "${CODEX_HOME}/rules/**/*"
+          ]
+        },
+        "hooks": {
+          "files": [
+            "${CODEX_HOME}/config.toml"
+          ],
+          "parse_as": "toml",
+          "extract_keys": [
+            "approval_policy",
+            "sandbox_mode"
+          ]
+        },
+        "mcp": {
+          "files": [
+            "${CODEX_HOME}/config.toml"
+          ],
+          "parse_as": "toml",
+          "extract_keys": [
+            "mcp_servers.*"
+          ]
+        },
+        "plugins": {
+          "globs": [
+            "${CODEX_HOME}/plugins/**/.codex-plugin/plugin.json"
+          ]
+        },
+        "commands_and_memory": {
+          "memory_files": [
+            "${CODEX_HOME}/AGENTS.md",
+            "${CODEX_HOME}/memories/**/*"
+          ],
+          "brain_files": [
+            "${CODEX_HOME}/AGENTS.md"
+          ]
+        },
+        "settings": {
+          "files": [
+            "${CODEX_HOME}/config.toml",
+            "${CODEX_HOME}/.codex-global-state.json"
+          ]
+        },
+        "credentials": {
+          "files": [
+            "${CODEX_HOME}/auth.json"
+          ],
+          "schema_inspection": "shape_only",
+          "metadata_fields": [
+            "file_mode_octal",
+            "is_world_readable",
+            "is_group_readable",
+            "owner_uid_matches_current",
+            "size_bytes",
+            "last_modified_iso",
+            "auth_mode",
+            "token_last_refresh_iso",
+            "staleness_days"
+          ],
+          "auth_mode_risk_weights": {
+            "apikey": "high",
+            "chatgpt": "medium",
+            "null": "low"
+          }
+        }
+      },
+      "shadow_surfaces": {
+        "globs": [
+          "${CODEX_HOME}/config.toml.bak.*",
+          "${CODEX_HOME}/logs_*.sqlite",
+          "${CODEX_HOME}/logs_*.sqlite-shm",
+          "${CODEX_HOME}/logs_*.sqlite-wal",
+          "${CODEX_HOME}/state_*.sqlite",
+          "${CODEX_HOME}/sessions/",
+          "${CODEX_HOME}/shell_snapshots/",
+          "${CODEX_HOME}/cache/",
+          "${CODEX_HOME}/.tmp/",
+          "${CODEX_HOME}/tmp/",
+          "${CODEX_HOME}/vendor_imports/",
+          "${CODEX_HOME}/sqlite/"
+        ]
+      }
+    },
+    "openclaw": {
+      "display_name": "OpenClaw",
+      "vendor": "Steipete / Worth A Try LLC",
+      "docs_url": "https://docs.openclaw.ai",
+      "detection": {
+        "kind": "dotfolder",
+        "env_overrides": [
+          {
+            "name": "OPENCLAW_PROFILE",
+            "affects": "workspace_suffix"
+          }
+        ],
+        "roots": [
+          "~/.openclaw",
+          "~/.agents"
+        ],
+        "required_signals_any": [
+          "~/.openclaw/openclaw.json",
+          "~/.openclaw/workspace/AGENTS.md",
+          "~/.agents/skills"
+        ]
+      },
+      "workspace": {
+        "default_path": "~/.openclaw/workspace",
+        "profile_env": "OPENCLAW_PROFILE",
+        "config_override_path": "~/.openclaw/openclaw.json",
+        "config_override_key": "agent.workspace"
+      },
+      "surfaces": {
+        "skills": {
+          "precedence_chain": [
+            "${workspace}/skills/*/SKILL.md",
+            "${workspace}/.agents/skills/*/SKILL.md",
+            "~/.agents/skills/*/SKILL.md",
+            "~/.openclaw/skills/*/SKILL.md"
+          ]
+        },
+        "agents": {
+          "globs": [
+            "~/.openclaw/agents/*/*.md"
+          ]
+        },
+        "commands": {
+          "globs": [
+            "${workspace}/commands/**/*"
+          ]
+        },
+        "brain_files": {
+          "files": [
+            "${workspace}/AGENTS.md",
+            "${workspace}/SOUL.md",
+            "${workspace}/USER.md",
+            "${workspace}/IDENTITY.md",
+            "${workspace}/TOOLS.md",
+            "${workspace}/HEARTBEAT.md",
+            "${workspace}/BOOT.md"
+          ]
+        },
+        "memory": {
+          "files": [
+            "${workspace}/MEMORY.md"
+          ],
+          "globs": [
+            "${workspace}/memory/*.md"
+          ]
+        },
+        "hooks": {
+          "files": [
+            "~/.openclaw/openclaw.json"
+          ],
+          "parse_as": "json",
+          "extract_keys": [
+            "hooks",
+            "agents.defaults.hooks"
+          ]
+        },
+        "mcp": {
+          "files": [
+            "~/.openclaw/openclaw.json"
+          ],
+          "parse_as": "json",
+          "extract_keys": [
+            "mcp",
+            "agents.defaults.mcp"
+          ]
+        },
+        "plugins": {
+          "globs": [
+            "~/.openclaw/plugins/*/openclaw.plugin.json"
+          ]
+        },
+        "settings": {
+          "files": [
+            "~/.openclaw/openclaw.json"
+          ]
+        },
+        "credentials": {
+          "walk_dirs": [
+            "~/.openclaw/credentials/"
+          ],
+          "schema_inspection": "shape_only",
+          "metadata_fields": [
+            "file_mode_octal",
+            "is_world_readable",
+            "is_group_readable",
+            "owner_uid_matches_current",
+            "size_bytes",
+            "last_modified_iso"
+          ]
+        },
+        "canvas": {
+          "globs": [
+            "${workspace}/canvas/**/*"
+          ]
+        }
+      },
+      "shadow_surfaces": {
+        "walk_dirs": [
+          "~/.openclaw/agents/*/sessions/",
+          "~/.openclaw/cache/",
+          "~/.openclaw/tmp/"
+        ]
+      }
+    },
+    "nanoclaw": {
+      "display_name": "NanoClaw",
+      "vendor": "qwibitai",
+      "docs_url": "https://docs.nanoclaw.dev",
+      "detection": {
+        "kind": "git_repo_signature",
+        "env_overrides": [
+          {
+            "name": "NANOCLAW_DIR",
+            "role": "primary_path_override"
+          }
+        ],
+        "common_paths": [
+          "~/NanoClaw",
+          "~/nanoclaw",
+          "~/code/nanoclaw",
+          "~/code/NanoClaw",
+          "~/CascadeProjects/*nanoclaw*",
+          "~/CascadeProjects/*NanoClaw*",
+          "~/projects/nanoclaw",
+          "~/projects/NanoClaw"
+        ],
+        "signature_files_all": [
+          "scripts/claw",
+          "container/skills",
+          "package.json"
+        ],
+        "signature_content_any": [
+          "\"name\":\\s*\"nanoclaw",
+          "nanoclaw-agent"
+        ],
+        "walk_depth_cap": 3
+      },
+      "surfaces": {
+        "operational_skills": {
+          "globs": [
+            "${root}/.claude/skills/*/SKILL.md"
+          ]
+        },
+        "container_skills": {
+          "globs": [
+            "${root}/container/skills/*/SKILL.md"
+          ]
+        },
+        "utility_skills": {
+          "globs": [
+            "${root}/.claude/skills/*/scripts/**/*"
+          ]
+        },
+        "hooks": {
+          "files": []
+        },
+        "mcp": {
+          "files": [
+            "${root}/.mcp.json"
+          ],
+          "globs": [
+            "${root}/container/**/mcp*.json"
+          ]
+        },
+        "plugins": {
+          "files": [
+            "${root}/package.json"
+          ]
+        },
+        "commands": {
+          "globs": [
+            "${root}/.claude/commands/*.md"
+          ]
+        },
+        "settings": {
+          "files": [
+            "${root}/package.json",
+            "${root}/.env.example"
+          ]
+        },
+        "credentials": {
+          "files": [
+            "${root}/.env"
+          ],
+          "schema_inspection": "line_count_only",
+          "metadata_fields": [
+            "file_mode_octal",
+            "is_world_readable",
+            "is_group_readable",
+            "size_bytes",
+            "last_modified_iso",
+            "line_count_non_comment"
+          ]
+        },
+        "database": {
+          "globs": [
+            "${root}/*.db",
+            "${root}/*.sqlite"
+          ],
+          "schema_inspection": "stat_only"
+        }
+      },
+      "shadow_surfaces": {
+        "globs": [
+          "${root}/node_modules/",
+          "${root}/dist/",
+          "${root}/build/",
+          "${root}/.next/"
+        ]
+      }
+    }
+  }
+}
