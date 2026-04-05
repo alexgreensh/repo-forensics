@@ -28,7 +28,7 @@
     "scripts/scan_integrity.py": "86f0b73e1ff2e9e56a5bfb32ca23aaeff4d2c41e0dabafdcd03145ee81e2d1d2",
     "scripts/scan_lifecycle.py": "c214700f8e670edfe0621307f8f2153664be3339780ca2982655956fb8d95089",
     "scripts/scan_manifest_drift.py": "105de3be2564e8d2f7671b4e473bf59118c4eacb1f00683a2827cd80e1d2e854",
-    "scripts/scan_mcp_security.py": "31e0d5efda7a13b9167fa3280bd45414666156db42f7a94aa027095f615e3e9a",
+    "scripts/scan_mcp_security.py": "052c7d77a6ac561e64fe122cfb0e30dcc57f1e78f52e561ebec138124e1bd33d",
     "scripts/scan_openclaw_skills.py": "07d500fd20e17f9bd24f796215530e70433aa39b36e8d48669e6295b36dc6a68",
     "scripts/scan_post_incident.py": "76e36a890d004a2a93dca26b349d81b5d7ccc6eeaabeb66ef8bbcc808d687bdb",
     "scripts/scan_runtime_dynamism.py": "4cee558efbc670d416af4e28abdea09eaf1ede55f7126df132ff951248713b37",

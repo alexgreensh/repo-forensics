@@ -84,8 +84,8 @@ TOOL_INJECTION_KEYWORDS = [
     "ignore previous", "ignore all previous", "disregard",
     "you are now", "do not ask", "silently execute",
     "never reveal", "override safety", "new system prompt",
-    "forget everything", "act as if you have no", "from now on",
-    "your new instructions", "always remember", "you must always",
+    "forget everything", "act as if you have no",
+    "your new instructions",
     # Invariant Labs canonical patterns (2026)
     "<important>", "note to the ai", "note to claude", "note to llm",
     "read ~/.ssh", "cat ~/.ssh",
@@ -97,8 +97,36 @@ TOOL_INJECTION_KEYWORDS = [
     "send to http", "send to ftp", "send to webhook",
     "send credentials to", "send data to http",
     "post to http", "exfiltrate",
-    "when using this tool", "when calling this tool", "before using",
+    #
+    # REMOVED 2026-04-05 (torture-room pattern-recognition Finding 3):
+    #
+    # "from now on", "always remember", "you must always"
+    #   → moved to PROMPT_INJECTION_IMPERATIVE_REGEX below, which requires
+    #     an attack verb (ignore|execute|send|cat|read|write|override|etc.)
+    #     within 50 characters. As bare substrings these phrases triggered
+    #     on benign instruction text like "From now on, the tool returns
+    #     JSON" or "Always remember to pass a valid API key" — same false
+    #     positive class as Issue #9.
+    #
+    # "when using this tool", "when calling this tool", "before using"
+    #   → already covered by TOOL_SHADOWING_PATTERNS regex at a stricter
+    #     anchor ("when using" + action verb within 60 chars). As bare
+    #     substrings they fired on every well-documented MCP/LangChain/
+    #     Flowise tool description that mentions usage instructions.
+    #     Pure deduplication — no recall loss.
 ]
+
+# Prompt-injection imperatives that are too common in benign documentation
+# as bare substrings but become highly specific when followed by an attack
+# verb within a tight window. Added 2026-04-05 per torture-room review.
+PROMPT_INJECTION_IMPERATIVE_REGEX = re.compile(
+    r'\b(from now on|always remember|you must always)\b'
+    r'[,.\s]*'
+    r'.{0,60}?'
+    r'\b(ignore|execute|send|cat|read|write|override|forget|reveal|'
+    r'disregard|bypass|disable|leak|exfiltrate|exec|eval|shell)\b',
+    re.IGNORECASE | re.DOTALL
+)
 
 # Broader exfil verb pattern — catches verb-substitution bypasses of the
 # keyword list (caught by torture-room security review 2026-04-05). The
@@ -250,6 +278,29 @@ def scan_tool_metadata_poisoning(content, rel_path, ext):
                 ))
                 keyword_hit = True
                 break  # One finding per matched field block
+
+        # Anchored prompt-injection imperative regex. Catches "from now on",
+        # "always remember", "you must always" followed by an attack verb
+        # within 60 chars. These were previously bare keyword substrings,
+        # which fired on benign instruction text. The regex anchor restricts
+        # to the genuinely malicious forms.
+        if not keyword_hit:
+            imperative_match = PROMPT_INJECTION_IMPERATIVE_REGEX.search(field_value)
+            if imperative_match:
+                line_no = content[:m.start()].count('\n') + 1
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="critical",
+                    title="Tool Metadata Poisoning",
+                    description=(
+                        f"Prompt injection imperative '{imperative_match.group(1)}' "
+                        f"followed by attack verb '{imperative_match.group(2)}' in "
+                        f"tool schema field"
+                    ),
+                    file=rel_path, line=line_no,
+                    snippet=m.group(0)[:120],
+                    category="tool-poisoning"
+                ))
+                keyword_hit = True
 
         # Broader verb-substitution exfil pattern — only if no keyword
         # already flagged the field (avoid double-counting the same issue).
