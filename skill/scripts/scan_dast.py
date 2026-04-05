@@ -42,7 +42,8 @@ SCANNER_NAME = "dast"
 EXEC_TIMEOUT = 5  # seconds
 MAX_OUTPUT_BYTES = 1024 * 100  # 100KB - anything more is amplification
 
-# macOS Seatbelt sandbox profile (denies network + restricts filesystem to /tmp)
+# macOS Seatbelt sandbox profile (denies network + /Users read/write,
+# re-allows reads on the specific hook script via HOOK_PATH/HOOK_DIR -D params)
 SANDBOX_PROFILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'dast_sandbox.sb')
 SANDBOX_AVAILABLE = os.path.exists('/usr/bin/sandbox-exec') and os.path.exists(SANDBOX_PROFILE)
 
@@ -212,9 +213,17 @@ def execute_hook_with_payload(hook, payload, repo_path):
     else:
         exec_cmd = [script_path]
 
-    # Wrap in macOS Seatbelt sandbox (denies network, restricts filesystem to /tmp)
+    # Wrap in macOS Seatbelt sandbox. The profile denies /Users reads broadly;
+    # -D params re-allow reads on the specific hook script path so bash can
+    # actually load it (without this, every /Users-hosted hook silently fails).
     if SANDBOX_AVAILABLE:
-        exec_cmd = ['/usr/bin/sandbox-exec', '-f', SANDBOX_PROFILE] + exec_cmd
+        hook_real = os.path.realpath(script_path)
+        exec_cmd = [
+            '/usr/bin/sandbox-exec',
+            '-D', f'HOOK_PATH={hook_real}',
+            '-D', f'HOOK_DIR={os.path.dirname(hook_real)}',
+            '-f', SANDBOX_PROFILE,
+        ] + exec_cmd
 
     start = time.monotonic()
     try:

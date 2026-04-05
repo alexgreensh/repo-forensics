@@ -7,8 +7,13 @@
 ;; Deny all network access — prevents data exfiltration
 (deny network*)
 
-;; Deny reading user home directories — prevents credential/config theft
+;; Deny reading user home directories — prevents credential/config theft.
+;; BUT re-allow reads on the specific hook script being tested, otherwise
+;; bash cannot open it and the scanner silently fails. HOOK_PATH and HOOK_DIR
+;; are passed via `sandbox-exec -D` parameters.
 (deny file-read* (subpath "/Users"))
+(allow file-read* (literal (param "HOOK_PATH")))
+(allow file-read* (subpath (param "HOOK_DIR")))
 
 ;; Deny writing to user home directories — prevents persistence
 (deny file-write* (subpath "/Users"))
