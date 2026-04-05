@@ -60,7 +60,15 @@ TOOL_INJECTION_KEYWORDS = [
     "your new instructions", "always remember", "you must always",
     # Invariant Labs canonical patterns (2026)
     "<important>", "note to the ai", "note to claude", "note to llm",
-    "read ~/.ssh", "cat ~/.ssh", "send to", "post to http", "exfiltrate",
+    "read ~/.ssh", "cat ~/.ssh",
+    # Network exfiltration targets — anchored to URL schemes and credential
+    # targets so benign English ("send to the GPU", "send to the server",
+    # "send to the queue") does not false-positive. Issue #9 (marcgadsdon,
+    # 2026-04-05): bare "send to" substring cascaded into compound criticals
+    # in Flowise's Ollama parameter descriptions.
+    "send to http", "send to ftp", "send to webhook",
+    "send credentials to", "send data to http",
+    "post to http", "exfiltrate",
     "when using this tool", "when calling this tool", "before using",
 ]
 
