@@ -1,5 +1,6 @@
 {
-  "name": "repo-forensics-marketplace",
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "alexgreensh-repo-forensics",
   "owner": {
     "name": "Alex Greenshpun",
     "url": "https://github.com/alexgreensh"
