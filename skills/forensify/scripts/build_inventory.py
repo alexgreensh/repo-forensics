@@ -34,6 +34,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import glob as glob_module
 import json
 import os
 import stat
@@ -357,6 +358,311 @@ def _path_contains(parent: str, candidate: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Path primitives
+# ---------------------------------------------------------------------------
+
+
+def _safe_stat(path: str) -> Optional[os.stat_result]:
+    """
+    stat(path) with exception swallowing. Returns None if the file is gone,
+    unreadable, or stat fails for any reason. Callers must handle None.
+    """
+    try:
+        return os.stat(path, follow_symlinks=True)
+    except (OSError, ValueError):
+        return None
+
+
+def _safe_lstat(path: str) -> Optional[os.stat_result]:
+    """lstat without following symlinks. Used to detect symlink targets."""
+    try:
+        return os.lstat(path)
+    except (OSError, ValueError):
+        return None
+
+
+def _iso_mtime(st: os.stat_result) -> str:
+    """Convert a stat_result's mtime to an ISO-8601 UTC timestamp."""
+    return datetime.fromtimestamp(st.st_mtime, tz=timezone.utc).isoformat(
+        timespec="seconds"
+    )
+
+
+def _path_depth_under(path: str, root: str) -> int:
+    """
+    Return how many path segments `path` sits below `root`. A file directly
+    inside root returns 1. Used to enforce walk_depth_cap.
+    """
+    try:
+        rel = os.path.relpath(path, root)
+    except ValueError:
+        return -1
+    if rel == "." or rel.startswith(".."):
+        return 0
+    return rel.count(os.sep) + 1
+
+
+def safe_resolve_glob(
+    template: str,
+    env: Dict[str, str],
+    walk_depth_cap: int = 8,
+) -> List[str]:
+    """
+    Expand a glob template (with env var and ~ substitution) and return the
+    list of matching paths. Results are NFKC-normalized, deduplicated, sorted
+    for stable output, and filtered to stay inside the walk_depth_cap from
+    the nearest concrete ancestor.
+
+    Templates may contain `*` (single segment), `**` (recursive), and `?`.
+    Uses glob.glob(recursive=True) from the stdlib — no external dependency.
+
+    The walk_depth_cap enforcement is defense-in-depth: even if a user points
+    --target at `/` or a symlink cycle exists under their home, the glob
+    will not return paths more than `walk_depth_cap` segments deep beneath
+    the first wildcard-free prefix of the template.
+    """
+    expanded = expand_env_vars(template, env)
+
+    # Find the non-wildcard prefix so we can enforce walk_depth_cap against it.
+    first_wildcard = len(expanded)
+    for marker in ("*", "?", "["):
+        idx = expanded.find(marker)
+        if idx != -1 and idx < first_wildcard:
+            first_wildcard = idx
+    prefix = expanded[:first_wildcard]
+    # Round prefix back to the nearest path separator so we do not split a
+    # directory name in half when a wildcard sits mid-segment.
+    if os.sep in prefix:
+        prefix = prefix.rsplit(os.sep, 1)[0]
+
+    try:
+        raw_matches = glob_module.glob(expanded, recursive=True)
+    except (OSError, ValueError):
+        return []
+
+    out: List[str] = []
+    seen = set()
+    for match in raw_matches:
+        try:
+            normalized = normalize_text(match)
+        except BidiOverrideRejected:
+            # A bidi-override filename on disk is itself a finding — skip it
+            # from the clean inventory and rely on the shadow surface layer
+            # (landing in a later commit) to report it.
+            continue
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+
+        # Walk depth cap enforcement
+        if prefix:
+            depth = _path_depth_under(normalized, prefix)
+            if depth > walk_depth_cap:
+                continue
+
+        out.append(normalized)
+
+    out.sort()
+    return out
+
+
+def _file_record(path: str, root_for_relative: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Build a uniform inventory record for a single file path.
+
+    Returns:
+        dict with normalized path, relative_path (if root given), size_bytes,
+        last_modified_iso, is_symlink, symlink_target (realpath if symlinked
+        outside root, else null), file_mode_octal.
+
+    Returns a minimal record with `_error` set if stat fails.
+    """
+    normalized = normalize_text(path)
+    st = _safe_stat(normalized)
+    if st is None:
+        return {"path": normalized, "_error": "stat_failed"}
+
+    lst = _safe_lstat(normalized)
+    is_symlink = bool(lst and stat.S_ISLNK(lst.st_mode))
+    symlink_target: Optional[str] = None
+    if is_symlink:
+        try:
+            target = os.path.realpath(normalized)
+            symlink_target = normalize_text(target)
+        except (OSError, ValueError):
+            symlink_target = None
+
+    record: Dict[str, Any] = {
+        "path": normalized,
+        "size_bytes": st.st_size,
+        "last_modified_iso": _iso_mtime(st),
+        "is_symlink": is_symlink,
+        "file_mode_octal": "0o%o" % (st.st_mode & 0o777),
+    }
+
+    if root_for_relative:
+        try:
+            rel = os.path.relpath(normalized, normalize_text(root_for_relative))
+            record["relative_path"] = normalize_text(rel)
+        except ValueError:
+            pass
+
+    if symlink_target:
+        record["symlink_target"] = symlink_target
+
+    return record
+
+
+# ---------------------------------------------------------------------------
+# Surface walkers
+# ---------------------------------------------------------------------------
+
+
+def _collect_glob_templates(
+    surface_config: Dict[str, Any],
+) -> List[Tuple[str, Optional[int]]]:
+    """
+    Extract glob templates from a surface config dict, handling both
+    `globs` (flat list) and `precedence_chain` (ordered list with implicit
+    precedence rank). Returns a list of (template, precedence_rank) tuples
+    where precedence_rank is None for flat globs and 0..N-1 for chain entries.
+    """
+    out: List[Tuple[str, Optional[int]]] = []
+    for tpl in surface_config.get("globs", []) or []:
+        if isinstance(tpl, str):
+            out.append((tpl, None))
+    for idx, tpl in enumerate(surface_config.get("precedence_chain", []) or []):
+        if isinstance(tpl, str):
+            out.append((tpl, idx))
+    return out
+
+
+def _resolve_workspace_path(
+    eco_config: Dict[str, Any], env: Dict[str, str]
+) -> Optional[str]:
+    """
+    Resolve OpenClaw's workspace path honoring the profile env var and the
+    openclaw.json config override. For other ecosystems (no `workspace`
+    block), returns None.
+
+    This is called by walkers that need to substitute ${workspace} into
+    glob templates.
+    """
+    ws = eco_config.get("workspace")
+    if not ws:
+        return None
+
+    default_path = ws.get("default_path", "")
+    profile_env_name = ws.get("profile_env")
+
+    # Profile suffix handling: if OPENCLAW_PROFILE is set and not "default",
+    # the workspace becomes workspace-<profile>. Matches docs.openclaw.ai
+    # and openclawplaybook.ai documentation.
+    if profile_env_name and profile_env_name in env:
+        profile_value = env[profile_env_name]
+        if profile_value and profile_value != "default":
+            default_path = default_path + "-" + profile_value
+
+    # openclaw.json override: if present AND has the override key, it wins.
+    # This is a best-effort read — we fail open if the file does not parse
+    # so walker behavior matches detection behavior for corrupted configs.
+    override_path = ws.get("config_override_path")
+    override_key = ws.get("config_override_key")
+    if override_path and override_key:
+        try:
+            with open(expand_env_vars(override_path, env), "r", encoding="utf-8") as f:
+                oc_config = json.load(f)
+            val = _get_dotted(oc_config, override_key)
+            if isinstance(val, str) and val:
+                default_path = val
+        except (OSError, json.JSONDecodeError, ValueError):
+            pass
+
+    return expand_env_vars(default_path, env) if default_path else None
+
+
+def _get_dotted(obj: Any, key: str) -> Any:
+    """Safely read a dotted key path from a nested dict. Returns None on miss."""
+    parts = key.split(".")
+    cur = obj
+    for p in parts:
+        if not isinstance(cur, dict):
+            return None
+        cur = cur.get(p)
+        if cur is None:
+            return None
+    return cur
+
+
+def walk_skills_surface(
+    eco_key: str,
+    eco_config: Dict[str, Any],
+    env: Dict[str, str],
+    walk_depth_cap: int = 8,
+) -> List[Dict[str, Any]]:
+    """
+    Enumerate every skill under a detected ecosystem.
+
+    For Claude Code and Codex: walks `surfaces.skills.globs`.
+    For OpenClaw: walks `surfaces.skills.precedence_chain` and decorates
+      each record with `precedence_rank` (lower = higher precedence).
+    For NanoClaw: walks all three skill subcategories (operational,
+      container, utility) if the ecosystem was detected via signature scan.
+      Signature detection lands in a later commit; until then this returns
+      an empty list for NanoClaw.
+
+    Each record:
+      path, size_bytes, last_modified_iso, is_symlink, symlink_target,
+      file_mode_octal, relative_path (when a root is known),
+      skill_name (parent directory name for SKILL.md files),
+      precedence_rank (OpenClaw only).
+    """
+    surfaces = eco_config.get("surfaces", {})
+    records: List[Dict[str, Any]] = []
+
+    # Resolve ${workspace} for OpenClaw before expanding templates
+    workspace_env = dict(env)
+    workspace_path = _resolve_workspace_path(eco_config, env)
+    if workspace_path:
+        workspace_env["workspace"] = workspace_path
+
+    skills_cfg = surfaces.get("skills") or {}
+
+    for template, precedence_rank in _collect_glob_templates(skills_cfg):
+        matches = safe_resolve_glob(template, workspace_env, walk_depth_cap)
+        for match in matches:
+            # For SKILL.md templates, derive skill_name from parent directory
+            record = _file_record(match)
+            parent = os.path.basename(os.path.dirname(match))
+            if parent:
+                record["skill_name"] = normalize_text(parent)
+            if precedence_rank is not None:
+                record["precedence_rank"] = precedence_rank
+                record["precedence_source"] = template
+            records.append(record)
+
+    # NanoClaw uses a different schema layout — separate keys per skill type
+    # rather than a flat skills/globs block. Walk them if present.
+    for alt_key in ("operational_skills", "container_skills", "utility_skills"):
+        alt_cfg = surfaces.get(alt_key)
+        if not alt_cfg:
+            continue
+        for template in alt_cfg.get("globs", []) or []:
+            if not isinstance(template, str):
+                continue
+            matches = safe_resolve_glob(template, workspace_env, walk_depth_cap)
+            for match in matches:
+                record = _file_record(match)
+                parent = os.path.basename(os.path.dirname(match))
+                if parent:
+                    record["skill_name"] = normalize_text(parent)
+                record["skill_subtype"] = alt_key
+                records.append(record)
+
+    return records
+
+
+# ---------------------------------------------------------------------------
 # Inventory assembly (skeleton — walkers land in later commits)
 # ---------------------------------------------------------------------------
 
@@ -369,10 +675,9 @@ def build_inventory(
     """
     Build a structured inventory of the user's AI-agent stack.
 
-    This skeleton emits the top-level shape and ecosystem detection results.
-    Per-surface walkers (skills, MCP, hooks, plugins, commands, credentials)
-    land in subsequent commits and populate the `ecosystems[*].surfaces`
-    subtree.
+    For each detected ecosystem, walkers populate the `surfaces` subtree
+    with structured records (currently: skills). Additional surface walkers
+    land in subsequent commits.
     """
     if config is None:
         config = load_ecosystem_roots()
@@ -380,6 +685,22 @@ def build_inventory(
         env = dict(os.environ)
 
     detected = detect_ecosystems(config, env=env, target_override=target_override)
+    walk_cap = int(config.get("invariants", {}).get("walk_depth_cap", 8))
+
+    # Walk every surface domain for each detected ecosystem
+    for eco_record in detected:
+        if not eco_record["detected"]:
+            eco_record["surfaces"] = {}
+            continue
+        eco_key = eco_record["key"]
+        eco_config = config["ecosystems"][eco_key]
+        eco_env = _resolve_env_for_ecosystem(eco_config, env)
+
+        surfaces: Dict[str, Any] = {}
+        surfaces["skills"] = walk_skills_surface(
+            eco_key, eco_config, eco_env, walk_depth_cap=walk_cap
+        )
+        eco_record["surfaces"] = surfaces
 
     return {
         "schema_version": SCHEMA_VERSION,
