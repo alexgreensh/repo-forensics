@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/skill/scripts/auto_scan.py\"",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/skills/repo-forensics/scripts/auto_scan.py\"",
             "timeout": 30
           }
         ]

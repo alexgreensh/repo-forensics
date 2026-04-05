@@ -1,21 +1,21 @@
 # Test fixtures contain intentionally malicious patterns for scanner validation
-skill/tests/*
+skills/repo-forensics/tests/*
 
 # Integrity checksums (SHA256 hashes trigger entropy scanner)
-skill/checksums.json
+skills/repo-forensics/checksums.json
 
 # Threat pattern references (documentation describes the attacks we detect)
-skill/references/*.md
+skills/repo-forensics/references/*.md
 
 # Scanner scripts and core (contain regex patterns for the attacks they detect)
-skill/scripts/scan_*.py
-skill/scripts/parse_pnpm_lock.py
-skill/scripts/aggregate_json.py
-skill/scripts/forensics_core.py
-skill/scripts/ioc_manager.py
+skills/repo-forensics/scripts/scan_*.py
+skills/repo-forensics/scripts/parse_pnpm_lock.py
+skills/repo-forensics/scripts/aggregate_json.py
+skills/repo-forensics/scripts/forensics_core.py
+skills/repo-forensics/scripts/ioc_manager.py
 
 # SKILL.md (documents the attack types we catch)
-skill/SKILL.md
+skills/repo-forensics/SKILL.md
 
 # README describes the attack types we detect — without this, the newly
 # wired correlation engine flags meta-documentation as install-time exfil.
