@@ -254,6 +254,75 @@ def _check_signal_exists(path: str) -> bool:
         return False
 
 
+def _detect_git_repo_signature(
+    detection: Dict[str, Any],
+    env: Dict[str, str],
+) -> Optional[str]:
+    """
+    Locate a git-cloned agent install (NanoClaw) by walking:
+      1. env var override (NANOCLAW_DIR)
+      2. common clone paths with glob expansion
+      3. signature file verification on each candidate
+
+    Returns the first confirmed install path, or None.
+    Walk depth is bounded by detection.walk_depth_cap (default 3).
+    """
+    import re as _re
+
+    walk_cap = int(detection.get("walk_depth_cap", 3))
+    sig_files = detection.get("signature_files_all") or []
+    sig_content = detection.get("signature_content_any") or []
+
+    def _is_valid_install(candidate: str) -> bool:
+        """Check if candidate contains ALL signature files and at least one
+        content match in package.json."""
+        for sf in sig_files:
+            target = os.path.join(candidate, sf)
+            if not os.path.exists(target):
+                return False
+        # Content check: at least one pattern must match in package.json
+        if sig_content:
+            pkg = os.path.join(candidate, "package.json")
+            try:
+                with open(pkg, "r", encoding="utf-8") as f:
+                    content = f.read(4096)  # first 4KB is enough
+            except OSError:
+                return False
+            if not any(_re.search(pat, content) for pat in sig_content):
+                return False
+        return True
+
+    # 1. Env var override
+    for override in detection.get("env_overrides", []):
+        if not isinstance(override, dict):
+            continue
+        var_name = override.get("name")
+        if var_name and var_name in env:
+            candidate = expand_env_vars(env[var_name], env)
+            if os.path.isdir(candidate) and _is_valid_install(candidate):
+                return candidate
+
+    # 2. Common paths with bounded glob
+    for path_tpl in detection.get("common_paths", []):
+        if not isinstance(path_tpl, str):
+            continue
+        expanded = expand_env_vars(path_tpl, env)
+        # If the template contains wildcards, glob; otherwise check directly
+        if "*" in expanded or "?" in expanded:
+            try:
+                candidates = glob_module.glob(expanded)
+            except (OSError, ValueError):
+                candidates = []
+            for c in candidates[:10]:  # cap candidates to avoid runaway
+                if os.path.isdir(c) and _is_valid_install(c):
+                    return normalize_text(c)
+        else:
+            if os.path.isdir(expanded) and _is_valid_install(expanded):
+                return normalize_text(expanded)
+
+    return None
+
+
 def detect_ecosystems(
     config: Dict[str, Any],
     env: Optional[Dict[str, str]] = None,
@@ -298,23 +367,13 @@ def detect_ecosystems(
             if _check_signal_exists(resolved):
                 matched_signals.append(resolved)
 
-        # Signature-based detection (NanoClaw) is a separate code path that
-        # will land in a subsequent commit alongside the NanoClaw walker.
-        # For now, git_repo_signature ecosystems report detected=False unless
-        # an env var override points at a real directory.
+        # Signature-based detection (NanoClaw): walk env var, common paths,
+        # and signature files to locate git-cloned installs.
         if kind == "git_repo_signature":
-            env_var_names = [
-                o.get("name")
-                for o in detection.get("env_overrides", [])
-                if isinstance(o, dict) and o.get("role") == "primary_path_override"
-            ]
-            for var_name in env_var_names:
-                if var_name and var_name in env:
-                    candidate = expand_env_vars(env[var_name], effective_env)
-                    if os.path.isdir(candidate):
-                        resolved_roots.append(candidate)
-                        matched_signals.append(candidate)
-                        break
+            found_root = _detect_git_repo_signature(detection, effective_env)
+            if found_root:
+                resolved_roots.append(found_root)
+                matched_signals.append(found_root)
 
         detected = len(matched_signals) > 0
 
@@ -1160,6 +1219,12 @@ def build_inventory(
         workspace_path = _resolve_workspace_path(eco_config, eco_env)
         if workspace_path:
             eco_env["workspace"] = workspace_path
+
+        # Inject root for NanoClaw (git_repo_signature): resolved_roots[0]
+        # is the detected install directory, used by ${root} templates
+        if eco_record.get("detection_kind") == "git_repo_signature":
+            if eco_record["resolved_roots"]:
+                eco_env["root"] = eco_record["resolved_roots"][0]
 
         surfaces: Dict[str, Any] = {}
         surfaces["skills"] = walk_skills_surface(

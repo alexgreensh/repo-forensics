@@ -1,0 +1,8 @@
+{
+  "domain": "mcp",
+  "display_name": "MCP Surface",
+  "description": "MCP server configurations across Claude Code, Codex, and plugin-provided servers. Rug pull enablers, tool poisoning, env var exposure.",
+  "scanners": ["scan_mcp_security", "scan_dataflow", "scan_secrets"],
+  "inventory_surfaces": ["mcp"],
+  "cross_ecosystem_awareness": ["shared_mcp_across_stacks"]
+}

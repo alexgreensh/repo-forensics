@@ -117,6 +117,25 @@ elif command -v gtimeout >/dev/null 2>&1; then
     TIMEOUT_CMD="gtimeout"
 fi
 
+# TTY autodetect for per-scanner progress lines
+PROGRESS=false
+if [ -t 2 ] && [ "$FORMAT" != "json" ]; then
+    PROGRESS=true
+fi
+
+# Staleness detection for Path B (git-clone) users
+STALENESS_DAYS=30
+if [ -d "$SKILL_DIR/.git" ] || [ -f "$SKILL_DIR/../../.git" ] || [ -f "$SKILL_DIR/../../../.git" ]; then
+    LAST_COMMIT_DATE=$(git -C "$SKILL_DIR" log -1 --format=%ct 2>/dev/null || echo "0")
+    NOW=$(date +%s)
+    if [ "$LAST_COMMIT_DATE" -gt 0 ]; then
+        AGE_DAYS=$(( (NOW - LAST_COMMIT_DATE) / 86400 ))
+        if [ "$AGE_DAYS" -ge "$STALENESS_DAYS" ]; then
+            echo "[repo-forensics] Install is ${AGE_DAYS} days old. Run 'git pull' for latest IOCs and detection rules." >&2
+        fi
+    fi
+fi
+
 run_scanner() {
     local name="$1"
     local script="$2"
@@ -124,33 +143,45 @@ run_scanner() {
     local output_file="$TMPDIR/$name.out"
     local exit_file="$TMPDIR/$name.exit"
     local error_file="$TMPDIR/$name.err"
+    local start_time
+    start_time=$(date +%s)
 
-    # Always run scanners in JSON format internally so aggregate_json.py can
-    # run the correlation engine across all of them. In text mode we convert
-    # JSON -> text at the aggregation step instead of letting each scanner
-    # emit text directly. This is what fixes security review A5 (correlation
-    # rules 1-19 were dead code in the primary workflow prior to 2026-04-05).
     local internal_format="json"
 
-    # Build the scanner-specific arg array. Using a bash array avoids the
-    # word-split/quoting bug in the old ${extra_args:+"$extra_args"} pattern.
     local -a scanner_args=()
     [ -n "$extra_args" ] && scanner_args+=($extra_args)
 
-    # Wire dependency-scanner-specific flags
     if [ "$name" = "dependencies" ]; then
         [ -n "$PACKAGE_LIST_FILE" ] && scanner_args+=("--package-list=$PACKAGE_LIST_FILE")
     fi
 
-    # `${arr[@]+"${arr[@]}"}` is the canonical `set -u`-safe expansion for
-    # bash arrays that may be empty. Without this, an empty scanner_args
-    # triggers "unbound variable" under `set -euo pipefail`.
     if [ -n "$TIMEOUT_CMD" ]; then
         $TIMEOUT_CMD "$SCANNER_TIMEOUT" python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$internal_format" ${scanner_args[@]+"${scanner_args[@]}"} > "$output_file" 2>> "$error_file"
     else
         python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$internal_format" ${scanner_args[@]+"${scanner_args[@]}"} > "$output_file" 2>> "$error_file"
     fi
-    echo $? > "$exit_file"
+    local exit_code=$?
+    echo $exit_code > "$exit_file"
+
+    # Per-scanner progress line (TTY only, silent in CI/piped output)
+    if $PROGRESS; then
+        local elapsed=$(( $(date +%s) - start_time ))
+        local findings=0
+        if [ -f "$output_file" ] && [ -s "$output_file" ]; then
+            findings=$(python3 -c "
+import json, sys
+try:
+    d = json.load(open('$output_file'))
+    print(len(d.get('findings', d.get('results', []))))
+except: print(0)
+" 2>/dev/null || echo 0)
+        fi
+        if [ "$exit_code" -eq 0 ]; then
+            echo "[OK] $name: $findings findings (${elapsed}s)" >&2
+        else
+            echo "[!!] $name: exit $exit_code (${elapsed}s)" >&2
+        fi
+    fi
 }
 
 if $SKILL_SCAN; then

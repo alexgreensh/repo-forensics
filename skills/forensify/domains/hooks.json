@@ -1,0 +1,8 @@
+{
+  "domain": "hooks",
+  "display_name": "Hooks & Auto-Execution",
+  "description": "Hook scripts, execution policies, shell auto-triggers. Symlink targets, permission anomalies, evidence laundering patterns.",
+  "scanners": ["scan_dast", "scan_ast", "scan_sast", "scan_lifecycle"],
+  "inventory_surfaces": ["hooks"],
+  "scanner_safety_notes": "scan_dast and scan_runtime_dynamism MUST NOT execute scan-target content. Verify via scanner_safety.json canary test before enabling."
+}

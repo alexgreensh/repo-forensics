@@ -1,0 +1,8 @@
+{
+  "domain": "commands",
+  "display_name": "Commands, Agents & Configuration",
+  "description": "Slash commands, subagent definitions, settings, global instructions (CLAUDE.md, AGENTS.md), memory files. Cross-ecosystem AGENTS.md convention.",
+  "scanners": ["scan_skill_threats", "scan_secrets", "scan_entropy"],
+  "inventory_surfaces": ["commands", "agents", "memory", "brain_files", "settings"],
+  "cross_ecosystem_awareness": ["agents_md_convention"]
+}

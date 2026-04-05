@@ -1,0 +1,8 @@
+{
+  "domain": "skills",
+  "display_name": "Skills Surface",
+  "description": "Skills installed across agent ecosystems. Prompt injection risk, shadow skill overrides, cross-ecosystem drift.",
+  "scanners": ["scan_skill_threats", "scan_openclaw_skills", "scan_runtime_dynamism"],
+  "inventory_surfaces": ["skills", "operational_skills", "container_skills", "utility_skills"],
+  "cross_ecosystem_awareness": ["precedence_chain_conflicts", "duplicate_skill_names"]
+}

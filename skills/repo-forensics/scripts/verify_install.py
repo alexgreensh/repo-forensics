@@ -75,6 +75,29 @@ def get_tracked_hook_files(repo_root):
     return tracked
 
 
+def get_tracked_manifest_files(repo_root):
+    """Get load-bearing plugin manifest files under .claude-plugin/.
+
+    plugin.json and marketplace.json are loaded by Claude Code's plugin
+    runtime to determine install behavior, versioning, and marketplace
+    registration. They live outside skill_root in the repo-root .claude-plugin/
+    directory. Extending the integrity registry to cover them closes the
+    same gap class as hook files (commit 64fbe57).
+    """
+    manifest_dir = os.path.join(repo_root, ".claude-plugin")
+    if not os.path.isdir(manifest_dir):
+        return []
+
+    tracked = []
+    for entry in sorted(os.listdir(manifest_dir)):
+        full_path = os.path.join(manifest_dir, entry)
+        if not os.path.isfile(full_path):
+            continue
+        if entry.endswith('.json'):
+            tracked.append(f".claude-plugin/{entry}")
+    return tracked
+
+
 def get_tracked_symlinks(repo_root, skill_root):
     """Get top-level repo symlinks whose targets point into skill_root.
 
@@ -157,6 +180,12 @@ def generate_checksums(skill_root):
         fp = os.path.join(repo_root, rel)
         hook_checksums[rel] = sha256_file(fp)
 
+    manifest_files = get_tracked_manifest_files(repo_root)
+    manifest_checksums = {}
+    for rel in manifest_files:
+        fp = os.path.join(repo_root, rel)
+        manifest_checksums[rel] = sha256_file(fp)
+
     output = {
         'version': '2',
         'generator': 'repo-forensics/verify_install',
@@ -169,6 +198,9 @@ def generate_checksums(skill_root):
     if hook_checksums:
         output['repo_hooks'] = hook_checksums
         output['hook_count'] = len(hook_checksums)
+    if manifest_checksums:
+        output['repo_manifests'] = manifest_checksums
+        output['manifest_count'] = len(manifest_checksums)
 
     out_path = os.path.join(skill_root, 'checksums.json')
     with open(out_path, 'w', encoding='utf-8') as f:
@@ -180,6 +212,8 @@ def generate_checksums(skill_root):
         extras.append(f"{len(symlinks)} symlinks")
     if hook_checksums:
         extras.append(f"{len(hook_checksums)} hook files")
+    if manifest_checksums:
+        extras.append(f"{len(manifest_checksums)} manifest files")
     extras_msg = f" + {' + '.join(extras)}" if extras else ""
     print(f"[+] Generated checksums.json: {len(checksums)} files tracked{extras_msg}")
     return out_path
@@ -287,18 +321,40 @@ def verify_checksums(skill_root):
         extra_symlinks.append(name)
         report.append(f"  NEW SYMLINK: {name} -> {current_symlinks[name]} (not in checksums.json)")
 
+    # Check .claude-plugin/ manifest files
+    expected_manifests = data.get('repo_manifests', {})
+    tampered_manifests = []
+    missing_manifests = []
+    for rel, expected_hash in expected_manifests.items():
+        fp = os.path.realpath(os.path.join(repo_root, rel))
+        repo_root_real = os.path.realpath(repo_root)
+        if not fp.startswith(repo_root_real + os.sep):
+            tampered_manifests.append(rel)
+            report.append(f"  MANIFEST REJECTED: {rel} (path traversal attempt)")
+            continue
+        actual_hash = sha256_file(fp)
+        if actual_hash is None:
+            missing_manifests.append(rel)
+            report.append(f"  MANIFEST MISSING: {rel} (not found on disk)")
+            continue
+        if actual_hash != expected_hash:
+            tampered_manifests.append(rel)
+            report.append(f"  MANIFEST TAMPERED: {rel} (expected {expected_hash[:12]}..., got {actual_hash[:12]}...)")
+
     # Summary
-    all_tampered = len(tampered) + len(tampered_symlinks) + len(tampered_hooks)
-    all_missing = len(missing) + len(missing_symlinks) + len(missing_hooks)
+    all_tampered = len(tampered) + len(tampered_symlinks) + len(tampered_hooks) + len(tampered_manifests)
+    all_missing = len(missing) + len(missing_symlinks) + len(missing_hooks) + len(missing_manifests)
     all_extra = len(extra) + len(extra_symlinks)
     passed = all_tampered == 0 and all_missing == 0
-    total_tracked = len(expected) + len(expected_symlinks) + len(expected_hooks)
+    total_tracked = len(expected) + len(expected_symlinks) + len(expected_hooks) + len(expected_manifests)
     if passed and all_extra == 0:
         extras_note = []
         if expected_symlinks:
             extras_note.append(f"{len(expected_symlinks)} symlinks")
         if expected_hooks:
             extras_note.append(f"{len(expected_hooks)} hooks")
+        if expected_manifests:
+            extras_note.append(f"{len(expected_manifests)} manifests")
         extras_str = f" (+{', '.join(extras_note)})" if extras_note else ""
         report.insert(0, f"[+] VERIFIED: All {len(expected)} files{extras_str} match checksums.json (v{data.get('version', '?')})")
     elif passed:

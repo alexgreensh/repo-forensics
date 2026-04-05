@@ -26,3 +26,13 @@ CHANGELOG.md
 # CLA workflow has a legitimate bot-signing webhook the scanner mis-flags
 # as install-time exfiltration (lifecycle + network keyword co-occurrence).
 .github/workflows/cla.yml
+
+# Vendor directories — common build/cache paths that generate false positives.
+# Users scanning vendored dependencies should remove these lines.
+node_modules/
+dist/
+build/
+vendor/
+.venv/
+__pycache__/
+.pytest_cache/

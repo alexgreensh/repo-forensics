@@ -287,16 +287,104 @@ class TestSkillsWalkerOpenClaw:
 
 class TestSkillsWalkerNanoClaw:
     def test_nanoclaw_walker_returns_empty_without_detection(self, tmp_path):
-        # Until the signature-based detection lands, NanoClaw walker should
-        # gracefully return an empty list when no root is known. ${root}
-        # will not expand so globs become literal ${root}/... paths that
-        # match nothing.
         config = load_ecosystem_roots()
         env = {"HOME": str(tmp_path)}
         records = walk_skills_surface(
             "nanoclaw", config["ecosystems"]["nanoclaw"], env
         )
         assert records == []
+
+    def test_nanoclaw_detected_with_skills(self, tmp_path):
+        """Build a fake NanoClaw install and verify full pipeline."""
+        nc = tmp_path / "NanoClaw"
+        nc.mkdir()
+        (nc / "scripts").mkdir()
+        (nc / "scripts" / "claw").write_text("#!/usr/bin/env python3")
+        (nc / "container" / "skills").mkdir(parents=True)
+        (nc / "package.json").write_text('{"name": "nanoclaw-agent", "version": "1.0.0"}')
+        # Operational skills (Claude Code format inside NanoClaw)
+        claude_skills = nc / ".claude" / "skills"
+        _make_skill(claude_skills, "setup")
+        _make_skill(claude_skills, "debug")
+        # Container skills
+        _make_skill(nc / "container" / "skills", "agent-browser")
+
+        config = load_ecosystem_roots()
+        env = {"HOME": str(tmp_path), "NANOCLAW_DIR": str(nc)}
+        inv = build_inventory_fn(config=config, env=env)
+
+        nano = next(e for e in inv["ecosystems"] if e["key"] == "nanoclaw")
+        assert nano["detected"] is True
+        assert str(nc) in nano["resolved_roots"][0]
+
+        skills = nano["surfaces"]["skills"]
+        names = {r.get("skill_name") for r in skills}
+        assert "setup" in names
+        assert "debug" in names
+        subtypes = {r.get("skill_subtype") for r in skills if r.get("skill_subtype")}
+        assert "container_skills" in subtypes
+
+
+class TestNanoClawSignatureDetection:
+    def test_detection_via_env_var(self, tmp_path):
+        nc = tmp_path / "my-nanoclaw"
+        nc.mkdir()
+        (nc / "scripts").mkdir()
+        (nc / "scripts" / "claw").write_text("")
+        (nc / "container" / "skills").mkdir(parents=True)
+        (nc / "package.json").write_text('{"name": "nanoclaw-agent"}')
+
+        config = load_ecosystem_roots()
+        env = {"HOME": str(tmp_path), "NANOCLAW_DIR": str(nc)}
+        from build_inventory import detect_ecosystems
+        results = detect_ecosystems(config, env=env)
+        nano = next(r for r in results if r["key"] == "nanoclaw")
+        assert nano["detected"] is True
+
+    def test_detection_via_common_path(self, tmp_path):
+        nc = tmp_path / "NanoClaw"
+        nc.mkdir()
+        (nc / "scripts").mkdir()
+        (nc / "scripts" / "claw").write_text("")
+        (nc / "container" / "skills").mkdir(parents=True)
+        (nc / "package.json").write_text('{"name": "nanoclaw-agent"}')
+
+        config = load_ecosystem_roots()
+        env = {"HOME": str(tmp_path)}
+        from build_inventory import detect_ecosystems
+        results = detect_ecosystems(config, env=env)
+        nano = next(r for r in results if r["key"] == "nanoclaw")
+        assert nano["detected"] is True
+
+    def test_missing_signature_file_rejects(self, tmp_path):
+        nc = tmp_path / "NanoClaw"
+        nc.mkdir()
+        (nc / "scripts").mkdir()
+        (nc / "scripts" / "claw").write_text("")
+        # Missing container/skills — should NOT detect
+        (nc / "package.json").write_text('{"name": "nanoclaw-agent"}')
+
+        config = load_ecosystem_roots()
+        env = {"HOME": str(tmp_path)}
+        from build_inventory import detect_ecosystems
+        results = detect_ecosystems(config, env=env)
+        nano = next(r for r in results if r["key"] == "nanoclaw")
+        assert nano["detected"] is False
+
+    def test_wrong_package_name_rejects(self, tmp_path):
+        nc = tmp_path / "NanoClaw"
+        nc.mkdir()
+        (nc / "scripts").mkdir()
+        (nc / "scripts" / "claw").write_text("")
+        (nc / "container" / "skills").mkdir(parents=True)
+        (nc / "package.json").write_text('{"name": "some-other-project"}')
+
+        config = load_ecosystem_roots()
+        env = {"HOME": str(tmp_path)}
+        from build_inventory import detect_ecosystems
+        results = detect_ecosystems(config, env=env)
+        nano = next(r for r in results if r["key"] == "nanoclaw")
+        assert nano["detected"] is False
 
 
 # ---------------------------------------------------------------------------
