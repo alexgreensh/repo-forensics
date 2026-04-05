@@ -124,7 +124,7 @@ The result is a severity-ranked verdict with exit codes designed for CI/CD gatin
 ```bash
 git clone https://github.com/alexgreensh/repo-forensics.git
 cd repo-forensics
-./skill/scripts/run_forensics.sh /path/to/repo
+./skills/repo-forensics/scripts/run_forensics.sh /path/to/repo
 ```
 
 No pip install. No API keys. No Docker. No dependencies.
@@ -133,19 +133,19 @@ No pip install. No API keys. No Docker. No dependencies.
 
 ```bash
 # Focused AI skill/MCP scan (8 scanners, faster)
-./skill/scripts/run_forensics.sh /path/to/skill --skill-scan
+./skills/repo-forensics/scripts/run_forensics.sh /path/to/skill --skill-scan
 
 # Track file integrity between scans
-./skill/scripts/run_forensics.sh /path/to/repo --watch
+./skills/repo-forensics/scripts/run_forensics.sh /path/to/repo --watch
 
 # Pull latest threat indicators before scanning
-./skill/scripts/run_forensics.sh /path/to/repo --update-iocs
+./skills/repo-forensics/scripts/run_forensics.sh /path/to/repo --update-iocs
 
 # CI/CD machine-readable output
-./skill/scripts/run_forensics.sh /path/to/repo --format json
+./skills/repo-forensics/scripts/run_forensics.sh /path/to/repo --format json
 
 # Verify your own installation hasn't been tampered with
-./skill/scripts/run_forensics.sh /path/to/repo --verify-install
+./skills/repo-forensics/scripts/run_forensics.sh /path/to/repo --verify-install
 ```
 
 ---
@@ -156,14 +156,14 @@ Already have projects installed? Run repo-forensics on your existing codebase to
 
 ```bash
 # Scan a single project
-./skill/scripts/run_forensics.sh ~/my-app
+./skills/repo-forensics/scripts/run_forensics.sh ~/my-app
 
 # Scan your entire projects folder
-./skill/scripts/run_forensics.sh ~/Projects
+./skills/repo-forensics/scripts/run_forensics.sh ~/Projects
 
 # Check if you were hit by the axios attack (March 31, 2026)
 # or liteLLM .pth injection, or any SANDWORM campaign package
-./skill/scripts/run_forensics.sh ~/Projects
+./skills/repo-forensics/scripts/run_forensics.sh ~/Projects
 ```
 
 The post-incident scanner automatically checks:
@@ -202,10 +202,10 @@ The hook fires automatically on every Bash command. Non-matching commands exit i
 
 ## As a Claude Code Skill
 
-The `skill/` directory is a self-contained [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skill:
+The `skills/repo-forensics/` directory is a self-contained [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skill. A legacy `skill/` symlink is preserved for existing installs; new usage should reference the canonical `skills/repo-forensics/` path.
 
 ```bash
-ln -s $(pwd)/repo-forensics/skill ~/.claude/skills/repo-forensics
+ln -s $(pwd)/repo-forensics/skills/repo-forensics ~/.claude/skills/repo-forensics
 ```
 
 Then just ask:
@@ -223,7 +223,7 @@ Then just ask:
 Scan any skill from ClawHub or the OpenClaw ecosystem before installing:
 
 ```bash
-./skill/scripts/run_forensics.sh ~/downloads/suspicious-skill --skill-scan
+./skills/repo-forensics/scripts/run_forensics.sh ~/downloads/suspicious-skill --skill-scan
 ```
 
 Auto-detects OpenClaw skills (SKILL.md frontmatter, tools.json, SOUL.md) and runs targeted checks:
