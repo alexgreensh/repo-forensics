@@ -35,6 +35,10 @@
     "scripts/scan_sast.py": "d8664253c5bd112042357f396041bd745801e137bdc19675d3426452f20ac24a",
     "scripts/scan_secrets.py": "fc11ac9d5a3b076e11d17641813d2e437c1a39ed327ebf3bee1ccf5ef575e05c",
     "scripts/scan_skill_threats.py": "73ae9041ebc43ef130b3f870afcc540256b610a18a2bcab4488202b60b31ed71",
-    "scripts/verify_install.py": "cbf7b4dc74d7a3bd6f997776a192b73b9b2f4f7b5c8055b27a95faac3682b668"
-  }
+    "scripts/verify_install.py": "5cb66eb81d1ceb21489f4336599411a5f438267c12cbab06e690c449474e18b6"
+  },
+  "repo_symlinks": {
+    "skill": "skills/repo-forensics"
+  },
+  "symlink_count": 1
 }

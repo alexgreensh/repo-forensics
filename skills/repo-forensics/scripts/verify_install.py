@@ -29,6 +29,58 @@ def get_skill_root():
     return os.path.dirname(scripts_dir)  # skills/repo-forensics/
 
 
+def get_repo_root(skill_root):
+    """Get the repository root (two levels up from skill_root).
+
+    skill_root is skills/repo-forensics/, so repo root is the parent of skills/.
+    Used by symlink integrity tracking — top-level repo symlinks (like the
+    backward-compat skill -> skills/repo-forensics symlink added in v2.4.1)
+    live outside skill_root and are invisible to get_tracked_files, so they
+    need a separate check to prevent tarball-poisoning attacks that replace
+    the symlink target.
+    """
+    return os.path.dirname(os.path.dirname(skill_root))
+
+
+def get_tracked_symlinks(repo_root, skill_root):
+    """Get top-level repo symlinks whose targets point into skill_root.
+
+    Caught by torture-room security-sentinel Finding 3: the backward-compat
+    'skill' symlink at the repo root points into skills/repo-forensics/ but
+    is outside what get_tracked_files walks, so verify_install cannot detect
+    if an attacker (via tarball swap or compromised fork) replaces the
+    symlink target with '/tmp/evil/' or any other attacker-controlled path.
+
+    This function enumerates repo-root symlinks whose targets resolve into
+    skill_root, so their target strings can be hashed and verified alongside
+    regular files.
+
+    Only top-level repo entries are considered (no recursion) because
+    forensify's symlink contract is specifically for root-level backward-
+    compat glue. Deep symlink farms would require a more sophisticated
+    policy and are out of scope for this hardening.
+    """
+    if not os.path.isdir(repo_root):
+        return {}
+
+    skill_root_real = os.path.realpath(skill_root)
+    symlinks = {}
+
+    for entry in os.listdir(repo_root):
+        full_path = os.path.join(repo_root, entry)
+        if not os.path.islink(full_path):
+            continue
+        target = os.readlink(full_path)
+        # Only track symlinks whose resolved target is inside skill_root.
+        # Other symlinks are outside our security domain.
+        resolved = os.path.realpath(full_path)
+        if not resolved.startswith(skill_root_real):
+            continue
+        symlinks[entry] = target
+
+    return symlinks
+
+
 def get_tracked_files(skill_root):
     """Get all files that should be integrity-checked."""
     tracked = []
@@ -52,12 +104,15 @@ def get_tracked_files(skill_root):
 
 
 def generate_checksums(skill_root):
-    """Generate checksums.json for all skill files."""
+    """Generate checksums.json for all skill files + root-level symlinks."""
     files = get_tracked_files(skill_root)
     checksums = {}
     for rel in files:
         fp = os.path.join(skill_root, rel)
         checksums[rel] = sha256_file(fp)
+
+    repo_root = get_repo_root(skill_root)
+    symlinks = get_tracked_symlinks(repo_root, skill_root)
 
     output = {
         'version': '2',
@@ -65,13 +120,17 @@ def generate_checksums(skill_root):
         'file_count': len(checksums),
         'files': checksums,
     }
+    if symlinks:
+        output['repo_symlinks'] = symlinks
+        output['symlink_count'] = len(symlinks)
 
     out_path = os.path.join(skill_root, 'checksums.json')
     with open(out_path, 'w', encoding='utf-8') as f:
         json.dump(output, f, indent=2)
         f.write('\n')
 
-    print(f"[+] Generated checksums.json: {len(checksums)} files tracked")
+    symlink_msg = f" + {len(symlinks)} symlinks" if symlinks else ""
+    print(f"[+] Generated checksums.json: {len(checksums)} files tracked{symlink_msg}")
     return out_path
 
 
@@ -126,14 +185,47 @@ def verify_checksums(skill_root):
         extra.append(rel)
         report.append(f"  NEW FILE: {rel} (not in checksums.json)")
 
+    # Check repo-level symlinks against manifest. Caught by torture-room
+    # security-sentinel Finding 3 — the backward-compat skill symlink at
+    # repo root points into skills/repo-forensics/, but it lives outside
+    # skill_root and would otherwise be invisible to verification.
+    expected_symlinks = data.get('repo_symlinks', {})
+    repo_root = get_repo_root(skill_root)
+    current_symlinks = get_tracked_symlinks(repo_root, skill_root)
+
+    tampered_symlinks = []
+    missing_symlinks = []
+    extra_symlinks = []
+
+    for name, expected_target in expected_symlinks.items():
+        if name not in current_symlinks:
+            missing_symlinks.append(name)
+            report.append(f"  SYMLINK MISSING: {name} (declared in manifest, not found on disk)")
+            continue
+        if current_symlinks[name] != expected_target:
+            tampered_symlinks.append(name)
+            report.append(
+                f"  SYMLINK TAMPERED: {name} "
+                f"(expected target '{expected_target}', got '{current_symlinks[name]}')"
+            )
+
+    for name in sorted(set(current_symlinks) - set(expected_symlinks)):
+        extra_symlinks.append(name)
+        report.append(f"  NEW SYMLINK: {name} -> {current_symlinks[name]} (not in checksums.json)")
+
     # Summary
-    passed = len(tampered) == 0 and len(missing) == 0
-    if passed and len(extra) == 0:
-        report.insert(0, f"[+] VERIFIED: All {len(expected)} files match checksums.json (v{data.get('version', '?')})")
+    all_tampered = len(tampered) + len(tampered_symlinks)
+    all_missing = len(missing) + len(missing_symlinks)
+    all_extra = len(extra) + len(extra_symlinks)
+    passed = all_tampered == 0 and all_missing == 0
+    total_tracked = len(expected) + len(expected_symlinks)
+    if passed and all_extra == 0:
+        symlink_note = f" (+{len(expected_symlinks)} symlinks)" if expected_symlinks else ""
+        report.insert(0, f"[+] VERIFIED: All {len(expected)} files{symlink_note} match checksums.json (v{data.get('version', '?')})")
     elif passed:
-        report.insert(0, f"[~] PARTIAL: All {len(expected)} tracked files OK, but {len(extra)} untracked file(s) found")
+        report.insert(0, f"[~] PARTIAL: All {total_tracked} tracked entries OK, but {all_extra} untracked entry/entries found")
     else:
-        report.insert(0, f"[!] FAILED: {len(tampered)} tampered, {len(missing)} missing out of {len(expected)} tracked files")
+        report.insert(0, f"[!] FAILED: {all_tampered} tampered, {all_missing} missing out of {total_tracked} tracked entries")
 
     return passed, report
 
