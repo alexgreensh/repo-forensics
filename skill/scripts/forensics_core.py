@@ -37,6 +37,28 @@ class Finding:
     snippet: str       # Code context (max 120 chars)
     category: str      # "secret", "injection", "exfiltration", etc.
 
+    def __post_init__(self):
+        # Defensive type coercion at the trust boundary between the in-process
+        # correlation engine and external scanner JSON. Any scanner that emits
+        # a stringified line number or a None severity must NOT crash the text
+        # aggregator or the `self.line > 0` comparison in format_text().
+        # (Python language review PL-F1 + PL-F12, 2026-04-05.)
+        try:
+            self.line = int(self.line) if self.line is not None else 0
+        except (TypeError, ValueError):
+            self.line = 0
+        if self.line < 0:
+            self.line = 0
+        if not isinstance(self.severity, str):
+            self.severity = "low"
+        else:
+            self.severity = self.severity.lower()
+        # Guard the remaining string fields so downstream .lower() / slicing
+        # can never NoneError.
+        for _field in ("scanner", "title", "description", "file", "snippet", "category"):
+            if getattr(self, _field) is None:
+                setattr(self, _field, "")
+
     def to_dict(self):
         return asdict(self)
 
@@ -76,7 +98,38 @@ def load_ignore_patterns(repo_path):
     return patterns
 
 
-DANGEROUS_IGNORE_PATTERNS = {'*', '**', '**/*', '*.*', '.'}
+# Patterns that suppress too much of the walk to be plausibly legitimate.
+# An attacker-planted .forensicsignore with `*.py` or `*.js` would otherwise
+# silently suppress entire languages and escape detection. (Security review
+# SS-F4, 2026-04-05.)
+DANGEROUS_IGNORE_PATTERNS = {
+    # Total wildcards
+    '*', '**', '**/*', '*.*', '.',
+    # Language-scope wildcards — suppressing all files of a major language
+    # is never a legitimate use case and is the shape of an attacker-planted
+    # suppression.
+    '*.py', '*.pyc', '*.pyw',
+    '*.js', '*.jsx', '*.mjs', '*.cjs',
+    '*.ts', '*.tsx',
+    '*.rb',
+    '*.go',
+    '*.rs',
+    '*.sh', '*.bash', '*.zsh',
+    '*.php', '*.phtml',
+    '*.pl', '*.pm',
+    '*.ps1',
+    '*.java', '*.kt', '*.scala',
+    '*.cs',
+    '*.c', '*.cpp', '*.cc', '*.h', '*.hpp',
+    '*.swift',
+    '*.lua',
+    # Directory-scope wildcards that would suppress source trees
+    'src/**', 'src/**/*',
+    'scripts/**', 'scripts/**/*',
+    '**/src/*', '**/src/**',
+    '**/scripts/*', '**/scripts/**',
+    '**/*.py', '**/*.js', '**/*.ts', '**/*.rb', '**/*.go',
+}
 
 
 def emit_status(output_format, message):
@@ -218,7 +271,193 @@ def walk_repo(repo_path, ignore_patterns=None, skip_dirs=None, skip_lockfiles=Tr
             yield file_path, rel_path
 
 
+# --- Raw-content Trifecta Scanner ---
+# Rule 19 Lethal Trifecta relies on sub-scanner findings to detect the three
+# primitives (exec, network, credential read). In practice, sub-scanners miss
+# low-level primitives like direct `open('~/.ssh/id_rsa')` or raw
+# `http.client.HTTPSConnection`. To keep Rule 19 from becoming dead code when
+# sub-scanners are silent, this module also does an independent raw-content
+# scan that synthesizes primitive findings directly. Called from
+# aggregate_json.py before correlate().
+# (Fix for 2026-04-05 security review A6.)
+
+import re as _re_trifecta
+
+# Each regex matches ONLY actionable code patterns — method calls with parens,
+# specific file paths, or named constant references. Bare descriptive keywords
+# (`webhook`, `api_key`, `browser data`, `reverse shell`, `keychain`) were
+# removed in the 2026-04-05 torture review (CRC-F2) because they matched
+# legitimate code comments, variable names, and doc strings and caused
+# false-positive Rule 19 hits on every CI/integration test repo.
+_TRIFECTA_EXEC_RE = _re_trifecta.compile(
+    r'(?:os\.system\s*\(|subprocess\.(?:run|call|Popen|check_output|check_call)\s*\(|'
+    r'child_process\.(?:exec|spawn|execSync)\s*\(|(?<![a-zA-Z_])eval\s*\(|'
+    r'(?<![a-zA-Z_])exec\s*\(|shell\s*=\s*True)'
+)
+_TRIFECTA_NETWORK_RE = _re_trifecta.compile(
+    # Only actionable outbound network primitives with concrete call syntax.
+    # Removed bare `webhook`, `reverse[\s_-]?shell`, and `node-fetch` which
+    # were prose-level keywords that matched comments and docstrings.
+    r'(?:http\.client\.HTTPS?Connection|urllib\.request\.urlopen|'
+    r'requests\.(?:post|get|put|delete)\s*\(|socket\.(?:connect|send|sendto)\s*\(|'
+    r'axios\.(?:post|get|put|delete)\s*\(|'
+    r'\bfetch\s*\(\s*[\'"]https?://|'
+    r'/dev/tcp/)'
+)
+_TRIFECTA_CREDENTIAL_RE = _re_trifecta.compile(
+    # Specific file paths and named environment variables. Removed bare
+    # `api_key`, `private_key`, `browser data`, `keychain` which matched
+    # legitimate variable names and comments in any file with auth code.
+    # Added \b boundaries on the remaining tokens so `GITHUB_TOKENIZE` and
+    # `.aws/credentials_fake_helper` do not match.
+    r'(?:\.ssh/id_(?:rsa|ed25519|dsa|ecdsa)\b|'
+    r'\.aws/credentials\b|\.aws/config\b|'
+    r'\.netrc\b|/etc/shadow\b|'
+    r'\b(?:GITHUB_TOKEN|GH_TOKEN|NPM_TOKEN|AWS_SECRET_ACCESS_KEY|AWS_ACCESS_KEY_ID)\b|'
+    r'\.env(?!\.example|\.template)(?:\s|\)|\'|"|$))'
+)
+
+_TRIFECTA_SCAN_EXTENSIONS = {
+    '.py', '.js', '.ts', '.jsx', '.tsx', '.sh', '.bash', '.rb', '.go',
+    '.rs', '.php', '.pl', '.ps1',
+}
+_TRIFECTA_MAX_SCAN_FILES = 5000
+_TRIFECTA_MAX_SCAN_BYTES = 2 * 1024 * 1024  # 2MB per file
+
+
+def detect_trifecta_raw(repo_path, ignore_patterns=None):
+    """Scan files in repo_path for the Lethal Trifecta three primitives.
+
+    Returns a list of Finding objects (one per primitive per file) that can
+    be fed into correlate() so Rule 19 fires regardless of whether the
+    specialized sub-scanners caught the primitives.
+
+    This is deliberately narrow: it only fires on unambiguous keyword hits
+    (e.g. `subprocess.run(` with the paren, `http.client.HTTPSConnection`,
+    `.aws/credentials`). The regexes use lookbehinds and word boundaries to
+    avoid false positives on `executable`, `.env.example`, etc.
+
+    As of 2026-04-05 (CRC-F2, CRC-F3), iterates line-by-line rather than
+    whole-file so each emitted Finding carries the actual line number and
+    a snippet of the matching code. This makes triage possible — previously
+    every CRITICAL Rule 19 finding pointed at file:0 with a canned snippet.
+    """
+    findings = []
+    if not repo_path or not os.path.isdir(repo_path):
+        return findings
+
+    scanned = 0
+    try:
+        walker = walk_repo(
+            repo_path,
+            ignore_patterns=ignore_patterns,
+            skip_binary=True,
+            skip_lockfiles=True,
+        )
+    except OSError:
+        return findings
+
+    for file_path, rel_path in walker:
+        if scanned >= _TRIFECTA_MAX_SCAN_FILES:
+            break
+        ext = os.path.splitext(file_path)[1].lower()
+        if ext not in _TRIFECTA_SCAN_EXTENSIONS:
+            continue
+
+        try:
+            size = os.path.getsize(file_path)
+            if size > _TRIFECTA_MAX_SCAN_BYTES:
+                continue
+            with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+                content = f.read()
+        except (OSError, UnicodeDecodeError):
+            continue
+        scanned += 1
+
+        # Line-by-line scan with attribution. Record first match per primitive.
+        exec_hit = None       # (line_num, snippet_text)
+        network_hit = None
+        credential_hit = None
+        for line_num, line in enumerate(content.splitlines(), start=1):
+            # Skip obvious comment-only lines to reduce false positives from
+            # prose. Conservative — language-agnostic comment prefixes only.
+            stripped = line.lstrip()
+            if stripped.startswith(('#', '//', ';;', '/*', '*')):
+                continue
+            if exec_hit is None and _TRIFECTA_EXEC_RE.search(line):
+                exec_hit = (line_num, line.strip()[:120])
+            if network_hit is None and _TRIFECTA_NETWORK_RE.search(line):
+                network_hit = (line_num, line.strip()[:120])
+            if credential_hit is None and _TRIFECTA_CREDENTIAL_RE.search(line):
+                credential_hit = (line_num, line.strip()[:120])
+            if exec_hit and network_hit and credential_hit:
+                break  # early exit: we have enough for Rule 19 to fire
+
+        # Only emit synthetic primitive findings when ALL THREE are present in
+        # the file. This tightens the feed into Rule 19's correlation loop —
+        # we never claim a file has only 1-2 primitives via this path.
+        if exec_hit and network_hit and credential_hit:
+            findings.append(Finding(
+                scanner="trifecta_raw", severity="high",
+                title="Code execution primitive",
+                description="Raw-content match for exec primitive (os.system, subprocess, eval, exec, shell=true)",
+                file=rel_path, line=exec_hit[0],
+                snippet=exec_hit[1],
+                category="code-execution",
+            ))
+            findings.append(Finding(
+                scanner="trifecta_raw", severity="high",
+                title="Outbound network primitive",
+                description="Raw-content match for outbound network primitive (http.client, requests.post, urllib, socket, axios)",
+                file=rel_path, line=network_hit[0],
+                snippet=network_hit[1],
+                category="exfiltration",
+            ))
+            findings.append(Finding(
+                scanner="trifecta_raw", severity="high",
+                title="Credential read primitive",
+                description="Raw-content match for credential read primitive (.ssh/id_*, .aws/credentials, .netrc, GITHUB_TOKEN)",
+                file=rel_path, line=credential_hit[0],
+                snippet=credential_hit[1],
+                category="credential-read",
+            ))
+
+    return findings
+
+
 # --- Correlation Engine ---
+
+
+def findings_from_dicts(dicts):
+    """Convert a sequence of finding dicts back into Finding dataclass instances.
+
+    Shared helper used by both `aggregate_json.run_correlation_pass` and
+    `auto_scan.run_targeted_scan` to avoid diverged copy-paste of the
+    conversion logic. (Pattern-recognition PR-F1, 2026-04-05.)
+
+    Skips items that aren't dicts or fail construction (e.g. malformed
+    scanner output). Type coercion for `line` (to int) is delegated to
+    Finding.__post_init__ which handles None, str, and out-of-range values.
+    """
+    out = []
+    for d in dicts:
+        if not isinstance(d, dict):
+            continue
+        try:
+            out.append(Finding(
+                scanner=d.get("scanner", "unknown"),
+                severity=d.get("severity", "low"),
+                title=d.get("title", ""),
+                description=d.get("description", ""),
+                file=d.get("file", ""),
+                line=d.get("line", 0),
+                snippet=d.get("snippet", ""),
+                category=d.get("category", ""),
+            ))
+        except (TypeError, ValueError):
+            continue
+    return out
+
 
 def correlate(findings):
     """Flag compound threats where multiple findings in the same file form attack chains.
@@ -227,10 +466,16 @@ def correlate(findings):
     - env/credential read + network POST in same file = "Potential data exfiltration" (critical)
     - base64 encoding + exec/eval in same file = "Obfuscated code execution" (critical)
     - file read of sensitive paths + any network call = "Credential theft pattern" (high)
+    - Rule 19: exec + network + credential read in same file = "Lethal Trifecta" (critical)
     """
     correlated = []
 
-    # Group findings by file
+    # Group findings by file path. Scanners emit paths relative to the
+    # scanned repo, so we use the path string as-is. (An earlier revision
+    # tried os.path.realpath here but that resolves relative paths against
+    # the current working directory, not the scan target, which fragmented
+    # findings and broke Rule 19. Symlink-based split attacks across two
+    # different relative paths are a P1 follow-up.)
     by_file = {}
     for f in findings:
         by_file.setdefault(f.file, []).append(f)
@@ -497,7 +742,8 @@ def correlate(findings):
                 category="pth-injection"
             ))
 
-        # Rule 16: .pth file + known IOC = "Known Supply Chain .pth Attack"
+        # Rule 18: .pth file + known IOC = "Known Supply Chain .pth Attack"
+        # (previously mis-labeled as Rule 16 — corrected 2026-04-05)
         known_ioc_keywords = {"known-ioc", "known malicious", "ioc match", "ioc database"}
         if has_category(file_findings, pth_keywords) and has_category(file_findings, known_ioc_keywords):
             correlated.append(Finding(
@@ -509,6 +755,112 @@ def correlate(findings):
                 line=0,
                 snippet="[compound: .pth file + known IOC match]",
                 category="pth-injection"
+            ))
+
+        # Rule 19: Lethal Trifecta — exec + outbound network + credential read
+        # all in the same file. Named after Snyk's terminology. Per the
+        # SkillSafe ClawHavoc post-mortem, this pattern catches ~91% of
+        # malicious skills that evade the simpler Rule 1/Rule 3 checks.
+        #
+        # False-positive hardening (2026-04-05 code review):
+        #   - Narrow keywords: removed bare "exec", "post", "http", "fork",
+        #     "socket", "network", "request", ".env", "password", "secret",
+        #     "credential". Those substrings appear in legitimate CI build
+        #     scripts (e.g. "executable", "postgres", "urllib HTTP request",
+        #     ".env.example", "password field") and fired false positives
+        #     at the critical level.
+        #   - Require each primitive-hit to come from a distinct scanner.
+        #     A single kitchen-sink finding that mentions all three primitives
+        #     in its description should not trip the rule on its own — real
+        #     Lethal Trifecta malware has each primitive flagged by the
+        #     appropriate specialized scanner (sast/dataflow/secrets).
+        trifecta_exec_keywords = {
+            "code execution", "code-execution", "arbitrary code",
+            "remote code", "shell execution", "shell-exec",
+            "eval(", "exec(", "os.system(", "os.system ",
+            "subprocess.run", "subprocess.call", "subprocess.popen",
+            "subprocess.check_output", "subprocess.exec",
+            "child_process.exec", "child_process.spawn",
+            "child_process.execsync", "command injection",
+            "shell=true", "dangerous exec",
+        }
+        trifecta_network_keywords = {
+            "exfiltration", "exfiltrate", "data theft",
+            "outbound network", "outbound-network", "outbound http",
+            "outbound-http", "webhook post", "webhook-post", "webhook exfil",
+            "reverse shell", "reverse-shell", "/dev/tcp/",
+            "requests.post(", "urllib.request.urlopen(",
+            "socket.connect(", "socket.send(", "socket.sendto(",
+            "http.client.httpsconnection", "http.client.httpconnection",
+            "node-fetch(", "axios.post(", "axios.get(",
+            "command and control", "c2 callback", "data posted to external",
+            "posts to webhook",
+        }
+        trifecta_credential_keywords = {
+            "credential read", "credential-read", "credential file",
+            "credential access", "credential theft", "credential exfil",
+            "secret read", "secret-read", "secret exfil",
+            "env access", "env-access", ".env read", ".env access",
+            "env_key read",
+            ".ssh/id_", ".aws/credentials", ".aws/config",
+            ".netrc", "id_rsa", "id_ed25519",
+            "keychain access", "keychain read",
+            "github_token", "api_key read", "api-key read",
+            "browser data", "private key read", "token theft",
+        }
+
+        def _primitive_finding_ids(keywords):
+            """Return set of distinct finding-indices that matched the keywords.
+
+            Using indices (not scanner names) means multiple findings from
+            the same synthetic scanner (e.g. trifecta_raw emits one finding
+            per primitive) still count as distinct contributors — which is
+            correct. The check blocks single "kitchen sink" findings that
+            mention all three primitives in one description, not legitimate
+            multi-finding matches from any source.
+            """
+            ids = set()
+            for i, f in enumerate(file_findings):
+                desc_lower = (f.description + " " + f.title + " " + f.category).lower()
+                for kw in keywords:
+                    if kw in desc_lower:
+                        ids.add(i)
+                        break
+            return ids
+
+        exec_ids = _primitive_finding_ids(trifecta_exec_keywords)
+        network_ids = _primitive_finding_ids(trifecta_network_keywords)
+        credential_ids = _primitive_finding_ids(trifecta_credential_keywords)
+
+        # All three primitives must be present AND at least 2 must come from
+        # different findings (so a single noisy finding cannot trip the rule
+        # just by mentioning all three keywords in its description).
+        has_exec = bool(exec_ids)
+        has_network = bool(network_ids)
+        has_credential = bool(credential_ids)
+        distinct_contributors = exec_ids | network_ids | credential_ids
+        if has_exec and has_network and has_credential and len(distinct_contributors) >= 2:
+            # Rule 19 co-exists with Rules 1 and 3 when they fire on the same
+            # file: the Trifecta finding carries extra attribution value
+            # (names the pattern, ties to the SkillSafe ClawHavoc research).
+            # No dedupe is needed because the titles and categories differ.
+            correlated.append(Finding(
+                scanner="correlation",
+                severity="critical",
+                title="Lethal Trifecta (exec + network + credential read)",
+                description=(
+                    "File contains all three primitives of the 'Lethal "
+                    "Trifecta' (Snyk terminology): code execution, outbound "
+                    "network capability, and credential/secret file access. "
+                    "This co-occurrence pattern matches 91% of malicious "
+                    "skills per the SkillSafe ClawHavoc post-mortem and is a "
+                    "strong signal of credential-stealing malware even when "
+                    "each primitive alone would be legitimate."
+                ),
+                file=filepath,
+                line=0,
+                snippet="[compound: exec + outbound network + credential read]",
+                category="lethal-trifecta"
             ))
 
     return correlated

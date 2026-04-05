@@ -5,15 +5,27 @@ skill/tests/*
 skill/checksums.json
 
 # Threat pattern references (documentation describes the attacks we detect)
-skill/references/threat_patterns.md
+skill/references/*.md
 
 # Scanner scripts and core (contain regex patterns for the attacks they detect)
 skill/scripts/scan_*.py
+skill/scripts/parse_pnpm_lock.py
+skill/scripts/aggregate_json.py
 skill/scripts/forensics_core.py
 skill/scripts/ioc_manager.py
 
 # SKILL.md (documents the attack types we catch)
 skill/SKILL.md
+
+# README describes the attack types we detect — without this, the newly
+# wired correlation engine flags meta-documentation as install-time exfil.
+# Added 2026-04-05 with the aggregate_json.py correlation wiring.
+README.md
+CHANGELOG.md
+
+# CLA workflow has a legitimate bot-signing webhook the scanner mis-flags
+# as install-time exfiltration (lifecycle + network keyword co-occurrence).
+.github/workflows/cla.yml
 
 # GitHub Action (controlled input interpolation)
 action.yml

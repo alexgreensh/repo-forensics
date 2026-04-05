@@ -34,6 +34,16 @@ IOC_FEED_URL = "https://raw.githubusercontent.com/alexgreensh/repo-forensics/mai
 CACHE_FILENAME = ".forensics-iocs.json"
 CACHE_MAX_AGE_HOURS = 24
 
+# Shipped IOC database (version-pinned compromises). Loaded from
+# skill/data/compromised_versions.json next to this script. This file ships
+# with the tool and is reviewable in git history — it is NOT cached or
+# downloaded at runtime. See --sync-osv (when implemented) for live updates.
+_DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data')
+COMPROMISED_VERSIONS_FILE = os.path.normpath(
+    os.path.join(_DATA_DIR, 'compromised_versions.json')
+)
+COMPROMISED_VERSIONS_SCHEMA_VERSION = '1.0'
+
 # --- Hardcoded IOCs (fallback, always available) ---
 
 HARDCODED_C2_IPS = [
@@ -75,6 +85,108 @@ HARDCODED_MALICIOUS_PTH_FILES = {
     "litellm_init.pth", "litellm-init.pth", "litellm.pth",
     "llm_init.pth", "init_hook.pth", "startup.pth",
 }
+
+
+# --- Shipped compromised-versions database loader ---
+
+_COMPROMISED_VERSIONS_CACHE = None
+
+
+def _load_compromised_versions_file(path=None):
+    """Load and flatten the shipped compromised_versions.json into scanner-
+    friendly structures.
+
+    Returns a tuple (version_map, entirely_malicious_names, raw_data) where:
+      - version_map: dict[str, dict[str, str]] keyed by lower-case package
+        name -> {version_string: campaign_id}. Only includes packages with
+        specific version entries (not wildcards).
+      - entirely_malicious_names: set[str] of lower-case package names where
+        ANY version is malicious (version list is ['*']).
+      - raw_data: the original parsed JSON (for callers that need campaign
+        metadata for reporting).
+
+    Returns ({}, set(), None) if the file is missing, unreadable, or has
+    an incompatible schema version. This is a soft failure — the scanner
+    will fall back to in-module defaults in that case.
+    """
+    target = path or COMPROMISED_VERSIONS_FILE
+    try:
+        with open(target, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        print(f"[!] Could not load {target}: {e}", file=sys.stderr)
+        return {}, set(), None
+
+    # Top-level must be a dict (crafted JSON could be a list or scalar)
+    if not isinstance(data, dict):
+        print(f"[!] {target} top-level must be a JSON object", file=sys.stderr)
+        return {}, set(), None
+
+    # Schema version gate — future schema changes may add incompatible fields.
+    # The schema_version field MUST be a string; non-string types (int, float,
+    # null, list, dict from a hand-edited or poisoned feed) would crash the
+    # .split() call with AttributeError, which is not caught by the outer
+    # except clause and would kill the scanner. (Security review SS-F2,
+    # 2026-04-05.)
+    schema_version = data.get('schema_version', '')
+    if not isinstance(schema_version, str):
+        print(
+            f"[!] {target} schema_version must be a string, "
+            f"got {type(schema_version).__name__}",
+            file=sys.stderr,
+        )
+        return {}, set(), None
+    major = schema_version.split('.')[0] if schema_version else ''
+    expected_major = COMPROMISED_VERSIONS_SCHEMA_VERSION.split('.')[0]
+    if major != expected_major:
+        print(
+            f"[!] {target} schema version {schema_version!r} "
+            f"incompatible with expected {COMPROMISED_VERSIONS_SCHEMA_VERSION!r}",
+            file=sys.stderr,
+        )
+        return {}, set(), None
+
+    version_map = {}
+    entirely_malicious = set()
+    campaigns = data.get('campaigns', {})
+    if not isinstance(campaigns, dict):
+        return {}, set(), None
+
+    for campaign_id, campaign in campaigns.items():
+        if not isinstance(campaign, dict):
+            continue
+        packages = campaign.get('packages', {})
+        if not isinstance(packages, dict):
+            continue
+        for pkg_name, versions in packages.items():
+            if not isinstance(pkg_name, str) or not isinstance(versions, list):
+                continue
+            pkg_lower = pkg_name.lower()
+            if versions == ['*']:
+                entirely_malicious.add(pkg_lower)
+                continue
+            if pkg_lower not in version_map:
+                version_map[pkg_lower] = {}
+            for v in versions:
+                if not isinstance(v, str):
+                    continue
+                version_map[pkg_lower][v] = campaign_id
+
+    return version_map, entirely_malicious, data
+
+
+def _get_compromised_versions():
+    """Return cached compromised-versions tuple, loading on first call."""
+    global _COMPROMISED_VERSIONS_CACHE
+    if _COMPROMISED_VERSIONS_CACHE is None:
+        _COMPROMISED_VERSIONS_CACHE = _load_compromised_versions_file()
+    return _COMPROMISED_VERSIONS_CACHE
+
+
+def _reset_compromised_versions_cache():
+    """Test helper: force a fresh load on next access."""
+    global _COMPROMISED_VERSIONS_CACHE
+    _COMPROMISED_VERSIONS_CACHE = None
 
 
 def _cache_path(cache_dir=None):
@@ -143,8 +255,19 @@ def update_iocs(feed_url=None, cache_dir=None):
 
 
 def get_iocs(cache_dir=None):
-    """Get merged IOC set: cached remote IOCs + hardcoded fallback.
-    Returns dict with: c2_ips, malicious_domains, malicious_npm, malicious_pypi."""
+    """Get merged IOC set: shipped JSON + cached remote feed + hardcoded fallback.
+
+    Returns dict with:
+      - c2_ips: list[str]
+      - malicious_domains: list[str]
+      - malicious_npm: set[str] (includes both hardcoded and wildcard-version
+        packages from the shipped compromised_versions.json)
+      - malicious_pypi: set[str]
+      - malicious_pth_files: set[str]
+      - compromised_versions: dict[str, dict[str, str]] keyed by lower-case
+        package name -> {version_string: campaign_id}. Only populated from
+        the shipped JSON file; the hardcoded sets do not carry version info.
+    """
     cached = _load_cache(cache_dir)
 
     # Start with hardcoded
@@ -154,6 +277,7 @@ def get_iocs(cache_dir=None):
         'malicious_npm': set(HARDCODED_MALICIOUS_NPM),
         'malicious_pypi': set(HARDCODED_MALICIOUS_PYPI),
         'malicious_pth_files': set(HARDCODED_MALICIOUS_PTH_FILES),
+        'compromised_versions': {},
     }
 
     # Merge remote IOCs if available
@@ -162,6 +286,13 @@ def get_iocs(cache_dir=None):
         result['malicious_domains'] = list(set(result['malicious_domains'] + cached.get('malicious_domains', [])))
         result['malicious_npm'].update(cached.get('malicious_npm_packages', []))
         result['malicious_pypi'].update(cached.get('malicious_pypi_packages', []))
+
+    # Merge shipped compromised_versions.json
+    version_map, entirely_malicious, _raw = _get_compromised_versions()
+    # Wildcard-version packages become name-only IOCs in the npm set
+    result['malicious_npm'].update(entirely_malicious)
+    # Version-pinned IOCs get their own key
+    result['compromised_versions'] = version_map
 
     return result
 

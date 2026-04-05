@@ -246,34 +246,16 @@ def run_targeted_scan(repo_path):
             except Exception as e:
                 print(f"[!] Scanner {futures[future]} failed: {e}", file=sys.stderr)
 
-    # Run correlation engine on collected findings to detect compound threats
+    # Run correlation engine on collected findings to detect compound threats.
+    # Uses the shared findings_from_dicts helper to stay in sync with
+    # aggregate_json.run_correlation_pass (PR-F1, 2026-04-05).
     try:
         import forensics_core as core
-        correlated_dicts = []
-        # Convert dicts to Finding objects for correlation
-        finding_objs = []
-        for f in all_findings:
-            if isinstance(f, dict):
-                try:
-                    line_val = int(f.get('line', 0))
-                except (ValueError, TypeError):
-                    line_val = 0
-                finding_objs.append(core.Finding(
-                    scanner=f.get('scanner', ''),
-                    severity=f.get('severity', 'low'),
-                    title=f.get('title', ''),
-                    description=f.get('description', ''),
-                    file=f.get('file', ''),
-                    line=line_val,
-                    snippet=f.get('snippet', ''),
-                    category=f.get('category', ''),
-                ))
+        finding_objs = core.findings_from_dicts(all_findings)
         if finding_objs:
             correlated = core.correlate(finding_objs)
-            for cf in correlated:
-                correlated_dicts.append(cf.to_dict())
-            all_findings.extend(correlated_dicts)
-    except Exception as e:
+            all_findings.extend(cf.to_dict() for cf in correlated)
+    except (ImportError, AttributeError, KeyError, TypeError, ValueError) as e:
         print(f"[!] Correlation failed: {e}", file=sys.stderr)
 
     return all_findings

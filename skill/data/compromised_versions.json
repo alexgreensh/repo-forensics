@@ -1,0 +1,239 @@
+{
+  "schema_version": "1.0",
+  "generated": "2026-04-05",
+  "description": "Version-pinned and entirely-malicious package IOCs. Shipped with repo-forensics as baseline detection. Optional OSV feed adds live updates (see --osv flag). Use '*' in the version list to mean 'any version of this package is malicious'.",
+  "contributors": [
+    {
+      "name": "Marc Gadsdon",
+      "github": "marcgadsdon",
+      "issue": "https://github.com/alexgreensh/repo-forensics/issues/5",
+      "date": "2026-04-04"
+    }
+  ],
+  "campaigns": {
+    "chalk_debug_sep_2025": {
+      "title": "Chalk/Debug supply chain compromise",
+      "ecosystem": "npm",
+      "disclosed": "2025-09",
+      "family": "crypto wallet drainer",
+      "reference": "https://socket.dev/blog/npm-author-qix-compromised-in-major-supply-chain-attack",
+      "notes": "Maintainer credentials phished. Malicious versions published for several hours before takedown. Payload hooked crypto wallet provider APIs to redirect transactions.",
+      "packages": {
+        "ansi-regex": ["6.2.1"],
+        "ansi-styles": ["6.2.2"],
+        "backslash": ["0.2.1"],
+        "chalk": ["5.6.1"],
+        "chalk-template": ["1.1.1"],
+        "color": ["5.0.1"],
+        "color-convert": ["3.1.1"],
+        "color-name": ["2.0.1"],
+        "color-string": ["2.1.1"],
+        "debug": ["4.4.2"],
+        "error-ex": ["1.3.3"],
+        "has-ansi": ["6.0.1"],
+        "is-arrayish": ["0.3.3"],
+        "simple-swizzle": ["0.2.3"],
+        "slice-ansi": ["7.1.1"],
+        "strip-ansi": ["7.1.1"],
+        "supports-color": ["10.2.1"],
+        "supports-hyperlinks": ["4.1.1"],
+        "wrap-ansi": ["9.0.1"]
+      }
+    },
+    "duckdb_sep_2025": {
+      "title": "DuckDB supply chain compromise",
+      "ecosystem": "npm",
+      "disclosed": "2025-09",
+      "family": "crypto wallet drainer",
+      "reference": "https://socket.dev/blog/duckdb-supply-chain-attack",
+      "notes": "Same actor as chalk/debug Sep 2025 campaign. DuckDB npm packages compromised in parallel.",
+      "packages": {
+        "@duckdb/duckdb-wasm": ["1.29.2"],
+        "@duckdb/node-api": ["1.3.3"],
+        "@duckdb/node-bindings": ["1.3.3"],
+        "duckdb": ["1.3.3"],
+        "proto-tinker-wc": ["0.1.87"]
+      }
+    },
+    "eslint_prettier_phishing_jul_2025": {
+      "title": "ESLint/Prettier phishing compromise",
+      "ecosystem": "npm",
+      "disclosed": "2025-07",
+      "family": "credential stealer + post-install RCE",
+      "reference": "https://socket.dev/blog/eslint-config-prettier-malware",
+      "notes": "Maintainer phished. Malicious versions published for eslint-config-prettier and related packages. postinstall script exfiltrated npm tokens.",
+      "packages": {
+        "@pkgr/core": ["0.2.8", "0.2.9"],
+        "eslint-config-prettier": ["8.10.1", "9.1.1", "10.1.6", "10.1.7"],
+        "eslint-plugin-prettier": ["4.2.2", "4.2.3"],
+        "got-fetch": ["5.1.11", "5.1.12"],
+        "napi-postinstall": ["0.3.1"],
+        "synckit": ["0.11.9", "0.11.10"]
+      }
+    },
+    "nx_s1ngularity_aug_2025": {
+      "title": "Nx / S1ngularity supply chain",
+      "ecosystem": "npm",
+      "disclosed": "2025-08",
+      "family": "credential stealer + GitHub token exfil",
+      "reference": "https://socket.dev/blog/nx-s1ngularity-supply-chain-attack",
+      "notes": "Multiple @nx/* scoped packages and the nx meta-package compromised across a range of versions. Payload scanned for GITHUB_TOKEN, NPM_TOKEN, AWS credentials and posted to attacker webhook.",
+      "packages": {
+        "@nx/devkit": ["20.9.0", "21.5.0"],
+        "@nx/enterprise-cloud": ["3.2.0"],
+        "@nx/eslint": ["21.5.0"],
+        "@nx/js": ["20.9.0", "21.5.0"],
+        "@nx/key": ["3.2.0"],
+        "@nx/node": ["20.9.0", "21.5.0"],
+        "@nx/workspace": ["20.9.0", "21.5.0"],
+        "nx": ["20.9.0", "20.10.0", "20.11.0", "20.12.0", "21.5.0", "21.6.0", "21.7.0", "21.8.0"]
+      }
+    },
+    "shai_hulud_worm_v1_sep_2025": {
+      "title": "Shai-Hulud self-propagating npm worm (v1)",
+      "ecosystem": "npm",
+      "disclosed": "2025-09",
+      "family": "self-propagating worm",
+      "reference": "https://socket.dev/blog/shai-hulud-worm",
+      "notes": "First npm worm with self-propagation via stolen maintainer credentials. @ctrl/tinycolor was the initial vector before the worm was contained.",
+      "packages": {
+        "@ctrl/tinycolor": ["4.1.1", "4.1.2"]
+      }
+    },
+    "react_native_mar_2026": {
+      "title": "React Native country/phone picker compromise",
+      "ecosystem": "npm",
+      "disclosed": "2026-03",
+      "family": "mobile credential stealer",
+      "reference": "https://socket.dev/blog/react-native-country-phone-picker",
+      "notes": "Two popular React Native packages compromised. Payload targeted mobile device credentials and keychain items.",
+      "packages": {
+        "react-native-country-select": ["0.3.91", "0.4.2"],
+        "react-native-international-phone-number": ["0.11.8", "0.12.1", "0.12.2", "0.12.3"]
+      }
+    },
+    "ghost_campaign_feb_2026": {
+      "title": "Ghost campaign (entirely malicious packages)",
+      "ecosystem": "npm",
+      "disclosed": "2026-02",
+      "family": "dropper + credential harvester",
+      "reference": "https://socket.dev/blog/ghost-npm-campaign-feb-2026",
+      "notes": "Entirely malicious packages published under ghost accounts. Names designed to look legitimate. All versions malicious.",
+      "packages": {
+        "ai-fast-auto-trader": ["*"],
+        "carbon-mac-copy-cloner": ["*"],
+        "coinbase-desktop-sdk": ["*"],
+        "darkslash": ["*"],
+        "pkgnewfefame1": ["*"],
+        "react-fast-utilsa": ["*"],
+        "react-performance-suite": ["*"],
+        "react-query-core-utils": ["*"],
+        "react-state-optimizer-core": ["*"]
+      }
+    },
+    "nk_contagious_interview_wave3_mar_2026": {
+      "title": "North Korean Contagious Interview wave 3",
+      "ecosystem": "npm",
+      "disclosed": "2026-03",
+      "family": "state-sponsored RAT + crypto drainer",
+      "reference": "https://socket.dev/blog/nk-contagious-interview-wave-3",
+      "notes": "Third wave of DPRK-linked Contagious Interview campaign. Packages distributed to software developer targets via fake job interviews. All versions malicious.",
+      "packages": {
+        "beautiful-plugins": ["*"],
+        "blur-plugins": ["*"],
+        "chalk-config": ["*"],
+        "flexible-loggers": ["*"],
+        "framer-motion-ext": ["*"],
+        "jsonpacks": ["*"],
+        "jsonsecs": ["*"],
+        "jsonspecific": ["*"],
+        "logbin-nodejs": ["*"],
+        "lucide-node": ["*"],
+        "mongo-errorlog": ["*"],
+        "next-log-patcher": ["*"],
+        "nextjs-insight": ["*"],
+        "node-loggers": ["*"],
+        "node-orm-mongoose": ["*"],
+        "pixel-percent": ["*"],
+        "prior-config": ["*"],
+        "proc-watch": ["*"],
+        "react-logs": ["*"],
+        "react-plaid-sdk": ["*"],
+        "reactbootstraps": ["*"],
+        "router-parse": ["*"],
+        "server-log-engine": ["*"],
+        "serverlog-dispatch": ["*"],
+        "struct-logger": ["*"],
+        "sumsub-node-websdk": ["*"],
+        "test-topdev-logger-v1": ["*"],
+        "test-topdev-logger-v3": ["*"],
+        "use-videos": ["*"],
+        "util-buffers": ["*"],
+        "vite-loader-svg": ["*"],
+        "vite-plugin-next-refresh": ["*"],
+        "vite-plugin-purify": ["*"],
+        "vite-plugin-svgn": ["*"],
+        "vite-plugin-tools": ["*"]
+      }
+    },
+    "credential_harvester_typosquats_2025": {
+      "title": "Credential harvester typosquats",
+      "ecosystem": "npm",
+      "disclosed": "2025-07 to 2025-10",
+      "family": "credential harvester",
+      "reference": "https://socket.dev/blog/credential-harvester-typosquats-2025",
+      "notes": "Typosquat campaign targeting Discord, Ethereum, and framework package names. Often use .js suffix as typosquat signal.",
+      "packages": {
+        "deezcord.js": ["*"],
+        "dezcord.js": ["*"],
+        "dizcordjs": ["*"],
+        "etherdjs": ["*"],
+        "ethesjs": ["*"],
+        "ethetsjs": ["*"],
+        "nodemonjs": ["*"],
+        "react-router-dom.js": ["*"],
+        "typescriptjs": ["*"],
+        "zustand.js": ["*"]
+      }
+    },
+    "nodecordrat_bitcoin_typosquats_2025": {
+      "title": "NodeCordRAT / Bitcoin library typosquats",
+      "ecosystem": "npm",
+      "disclosed": "2025",
+      "family": "RAT + crypto wallet drainer",
+      "reference": "https://socket.dev/blog/nodecordrat-bitcoin-typosquats",
+      "notes": "Typosquats of Bitcoin library names carrying NodeCordRAT payload.",
+      "packages": {
+        "bip40": ["*"],
+        "bitcoin-lib-js": ["*"],
+        "bitcoin-main-lib": ["*"]
+      }
+    },
+    "lazarus_graphalgo_may2025_feb2026": {
+      "title": "Lazarus Group / Graphalgo campaign",
+      "ecosystem": "npm",
+      "disclosed": "2025-05 to 2026-02",
+      "family": "state-sponsored (Lazarus)",
+      "reference": "https://socket.dev/blog/lazarus-graphalgo-campaign",
+      "notes": "Long-running Lazarus-attributed campaign using math/graph library names.",
+      "packages": {
+        "bigmathutils": ["*"],
+        "graphalgo": ["*"],
+        "graphlibx": ["*"],
+        "xpack-subscription": ["*"]
+      }
+    },
+    "rat_typosquats_2026": {
+      "title": "RAT-delivering typosquats 2026",
+      "ecosystem": "npm",
+      "disclosed": "2026",
+      "family": "RAT dropper",
+      "reference": "https://socket.dev/blog/rat-typosquats-2026",
+      "notes": "Typosquat packages delivering remote access trojans.",
+      "packages": {
+        "buildrunner-dev": ["*"],
+        "eslint-verify-plugin": ["*"]
+      }
+    }
+  }
+}
