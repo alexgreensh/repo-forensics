@@ -1,0 +1,440 @@
+# forensify — canonical agent-stack root definitions
+#
+# This file is the authoritative map of where each supported ecosystem lives on
+# disk, what surfaces each ecosystem exposes (skills, MCP, hooks, plugins,
+# commands, memory, credentials), and which paths are "shadow" surfaces that
+# should be reported separately rather than scanned by the domain sub-agents.
+#
+# Every string that leaves inventory output via this schema MUST be
+# NFKC-normalized and realpath-resolved before hashing or display. Bidirectional
+# override characters (U+202A..U+202E, U+2066..U+2069) are rejected outright.
+#
+# Schema is intentionally additive: new ecosystems land as new top-level
+# entries, new surfaces land as new keys under `surfaces`. The inventory
+# consumer is contract-stable on `schema_version`.
+#
+# Research provenance:
+#   Claude Code — context7 /anthropics/claude-code + filesystem recon 2026-04-06
+#   Codex CLI   — context7 /openai/codex + developers.openai.com/codex/auth + auth.json shape inspection
+#   OpenClaw    — docs.openclaw.ai/llms.txt + docs.openclaw.ai/tools/skills + openclawplaybook.ai workspace architecture
+#   NanoClaw    — docs.nanoclaw.dev/llms.txt + docs.nanoclaw.dev/api/skills/skill-structure + /features/cli
+
+schema_version: 1
+version: "0.1.0"
+generated_for: "forensify v0.1"
+
+# ---------------------------------------------------------------------------
+# Schema invariants (enforced by build_inventory.py at runtime)
+# ---------------------------------------------------------------------------
+invariants:
+  path_normalization: NFKC
+  bidi_override_policy: reject
+  symlink_resolution: realpath_before_hash
+  walk_depth_cap: 8
+  follow_symlinks_outside_root: true   # but record the redirect target for audit
+  credential_value_reads: forbidden    # stat + JSON-shape inspection only
+  shadow_surfaces_in_default_scan: false
+
+# ---------------------------------------------------------------------------
+# Cross-ecosystem conventions
+# ---------------------------------------------------------------------------
+cross_ecosystem_conventions:
+  # AGENTS.md is a shared convention. OpenClaw workspaces use it, Codex uses it,
+  # Claude Code projects increasingly use it (paired with or instead of
+  # CLAUDE.md). When forensify finds AGENTS.md under any ecosystem root, it
+  # reports under that ecosystem's `memory` surface AND cross-links it under a
+  # top-level cross_ecosystem.agents_md findings bucket so multi-stack users see
+  # the coordination/contention risk at a glance.
+  agents_md:
+    filename: AGENTS.md
+    used_by: [claude_code, codex, openclaw]
+    purpose: agent_instructions
+    report_under: memory
+
+# ---------------------------------------------------------------------------
+# Known cross-tool contention IOCs
+# Deterministic rule set. No LLM inference. Append-only; each entry needs a
+# public upstream reference.
+# ---------------------------------------------------------------------------
+cross_tool_iocs:
+  - id: "openai/codex#54506"
+    title: "OpenClaw models status overwrites fresh Codex OAuth credentials"
+    affected_file: "~/.codex/auth.json"
+    trigger_conditions:
+      - codex_installed: true
+      - openclaw_installed: true
+    severity: high
+    reference: "https://github.com/openclaw/openclaw/issues/54506"
+    detection_logic: |
+      If ~/.codex/auth.json exists AND ~/.openclaw/ has an active install
+      (openclaw.json present OR ~/.agents/skills/ populated), emit a finding
+      with severity=high pointing to the upstream bug. Does not read token
+      values — the presence of both installs is sufficient signal for the
+      known exploit vector.
+
+# ---------------------------------------------------------------------------
+# Ecosystem: Claude Code (Anthropic)
+# ---------------------------------------------------------------------------
+ecosystems:
+  claude_code:
+    display_name: Claude Code
+    vendor: Anthropic
+    docs_url: https://docs.anthropic.com/claude/docs/claude-code
+    detection:
+      kind: dotfolder
+      roots:
+        - "~/.claude"
+        - "~/.claude.json"          # sibling file at $HOME, not inside .claude/
+      required_signals_any:         # at least one must exist to mark "installed"
+        - "~/.claude/CLAUDE.md"
+        - "~/.claude/settings.json"
+        - "~/.claude.json"
+    surfaces:
+      skills:
+        globs:
+          - "~/.claude/skills/*/SKILL.md"
+          - "~/.claude/plugins/*/skills/*/SKILL.md"
+          - "~/.claude/plugins/*/plugins/*/skills/*/SKILL.md"
+      agents:
+        globs:
+          - "~/.claude/agents/*.md"
+          - "~/.claude/plugins/*/agents/*.md"
+      commands:
+        globs:
+          - "~/.claude/commands/**/*.md"
+          - "~/.claude/plugins/*/commands/**/*.md"
+      hooks:
+        files:
+          - "~/.claude/settings.json"         # hooks block lives here
+          - "~/.claude/plugins/*/hooks/hooks.json"
+        walk_dirs:
+          - "~/.claude/hooks/"                # shell scripts, often symlinked
+        realpath_required: true
+      mcp:
+        files:
+          - "~/.claude.json"                  # primary global MCP config
+          - "~/.claude/settings.json"         # secondary (mcp block)
+          - "~/.claude/plugins/*/.mcp.json"
+      plugins:
+        files:
+          - "~/.claude/plugins/installed_plugins.json"
+          - "~/.claude/plugins/known_marketplaces.json"
+          - "~/.claude/plugins/blocklist.json"
+        walk_dirs:
+          - "~/.claude/plugins/marketplaces/"
+      commands_and_memory:
+        memory_files:
+          - "~/.claude/CLAUDE.md"                          # global memory
+          - "~/.claude/projects/*/memory/MEMORY.md"        # per-project memory
+        brain_files:
+          - "~/.claude/AGENTS.md"                          # if present, see cross_ecosystem_conventions
+      settings:
+        files:
+          - "~/.claude/settings.json"
+      credentials:
+        # Claude Code credentials typically live in macOS Keychain, not on disk.
+        # If a user has manually placed an anthropic_api_key file here, it
+        # surfaces as a shadow/warning finding.
+        soft_paths:
+          - "~/.claude/anthropic*"
+          - "~/.claude/*credentials*"
+    shadow_surfaces:
+      globs:
+        - "~/.claude-backup-*"
+        - "~/.claude.full_backup_*"
+        - "~/.claude.json.backup"
+        - "~/.claude/backups/"
+        - "~/.claude/_backups/"
+        - "~/.claude/debug/"
+        - "~/.claude/file-history/"
+        - "~/.claude/cache/"
+        - "~/.claude/downloads/"
+
+  # -------------------------------------------------------------------------
+  # Ecosystem: Codex CLI (OpenAI)
+  # -------------------------------------------------------------------------
+  codex:
+    display_name: Codex CLI
+    vendor: OpenAI
+    docs_url: https://developers.openai.com/codex/
+    detection:
+      kind: dotfolder
+      env_overrides:
+        - name: CODEX_HOME
+          default: "~/.codex"
+      roots:
+        - "${CODEX_HOME}"
+      required_signals_any:
+        - "${CODEX_HOME}/config.toml"
+        - "${CODEX_HOME}/auth.json"
+        - "${CODEX_HOME}/AGENTS.md"
+    surfaces:
+      skills:
+        globs:
+          - "${CODEX_HOME}/skills/*/SKILL.md"
+      agents:
+        globs:
+          - "${CODEX_HOME}/agents/*.md"
+      commands:
+        globs:
+          - "${CODEX_HOME}/commands/**/*.md"
+      prompts:                                 # Codex-specific surface
+        globs:
+          - "${CODEX_HOME}/prompts/**/*"
+      rules:                                   # Codex-specific surface
+        globs:
+          - "${CODEX_HOME}/rules/**/*"
+      hooks:
+        # Codex does not have a standalone hook system. Execution policies
+        # (approval_policy, sandbox_mode) are declared in config.toml.
+        files:
+          - "${CODEX_HOME}/config.toml"
+        parse_as: toml
+        extract_keys: [approval_policy, sandbox_mode]
+      mcp:
+        files:
+          - "${CODEX_HOME}/config.toml"
+        parse_as: toml
+        extract_keys: ["mcp_servers.*"]
+      plugins:
+        globs:
+          - "${CODEX_HOME}/plugins/**/.codex-plugin/plugin.json"
+      commands_and_memory:
+        memory_files:
+          - "${CODEX_HOME}/AGENTS.md"          # global instructions, cross-ecosystem convention
+          - "${CODEX_HOME}/memories/**/*"
+        brain_files:
+          - "${CODEX_HOME}/AGENTS.md"
+      settings:
+        files:
+          - "${CODEX_HOME}/config.toml"
+          - "${CODEX_HOME}/.codex-global-state.json"
+      credentials:
+        # First-class structured metadata per the forensify credentials design.
+        # NEVER read values. Inventory captures: file_mode, perms, auth_mode,
+        # token_last_refresh, staleness_days, known cross-tool IOCs.
+        files:
+          - "${CODEX_HOME}/auth.json"
+        schema_inspection: shape_only
+        metadata_fields:
+          - file_mode_octal
+          - is_world_readable
+          - is_group_readable
+          - owner_uid_matches_current
+          - size_bytes
+          - last_modified_iso
+          - auth_mode              # "chatgpt" | "apikey" | null
+          - token_last_refresh_iso # if auth_mode=chatgpt
+          - staleness_days         # derived from last_refresh
+        auth_mode_risk_weights:
+          apikey: high             # non-rotating, broad-scope, exfil-once-use-forever
+          chatgpt: medium          # short OAuth with refresh rotation
+          null: low                # unconfigured or legacy
+    shadow_surfaces:
+      globs:
+        - "${CODEX_HOME}/config.toml.bak.*"
+        - "${CODEX_HOME}/logs_*.sqlite"
+        - "${CODEX_HOME}/logs_*.sqlite-shm"
+        - "${CODEX_HOME}/logs_*.sqlite-wal"
+        - "${CODEX_HOME}/state_*.sqlite"
+        - "${CODEX_HOME}/sessions/"
+        - "${CODEX_HOME}/shell_snapshots/"
+        - "${CODEX_HOME}/cache/"
+        - "${CODEX_HOME}/.tmp/"
+        - "${CODEX_HOME}/tmp/"
+        - "${CODEX_HOME}/vendor_imports/"
+        - "${CODEX_HOME}/sqlite/"
+
+  # -------------------------------------------------------------------------
+  # Ecosystem: OpenClaw (Steipete / Worth A Try LLC)
+  # -------------------------------------------------------------------------
+  openclaw:
+    display_name: OpenClaw
+    vendor: Steipete / Worth A Try LLC
+    docs_url: https://docs.openclaw.ai
+    detection:
+      kind: dotfolder
+      env_overrides:
+        - name: OPENCLAW_PROFILE
+          affects: workspace_suffix     # workspace becomes workspace-<profile>
+      roots:
+        - "~/.openclaw"
+        - "~/.agents"                   # personal agent skills, per docs.openclaw.ai
+      required_signals_any:
+        - "~/.openclaw/openclaw.json"
+        - "~/.openclaw/workspace/AGENTS.md"
+        - "~/.agents/skills"
+    workspace:
+      # Workspace location resolution order:
+      #   1. openclaw.json -> agent.workspace (if set)
+      #   2. ~/.openclaw/workspace-${OPENCLAW_PROFILE} (if OPENCLAW_PROFILE != "default")
+      #   3. ~/.openclaw/workspace
+      default_path: "~/.openclaw/workspace"
+      profile_env: OPENCLAW_PROFILE
+      config_override_path: "~/.openclaw/openclaw.json"
+      config_override_key: "agent.workspace"
+    surfaces:
+      # Skills precedence chain (highest to lowest), per docs.openclaw.ai/tools/skills:
+      #   workspace/skills/               (highest; per-agent workspace)
+      #   workspace/.agents/skills/       (project agent skills)
+      #   ~/.agents/skills/               (personal agent skills, cross-workspace)
+      #   ~/.openclaw/skills/             (managed/local overrides)
+      #   bundled                         (ships with npm package / .app)
+      #   skills.load.extraDirs           (lowest; configured extras)
+      skills:
+        precedence_chain:
+          - "${workspace}/skills/*/SKILL.md"
+          - "${workspace}/.agents/skills/*/SKILL.md"
+          - "~/.agents/skills/*/SKILL.md"
+          - "~/.openclaw/skills/*/SKILL.md"
+      agents:
+        globs:
+          - "~/.openclaw/agents/*/*.md"
+      commands:
+        globs:
+          - "${workspace}/commands/**/*"
+      brain_files:
+        files:
+          - "${workspace}/AGENTS.md"        # instructions
+          - "${workspace}/SOUL.md"          # persona
+          - "${workspace}/USER.md"          # user context
+          - "${workspace}/IDENTITY.md"      # identity
+          - "${workspace}/TOOLS.md"         # local conventions
+          - "${workspace}/HEARTBEAT.md"     # heartbeat
+          - "${workspace}/BOOT.md"          # bootstrap
+      memory:
+        files:
+          - "${workspace}/MEMORY.md"
+        globs:
+          - "${workspace}/memory/*.md"
+      hooks:
+        # OpenClaw has a hooks topic in its CLI reference. Config location TBD
+        # from upstream docs — placeholder until we confirm exact file paths in
+        # the next research pass.
+        files:
+          - "~/.openclaw/openclaw.json"
+        parse_as: json
+        extract_keys: [hooks, "agents.defaults.hooks"]
+      mcp:
+        files:
+          - "~/.openclaw/openclaw.json"
+        parse_as: json
+        extract_keys: [mcp, "agents.defaults.mcp"]
+      plugins:
+        globs:
+          - "~/.openclaw/plugins/*/openclaw.plugin.json"
+      settings:
+        files:
+          - "~/.openclaw/openclaw.json"
+      credentials:
+        walk_dirs:
+          - "~/.openclaw/credentials/"
+        schema_inspection: shape_only
+        metadata_fields:
+          - file_mode_octal
+          - is_world_readable
+          - is_group_readable
+          - owner_uid_matches_current
+          - size_bytes
+          - last_modified_iso
+      canvas:
+        globs:
+          - "${workspace}/canvas/**/*"
+    shadow_surfaces:
+      walk_dirs:
+        - "~/.openclaw/agents/*/sessions/"    # session transcripts
+        - "~/.openclaw/cache/"
+        - "~/.openclaw/tmp/"
+
+  # -------------------------------------------------------------------------
+  # Ecosystem: NanoClaw (qwibitai)
+  # Detection is signature-based, not path-based — NanoClaw is a git-cloned
+  # repo wherever the user chose to put it, not a dotfolder under $HOME.
+  # -------------------------------------------------------------------------
+  nanoclaw:
+    display_name: NanoClaw
+    vendor: qwibitai
+    docs_url: https://docs.nanoclaw.dev
+    detection:
+      kind: git_repo_signature
+      env_overrides:
+        - name: NANOCLAW_DIR
+          role: primary_path_override
+      common_paths:
+        - "~/NanoClaw"
+        - "~/nanoclaw"
+        - "~/code/nanoclaw"
+        - "~/code/NanoClaw"
+        - "~/CascadeProjects/*nanoclaw*"
+        - "~/CascadeProjects/*NanoClaw*"
+        - "~/projects/nanoclaw"
+        - "~/projects/NanoClaw"
+      signature_files_all:          # directory must contain ALL of these to match
+        - "scripts/claw"
+        - "container/skills"
+        - "package.json"
+      signature_content_any:        # AND package.json must contain one of these
+        - '"name":\s*"nanoclaw'
+        - "nanoclaw-agent"
+      walk_depth_cap: 3             # prevent runaway globbing on common_paths
+    surfaces:
+      # NanoClaw reuses Claude Code's .claude/skills/ directory layout inside
+      # its own repo for operational skills. Container skills live under
+      # container/skills/ and are synced into containers' .claude/skills/ at
+      # runtime.
+      operational_skills:
+        globs:
+          - "${root}/.claude/skills/*/SKILL.md"
+      container_skills:
+        globs:
+          - "${root}/container/skills/*/SKILL.md"
+      utility_skills:
+        globs:
+          - "${root}/.claude/skills/*/scripts/**/*"
+      hooks:
+        # NanoClaw does not expose a hook system comparable to Claude Code.
+        # The scheduling system in container does emit task payloads; that is
+        # surfaced under the commands domain, not hooks.
+        files: []
+      mcp:
+        files:
+          - "${root}/.mcp.json"
+        globs:
+          - "${root}/container/**/mcp*.json"
+      plugins:
+        files:
+          - "${root}/package.json"
+      commands:
+        globs:
+          - "${root}/.claude/commands/*.md"
+      settings:
+        files:
+          - "${root}/package.json"
+          - "${root}/.env.example"          # safe to enumerate; never read .env values
+      credentials:
+        # NanoClaw credentials live in .env at repo root. Structured metadata
+        # only — forensify never reads .env values.
+        files:
+          - "${root}/.env"
+        schema_inspection: line_count_only   # count non-comment lines, no keys or values
+        metadata_fields:
+          - file_mode_octal
+          - is_world_readable
+          - is_group_readable
+          - size_bytes
+          - last_modified_iso
+          - line_count_non_comment
+      database:
+        # SQLite group registry. Metadata only: size, mtime, mode. Do not open.
+        globs:
+          - "${root}/*.db"
+          - "${root}/*.sqlite"
+        schema_inspection: stat_only
+    shadow_surfaces:
+      # NanoClaw does not accumulate user-level dotfolder backups; state lives
+      # in the cloned repo dir itself. Shadows are git-ignored caches.
+      globs:
+        - "${root}/node_modules/"
+        - "${root}/dist/"
+        - "${root}/build/"
+        - "${root}/.next/"
