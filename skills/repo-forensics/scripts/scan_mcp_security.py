@@ -100,6 +100,27 @@ TOOL_INJECTION_KEYWORDS = [
     "when using this tool", "when calling this tool", "before using",
 ]
 
+# Broader exfil verb pattern — catches verb-substitution bypasses of the
+# keyword list (caught by torture-room security review 2026-04-05). The
+# keyword list is send-verb-only; an attacker can substitute upload,
+# transmit, forward, push, beacon, relay, report, notify, deliver, dispatch,
+# submit, leak, exfiltrate, siphon, extract, ship, pipe, or stream and walk
+# through the keyword loop clean. This regex catches (verb) + up to 40 chars
+# + (URL scheme or webhook target).
+#
+# Severity is HIGH not CRITICAL because legitimate tool descriptions DO
+# sometimes mention uploading/posting to HTTPS URLs (e.g., "uploads your
+# package to https://s3.amazonaws.com/..."). HIGH tells reviewers "investigate
+# this" without the CRITICAL "abort install" escalation. The anchored keyword
+# list remains the source of CRITICAL for known-bad patterns.
+EXFIL_VERB_URL_PATTERN = re.compile(
+    r'\b(send|post|upload|transmit|forward|push|beacon|relay|report|notify|'
+    r'deliver|dispatch|submit|exfiltrate|leak|siphon|extract|ship|pipe|stream)\b'
+    r'[^\n]{0,40}?'
+    r'\b(https?://|ftp://|webhook\.)',
+    re.IGNORECASE
+)
+
 # Tool shadowing: description instructs agent to hijack trusted tools
 # Source: Invariant Labs tool shadowing demo (April 2025)
 TOOL_SHADOWING_PATTERNS = [
@@ -215,6 +236,7 @@ def scan_tool_metadata_poisoning(content, rel_path, ext):
     # Check description/title/summary fields
     for m in main_pattern.finditer(content):
         field_value = _normalize_for_keyword_match(m.group(1))
+        keyword_hit = False
         for keyword in TOOL_INJECTION_KEYWORDS:
             if keyword in field_value:
                 line_no = content[:m.start()].count('\n') + 1
@@ -226,7 +248,29 @@ def scan_tool_metadata_poisoning(content, rel_path, ext):
                     snippet=m.group(0)[:120],
                     category="tool-poisoning"
                 ))
+                keyword_hit = True
                 break  # One finding per matched field block
+
+        # Broader verb-substitution exfil pattern — only if no keyword
+        # already flagged the field (avoid double-counting the same issue).
+        # See EXFIL_VERB_URL_PATTERN definition for rationale.
+        if not keyword_hit:
+            verb_match = EXFIL_VERB_URL_PATTERN.search(field_value)
+            if verb_match:
+                line_no = content[:m.start()].count('\n') + 1
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="high",
+                    title="Suspicious Exfiltration Pattern in Tool Description",
+                    description=(
+                        f"Tool description contains exfiltration verb "
+                        f"'{verb_match.group(1)}' followed by URL/webhook target "
+                        f"'{verb_match.group(2)}'. Review whether this is a "
+                        f"legitimate upload target or an exfiltration vector."
+                    ),
+                    file=rel_path, line=line_no,
+                    snippet=m.group(0)[:120],
+                    category="exfil-pattern"
+                ))
 
     # Check name fields for injection (FSP — shorter but still loaded into context)
     if ext == '.json':
