@@ -7,18 +7,19 @@
 set -euo pipefail
 
 if [ -z "${1:-}" ]; then
-    echo "Usage: $0 <repo_path> [--skill-scan] [--format text|json|summary] [--update-iocs] [--watch]"
+    echo "Usage: $0 <repo_path> [options]"
     echo ""
     echo "Modes:"
-    echo "  (default)      Full audit - all 17 scanners"
-    echo "  --skill-scan   Focused on AI skill threats (9 scanners, faster)"
+    echo "  (default)              Full audit - all 18 scanners"
+    echo "  --skill-scan           Focused on AI skill threats (9 scanners, faster)"
     echo ""
     echo "Options:"
-    echo "  --format text     Human-readable with severity colors (default)"
-    echo "  --format json     Machine-readable JSON"
-    echo "  --format summary  Counts only (for CI/CD)"
-    echo "  --update-iocs     Pull latest IOC database before scanning"
-    echo "  --watch           Enable file integrity baseline tracking"
+    echo "  --format text          Human-readable with severity colors (default)"
+    echo "  --format json          Machine-readable JSON"
+    echo "  --format summary       Counts only (for CI/CD)"
+    echo "  --update-iocs          Pull latest IOC database before scanning"
+    echo "  --watch                Enable file integrity baseline tracking"
+    echo "  --package-list=FILE    Load user-supplied IOC list (absolute path, see docs)"
     exit 1
 fi
 
@@ -31,6 +32,7 @@ FORMAT="text"
 UPDATE_IOCS=false
 WATCH_MODE=false
 VERIFY_INSTALL=false
+PACKAGE_LIST_FILE=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --skill-scan) SKILL_SCAN=true; shift ;;
@@ -38,9 +40,24 @@ while [[ $# -gt 0 ]]; do
         --update-iocs) UPDATE_IOCS=true; shift ;;
         --watch) WATCH_MODE=true; shift ;;
         --verify-install) VERIFY_INSTALL=true; shift ;;
+        --package-list=*) PACKAGE_LIST_FILE="${1#*=}"; shift ;;
+        --package-list)
+            [[ $# -ge 2 ]] || { echo "Error: --package-list requires a FILE argument"; exit 1; }
+            PACKAGE_LIST_FILE="$2"; shift 2 ;;
         *) echo "Unknown arg: $1"; exit 1 ;;
     esac
 done
+
+# Validate --package-list is an absolute path BEFORE passing to Python
+if [ -n "$PACKAGE_LIST_FILE" ]; then
+    case "$PACKAGE_LIST_FILE" in
+        /*) : ;;  # absolute, OK
+        *) echo "Error: --package-list must be an absolute path, got: $PACKAGE_LIST_FILE"; exit 1 ;;
+    esac
+    if [ ! -f "$PACKAGE_LIST_FILE" ]; then
+        echo "Error: --package-list file not found: $PACKAGE_LIST_FILE"; exit 1
+    fi
+fi
 
 SKILL_DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -86,14 +103,30 @@ run_scanner() {
     local exit_file="$TMPDIR/$name.exit"
     local error_file="$TMPDIR/$name.err"
 
-    # JSON mode: separate stderr so stdout is clean JSON. Otherwise merge for human readability.
-    local stderr_target="$output_file"
-    [ "$FORMAT" = "json" ] && stderr_target="$error_file"
+    # Always run scanners in JSON format internally so aggregate_json.py can
+    # run the correlation engine across all of them. In text mode we convert
+    # JSON -> text at the aggregation step instead of letting each scanner
+    # emit text directly. This is what fixes security review A5 (correlation
+    # rules 1-19 were dead code in the primary workflow prior to 2026-04-05).
+    local internal_format="json"
 
+    # Build the scanner-specific arg array. Using a bash array avoids the
+    # word-split/quoting bug in the old ${extra_args:+"$extra_args"} pattern.
+    local -a scanner_args=()
+    [ -n "$extra_args" ] && scanner_args+=($extra_args)
+
+    # Wire dependency-scanner-specific flags
+    if [ "$name" = "dependencies" ]; then
+        [ -n "$PACKAGE_LIST_FILE" ] && scanner_args+=("--package-list=$PACKAGE_LIST_FILE")
+    fi
+
+    # `${arr[@]+"${arr[@]}"}` is the canonical `set -u`-safe expansion for
+    # bash arrays that may be empty. Without this, an empty scanner_args
+    # triggers "unbound variable" under `set -euo pipefail`.
     if [ -n "$TIMEOUT_CMD" ]; then
-        $TIMEOUT_CMD "$SCANNER_TIMEOUT" python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$FORMAT" ${extra_args:+"$extra_args"} > "$output_file" 2>> "$stderr_target"
+        $TIMEOUT_CMD "$SCANNER_TIMEOUT" python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$internal_format" ${scanner_args[@]+"${scanner_args[@]}"} > "$output_file" 2>> "$error_file"
     else
-        python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$FORMAT" ${extra_args:+"$extra_args"} > "$output_file" 2>> "$stderr_target"
+        python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$internal_format" ${scanner_args[@]+"${scanner_args[@]}"} > "$output_file" 2>> "$error_file"
     fi
     echo $? > "$exit_file"
 }
@@ -147,81 +180,28 @@ else
     wait
 fi
 
-# Collect and display results
+# Scanners ran in JSON format internally so the correlation engine can see
+# every scanner's findings together (security review A5 fix, 2026-04-05).
+# aggregate_json.py runs forensics_core.correlate() on the merged findings
+# and emits either JSON (for --format json) or text (for --format text /
+# --format summary) output. This is the single aggregation path.
+
+EXIT_CODE_FILE="$TMPDIR/aggregate.exit"
+echo "99" > "$EXIT_CODE_FILE"
+
 if [ "$FORMAT" = "json" ]; then
-    EXIT_CODE_FILE="$TMPDIR/aggregate.exit"
-    echo "99" > "$EXIT_CODE_FILE"
     if ! python3 "$SKILL_DIR/aggregate_json.py" "$TMPDIR" "$REPO_PATH" "$SKILL_SCAN" "$EXIT_CODE_FILE"; then
         :
     fi
-    _rc=$(cat "$EXIT_CODE_FILE" 2>/dev/null || echo "99")
-    case "$_rc" in
-        0|1|2) exit "$_rc" ;;
-        *) exit 99 ;;
-    esac
-fi
-
-echo ""
-echo "=========================================="
-echo "  RESULTS"
-echo "=========================================="
-
-MAX_EXIT=0
-TOTAL_C=0
-TOTAL_H=0
-TOTAL_M=0
-TOTAL_L=0
-
-for out_file in "$TMPDIR"/*.out; do
-    name=$(basename "$out_file" .out)
-    exit_code=$(cat "$TMPDIR/$name.exit" 2>/dev/null || echo "1")
-
-    echo ""
-    echo "--- [$name] ---"
-    cat "$out_file"
-
-    if [ "$exit_code" -gt "$MAX_EXIT" ]; then
-        MAX_EXIT=$exit_code
-    fi
-
-    # Count severity from output (supports both text and summary formats)
-    # Text format: lines with [CRITICAL], [HIGH], [MEDIUM], [LOW]
-    # Summary format: "scanner: N findings (XC YH ZM WL)"
-    if [ "$FORMAT" = "summary" ]; then
-        # Parse summary line: "scanner: N findings (29C 13H 0M 0L)"
-        summary_line=$(grep -E '[0-9]+C [0-9]+H [0-9]+M [0-9]+L' "$out_file" 2>/dev/null || true)
-        if [ -n "$summary_line" ]; then
-            c_count=$(echo "$summary_line" | grep -oE '[0-9]+C' | grep -oE '[0-9]+')
-            h_count=$(echo "$summary_line" | grep -oE '[0-9]+H' | grep -oE '[0-9]+')
-            m_count=$(echo "$summary_line" | grep -oE '[0-9]+M' | grep -oE '[0-9]+')
-            l_count=$(echo "$summary_line" | grep -oE '[0-9]+L' | grep -oE '[0-9]+')
-        else
-            c_count=0; h_count=0; m_count=0; l_count=0
-        fi
-    else
-        c_count=$(grep -c '\[CRITICAL\]' "$out_file" 2>/dev/null || true)
-        h_count=$(grep -c '\[HIGH\]' "$out_file" 2>/dev/null || true)
-        m_count=$(grep -c '\[MEDIUM\]' "$out_file" 2>/dev/null || true)
-        l_count=$(grep -c '\[LOW\]' "$out_file" 2>/dev/null || true)
-    fi
-    TOTAL_C=$((TOTAL_C + ${c_count:-0}))
-    TOTAL_H=$((TOTAL_H + ${h_count:-0}))
-    TOTAL_M=$((TOTAL_M + ${m_count:-0}))
-    TOTAL_L=$((TOTAL_L + ${l_count:-0}))
-done
-
-echo ""
-echo "=========================================="
-TOTAL=$((TOTAL_C + TOTAL_H + TOTAL_M + TOTAL_L))
-echo "  VERDICT: $TOTAL findings ($TOTAL_C critical, $TOTAL_H high, $TOTAL_M medium, $TOTAL_L low)"
-
-if [ "$TOTAL_C" -gt 0 ]; then
-    echo "  EXIT CODE: 2 (critical findings)"
-    exit 2
-elif [ "$TOTAL_H" -gt 0 ] || [ "$TOTAL_M" -gt 0 ]; then
-    echo "  EXIT CODE: 1 (high/medium findings)"
-    exit 1
 else
-    echo "  EXIT CODE: 0 (clean)"
-    exit 0
+    # text and summary modes both use text output from the aggregator
+    if ! python3 "$SKILL_DIR/aggregate_json.py" --text "$TMPDIR" "$REPO_PATH" "$SKILL_SCAN" "$EXIT_CODE_FILE"; then
+        :
+    fi
 fi
+
+_rc=$(cat "$EXIT_CODE_FILE" 2>/dev/null || echo "99")
+case "$_rc" in
+    0|1|2) exit "$_rc" ;;
+    *) exit 99 ;;
+esac
