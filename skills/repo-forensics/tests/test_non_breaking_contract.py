@@ -44,7 +44,7 @@ REQUIRED_SCANNER_ENTRY_KEYS = {
     "findings",
 }
 
-EXPECTED_SCANNER_NAMES = {
+EXPECTED_BASE_SCANNER_NAMES = {
     "ast_analysis",
     "binary",
     "dast",
@@ -65,7 +65,17 @@ EXPECTED_SCANNER_NAMES = {
     "skill_threats",
 }
 
-EXPECTED_SCANNER_COUNT = 18
+# Synthetic scanner entries injected by aggregate_json.py AFTER the real
+# scanner loop runs. trifecta_raw is appended when forensics_core.detect_trifecta_raw
+# finds a raw trifecta pattern (aggregate_json.py:178). correlation is appended
+# when run_correlation_pass produces any findings (aggregate_json.py:198). On a
+# clean target neither appears. On a dirty target both may appear. The contract
+# here is: the base scanners are ALWAYS present, and any extras must be in this
+# allow-list of known synthetic entries.
+EXPECTED_SYNTHETIC_SCANNER_NAMES = {"trifecta_raw", "correlation"}
+
+# Derived from the set so adding a base scanner only requires editing the set above.
+EXPECTED_BASE_SCANNER_COUNT = len(EXPECTED_BASE_SCANNER_NAMES)
 
 
 def _script_path():
@@ -174,25 +184,51 @@ class TestJsonSchemaSummary:
 
 
 class TestJsonSchemaScanners:
-    """Scanner list length, names, and entry shape are locked."""
+    """Scanner list length, names, and entry shape are locked.
 
-    def test_scanner_count_is_eighteen_in_full_mode(self, clean_repo):
+    Note: aggregate_json.py appends synthetic 'trifecta_raw' and 'correlation'
+    scanner entries AFTER the real scanner loop when those detection paths fire.
+    On a clean target neither appears; on a dirty target either or both may
+    appear. The contract is: all 18 base scanners are ALWAYS present, and any
+    additional names must be in EXPECTED_SYNTHETIC_SCANNER_NAMES. Set equality
+    against only the base set would incorrectly flag dirty-target scans as
+    contract breaks.
+    """
+
+    def test_base_scanner_count_at_least_eighteen_in_full_mode(self, clean_repo):
         _, payload = _run_forensics(clean_repo)
-        assert payload["scanner_count"] == EXPECTED_SCANNER_COUNT, (
-            f"Expected {EXPECTED_SCANNER_COUNT} scanners in full mode, "
-            f"got {payload['scanner_count']}. "
-            f"Adding or removing a scanner changes the contract."
+        assert payload["scanner_count"] >= EXPECTED_BASE_SCANNER_COUNT, (
+            f"Expected at least {EXPECTED_BASE_SCANNER_COUNT} base scanners in "
+            f"full mode, got {payload['scanner_count']}. "
+            f"Removing a base scanner is a breaking contract change."
         )
-        assert len(payload["scanners"]) == EXPECTED_SCANNER_COUNT
+        assert len(payload["scanners"]) == payload["scanner_count"], (
+            "scanner_count header must equal len(scanners) list."
+        )
 
-    def test_scanner_names_match_expected_set(self, clean_repo):
+    def test_all_base_scanners_present(self, clean_repo):
         _, payload = _run_forensics(clean_repo)
         actual_names = {scanner["name"] for scanner in payload["scanners"]}
-        assert actual_names == EXPECTED_SCANNER_NAMES, (
-            f"Scanner name set drift detected.\n"
-            f"Missing: {EXPECTED_SCANNER_NAMES - actual_names}\n"
-            f"Added: {actual_names - EXPECTED_SCANNER_NAMES}\n"
-            f"Renaming or adding scanners requires a contract update."
+        missing_base = EXPECTED_BASE_SCANNER_NAMES - actual_names
+        assert not missing_base, (
+            f"Base scanner missing from output: {missing_base}. "
+            f"Removing a base scanner is a breaking contract change. "
+            f"If a base scanner was renamed, update EXPECTED_BASE_SCANNER_NAMES "
+            f"with a compatibility alias and document the migration."
+        )
+
+    def test_no_unexpected_scanner_names(self, clean_repo):
+        _, payload = _run_forensics(clean_repo)
+        actual_names = {scanner["name"] for scanner in payload["scanners"]}
+        allowed = EXPECTED_BASE_SCANNER_NAMES | EXPECTED_SYNTHETIC_SCANNER_NAMES
+        unexpected = actual_names - allowed
+        assert not unexpected, (
+            f"Unexpected scanner names in output: {unexpected}. "
+            f"Either these are new scanners that need to be added to "
+            f"EXPECTED_BASE_SCANNER_NAMES, or new synthetic entries in "
+            f"aggregate_json.py that need to be added to "
+            f"EXPECTED_SYNTHETIC_SCANNER_NAMES with a comment explaining "
+            f"when they fire."
         )
 
     def test_every_scanner_entry_has_required_keys(self, clean_repo):
