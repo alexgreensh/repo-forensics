@@ -11,6 +11,14 @@
 ;; BUT re-allow reads on the specific hook script being tested, otherwise
 ;; bash cannot open it and the scanner silently fails. HOOK_PATH and HOOK_DIR
 ;; are passed via `sandbox-exec -D` parameters.
+;;
+;; Why both HOOK_PATH (literal) AND HOOK_DIR (subpath)?
+;; - literal HOOK_PATH: minimum needed so bash can load the hook itself.
+;; - subpath HOOK_DIR: real hooks commonly `source "$(dirname "$0")/lib.sh"`
+;;   or read .claude/settings.json for config. Limiting to `literal` alone
+;;   would silently break any realistic multi-file hook setup.
+;; This intentionally widens reads to the hook's containing directory only;
+;; reads of unrelated /Users paths (credentials, shell rc files) stay denied.
 (deny file-read* (subpath "/Users"))
 (allow file-read* (literal (param "HOOK_PATH")))
 (allow file-read* (subpath (param "HOOK_DIR")))

@@ -217,6 +217,11 @@ def execute_hook_with_payload(hook, payload, repo_path):
     # -D params re-allow reads on the specific hook script path so bash can
     # actually load it (without this, every /Users-hosted hook silently fails).
     if SANDBOX_AVAILABLE:
+        # Seatbelt matches rules against the fully-resolved path, so we must
+        # pass the realpath — otherwise a symlinked hook would be denied even
+        # though its symlink path is "allowed". No TOCTOU concern here: the
+        # allow rule is keyed to the resolved path at invocation time, and
+        # we don't trust the hook anyway (we're running it to observe leaks).
         hook_real = os.path.realpath(script_path)
         exec_cmd = [
             '/usr/bin/sandbox-exec',
