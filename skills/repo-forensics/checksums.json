@@ -5,7 +5,7 @@
   "files": {
     ".gitignore": "8b2598a3359a556874b8069d42dea2686f07d46c3ca1b540c4025788b258180a",
     "SKILL.md": "1b8b7f336c0a48640441735f4468d6fc0136af691a8369e53c9373f84c03f1d5",
-    "data/README.md": "374a2d4c532a4600925c982d942081c05aaa734010998c909a36c1a2efd2766d",
+    "data/README.md": "3980ad873dbef332e0db2d209cd22287d8a0d146930b40bafc8ab774166a8bc4",
     "data/compromised_versions.json": "96dfea743bc4437fb3a3bcd880c04d6e318b48cc0b81d439c1926064a2f9be62",
     "references/mcp-attack-patterns.md": "722d7a47186bfee18bde0e06a749dc55e8cc716c2418d118a64e57d60e48689a",
     "references/research_sources.md": "cbf07116ed04d87436fc1c9daf43ffb3ec2f513713f5fc882d089b53bcd7c629",
@@ -14,14 +14,14 @@
     "scripts/auto_scan.py": "4b6a76c6159cc9a71956bbaa8d6f40b548a293a68c69859cba856ad95c1da855",
     "scripts/dast_sandbox.sb": "6f6e9571a73aa8a9d07e7e4c5c0e6ae49fb6447c5f34a446154d301c6c4e8875",
     "scripts/forensics_core.py": "17c9e1ae1eca31ff10dd3d0080a3702a0160d1b3e9602caf7da59b112d0e7f2b",
-    "scripts/ioc_manager.py": "8ac247860d987eed8fe211a55416f56107fe9848b69a585ccdcf700753192d0b",
+    "scripts/ioc_manager.py": "0fb872b384592861e838a12e2ab7b3733469bd84284a49841b1925d47fa5e442",
     "scripts/parse_pnpm_lock.py": "720f084e11cd759ab453bdfa161950111a49455ff2c6ba55ef5a9c3e32161f0c",
     "scripts/run_forensics.sh": "19de7e87679360ebedb33a3c07ab99c4eedf8ad9fca434676da06288733faf82",
     "scripts/scan_ast.py": "92375cea8c9e71caa5885e904b1d4407e0f6c2d4dd29d990a820cf74e907f6a0",
     "scripts/scan_binary.py": "2b2cada77440ea10234c350a001386436eedad6365b7546c2c5e7b6aec6e88f8",
     "scripts/scan_dast.py": "0a635e54f24f2a7bf2dd1f82be993e177767ab014dfe7ad8ac0ed92bc9ffc62c",
     "scripts/scan_dataflow.py": "e030a3428dd2e425e35d86dcb24034917c28ad92d7903154e24b951212efe25e",
-    "scripts/scan_dependencies.py": "3a000b7c76ef45e6d2d762a5675c67309c5cd980e33b3677f32116305b5eaef0",
+    "scripts/scan_dependencies.py": "8288356c73c0b537d9afbd78a33f4e05ed9817344309eb2c8d978bf8dd332602",
     "scripts/scan_entropy.py": "c27a83523d4b9b63b880d948aa60ab269b6ab340fb2a5cd325c705495b4e5712",
     "scripts/scan_git_forensics.py": "ac4c2944f3a2eff15bc63896d50b8ed862e7fa513532d83043e073449063903b",
     "scripts/scan_infra.py": "b4a334bf8627432eecc2c2e3506c446300e9bc510b0d4565f3f442915ae0e59b",
@@ -35,6 +35,6 @@
     "scripts/scan_sast.py": "d8664253c5bd112042357f396041bd745801e137bdc19675d3426452f20ac24a",
     "scripts/scan_secrets.py": "fc11ac9d5a3b076e11d17641813d2e437c1a39ed327ebf3bee1ccf5ef575e05c",
     "scripts/scan_skill_threats.py": "73ae9041ebc43ef130b3f870afcc540256b610a18a2bcab4488202b60b31ed71",
-    "scripts/verify_install.py": "9a3b0b10db0aa35a78701b217387d297c4a0be4e9952f7793eceb129bd18453b"
+    "scripts/verify_install.py": "cbf7b4dc74d7a3bd6f997776a192b73b9b2f4f7b5c8055b27a95faac3682b668"
   }
 }

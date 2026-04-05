@@ -26,7 +26,7 @@ sha256_file = core.sha256_file
 def get_skill_root():
     """Get the root directory of the repo-forensics skill."""
     scripts_dir = os.path.dirname(os.path.abspath(__file__))
-    return os.path.dirname(scripts_dir)  # skill/
+    return os.path.dirname(scripts_dir)  # skills/repo-forensics/
 
 
 def get_tracked_files(skill_root):

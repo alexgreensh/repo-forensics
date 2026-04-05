@@ -345,7 +345,7 @@ def check_known_ioc_packages(dependencies, rel_path):
 #
 # DESIGN NOTE (2026-04-05): This in-module dict is the LEGACY baseline that
 # ships with the scanner for offline/air-gapped use. It is DISJOINT from the
-# larger ioc_manager-loaded database (skill/data/compromised_versions.json)
+# larger ioc_manager-loaded database (skills/repo-forensics/data/compromised_versions.json)
 # which carries Marc Gadsdon's 127 IOCs with campaign attribution. The two
 # sources are union-merged by _get_compromised_versions_db() below. When
 # adding new IOCs, prefer the JSON file (richer metadata, reviewable in git
@@ -374,7 +374,7 @@ def _get_compromised_versions_db():
 
     Merges the in-module COMPROMISED_PACKAGE_VERSIONS fallback (kept for
     offline/air-gapped use) with the richer ioc_manager dataset loaded from
-    skill/data/compromised_versions.json. When ioc_manager provides campaign
+    skills/repo-forensics/data/compromised_versions.json. When ioc_manager provides campaign
     attribution, the fallback dict's bare version strings are replaced by
     {version: campaign_id} maps for better reporting; when it does not, we
     synthesize 'local-fallback' as the campaign id so the downstream code

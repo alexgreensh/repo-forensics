@@ -35,7 +35,7 @@ CACHE_FILENAME = ".forensics-iocs.json"
 CACHE_MAX_AGE_HOURS = 24
 
 # Shipped IOC database (version-pinned compromises). Loaded from
-# skill/data/compromised_versions.json next to this script. This file ships
+# skills/repo-forensics/data/compromised_versions.json next to this script. This file ships
 # with the tool and is reviewable in git history — it is NOT cached or
 # downloaded at runtime. See --sync-osv (when implemented) for live updates.
 _DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data')

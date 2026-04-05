@@ -1,4 +1,4 @@
-# skill/data/
+# skills/repo-forensics/data/
 
 Static IOC data shipped with the repo-forensics skill. Files here are loaded
 at runtime by `ioc_manager.py`. They are NOT fetched from external sources
