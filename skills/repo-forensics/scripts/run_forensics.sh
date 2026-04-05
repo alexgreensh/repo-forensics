@@ -12,6 +12,7 @@ if [ -z "${1:-}" ]; then
     echo "Modes:"
     echo "  (default)              Full audit - all 18 scanners"
     echo "  --skill-scan           Focused on AI skill threats (9 scanners, faster)"
+    echo "  --inventory            Enumerate installed AI-agent stacks (zero-LLM, JSON output)"
     echo ""
     echo "Options:"
     echo "  --format text          Human-readable with severity colors (default)"
@@ -20,7 +21,28 @@ if [ -z "${1:-}" ]; then
     echo "  --update-iocs          Pull latest IOC database before scanning"
     echo "  --watch                Enable file integrity baseline tracking"
     echo "  --package-list=FILE    Load user-supplied IOC list (absolute path, see docs)"
+    echo "  --include-shadows      Include shadow surfaces in inventory (backups, caches)"
     exit 1
+fi
+
+# Check for --inventory before consuming positional arg
+if [ "$1" = "--inventory" ]; then
+    shift
+    INVENTORY_ARGS=()
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --target) INVENTORY_ARGS+=("--target" "$2"); shift 2 ;;
+            --include-shadows) INVENTORY_ARGS+=("--include-shadows"); shift ;;
+            --list-ecosystems) INVENTORY_ARGS+=("--list-ecosystems"); shift ;;
+            *) echo "Unknown inventory arg: $1"; exit 1 ;;
+        esac
+    done
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    FORENSIFY_DIR="$(cd "$SCRIPT_DIR/../../forensify/scripts" 2>/dev/null && pwd)" || {
+        echo "Error: forensify scripts not found at $SCRIPT_DIR/../../forensify/scripts" >&2
+        exit 1
+    }
+    exec python3 "$FORENSIFY_DIR/build_inventory.py" "${INVENTORY_ARGS[@]}"
 fi
 
 REPO_PATH=$(realpath "$1")
