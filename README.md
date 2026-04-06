@@ -176,6 +176,46 @@ This catches attacks that designed to evade detection. The axios dropper deletes
 
 ---
 
+## Forensify — Audit Your Agent Stack (v2.5)
+
+repo-forensics scans code you're about to install. **forensify** scans what you've already installed and forgot about.
+
+Over time you accumulate skills, MCP servers, hooks, plugins, commands, and credentials across every agent framework you use. Nobody keeps track. That credential file from three months ago is still world-readable. That hook script symlinks to a directory outside your stack. Two of your ecosystems have a known bug where one silently overwrites the other's OAuth tokens.
+
+Point forensify at your global stack, a specific project, or any directory with agent configs. It tells you what's there, what's exposed, and what to fix.
+
+```bash
+# What's accumulated across all my agent stacks?
+./skills/repo-forensics/scripts/run_forensics.sh --inventory
+
+# Which ecosystems do I have installed?
+./skills/repo-forensics/scripts/run_forensics.sh --inventory --list-ecosystems
+
+# Audit a specific project's agent surface
+./skills/repo-forensics/scripts/run_forensics.sh --inventory --target /path/to/my-project
+
+# Audit only my Codex setup
+./skills/repo-forensics/scripts/run_forensics.sh --inventory --target ~/.codex
+```
+
+### What it audits
+
+**Four ecosystems** — Claude Code, Codex CLI, OpenClaw, NanoClaw. Auto-detected from your machine, no configuration needed.
+
+**Project-scope scanning** — Point `--target` at any project directory and forensify finds project-level agent configs: `.claude/` settings and commands, `CLAUDE.md`, `.mcp.json`, `.agents/`, `.env`, hooks, skills. The stuff people set up quickly during a sprint and never revisit.
+
+**Ten surface categories** — Skills, commands, agents, memory files, brain files, hooks, MCP servers, plugins, settings, credentials. Each with file metadata: permissions, modification times, symlink targets, sizes.
+
+**Credential permission auditing** — World-readable `.env` files and API key stores surface as findings. For Codex `auth.json`, forensify reports auth mode (apiKey vs OAuth), token staleness, and file permissions without ever reading the actual token values.
+
+**Cross-ecosystem intelligence** — Findings that only exist when multiple stacks coexist on the same machine. The `openai/codex#54506` credential overwrite bug fires when both Codex and OpenClaw are detected. `AGENTS.md` conflicts across stacks are surfaced. Same skill name in multiple ecosystems with different versions triggers a drift warning.
+
+### What it doesn't do
+
+Forensify is read-only. It doesn't fix, patch, or quarantine anything. It doesn't scan external code before install (that's repo-forensics' job). It doesn't read credential values, only file metadata. It's the X-ray, not the surgery.
+
+---
+
 ## Auto-Scan Hook (v2)
 
 v2 adds a PostToolUse hook that automatically scans when you install or clone anything. No manual invocation needed.
