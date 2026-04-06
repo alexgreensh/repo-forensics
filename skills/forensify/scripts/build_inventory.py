@@ -404,7 +404,72 @@ def detect_ecosystems(
             }
         )
 
+    # If --target was supplied and no ecosystem matched, check if the target
+    # itself is a project directory with project-level agent configs. This
+    # covers the primary use case: "point forensify at my project and tell me
+    # what agent surfaces exist there."
+    if target_override is not None and not results:
+        project_eco = _detect_project_scope(target_override, env)
+        if project_eco:
+            results.append(project_eco)
+
     return results
+
+
+# Project-level agent surface markers. If a directory contains any of these,
+# it has project-level agent configuration that forensify should audit.
+_PROJECT_AGENT_MARKERS = [
+    ".claude",            # Claude Code project settings/commands
+    "CLAUDE.md",          # Claude Code project instructions
+    ".mcp.json",          # MCP server config (Claude Code, OpenClaw)
+    ".agents",            # Agent definitions (OpenClaw, custom)
+    ".cursor",            # Cursor project config
+    "AGENTS.md",          # Cross-ecosystem agent instructions
+    ".codex-plugin",      # Codex plugin manifest
+    ".claude-plugin",     # Claude Code plugin manifest
+    ".env",               # Credentials (API keys, tokens)
+]
+
+
+def _detect_project_scope(
+    target_path: str,
+    env: Dict[str, str],
+) -> Optional[Dict[str, Any]]:
+    """
+    Detect project-level agent surfaces at a target path.
+
+    When a user runs `forensify --target /path/to/my-project`, this finds
+    project-level agent configs (.claude/, CLAUDE.md, .mcp.json, .agents/,
+    AGENTS.md, etc.) and returns a synthetic "project" ecosystem record
+    with resolved_roots pointing at the project directory.
+
+    Returns None if the target has no recognizable agent surface.
+    """
+    target_real = os.path.realpath(target_path)
+    if not os.path.isdir(target_real):
+        return None
+
+    matched: List[str] = []
+    for marker in _PROJECT_AGENT_MARKERS:
+        candidate = os.path.join(target_real, marker)
+        if os.path.exists(candidate):
+            try:
+                matched.append(normalize_text(candidate))
+            except BidiOverrideRejected:
+                continue
+
+    if not matched:
+        return None
+
+    return {
+        "key": "project",
+        "display_name": "Project: %s" % os.path.basename(target_real),
+        "vendor": "",
+        "detection_kind": "project_scope",
+        "detected": True,
+        "resolved_roots": [normalize_text(target_real)],
+        "matched_signals": matched,
+    }
 
 
 def _path_contains(parent: str, candidate: str) -> bool:
@@ -1208,6 +1273,95 @@ def find_cross_ecosystem_agents_md(
 # ---------------------------------------------------------------------------
 
 
+def _walk_project_surfaces(
+    project_root: str,
+    walk_depth_cap: int = 8,
+) -> Dict[str, List[Dict[str, Any]]]:
+    """
+    Walk project-level agent surfaces at a given directory.
+
+    Covers: .claude/ (settings, commands, agents), CLAUDE.md, AGENTS.md,
+    .mcp.json, .agents/, .cursor/, .claude-plugin/, .codex-plugin/.
+
+    This is the "point forensify at my project" flow. Unlike global ecosystem
+    scanning which uses ecosystem_roots.json templates, project scanning uses
+    hardcoded patterns because project-level configs follow a universal layout
+    across all agent frameworks.
+    """
+    surfaces: Dict[str, List[Dict[str, Any]]] = {
+        "skills": [],
+        "commands": [],
+        "agents": [],
+        "memory": [],
+        "brain_files": [],
+        "hooks": [],
+        "mcp": [],
+        "plugins": [],
+        "settings": [],
+        "credentials": [],
+    }
+    env = {"HOME": os.path.expanduser("~")}
+
+    def _collect(pattern: str, surface_key: str) -> None:
+        for match in safe_resolve_glob(
+            os.path.join(project_root, pattern), env, walk_depth_cap
+        ):
+            surfaces[surface_key].append(_file_record(match, root_for_relative=project_root))
+
+    def _collect_file(rel_path: str, surface_key: str) -> None:
+        full = os.path.join(project_root, rel_path)
+        if os.path.exists(full):
+            surfaces[surface_key].append(_file_record(full, root_for_relative=project_root))
+
+    # Skills
+    _collect(".claude/skills/*/SKILL.md", "skills")
+    _collect(".agents/skills/*/SKILL.md", "skills")
+    _collect("skills/*/SKILL.md", "skills")
+
+    # Commands
+    _collect(".claude/commands/**/*.md", "commands")
+
+    # Agents
+    _collect(".claude/agents/*.md", "agents")
+    _collect(".agents/*.md", "agents")
+
+    # Memory / brain files
+    _collect_file("CLAUDE.md", "memory")
+    _collect_file("AGENTS.md", "memory")
+    _collect_file(".claude/CLAUDE.md", "memory")
+    _collect(".claude/projects/*/memory/MEMORY.md", "memory")
+
+    # Hooks
+    _collect(".claude/hooks/*", "hooks")
+    _collect_file(".claude/settings.json", "hooks")
+
+    # MCP
+    _collect_file(".mcp.json", "mcp")
+    _collect_file(".claude.json", "mcp")
+
+    # Plugins
+    _collect_file(".claude-plugin/plugin.json", "plugins")
+    _collect_file(".codex-plugin/plugin.json", "plugins")
+
+    # Settings
+    _collect_file(".claude/settings.json", "settings")
+    _collect_file(".cursor/settings.json", "settings")
+
+    # Credentials (stat-only, never read values)
+    _collect_file(".env", "credentials")
+    for rec in surfaces["credentials"]:
+        if rec.get("_error"):
+            continue
+        st = _safe_stat(rec["path"])
+        if st:
+            mode = st.st_mode & 0o777
+            rec["is_world_readable"] = bool(mode & stat.S_IROTH)
+            rec["is_group_readable"] = bool(mode & stat.S_IRGRP)
+            rec["line_count_non_comment"] = _count_non_comment_lines(rec["path"])
+
+    return surfaces
+
+
 def build_inventory(
     config: Optional[Dict[str, Any]] = None,
     env: Optional[Dict[str, str]] = None,
@@ -1233,6 +1387,15 @@ def build_inventory(
             eco_record["surfaces"] = {}
             continue
         eco_key = eco_record["key"]
+
+        # Project scope uses a synthetic config built from the target path
+        if eco_record.get("detection_kind") == "project_scope":
+            project_root = eco_record["resolved_roots"][0]
+            eco_record["surfaces"] = _walk_project_surfaces(
+                project_root, walk_depth_cap=walk_cap
+            )
+            continue
+
         eco_config = config["ecosystems"][eco_key]
         eco_env = _resolve_env_for_ecosystem(eco_config, env)
 

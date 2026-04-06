@@ -602,6 +602,61 @@ class TestCrossToolIOCs:
         assert len(iocs) == 0
 
 
+class TestProjectScopeDetection:
+    def test_project_with_claude_md_detected(self, tmp_path):
+        (tmp_path / "CLAUDE.md").write_text("# Project instructions")
+        from build_inventory import build_inventory as build_fn
+        inv = build_fn(env={"HOME": str(tmp_path.parent)}, target_override=str(tmp_path))
+        assert len(inv["ecosystems"]) == 1
+        eco = inv["ecosystems"][0]
+        assert eco["key"] == "project"
+        assert eco["detected"] is True
+        assert eco["detection_kind"] == "project_scope"
+        assert len(eco["surfaces"]["memory"]) >= 1
+
+    def test_project_with_mcp_json_detected(self, tmp_path):
+        (tmp_path / ".mcp.json").write_text('{"mcpServers": {}}')
+        from build_inventory import build_inventory as build_fn
+        inv = build_fn(env={"HOME": str(tmp_path.parent)}, target_override=str(tmp_path))
+        eco = inv["ecosystems"][0]
+        assert eco["detected"] is True
+        assert len(eco["surfaces"]["mcp"]) >= 1
+
+    def test_project_with_skills_and_commands(self, tmp_path):
+        skills = tmp_path / ".claude" / "skills" / "helper"
+        skills.mkdir(parents=True)
+        (skills / "SKILL.md").write_text("---\nname: helper\n---\n")
+        cmds = tmp_path / ".claude" / "commands"
+        cmds.mkdir(parents=True)
+        (cmds / "review.md").write_text("# review")
+        from build_inventory import build_inventory as build_fn
+        inv = build_fn(env={"HOME": str(tmp_path.parent)}, target_override=str(tmp_path))
+        eco = inv["ecosystems"][0]
+        assert len(eco["surfaces"]["skills"]) == 1
+        assert len(eco["surfaces"]["commands"]) == 1
+
+    def test_project_with_dotenv_gets_permission_check(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text("API_KEY=secret\n# comment\nDB_URL=postgres://\n")
+        import os
+        os.chmod(str(env_file), 0o644)
+        from build_inventory import build_inventory as build_fn
+        inv = build_fn(env={"HOME": str(tmp_path.parent)}, target_override=str(tmp_path))
+        eco = inv["ecosystems"][0]
+        creds = eco["surfaces"]["credentials"]
+        assert len(creds) == 1
+        assert creds[0]["is_world_readable"] is True
+        assert creds[0]["line_count_non_comment"] == 2
+
+    def test_empty_project_returns_no_ecosystems(self, tmp_path):
+        (tmp_path / "just_code.py").write_text("print('hello')")
+        from build_inventory import build_inventory as build_fn
+        inv = build_fn(env={"HOME": str(tmp_path.parent)}, target_override=str(tmp_path))
+        # No agent surface markers = no detection
+        detected = [e for e in inv["ecosystems"] if e["detected"]]
+        assert len(detected) == 0
+
+
 class TestRealFilesystemWalkerSmoke:
     def test_all_surfaces_populated_for_detected_ecosystems(self):
         inv = build_inventory_fn()
