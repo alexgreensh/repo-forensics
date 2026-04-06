@@ -1,6 +1,7 @@
-# forensify
+# Forensify Architecture Reference
 
-Internal layout notes. User-facing docs live in `SKILL.md`.
+Detailed invariants, design rationale, and implementation notes.
+SKILL.md is the primary entry point; this file provides depth.
 
 ## Directory map
 
