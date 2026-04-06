@@ -29,9 +29,11 @@ def collect_all_findings(results: List[DomainResult]) -> List[Dict[str, Any]]:
     all_findings: List[Dict[str, Any]] = []
     for r in results:
         for f in r.findings:
-            f["_source_domain"] = r.domain
-            f["_source_ecosystem"] = r.ecosystem
-            all_findings.append(f)
+            # Copy before decorating — never mutate DomainResult dicts
+            enriched = dict(f)
+            enriched["_source_domain"] = r.domain
+            enriched["_source_ecosystem"] = r.ecosystem
+            all_findings.append(enriched)
     return all_findings
 
 

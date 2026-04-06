@@ -52,6 +52,17 @@ def create_coord_folder(run_id: Optional[str] = None) -> str:
     coord_path = os.path.join(COORD_BASE, run_id)
     os.makedirs(coord_path, mode=0o700, exist_ok=True)
 
+    # Fix ancestor permissions: os.makedirs only applies mode to the leaf.
+    # Existing parents may have permissive modes from prior runs.
+    for ancestor in [COORD_BASE, os.path.dirname(COORD_BASE)]:
+        if os.path.isdir(ancestor):
+            current = os.stat(ancestor).st_mode & 0o777
+            if current != 0o700:
+                try:
+                    os.chmod(ancestor, 0o700)
+                except OSError:
+                    pass
+
     # Write manifest
     manifest = {
         "coord_schema_version": 1,
@@ -171,7 +182,12 @@ def gc_old_runs(max_runs: int = MAX_RETAINED_RUNS, max_days: int = MAX_RETAINED_
         age_days = (now - mtime) / 86400
         if idx >= max_runs or age_days > max_days:
             try:
-                shutil.rmtree(path)
+                # Symlink guard: don't rmtree a symlink (attacker could
+                # point it at ~/.claude/skills/ and we'd delete the target)
+                if os.path.islink(path):
+                    os.unlink(path)
+                else:
+                    shutil.rmtree(path)
                 removed += 1
             except OSError:
                 pass

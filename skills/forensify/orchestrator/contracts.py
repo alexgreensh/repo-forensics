@@ -10,7 +10,7 @@ one ecosystem.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, fields, asdict
 from typing import Any, Dict, List, Optional
 
 
@@ -46,9 +46,11 @@ class DomainJob:
 
     @classmethod
     def from_json(cls, data: str) -> "DomainJob":
-        """Deserialize from coord folder file."""
+        """Deserialize from coord folder file. Filters to known fields only
+        to prevent injection of unexpected values via poisoned coord files."""
         d = json.loads(data)
-        return cls(**d)
+        valid = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in d.items() if k in valid})
 
 
 @dataclass
@@ -69,4 +71,5 @@ class DomainResult:
     @classmethod
     def from_json(cls, data: str) -> "DomainResult":
         d = json.loads(data)
-        return cls(**d)
+        valid = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in d.items() if k in valid})

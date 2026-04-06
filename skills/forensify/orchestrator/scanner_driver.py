@@ -47,6 +47,11 @@ def run_scanners(
     if not script:
         return {"_error": "run_forensics.sh not found"}
 
+    # Canonicalize and validate target path
+    target_path = os.path.realpath(target_path)
+    if not os.path.isdir(target_path):
+        return {"_error": "target_not_a_directory", "path": target_path}
+
     cmd = ["bash", script, target_path, "--format", "json"]
     if skill_scan:
         cmd.insert(3, "--skill-scan")
@@ -137,7 +142,8 @@ def cap_findings(
     first-seen order up to max_per_severity.
     """
     severity_order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
-    findings.sort(key=lambda f: severity_order.get(f.get("severity", "INFO"), 4))
+    # sorted() not .sort() — never mutate the caller's list
+    findings = sorted(findings, key=lambda f: severity_order.get(f.get("severity", "INFO"), 4))
 
     by_sev: Dict[str, List[Dict[str, Any]]] = {}
     for f in findings:

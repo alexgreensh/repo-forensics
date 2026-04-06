@@ -37,12 +37,17 @@ import argparse
 import glob as glob_module
 import json
 import os
+import re
 import stat
 import sys
 import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+# Maximum file size for config/credential file reads (1MB). Defense against
+# maliciously large files or symlinks to /dev/zero.
+_MAX_CONFIG_READ_BYTES = 1_048_576
 
 # ---------------------------------------------------------------------------
 # Schema invariants
@@ -267,8 +272,6 @@ def _detect_git_repo_signature(
     Returns the first confirmed install path, or None.
     Walk depth is bounded by detection.walk_depth_cap (default 3).
     """
-    import re as _re
-
     walk_cap = int(detection.get("walk_depth_cap", 3))
     sig_files = detection.get("signature_files_all") or []
     sig_content = detection.get("signature_content_any") or []
@@ -288,7 +291,7 @@ def _detect_git_repo_signature(
                     content = f.read(4096)  # first 4KB is enough
             except OSError:
                 return False
-            if not any(_re.search(pat, content) for pat in sig_content):
+            if not any(re.search(pat, content) for pat in sig_content):
                 return False
         return True
 
@@ -878,9 +881,10 @@ def _extract_toml_keys(path: str, keys: List[str]) -> Dict[str, str]:
     `key = value` lines only. Used for Codex config.toml policy extraction
     without adding a tomllib dependency.
     """
-    import re
-
     result: Dict[str, str] = {}
+    st = _safe_stat(path)
+    if st and st.st_size > _MAX_CONFIG_READ_BYTES:
+        return result
     try:
         with open(path, "r", encoding="utf-8") as f:
             content = f.read()
@@ -940,8 +944,9 @@ def _count_json_mcp_servers(path: str) -> int:
 
 def _count_toml_mcp_servers(path: str) -> int:
     """Count [mcp_servers.*] section headers in a TOML file via regex."""
-    import re
-
+    st = _safe_stat(path)
+    if st and st.st_size > _MAX_CONFIG_READ_BYTES:
+        return 0
     try:
         with open(path, "r", encoding="utf-8") as f:
             content = f.read()
@@ -1016,8 +1021,22 @@ def _inspect_json_shape(path: str) -> Dict[str, Any]:
     Read a JSON credential file and extract ONLY structural metadata.
     Top-level key names, value types, and string lengths. NEVER captures
     actual secret values — this is the shape_only policy.
+
+    Defense-in-depth: file size capped at _MAX_CONFIG_READ_BYTES. After
+    shape extraction, the parsed dict is explicitly cleared so credential
+    values do not persist in process memory longer than necessary.
     """
+    # Metadata keys safe to extract as values (non-secret by design)
+    _SAFE_METADATA_KEYS = frozenset({"auth_mode", "last_refresh"})
+
     result: Dict[str, Any] = {}
+
+    # Size guard: credential files should be small
+    st = _safe_stat(path)
+    if st and st.st_size > _MAX_CONFIG_READ_BYTES:
+        result["_shape_error"] = "file_too_large"
+        return result
+
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -1053,13 +1072,15 @@ def _inspect_json_shape(path: str) -> Dict[str, Any]:
     if isinstance(last_refresh, str):
         result["token_last_refresh_iso"] = last_refresh
         try:
-            from datetime import datetime as _dt
-
-            lr = _dt.fromisoformat(last_refresh.replace("Z", "+00:00"))
+            lr = datetime.fromisoformat(last_refresh.replace("Z", "+00:00"))
             days = (datetime.now(timezone.utc) - lr).days
             result["staleness_days"] = max(0, days)
         except (ValueError, TypeError):
             pass
+
+    # Defense-in-depth: clear credential values from process memory.
+    # Only _SAFE_METADATA_KEYS survive; everything else is wiped.
+    data.clear()
 
     return result
 

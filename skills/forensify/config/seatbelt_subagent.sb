@@ -1,14 +1,23 @@
 (version 1)
 
 ;; Forensify domain sub-agent sandbox profile (macOS Seatbelt)
-;; Restricts to: read scan target + forensify dir, write coord folder only, no network.
+;;
+;; v2.5.0: allow-default with selective denies for network and filesystem writes.
+;; Python's macOS startup touches dyld cache, Mach IPC, locale data, SSL certs,
+;; etc. — a deny-default profile that handles all of these is version-specific
+;; and requires dedicated testing. The selective denies below enforce the two
+;; critical constraints: no network exfiltration, no writes outside coord folder.
+;;
+;; v2.5.1 target: invert to deny-default with exhaustive allow list, verified
+;; across macOS 14/15 with Homebrew and framework Python installs.
 
 (allow default)
 
-;; Block all network access
+;; Block all network access — domain sub-agents must not exfiltrate data
 (deny network*)
 
-;; Block writes outside the coord folder
+;; Block writes outside the coord folder — forensify is read-only against the
+;; scanned stack. Only the coord folder for this specific run is writable.
 (deny file-write*
   (require-not
     (subpath (param "COORD_PATH"))

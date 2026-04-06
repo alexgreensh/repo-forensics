@@ -236,7 +236,7 @@ class TestSeatbeltSandbox:
         assert profile.exists()
 
     def test_seatbelt_profile_parseable(self):
-        """sandbox-exec --check validates profile syntax without executing."""
+        """sandbox-exec validates profile syntax by running python3 -c 'pass'."""
         profile = CONFIG_DIR / "seatbelt_subagent.sb"
         with tempfile.TemporaryDirectory() as td:
             result = subprocess.run(
@@ -245,14 +245,13 @@ class TestSeatbeltSandbox:
                     "-D", "TARGET_PATH=%s" % td,
                     "-D", "COORD_PATH=%s" % td,
                     "-D", "SKILL_PATH=%s" % str(CONFIG_DIR.parent),
-                    "true",  # just test profile loading
+                    "python3", "-c", "pass",
                 ],
                 capture_output=True,
                 text=True,
                 timeout=10,
             )
-            # sandbox-exec with 'true' should succeed if profile is valid
-            assert result.returncode == 0, "Seatbelt profile parse error: %s" % result.stderr
+            assert result.returncode == 0, "Seatbelt profile error: %s" % result.stderr
 
     def test_seatbelt_blocks_network(self):
         """Verify the sandbox blocks network access."""
