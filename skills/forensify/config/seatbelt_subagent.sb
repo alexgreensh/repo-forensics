@@ -1,0 +1,16 @@
+(version 1)
+
+;; Forensify domain sub-agent sandbox profile (macOS Seatbelt)
+;; Restricts to: read scan target + forensify dir, write coord folder only, no network.
+
+(allow default)
+
+;; Block all network access
+(deny network*)
+
+;; Block writes outside the coord folder
+(deny file-write*
+  (require-not
+    (subpath (param "COORD_PATH"))
+  )
+)
