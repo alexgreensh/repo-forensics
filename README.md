@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg" alt="License: AGPL-3.0"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-blue.svg" alt="License: PolyForm Noncommercial"></a>
   <img src="https://img.shields.io/badge/python-3.8%2B-blue.svg" alt="Python 3.8+">
   <img src="https://img.shields.io/badge/dependencies-zero-brightgreen.svg" alt="Zero Dependencies">
   <img src="https://img.shields.io/badge/scanners-18-orange.svg" alt="18 Scanners">
@@ -201,6 +201,12 @@ Point forensify at your global stack, a specific project, or any directory with 
 ### What it audits
 
 **Four ecosystems** — Claude Code, Codex CLI, OpenClaw, NanoClaw. Auto-detected from your machine, no configuration needed.
+
+**Installed skills and plugins** — Every skill and plugin across all detected ecosystems is inspected for prompt injection attacks (HTML comment injection, frontmatter poisoning), suspicious tool definitions (schema poisoning, exfiltration URLs), manifest drift between installed and declared versions, and cross-ecosystem name collisions where the same skill exists in multiple stacks with different code.
+
+**MCP server configs** — Registered MCP servers are checked for tool poisoning patterns, overly broad permissions, and rug-pull enablers (servers that could silently change behavior after initial trust).
+
+**Hooks and auto-execution** — Hook scripts are inspected for symlinks targeting directories outside the agent stack, permission anomalies (world-writable hook scripts), and unexpected execution chains.
 
 **Project-scope scanning** — Point `--target` at any project directory and forensify finds project-level agent configs: `.claude/` settings and commands, `CLAUDE.md`, `.mcp.json`, `.agents/`, `.env`, hooks, skills. The stuff people set up quickly during a sprint and never revisit.
 
@@ -414,7 +420,7 @@ Note: `.forensicsignore` is itself scanned. Broad wildcard patterns like `*` are
 
 ## License
 
-**AGPL-3.0** (dual licensed). Free for personal and open source use. If you modify this software, you must make the modified source code publicly available under the same license.
+**PolyForm Noncommercial 1.0.0**. Free for personal, research, educational, and non-commercial use. Commercial use requires a separate license. Contact [Alex Greenshpun](https://linkedin.com/in/alexgreensh) for commercial licensing.
 
 Organizations using this commercially (including internal business use) need a commercial license. Contact me@alexgreenshpun.com for details.
 

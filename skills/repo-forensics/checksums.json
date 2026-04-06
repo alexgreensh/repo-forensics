@@ -4,7 +4,7 @@
   "file_count": 33,
   "files": {
     ".gitignore": "8b2598a3359a556874b8069d42dea2686f07d46c3ca1b540c4025788b258180a",
-    "SKILL.md": "d35140d52c924d6357b55b2d628f675b6035bfea40cc5f92f61e7e165d1c7f0a",
+    "SKILL.md": "1fc927af2decb19876122163242f8f078a4ce681da55ca32bf6d64d95a563014",
     "data/README.md": "3980ad873dbef332e0db2d209cd22287d8a0d146930b40bafc8ab774166a8bc4",
     "data/compromised_versions.json": "96dfea743bc4437fb3a3bcd880c04d6e318b48cc0b81d439c1926064a2f9be62",
     "references/mcp-attack-patterns.md": "722d7a47186bfee18bde0e06a749dc55e8cc716c2418d118a64e57d60e48689a",
@@ -48,7 +48,7 @@
   },
   "hook_count": 3,
   "repo_manifests": {
-    ".claude-plugin/marketplace.json": "2669a77e96bc982a550252da10199b8ef78b47e5093502ca2ffb8c970900c641",
+    ".claude-plugin/marketplace.json": "d7767d537e69873711c40a182cada4f2c3004eff33a52e01fbc6c7b99c81b6fa",
     ".claude-plugin/plugin.json": "2bb01b4e4c90587109efba77953ccd294541b8aaaac869850c02446666f76907"
   },
   "manifest_count": 2
