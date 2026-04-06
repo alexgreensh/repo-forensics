@@ -165,8 +165,10 @@ def render_briefing_json(
         "top_actions": top_actions,
         "suppression_alerts": suppressed,
         "cross_ecosystem": inventory.get("cross_ecosystem", {}),
+        # Key by domain+ecosystem so multi-ecosystem scans keep all results
         "domain_sections": {
-            r.domain: {
+            "%s_%s" % (r.domain, r.ecosystem): {
+                "domain": r.domain,
                 "ecosystem": r.ecosystem,
                 "finding_count": len(r.findings),
                 "risk_themes": r.risk_themes,

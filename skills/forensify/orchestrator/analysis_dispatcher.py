@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .contracts import DomainJob, DomainResult
+from .scanner_driver import filter_findings_for_domain
 
 COORD_BASE = os.path.expanduser("~/.cache/forensify/runs")
 LOCK_DIR = os.path.expanduser("~/.cache/repo-forensics/locks")
@@ -133,7 +134,6 @@ def build_domain_jobs(
                 continue
 
             # Filter findings for this domain's scanner set
-            from .scanner_driver import filter_findings_for_domain
             domain_findings = filter_findings_for_domain(findings, domain_cfg)
 
             job = DomainJob(
