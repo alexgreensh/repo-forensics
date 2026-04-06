@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "version": "0.1.0",
-  "generated_for": "forensify v0.1",
+  "version": "1.0.0",
+  "generated_for": "forensify v1.0",
   "invariants": {
     "path_normalization": "NFKC",
     "bidi_override_policy": "reject",

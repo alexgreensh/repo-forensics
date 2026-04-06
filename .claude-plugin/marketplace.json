@@ -7,13 +7,13 @@
   },
   "metadata": {
     "description": "Zero-dependency security scanner for AI agent ecosystems",
-    "version": "2.4.1"
+    "version": "2.5.0"
   },
   "plugins": [
     {
       "name": "repo-forensics",
-      "description": "Auto-scan repos, skills, MCP servers, and packages for security threats. 18 scanners, 19 correlation rules (incl. Lethal Trifecta), PostToolUse auto-scan hook, macOS Seatbelt sandbox for DAST. Detects prompt injection, supply chain attacks (127 version-pinned IOCs across 12 campaigns), credential theft, and 2026 attack patterns.",
-      "version": "2.4.1",
+      "description": "Security for the AI agent ecosystem. 18 scanners + forensify cross-agent self-inspection (Claude Code, Codex, OpenClaw, NanoClaw). Detects prompt injection, supply chain attacks, credential exposure, MCP tool poisoning, and cross-ecosystem risk patterns. PostToolUse auto-scan hook, macOS Seatbelt sandbox, 19 correlation rules, 127 version-pinned IOCs.",
+      "version": "2.5.0",
       "author": {
         "name": "Alex Greenshpun",
         "url": "https://linkedin.com/in/alexgreensh"

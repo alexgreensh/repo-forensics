@@ -14,7 +14,7 @@ description: |
   or patching vulnerabilities (forensify is read-only).
 metadata:
   author: Alex Greenshpun
-  version: 0.1.0
+  version: 1.0.0
 allowed-tools: Bash Read Glob Grep
 user-invocable: true
 argument-hint: [--target PATH] [--inventory] [--domains NAMES] [--list-runs] [--dry-run] [--format md|json|both] [--include-shadows]
