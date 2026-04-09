@@ -53,14 +53,17 @@ SIGNING_KEY_FILENAME = '.forensics-key'
 def _get_or_create_signing_key(repo_path):
     """Get or create a 32-byte HMAC signing key for baseline integrity verification."""
     key_path = os.path.join(repo_path, SIGNING_KEY_FILENAME)
-    if os.path.exists(key_path):
-        with open(key_path, 'rb') as f:
-            return f.read()
-    key = secrets.token_bytes(32)
-    with open(key_path, 'wb') as f:
-        f.write(key)
-    os.chmod(key_path, 0o600)
-    return key
+    try:
+        if os.path.exists(key_path):
+            with open(key_path, 'rb') as f:
+                return f.read()
+        key = secrets.token_bytes(32)
+        with open(key_path, 'wb') as f:
+            f.write(key)
+        os.chmod(key_path, 0o600)
+        return key
+    except OSError:
+        return secrets.token_bytes(32)
 
 
 def find_critical_files(repo_path):
@@ -197,13 +200,14 @@ def load_baseline(repo_path):
         key_path = os.path.join(repo_path, SIGNING_KEY_FILENAME)
         if not os.path.exists(key_path):
             integrity_findings.append(core.Finding(
-                scanner=SCANNER_NAME, severity="high",
+                scanner=SCANNER_NAME, severity="critical",
                 title="Signing key missing for HMAC-signed baseline",
-                description="Baseline has HMAC signature but signing key is missing - cannot verify integrity",
+                description="Baseline has HMAC signature but signing key is missing - cannot verify integrity. Baseline is untrusted.",
                 file=BASELINE_FILENAME, line=0,
                 snippet="",
                 category="integrity-hmac"
             ))
+            return None, integrity_findings
         else:
             key = _get_or_create_signing_key(repo_path)
             content = json.dumps(baseline, sort_keys=True)

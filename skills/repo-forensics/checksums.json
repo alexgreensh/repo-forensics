@@ -19,23 +19,23 @@
     "scripts/run_forensics.sh": "2196372ca30276ef75fa138c31558fe7b2cb6de11734a266f468b1f66e395c1e",
     "scripts/scan_ast.py": "92375cea8c9e71caa5885e904b1d4407e0f6c2d4dd29d990a820cf74e907f6a0",
     "scripts/scan_binary.py": "2b2cada77440ea10234c350a001386436eedad6365b7546c2c5e7b6aec6e88f8",
-    "scripts/scan_dast.py": "0a635e54f24f2a7bf2dd1f82be993e177767ab014dfe7ad8ac0ed92bc9ffc62c",
+    "scripts/scan_dast.py": "649e88c2879dba6e5146ed0004f27b924e95b5444ea436b11ca20c0968d6f3bc",
     "scripts/scan_dataflow.py": "e030a3428dd2e425e35d86dcb24034917c28ad92d7903154e24b951212efe25e",
     "scripts/scan_dependencies.py": "8288356c73c0b537d9afbd78a33f4e05ed9817344309eb2c8d978bf8dd332602",
     "scripts/scan_entropy.py": "c27a83523d4b9b63b880d948aa60ab269b6ab340fb2a5cd325c705495b4e5712",
     "scripts/scan_git_forensics.py": "ac4c2944f3a2eff15bc63896d50b8ed862e7fa513532d83043e073449063903b",
     "scripts/scan_infra.py": "b4a334bf8627432eecc2c2e3506c446300e9bc510b0d4565f3f442915ae0e59b",
-    "scripts/scan_integrity.py": "86f0b73e1ff2e9e56a5bfb32ca23aaeff4d2c41e0dabafdcd03145ee81e2d1d2",
+    "scripts/scan_integrity.py": "9a3f83b33557ed627066cb139b27c8ef1ed152bd88eedd72132c1f0b433c9285",
     "scripts/scan_lifecycle.py": "c214700f8e670edfe0621307f8f2153664be3339780ca2982655956fb8d95089",
     "scripts/scan_manifest_drift.py": "105de3be2564e8d2f7671b4e473bf59118c4eacb1f00683a2827cd80e1d2e854",
     "scripts/scan_mcp_security.py": "052c7d77a6ac561e64fe122cfb0e30dcc57f1e78f52e561ebec138124e1bd33d",
-    "scripts/scan_openclaw_skills.py": "07d500fd20e17f9bd24f796215530e70433aa39b36e8d48669e6295b36dc6a68",
+    "scripts/scan_openclaw_skills.py": "77aa4e3d1f2c24cb1761466e1e289b6680d03778f2b9f3d997b0575360171f8b",
     "scripts/scan_post_incident.py": "76e36a890d004a2a93dca26b349d81b5d7ccc6eeaabeb66ef8bbcc808d687bdb",
     "scripts/scan_runtime_dynamism.py": "4cee558efbc670d416af4e28abdea09eaf1ede55f7126df132ff951248713b37",
     "scripts/scan_sast.py": "d8664253c5bd112042357f396041bd745801e137bdc19675d3426452f20ac24a",
     "scripts/scan_secrets.py": "fc11ac9d5a3b076e11d17641813d2e437c1a39ed327ebf3bee1ccf5ef575e05c",
     "scripts/scan_skill_threats.py": "73ae9041ebc43ef130b3f870afcc540256b610a18a2bcab4488202b60b31ed71",
-    "scripts/verify_install.py": "0901cce69e75e6325e1157f2e8c5207724a90f56cc31f4a1d8085a84c19faa2f"
+    "scripts/verify_install.py": "8adc64b2bf6fa9a02969c1a13d78e6202020b41abe4b3f09a3527e7e374d1a41"
   },
   "repo_symlinks": {
     "skill": "skills/repo-forensics"
@@ -48,8 +48,8 @@
   },
   "hook_count": 3,
   "repo_manifests": {
-    ".claude-plugin/marketplace.json": "d7767d537e69873711c40a182cada4f2c3004eff33a52e01fbc6c7b99c81b6fa",
-    ".claude-plugin/plugin.json": "2bb01b4e4c90587109efba77953ccd294541b8aaaac869850c02446666f76907"
+    ".claude-plugin/marketplace.json": "4b62ae3a498cb213bc287a1b782f95743a4c8e9214dc017c2e5c075defd980ae",
+    ".claude-plugin/plugin.json": "a7b66473a2de384512808c85c057d1553c1235fef24e2933e7b937241a531a5b"
   },
   "manifest_count": 2
 }

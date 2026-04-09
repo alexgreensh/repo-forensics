@@ -189,8 +189,13 @@ def scan_agent_configs(repo_path):
     findings = []
     targets = ['SOUL.md', 'AGENTS.md', 'CLAUDE.md']
     mem_dir = os.path.join(repo_path, 'memory')
-    if os.path.isdir(mem_dir):
-        targets += [os.path.join('memory', f) for f in os.listdir(mem_dir) if f.endswith('.md')]
+    try:
+        if os.path.isdir(mem_dir):
+            targets += [os.path.join('memory', f) for f in os.listdir(mem_dir) if f.endswith('.md')]
+    except OSError:
+        findings.append(_F(SCANNER_NAME, "medium", "Memory directory unreadable",
+            "Could not list memory/ directory - memory files were not scanned for injection.",
+            "memory/", 0, "", "agent-access-error"))
     for rel in targets:
         content = _read(os.path.join(repo_path, rel))
         if not content:

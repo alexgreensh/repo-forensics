@@ -1,6 +1,6 @@
 ---
 name: repo-forensics
-description: Security forensics for git repos and AI agent skills. Use when auditing repos, reviewing dependencies, investigating compromises, vetting MCP servers, or checking AI skills for prompt injection, credential theft, runtime behavior prediction, and 2026 attack patterns. Includes runtime dynamism detection (time bombs, rug pulls, deferred payloads), manifest drift analysis, DAST for hook testing, file integrity monitoring, and IOC auto-update. Not for fixing vulnerabilities or pentesting.
+description: Security forensics for git repos, AI skills, and MCP servers. Audits dependencies, detects prompt injection, credential theft, runtime dynamism, manifest drift, and 2026 attack patterns. Not for fixing vulnerabilities or pentesting.
 metadata:
   author: Alex Greenshpun
 allowed-tools: Bash Read Glob Grep

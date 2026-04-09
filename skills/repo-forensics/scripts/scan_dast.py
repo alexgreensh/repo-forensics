@@ -134,8 +134,13 @@ def find_hook_scripts(repo_path):
 
     # Check for standalone hook scripts in .claude/
     claude_dir = os.path.join(repo_path, '.claude')
-    if os.path.isdir(claude_dir):
-        for f in os.listdir(claude_dir):
+    try:
+        claude_entries = os.listdir(claude_dir) if os.path.isdir(claude_dir) else []
+    except OSError:
+        claude_entries = []
+        print(f"[!] WARNING: Could not read .claude/ directory - standalone hooks not tested", file=sys.stderr)
+    if claude_entries:
+        for f in claude_entries:
             fp = os.path.join(claude_dir, f)
             if os.path.isfile(fp) and f.endswith(('.sh', '.bash')):
                 try:

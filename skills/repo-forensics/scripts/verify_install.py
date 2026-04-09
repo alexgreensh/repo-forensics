@@ -58,12 +58,16 @@ def get_tracked_hook_files(repo_root):
     the integrity registry, even if it lives outside skill_root.
     """
     hooks_dir = os.path.join(repo_root, "hooks")
-    if not os.path.isdir(hooks_dir):
+    try:
+        if not os.path.isdir(hooks_dir):
+            return []
+        entries = sorted(os.listdir(hooks_dir))
+    except OSError:
         return []
 
     tracked = []
     skip_files = {'.DS_Store'}
-    for entry in sorted(os.listdir(hooks_dir)):
+    for entry in entries:
         full_path = os.path.join(hooks_dir, entry)
         if not os.path.isfile(full_path):
             continue
@@ -85,11 +89,15 @@ def get_tracked_manifest_files(repo_root):
     same gap class as hook files (commit 64fbe57).
     """
     manifest_dir = os.path.join(repo_root, ".claude-plugin")
-    if not os.path.isdir(manifest_dir):
+    try:
+        if not os.path.isdir(manifest_dir):
+            return []
+        entries = sorted(os.listdir(manifest_dir))
+    except OSError:
         return []
 
     tracked = []
-    for entry in sorted(os.listdir(manifest_dir)):
+    for entry in entries:
         full_path = os.path.join(manifest_dir, entry)
         if not os.path.isfile(full_path):
             continue
@@ -226,8 +234,11 @@ def verify_checksums(skill_root):
     if not os.path.exists(checksum_path):
         return False, ["checksums.json not found. Run --generate first or download from release."]
 
-    with open(checksum_path, 'r', encoding='utf-8') as f:
-        data = json.load(f)
+    try:
+        with open(checksum_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        return False, [f"Failed to read checksums.json: {e}"]
 
     expected = data.get('files', {})
     report = []
