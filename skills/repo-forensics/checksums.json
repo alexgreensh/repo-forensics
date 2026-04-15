@@ -25,7 +25,7 @@
     "scripts/scan_entropy.py": "c27a83523d4b9b63b880d948aa60ab269b6ab340fb2a5cd325c705495b4e5712",
     "scripts/scan_git_forensics.py": "ac4c2944f3a2eff15bc63896d50b8ed862e7fa513532d83043e073449063903b",
     "scripts/scan_infra.py": "b4a334bf8627432eecc2c2e3506c446300e9bc510b0d4565f3f442915ae0e59b",
-    "scripts/scan_integrity.py": "9a3f83b33557ed627066cb139b27c8ef1ed152bd88eedd72132c1f0b433c9285",
+    "scripts/scan_integrity.py": "1559ad5e756984973dac358bb3706c30de64f477243ac0a6fd2ad57e0e4bd038",
     "scripts/scan_lifecycle.py": "c214700f8e670edfe0621307f8f2153664be3339780ca2982655956fb8d95089",
     "scripts/scan_manifest_drift.py": "105de3be2564e8d2f7671b4e473bf59118c4eacb1f00683a2827cd80e1d2e854",
     "scripts/scan_mcp_security.py": "052c7d77a6ac561e64fe122cfb0e30dcc57f1e78f52e561ebec138124e1bd33d",
@@ -49,7 +49,7 @@
   "hook_count": 3,
   "repo_manifests": {
     ".claude-plugin/marketplace.json": "4b62ae3a498cb213bc287a1b782f95743a4c8e9214dc017c2e5c075defd980ae",
-    ".claude-plugin/plugin.json": "a7b66473a2de384512808c85c057d1553c1235fef24e2933e7b937241a531a5b"
+    ".claude-plugin/plugin.json": "44ec2cfe8de5c1e2c3920dabefe6382ad80def6cddb36d857a87983cb3011678"
   },
   "manifest_count": 2
 }

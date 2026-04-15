@@ -200,7 +200,7 @@ def load_baseline(repo_path):
         key_path = os.path.join(repo_path, SIGNING_KEY_FILENAME)
         if not os.path.exists(key_path):
             integrity_findings.append(core.Finding(
-                scanner=SCANNER_NAME, severity="critical",
+                scanner=SCANNER_NAME, severity="high",
                 title="Signing key missing for HMAC-signed baseline",
                 description="Baseline has HMAC signature but signing key is missing - cannot verify integrity. Baseline is untrusted.",
                 file=BASELINE_FILENAME, line=0,
