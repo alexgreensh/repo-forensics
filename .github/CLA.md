@@ -8,7 +8,7 @@ By contributing to this project (via pull request, patch, or any other form), yo
 
 2. **Patent License**: You grant Alex Greenshpun a perpetual, worldwide, non-exclusive, royalty-free, irrevocable patent license for any patents you own that are necessarily infringed by your contributions.
 
-3. **Right to Sublicense**: You understand that this project uses dual licensing (open source + commercial). Your contributions may be distributed under both the open source license and a separate commercial license.
+3. **Right to Sublicense**: You understand that this project uses dual licensing (PolyForm Noncommercial + Commercial). Your contributions may be distributed under both the PolyForm Noncommercial license and a separate commercial license.
 
 4. **Original Work**: You represent that your contributions are your original work and that you have the legal right to grant this license.
 

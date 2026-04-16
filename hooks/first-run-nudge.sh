@@ -16,7 +16,7 @@
 #   - REPO_FORENSICS_NUDGE environment variable not set to 0 (kill switch)
 #
 # Copyright (C) 2026 Alex Greenshpun
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 PLUGIN_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 NUDGE_FLAG="${HOME}/.claude/repo-forensics/.autoupdate-nudge-shown"

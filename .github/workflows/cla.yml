@@ -28,7 +28,7 @@ jobs:
           custom-notsigned-prcomment: |
             Thank you for your contribution! Before we can merge this PR, you need to sign our [Contributor License Agreement](https://github.com/alexgreensh/repo-forensics/blob/main/CLA.md).
 
-            This project uses dual licensing (AGPL-3.0 + Commercial). The CLA ensures we can continue offering both licenses.
+            This project uses dual licensing (PolyForm Noncommercial + Commercial). The CLA ensures we can continue offering both licenses.
 
             To sign, please post a comment with exactly:
             `I have read the CLA Document and I hereby sign the CLA`
