@@ -61,6 +61,9 @@ $ ./run_forensics.sh ./suspicious-skill
   [CRITICAL] Known Malicious Package: 'claud-code'
              package.json (SANDWORM_MODE campaign IOC)
 
+  [CRITICAL] Known Vulnerability: lodash@4.17.20 — CVE-2021-23337 [CISA KEV - actively exploited]
+             package.json → OSV match, in CISA KEV catalog
+
   [HIGH]     Missing skill author in frontmatter
              SKILL.md — unattributed OpenClaw skill
 
@@ -109,7 +112,7 @@ The result is a severity-ranked verdict with exit codes designed for CI/CD gatin
 | **secrets** | API keys, tokens, private keys, database URIs, JWTs | 40+ patterns with entropy + format combo detection |
 | **sast** | Dangerous functions, injection, deserialization, shell execution | 8 languages: Python, JS, TS, Ruby, PHP, Java, Go, Bash |
 | **ast_analysis** | Obfuscated exec chains, `__reduce__` backdoors, marshal/types bytecode, audit hook abuse | Python AST walking, 12 detection patterns |
-| **dependencies** | Typosquatting, version confusion, SANDWORM_MODE IOC packages, transitive supply chain | 500+ popular packages, l33t normalization, lockfile deep parsing (npm/yarn/poetry/pipfile) |
+| **dependencies** | Typosquatting, version confusion, SANDWORM_MODE IOC packages, transitive supply chain, **known CVEs + CISA KEV auto-enrichment** | 500+ popular packages, l33t normalization, lockfile deep parsing (npm/yarn/poetry/pipfile), OSV API per-package queries, KEV catalog cross-reference |
 | **lifecycle** | Malicious install hooks in npm and pip, `.pth` file injection (liteLLM-style) | `postinstall`, `preinstall`, `cmdclass`, `.pth` exec/base64/IOC detection |
 | **entropy** | Hidden payloads in base64 blocks, hex strings, high-entropy content | Per-string Shannon entropy with format-aware thresholds |
 | **infra** | Docker misconfig, K8s breakouts, GHA expression injection, Claude config CVEs | Dockerfile, YAML, workflow, and settings.json analysis |
@@ -374,6 +377,26 @@ Research basis: CVE-2026-2297 (SourcelessFileLoader), PylangGhost RAT (March 202
 | Manual review | Reading code | Misses zero-width unicode, cross-file taint flows, tool description injection. |
 
 **repo-forensics:** 18 scanners. Zero dependencies. Fully offline. Runtime behavior prediction. Post-incident forensics. Built for the AI agent ecosystem.
+
+---
+
+## CVE + CISA KEV Auto-Enrichment (v2.6)
+
+The scanner automatically knows the latest CVEs and actively-exploited vulnerabilities. No manual database, no API keys, no phoning home beyond two public feeds.
+
+- **OSV (Open Source Vulnerabilities):** Every pinned `(ecosystem, package, version)` seen in a manifest or lockfile is queried against `api.osv.dev`. Matches emit a `cve` finding with CVSS-mapped severity and suggested fix versions.
+- **CISA KEV (Known Exploited Vulnerabilities):** CVE aliases are cross-referenced against the CISA KEV catalog — CVEs confirmed actively exploited in the wild. Any match is escalated to **CRITICAL** (category `cve-kev`) regardless of CVSS, because in-the-wild exploitation is the strongest prioritization signal.
+- **Caches:** KEV catalog cached 24h (`~/.cache/repo-forensics/kev.json`). Per-package OSV queries cached 24h (LRU-capped, mode 0o600, atomic writes).
+- **Offline:** `--offline` uses cached data only. `--no-vulns` disables the feature. `--update-vulns` refreshes the KEV catalog before scanning.
+- **Hardening:** Hardcoded feed URLs (no SSRF surface), HTTPS-only, response size caps, fail-closed CVE regex, log-injection sanitizer for untrusted summaries, PEP 503 canonical package names, short-TTL negative cache to prevent retry storms.
+
+```bash
+# Standalone package check
+python3 skills/repo-forensics/scripts/vuln_feed.py --query npm lodash 4.17.20
+
+# Full scan with fresh KEV data
+./skills/repo-forensics/scripts/run_forensics.sh /path/to/repo --update-vulns
+```
 
 ---
 
