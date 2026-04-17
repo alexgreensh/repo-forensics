@@ -369,6 +369,92 @@ SUSPICIOUS_NPM_SCOPES = {
 }
 
 
+# --- Vuln enrichment (OSV + CISA KEV) state -------------------------------
+#
+# Populated on first use by main() (or lazily on first _check_vulns call).
+# Scanner behavior: for every (ecosystem, package, version) seen in any
+# manifest, query OSV for known vulnerabilities. Cross-reference CVE aliases
+# against the CISA KEV catalog and escalate severity to CRITICAL when a vuln
+# is actively exploited in the wild. Full offline-safe: network failures
+# degrade silently to the existing IOC/compromised-version checks.
+_VULN_STATE = {
+    "enabled": True,      # --no-vulns disables
+    "offline": False,     # --offline avoids any network call
+    "kev": None,          # lazy-loaded set[str] of KEV CVE IDs
+    "queried": set(),     # dedup tuples (ecosystem, name_lower, normalized_version)
+}
+
+
+def _check_vulns(ecosystem, pkg_versions, rel_path):
+    """Enrich findings with OSV + CISA KEV data for each (pkg, version) seen.
+
+    Design:
+      - Pure: no mutation of caller state beyond returning findings.
+      - Offline-safe: missing/failed feeds -> [] (scanner keeps running).
+      - Deduped: each (eco, name, version) triple queries OSV at most once
+        per scan run. OSV itself caches 24h on disk across runs.
+      - Severity escalation: any vuln whose CVE alias is in CISA KEV is
+        marked 'critical' regardless of CVSS score.
+    """
+    if not _VULN_STATE["enabled"]:
+        return []
+    try:
+        import vuln_feed
+    except ImportError:
+        return []
+    if _VULN_STATE["kev"] is None:
+        _VULN_STATE["kev"] = vuln_feed.get_kev_cves(offline=_VULN_STATE["offline"])
+
+    findings = []
+    for pkg, version in pkg_versions.items():
+        if not isinstance(pkg, str) or not isinstance(version, str):
+            continue
+        normalized = normalize_version(version)
+        if normalized is None:
+            continue
+        canonical = vuln_feed.canonicalize_pkg_name(ecosystem, pkg)
+        key = (ecosystem, canonical, normalized)
+        if key in _VULN_STATE["queried"]:
+            continue
+        _VULN_STATE["queried"].add(key)
+        try:
+            vulns = vuln_feed.check_package_vulnerabilities(
+                ecosystem, canonical, normalized,
+                kev_set=_VULN_STATE["kev"],
+                offline=_VULN_STATE["offline"],
+            )
+        except (OSError, ValueError, RuntimeError) as e:
+            # vuln_feed is designed to swallow errors internally, but guard
+            # the boundary anyway so a single bad package can't kill the scan.
+            print(f"[!] Vuln enrichment error for {canonical}@{normalized}: {e}",
+                  file=sys.stderr)
+            continue
+
+        # Sanitize pkg identity before embedding in Finding output
+        # (defense against terminal escape / BIDI injection via manifest files)
+        safe_pkg = vuln_feed._sanitize_display_text(canonical, max_len=214)
+        for v in vulns:
+            aliases = v.get("aliases") or []
+            cve_label = ", ".join(aliases) if aliases else v.get("id", "unknown")
+            kev_flag = " [CISA KEV - actively exploited]" if v.get("in_kev") else ""
+            fixed_in = v.get("fixed_in") or []
+            fixed_label = ", ".join(fixed_in) if fixed_in else "unknown"
+            summary = v.get("summary") or "(no summary)"
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME,
+                severity=v.get("suggested_severity", "medium"),
+                title=f"Known Vulnerability: {safe_pkg}@{normalized} — {cve_label}{kev_flag}",
+                description=(
+                    f"{summary} | Source: OSV (id={v.get('id')}) "
+                    f"| Fixed in: {fixed_label}"
+                ),
+                file=rel_path, line=0,
+                snippet=f"{safe_pkg}@{normalized} matches {v.get('id')}",
+                category="cve-kev" if v.get("in_kev") else "cve",
+            ))
+    return findings
+
+
 def _get_compromised_versions_db():
     """Return the live compromised-versions database.
 
@@ -576,6 +662,7 @@ def scan_package_json(filepath, rel_path):
                 f.description = f.description + " [via overrides/resolutions/catalog]"
                 f.category = "supply-chain-override"
             findings.extend(override_findings)
+            findings.extend(_check_vulns("npm", override_deps, rel_path))
 
         # Flag .pnpmfile.cjs as an install-time rewriting vector (advisory only)
         pkg_dir = os.path.dirname(filepath)
@@ -657,6 +744,7 @@ def scan_package_json(filepath, rel_path):
         # false-positive. Lockfile scanners pass strict_pin=False because
         # their values are already resolved. (CRC-F1, 2026-04-05.)
         findings.extend(check_compromised_versions(all_deps, rel_path, strict_pin=True))
+        findings.extend(_check_vulns("npm", all_deps, rel_path))
 
         # Suspicious npm scopes (forking campaigns)
         findings.extend(check_suspicious_scopes(dep_names, rel_path))
@@ -730,6 +818,7 @@ def scan_python_deps(filepath, rel_path):
         py_lockfiles = ('requirements.lock', 'requirements-lock.txt', 'Pipfile.lock', 'poetry.lock')
         has_py_lockfile = any(os.path.exists(os.path.join(lock_dir, lf)) for lf in py_lockfiles)
 
+        pinned_pkg_versions = {}
         if basename in ('requirements.txt', 'requirements-dev.txt', 'requirements-test.txt', 'constraints.txt'):
             for line in content.split('\n'):
                 line = line.strip()
@@ -737,6 +826,10 @@ def scan_python_deps(filepath, rel_path):
                     pkg = re.split(r'[>=<!\[\];~]', line)[0].strip()
                     if pkg:
                         deps.append(pkg)
+                        # Extract version if pinned (==X.Y.Z) for vuln check
+                        pin_m = re.search(r'==\s*([A-Za-z0-9._+\-]+)', line)
+                        if pin_m:
+                            pinned_pkg_versions[pkg] = pin_m.group(1)
                     # Check version
                     ver_m = re.search(r'[>=<]=?(\d+)', line)
                     if ver_m and int(ver_m.group(1)) >= 90:
@@ -775,6 +868,10 @@ def scan_python_deps(filepath, rel_path):
 
         # Known IOC check first
         findings.extend(check_known_ioc_packages(deps, rel_path))
+
+        # Vuln enrichment on pinned versions only (ranges can't be queried)
+        if pinned_pkg_versions:
+            findings.extend(_check_vulns("PyPI", pinned_pkg_versions, rel_path))
 
         typos = check_typosquatting(deps, POPULAR_PYPI)
         for suspect, target, score in typos:
@@ -922,6 +1019,7 @@ def parse_package_lock_json(filepath, rel_path):
                     pkg_versions[pkg] = version
             if pkg_versions:
                 findings.extend(check_compromised_versions(pkg_versions, rel_path))
+                findings.extend(_check_vulns("npm", pkg_versions, rel_path))
 
             # Typosquatting check on transitive deps too
             typos = check_typosquatting(list(all_packages), POPULAR_NPM)
@@ -1026,6 +1124,7 @@ def parse_yarn_lock(filepath, rel_path):
                         current_header_names = []
             if pkg_versions:
                 findings.extend(check_compromised_versions(pkg_versions, rel_path))
+                findings.extend(_check_vulns("npm", pkg_versions, rel_path))
 
             typos = check_typosquatting(list(all_packages), POPULAR_NPM)
             for suspect, target, score in typos:
@@ -1070,6 +1169,7 @@ def parse_poetry_lock(filepath, rel_path):
             # Check all packages against known compromised versions
             if pkg_versions:
                 findings.extend(check_compromised_versions(pkg_versions, rel_path))
+                findings.extend(_check_vulns("PyPI", pkg_versions, rel_path))
 
             typos = check_typosquatting(list(all_packages), POPULAR_PYPI)
             for suspect, target, score in typos:
@@ -1113,6 +1213,7 @@ def parse_pnpm_lock_file(filepath, rel_path):
     findings.extend(check_known_ioc_packages(list(deps.keys()), rel_path))
     findings.extend(check_suspicious_scopes(list(deps.keys()), rel_path))
     findings.extend(check_compromised_versions(deps, rel_path))
+    findings.extend(_check_vulns("npm", deps, rel_path))
 
     # Typosquatting on the package names
     typos = check_typosquatting(list(deps.keys()), POPULAR_NPM)
@@ -1149,6 +1250,7 @@ def parse_pipfile_lock(filepath, rel_path):
             # Check all packages against known compromised versions
             if pkg_versions:
                 findings.extend(check_compromised_versions(pkg_versions, rel_path))
+                findings.extend(_check_vulns("PyPI", pkg_versions, rel_path))
             findings.extend(check_known_ioc_packages(list(all_packages), rel_path))
             typos = check_typosquatting(list(all_packages), POPULAR_PYPI)
             for suspect, target, score in typos:
@@ -1398,7 +1500,24 @@ def main():
                               "line, # comments allowed). File must be "
                               "outside the scanned repo, owned by current "
                               "user, not a symlink, and under 256KB."))
+    parser.add_argument('--no-vulns', action='store_true',
+                        help="Skip OSV + CISA KEV vulnerability enrichment")
+    parser.add_argument('--offline', action='store_true',
+                        help=("Skip all network fetches. Use only cached KEV/"
+                              "OSV data if present. Implies no live updates."))
+    parser.add_argument('--update-vulns', action='store_true',
+                        help="Refresh CISA KEV cache before scanning")
     args = parser.parse_args()
+
+    _VULN_STATE["enabled"] = not args.no_vulns
+    _VULN_STATE["offline"] = bool(args.offline)
+    if args.update_vulns and not args.offline:
+        try:
+            import vuln_feed
+            ok, msg = vuln_feed.update_kev_cache()
+            core.emit_status(args.format, f"[*] {msg}")
+        except (ImportError, OSError) as e:
+            print(f"[!] KEV update failed: {e}", file=sys.stderr)
     args.repo_path = os.path.abspath(args.repo_path)
     repo_path = args.repo_path
 

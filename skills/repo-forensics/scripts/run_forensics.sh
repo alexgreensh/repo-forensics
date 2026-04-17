@@ -19,6 +19,9 @@ if [ -z "${1:-}" ]; then
     echo "  --format json          Machine-readable JSON"
     echo "  --format summary       Counts only (for CI/CD)"
     echo "  --update-iocs          Pull latest IOC database before scanning"
+    echo "  --update-vulns         Refresh CISA KEV catalog before scanning (CVE enrichment)"
+    echo "  --no-vulns             Skip OSV + KEV vulnerability enrichment"
+    echo "  --offline              No network fetches (use cached KEV/OSV data only)"
     echo "  --watch                Enable file integrity baseline tracking"
     echo "  --package-list=FILE    Load user-supplied IOC list (absolute path, see docs)"
     echo "  --include-shadows      Include shadow surfaces in inventory (backups, caches)"
@@ -52,6 +55,9 @@ shift
 SKILL_SCAN=false
 FORMAT="text"
 UPDATE_IOCS=false
+UPDATE_VULNS=false
+NO_VULNS=false
+OFFLINE=false
 WATCH_MODE=false
 VERIFY_INSTALL=false
 PACKAGE_LIST_FILE=""
@@ -60,6 +66,9 @@ while [[ $# -gt 0 ]]; do
         --skill-scan) SKILL_SCAN=true; shift ;;
         --format) [[ $# -ge 2 ]] || { echo "Error: --format requires a value"; exit 1; }; FORMAT="$2"; shift 2 ;;
         --update-iocs) UPDATE_IOCS=true; shift ;;
+        --update-vulns) UPDATE_VULNS=true; shift ;;
+        --no-vulns) NO_VULNS=true; shift ;;
+        --offline) OFFLINE=true; shift ;;
         --watch) WATCH_MODE=true; shift ;;
         --verify-install) VERIFY_INSTALL=true; shift ;;
         --package-list=*) PACKAGE_LIST_FILE="${1#*=}"; shift ;;
@@ -93,6 +102,12 @@ fi
 if $UPDATE_IOCS; then
     echo "[*] Updating IOC database..."
     python3 "$SKILL_DIR/ioc_manager.py" --update
+fi
+
+# Handle --update-vulns (CISA KEV) before scanning
+if $UPDATE_VULNS && ! $OFFLINE; then
+    echo "[*] Updating CISA KEV catalog..."
+    python3 "$SKILL_DIR/vuln_feed.py" --update || true
 fi
 TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
@@ -153,6 +168,8 @@ run_scanner() {
 
     if [ "$name" = "dependencies" ]; then
         [ -n "$PACKAGE_LIST_FILE" ] && scanner_args+=("--package-list=$PACKAGE_LIST_FILE")
+        $NO_VULNS && scanner_args+=("--no-vulns")
+        $OFFLINE && scanner_args+=("--offline")
     fi
 
     if [ -n "$TIMEOUT_CMD" ]; then

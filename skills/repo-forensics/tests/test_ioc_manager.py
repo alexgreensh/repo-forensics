@@ -297,3 +297,41 @@ class TestCompromisedVersionsLoader:
         # Different objects after reset, but equal content
         assert first is not second
         assert first[0].keys() == second[0].keys()
+
+
+class TestFeedURLHardening:
+    """ADV-001: fetch_remote_iocs must reject non-https and non-allowlisted hosts."""
+
+    def test_https_allowlisted_host_accepted(self):
+        assert ioc_manager._validate_feed_url(
+            "https://raw.githubusercontent.com/x/y/main/iocs.json"
+        ) is True
+
+    def test_http_rejected(self):
+        assert ioc_manager._validate_feed_url(
+            "http://raw.githubusercontent.com/x/y/main/iocs.json"
+        ) is False
+
+    def test_file_scheme_rejected(self):
+        assert ioc_manager._validate_feed_url("file:///etc/passwd") is False
+
+    def test_ftp_rejected(self):
+        assert ioc_manager._validate_feed_url("ftp://example.com/iocs.json") is False
+
+    def test_unknown_host_rejected(self):
+        assert ioc_manager._validate_feed_url("https://evil.com/iocs.json") is False
+
+    def test_private_ip_rejected(self):
+        assert ioc_manager._validate_feed_url("https://127.0.0.1/iocs.json") is False
+
+    def test_empty_url_rejected(self):
+        assert ioc_manager._validate_feed_url("") is False
+        assert ioc_manager._validate_feed_url(None) is False
+
+    def test_fetch_rejects_bad_url_without_network(self, monkeypatch):
+        # Ensure no socket is attempted
+        def panic(*a, **kw):
+            raise AssertionError("urlopen must not be called for rejected URL")
+        import urllib.request
+        monkeypatch.setattr(urllib.request, "urlopen", panic)
+        assert ioc_manager.fetch_remote_iocs("http://evil.com/iocs.json") is None

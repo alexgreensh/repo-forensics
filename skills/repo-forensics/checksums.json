@@ -1,10 +1,10 @@
 {
   "version": "2",
   "generator": "repo-forensics/verify_install",
-  "file_count": 33,
+  "file_count": 34,
   "files": {
     ".gitignore": "8b2598a3359a556874b8069d42dea2686f07d46c3ca1b540c4025788b258180a",
-    "SKILL.md": "1fc927af2decb19876122163242f8f078a4ce681da55ca32bf6d64d95a563014",
+    "SKILL.md": "b550fb7ddc8db0f9c513d77d3b95f63add1a29af64cd863e59eec7ce7b976a8f",
     "data/README.md": "3980ad873dbef332e0db2d209cd22287d8a0d146930b40bafc8ab774166a8bc4",
     "data/compromised_versions.json": "96dfea743bc4437fb3a3bcd880c04d6e318b48cc0b81d439c1926064a2f9be62",
     "references/mcp-attack-patterns.md": "722d7a47186bfee18bde0e06a749dc55e8cc716c2418d118a64e57d60e48689a",
@@ -14,14 +14,14 @@
     "scripts/auto_scan.py": "4b6a76c6159cc9a71956bbaa8d6f40b548a293a68c69859cba856ad95c1da855",
     "scripts/dast_sandbox.sb": "6f6e9571a73aa8a9d07e7e4c5c0e6ae49fb6447c5f34a446154d301c6c4e8875",
     "scripts/forensics_core.py": "17c9e1ae1eca31ff10dd3d0080a3702a0160d1b3e9602caf7da59b112d0e7f2b",
-    "scripts/ioc_manager.py": "0fb872b384592861e838a12e2ab7b3733469bd84284a49841b1925d47fa5e442",
+    "scripts/ioc_manager.py": "aaae88ac4d75d290a94b5a5483fb30001fb4b437f07e0f452c4535e33848cfc0",
     "scripts/parse_pnpm_lock.py": "720f084e11cd759ab453bdfa161950111a49455ff2c6ba55ef5a9c3e32161f0c",
-    "scripts/run_forensics.sh": "2196372ca30276ef75fa138c31558fe7b2cb6de11734a266f468b1f66e395c1e",
+    "scripts/run_forensics.sh": "7dce49a5adc2a0eec876ccbcbe1c980ac28768a02758a830a7b07babd84a6a61",
     "scripts/scan_ast.py": "92375cea8c9e71caa5885e904b1d4407e0f6c2d4dd29d990a820cf74e907f6a0",
     "scripts/scan_binary.py": "2b2cada77440ea10234c350a001386436eedad6365b7546c2c5e7b6aec6e88f8",
     "scripts/scan_dast.py": "649e88c2879dba6e5146ed0004f27b924e95b5444ea436b11ca20c0968d6f3bc",
     "scripts/scan_dataflow.py": "e030a3428dd2e425e35d86dcb24034917c28ad92d7903154e24b951212efe25e",
-    "scripts/scan_dependencies.py": "8288356c73c0b537d9afbd78a33f4e05ed9817344309eb2c8d978bf8dd332602",
+    "scripts/scan_dependencies.py": "3d32919db8756a83de9bfbf99e2a9579ba78a7373448fa6647108c31bcfd88a1",
     "scripts/scan_entropy.py": "c27a83523d4b9b63b880d948aa60ab269b6ab340fb2a5cd325c705495b4e5712",
     "scripts/scan_git_forensics.py": "ac4c2944f3a2eff15bc63896d50b8ed862e7fa513532d83043e073449063903b",
     "scripts/scan_infra.py": "b4a334bf8627432eecc2c2e3506c446300e9bc510b0d4565f3f442915ae0e59b",
@@ -35,7 +35,8 @@
     "scripts/scan_sast.py": "d8664253c5bd112042357f396041bd745801e137bdc19675d3426452f20ac24a",
     "scripts/scan_secrets.py": "fc11ac9d5a3b076e11d17641813d2e437c1a39ed327ebf3bee1ccf5ef575e05c",
     "scripts/scan_skill_threats.py": "73ae9041ebc43ef130b3f870afcc540256b610a18a2bcab4488202b60b31ed71",
-    "scripts/verify_install.py": "8adc64b2bf6fa9a02969c1a13d78e6202020b41abe4b3f09a3527e7e374d1a41"
+    "scripts/verify_install.py": "8adc64b2bf6fa9a02969c1a13d78e6202020b41abe4b3f09a3527e7e374d1a41",
+    "scripts/vuln_feed.py": "f6628830a7410e5efc3df1af69fbf41739fb72fec979c6818363112f6f408b66"
   },
   "repo_symlinks": {
     "skill": "skills/repo-forensics"
@@ -48,8 +49,8 @@
   },
   "hook_count": 3,
   "repo_manifests": {
-    ".claude-plugin/marketplace.json": "4b62ae3a498cb213bc287a1b782f95743a4c8e9214dc017c2e5c075defd980ae",
-    ".claude-plugin/plugin.json": "44ec2cfe8de5c1e2c3920dabefe6382ad80def6cddb36d857a87983cb3011678"
+    ".claude-plugin/marketplace.json": "88e7561352b123936a8de4995ebf6fdc7477b7b3572219cdd58618da1dcd35a5",
+    ".claude-plugin/plugin.json": "6cc481a38db0428c20a1d4288e5c4527b51ac111e1b7e402715d7097f478a575"
   },
   "manifest_count": 2
 }

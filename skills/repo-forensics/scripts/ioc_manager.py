@@ -224,15 +224,50 @@ def _save_cache(data, cache_dir=None):
         json.dump(to_save, f, indent=2)
 
 
+# Hardened fetcher: HTTPS only, hostname allowlist, strict size cap.
+# Prevents SSRF / exfiltration via --feed-url on a shared CI runner.
+_IOC_HOST_ALLOWLIST = {
+    "raw.githubusercontent.com",
+    "github.com",
+    "objects.githubusercontent.com",
+}
+_IOC_MAX_BYTES = 5_000_000  # 5 MB
+
+
+def _validate_feed_url(url):
+    """Return True iff url is https:// and host is in the allowlist."""
+    if not isinstance(url, str) or not url.startswith("https://"):
+        return False
+    try:
+        from urllib.parse import urlparse
+        host = (urlparse(url).hostname or "").lower()
+    except (ValueError, TypeError):
+        return False
+    return host in _IOC_HOST_ALLOWLIST
+
+
 def fetch_remote_iocs(feed_url=None):
-    """Fetch IOCs from remote feed. Returns dict or None on failure."""
+    """Fetch IOCs from remote feed. Returns dict or None on failure.
+
+    Security: URL must be HTTPS and point to an allowlisted host. Any
+    file://, http://, or unknown-host URL is rejected before the socket
+    is opened. Response is byte-capped and JSON-parsed before use.
+    """
     url = feed_url or IOC_FEED_URL
+    if not _validate_feed_url(url):
+        print(f"[!] IOC feed URL rejected (non-https or host not allowlisted): {url!r}",
+              file=sys.stderr)
+        return None
     try:
         import urllib.request
         import urllib.error
         req = urllib.request.Request(url, headers={'User-Agent': 'repo-forensics/v2'})
         with urllib.request.urlopen(req, timeout=10) as resp:
-            data = json.loads(resp.read(5_000_000).decode('utf-8'))  # 5MB max
+            raw = resp.read(_IOC_MAX_BYTES + 1)
+            if len(raw) > _IOC_MAX_BYTES:
+                print(f"[!] IOC feed exceeded {_IOC_MAX_BYTES} byte cap", file=sys.stderr)
+                return None
+            data = json.loads(raw.decode('utf-8'))
         return data
     except (urllib.error.URLError, json.JSONDecodeError, OSError, ValueError) as e:
         print(f"[!] IOC fetch failed: {e}", file=sys.stderr)

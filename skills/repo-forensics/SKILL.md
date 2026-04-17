@@ -1,11 +1,11 @@
 ---
 name: repo-forensics
-description: Security forensics for git repos, AI skills, and MCP servers. Audits dependencies, detects prompt injection, credential theft, runtime dynamism, manifest drift, and 2026 attack patterns. Not for fixing vulnerabilities or pentesting.
+description: Security forensics for git repos, AI skills, and MCP servers. Audits dependencies, detects prompt injection, credential theft, runtime dynamism, manifest drift, known CVEs, CISA KEV (actively exploited) vulns, and 2026 attack patterns. Not for fixing vulnerabilities or pentesting.
 metadata:
   author: Alex Greenshpun
 allowed-tools: Bash Read Glob Grep
 user-invocable: true
-argument-hint: <repo_path> [--skill-scan] [--format text|json|summary] [--update-iocs] [--watch] [--verify-install]
+argument-hint: <repo_path> [--skill-scan] [--format text|json|summary] [--update-iocs] [--update-vulns] [--no-vulns] [--offline] [--watch] [--verify-install]
 ---
 
 <!-- repo-forensics v2 | built by Alex Greenshpun | https://linkedin.com/in/alexgreensh -->
@@ -131,6 +131,17 @@ The `scan_integrity.py` scanner protects critical configuration files:
 - **`--watch` mode**: Creates baseline on first run, alerts on drift on subsequent runs
 - Detects dangerous hook commands (curl, wget, eval, base64, /dev/tcp)
 - Flags executable config files (unusual permission bits)
+
+## CVE + CISA KEV Auto-Enrichment (v2.6)
+
+The dependency scanner automatically enriches findings with live vulnerability data:
+
+- **OSV (Open Source Vulnerabilities):** Every pinned `(ecosystem, package, version)` found in a manifest or lockfile is queried against `api.osv.dev`. Matches emit a `cve` finding with CVSS-mapped severity and suggested fix versions.
+- **CISA KEV (Known Exploited Vulnerabilities):** CVE aliases are cross-referenced against the CISA KEV catalog — CVEs confirmed actively exploited in the wild. Any match is escalated to **CRITICAL** severity (category `cve-kev`) regardless of CVSS, because exploitation in the wild is the strongest prioritization signal.
+- **Caches:** KEV catalog is cached 24h (`~/.cache/repo-forensics/kev.json`). OSV per-package queries cache 24h (`~/.cache/repo-forensics/osv-queries.json`, LRU-capped at 4000 entries). Both files are written atomically with mode 0o600.
+- **Security:** Feed URLs are hardcoded constants. No user-overridable URL at the public API (SSRF guardrail). Response size caps, HTTPS-only fetch, fail-closed CVE ID validation, and oversized-response rejection. A malformed or hostile feed returns an empty result rather than crashing the scanner.
+- **Offline mode:** `--offline` uses cached data only; `--no-vulns` disables the feature entirely.
+- **CLI:** `--update-vulns` refreshes the KEV catalog before scanning. Standalone tool: `python3 scripts/vuln_feed.py --query npm lodash 4.17.20`.
 
 ## IOC Auto-Update
 
