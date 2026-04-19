@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/dependencies-zero-brightgreen.svg" alt="Zero Dependencies">
   <img src="https://img.shields.io/badge/scanners-18-orange.svg" alt="18 Scanners">
   <img src="https://img.shields.io/badge/patterns-450%2B-red.svg" alt="450+ Patterns">
-  <img src="https://img.shields.io/badge/2026%20CVEs-covered-critical.svg" alt="2026 CVEs">
+  <img src="https://img.shields.io/badge/CVE%20%2B%20CISA%20KEV-live%20scanning-critical.svg" alt="Live CVE + CISA KEV scanning">
   <a href="https://github.com/sponsors/alexgreensh"><img src="https://img.shields.io/badge/Sponsor-%E2%9D%A4-ff69b4.svg?labelColor=262626" alt="Sponsor"></a>
 </p>
 
