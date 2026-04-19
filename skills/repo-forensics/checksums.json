@@ -4,7 +4,7 @@
   "file_count": 36,
   "files": {
     ".gitignore": "8b2598a3359a556874b8069d42dea2686f07d46c3ca1b540c4025788b258180a",
-    "SKILL.md": "79dcfef0e6d2038e5e0ef444cc0edf55d90e98a26a5fa57977ade175102d3186",
+    "SKILL.md": "e13bb9bbc58b5e2f6edddba87a35461595480cb5c77160903c32ee7bc0095c7f",
     "data/README.md": "3980ad873dbef332e0db2d209cd22287d8a0d146930b40bafc8ab774166a8bc4",
     "data/compromised_versions.json": "96dfea743bc4437fb3a3bcd880c04d6e318b48cc0b81d439c1926064a2f9be62",
     "references/mcp-attack-patterns.md": "722d7a47186bfee18bde0e06a749dc55e8cc716c2418d118a64e57d60e48689a",
@@ -36,7 +36,7 @@
     "scripts/scan_sast.py": "d8664253c5bd112042357f396041bd745801e137bdc19675d3426452f20ac24a",
     "scripts/scan_secrets.py": "fc11ac9d5a3b076e11d17641813d2e437c1a39ed327ebf3bee1ccf5ef575e05c",
     "scripts/scan_skill_threats.py": "73ae9041ebc43ef130b3f870afcc540256b610a18a2bcab4488202b60b31ed71",
-    "scripts/session_scan.py": "0918b89acd24406dec2f7128a3eb156fbf51eb527aefcf1583983b5c0a8f5157",
+    "scripts/session_scan.py": "52a7eae452155a0ecce0073baabd162b164a10772036073e5778ebb2a08b5c3f",
     "scripts/verify_install.py": "8adc64b2bf6fa9a02969c1a13d78e6202020b41abe4b3f09a3527e7e374d1a41",
     "scripts/vuln_feed.py": "f6628830a7410e5efc3df1af69fbf41739fb72fec979c6818363112f6f408b66"
   },
@@ -54,7 +54,7 @@
   "hook_count": 5,
   "repo_manifests": {
     ".claude-plugin/marketplace.json": "ee5b9f3f264519794a3b3609c96520f4f3ba37ea004d88fb75d70b269249dcea",
-    ".claude-plugin/plugin.json": "1c7eab91997b141df72f78f8121e915dedaa53fc6029283a3ace14631cc347ba"
+    ".claude-plugin/plugin.json": "3b36740d1feb3423fc412bb9c269023258ed67fff315990f61a5da4e95117f94"
   },
   "manifest_count": 2
 }

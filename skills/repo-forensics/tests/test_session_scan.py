@@ -559,7 +559,7 @@ class TestOutputSessionContext:
             session_scan.output_session_context([])
         assert exc.value.code == 0
         out = capsys.readouterr().out
-        assert json.loads(out) == {"hookEventName": "SessionStart"}
+        assert json.loads(out) == {"hookSpecificOutput": {"hookEventName": "SessionStart"}}
 
     def test_with_context(self, capsys):
         with pytest.raises(SystemExit) as exc:
@@ -567,8 +567,8 @@ class TestOutputSessionContext:
         assert exc.value.code == 0
         out = capsys.readouterr().out
         data = json.loads(out)
-        assert data["hookEventName"] == "SessionStart"
         assert "hookSpecificOutput" in data
+        assert data["hookSpecificOutput"]["hookEventName"] == "SessionStart"
         assert "additionalContext" in data["hookSpecificOutput"]
         assert "repo-forensics" in data["hookSpecificOutput"]["additionalContext"]
 
@@ -590,7 +590,7 @@ class TestKillSwitch:
             session_scan.main()
         assert exc.value.code == 0
         out = capsys.readouterr().out
-        assert json.loads(out) == {"hookEventName": "SessionStart"}
+        assert json.loads(out) == {"hookSpecificOutput": {"hookEventName": "SessionStart"}}
 
     def test_disabled_false(self, monkeypatch, capsys):
         monkeypatch.setenv("REPO_FORENSICS_SESSION_SCAN", "false")
