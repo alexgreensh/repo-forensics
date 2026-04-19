@@ -1,5 +1,5 @@
 {
-  "description": "repo-forensics PreToolUse IOC gate + PostToolUse auto-scan for install/clone/update commands + first-run auto-update nudge at SessionStart",
+  "description": "repo-forensics: PreToolUse IOC gate, PostToolUse auto-scan, SessionStart security scan (plugin/skill/MCP change detection + threat DB refresh) + first-run nudge",
   "hooks": {
     "PreToolUse": [
       {
@@ -28,6 +28,11 @@
     "SessionStart": [
       {
         "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/run_session_scan.sh\"",
+            "timeout": 15
+          },
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/first-run-nudge.sh\""

@@ -1,10 +1,11 @@
 {
   "version": "2",
   "generator": "repo-forensics/verify_install",
-  "file_count": 35,
+  "file_count": 37,
   "files": {
     ".gitignore": "8b2598a3359a556874b8069d42dea2686f07d46c3ca1b540c4025788b258180a",
-    "SKILL.md": "aad364dc8c6e91f7b1ae9d423795578e77caacdd6c280b3670e690f8f7ce682b",
+    "SKILL.md": "fcfc79a205beb54059d42fc9ff89a57f9ce2ee7138d73c92a7500e47c8228783",
+    "checksums.json": "b43a80b0fb76b1e8131871f9daa286d40e6c86a49010de83ecf6ae6c45ce614e",
     "data/README.md": "3980ad873dbef332e0db2d209cd22287d8a0d146930b40bafc8ab774166a8bc4",
     "data/compromised_versions.json": "96dfea743bc4437fb3a3bcd880c04d6e318b48cc0b81d439c1926064a2f9be62",
     "references/mcp-attack-patterns.md": "722d7a47186bfee18bde0e06a749dc55e8cc716c2418d118a64e57d60e48689a",
@@ -36,23 +37,8 @@
     "scripts/scan_sast.py": "d8664253c5bd112042357f396041bd745801e137bdc19675d3426452f20ac24a",
     "scripts/scan_secrets.py": "fc11ac9d5a3b076e11d17641813d2e437c1a39ed327ebf3bee1ccf5ef575e05c",
     "scripts/scan_skill_threats.py": "73ae9041ebc43ef130b3f870afcc540256b610a18a2bcab4488202b60b31ed71",
+    "scripts/session_scan.py": "d309e9999274d188a95aba9a08535c41c1068a12717db47a74a2d8b225905cc2",
     "scripts/verify_install.py": "8adc64b2bf6fa9a02969c1a13d78e6202020b41abe4b3f09a3527e7e374d1a41",
     "scripts/vuln_feed.py": "f6628830a7410e5efc3df1af69fbf41739fb72fec979c6818363112f6f408b66"
-  },
-  "repo_symlinks": {
-    "skill": "skills/repo-forensics"
-  },
-  "symlink_count": 1,
-  "repo_hooks": {
-    "hooks/first-run-nudge.sh": "bae0579e632d529a2dd1ca88eb692fb24a770ab3d7b9a364545d8eedcc7a7fc3",
-    "hooks/hooks.json": "5c5f5d7ebc51b118afdf024ec2250f7b61a52bd77a69c6c83b4ba6e76ab869b0",
-    "hooks/run_auto_scan.sh": "c2d171acd564f5c1c911242f5ae44368260ce3fe627faee5f2e5cb43478139ac",
-    "hooks/run_pre_scan.sh": "c4ba717c8a8e5030ee0d61e7dcb1eda71cb828b0692206877b410413c1d7d744"
-  },
-  "hook_count": 4,
-  "repo_manifests": {
-    ".claude-plugin/marketplace.json": "dd372614a446b75ac31ef4f03511c4ea573b638b522a2c78ebc2366dce304d15",
-    ".claude-plugin/plugin.json": "6cc481a38db0428c20a1d4288e5c4527b51ac111e1b7e402715d7097f478a575"
-  },
-  "manifest_count": 2
+  }
 }

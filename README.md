@@ -259,6 +259,24 @@ ln -s $(pwd) ~/.claude/plugins/repo-forensics
 
 The hook fires automatically on every Bash command. Non-matching commands exit in <10ms with zero overhead.
 
+### Session Security Scanner (v2.6.1)
+
+A SessionStart hook that detects changes to plugins, skills, and MCP servers between sessions:
+
+- **Change detection**: Compares SHA256 checksums against a cached baseline. Only scans what actually changed.
+- **Two-tier scan**: Fast IOC check (milliseconds) + full 18-scanner deep scan on changed items (catches zero-day supply chain attacks, obfuscated code, C2 beaconing, manifest drift).
+- **Threat database refresh**: Updates IOC and CISA KEV databases once per day (2-5s). Uses stale caches gracefully if offline.
+- **Sub-1ms common case**: When nothing changed (99% of sessions), the scanner exits in <1ms.
+- **Kill switch**: Set `REPO_FORENSICS_SESSION_SCAN=0` to disable.
+
+| Scenario | Latency |
+|----------|---------|
+| Nothing changed | 0.9ms |
+| 1 plugin changed (fast IOC) | 1.3ms |
+| 1 plugin changed (+ deep scan) | 2-10s |
+| Daily threat DB refresh | +2-5s |
+| Kill switch | 0.02ms |
+
 ---
 
 ## As a Claude Code Skill
@@ -450,6 +468,19 @@ docs/examples/unsafe-demo.py
 ```
 
 Note: `.forensicsignore` is itself scanned. Broad wildcard patterns like `*` are flagged as critical (likely attacker-planted).
+
+---
+
+## Security Disclaimer
+
+Repo Forensics is a **defense-in-depth tool** — it adds layers of automated detection but **does not guarantee complete protection** against all threats. No security tool can.
+
+- This software is provided **as-is**, without warranty of any kind. The author is not responsible for any security incidents, data loss, or damages resulting from the use or inability to use this tool.
+- Repo Forensics relies on pattern matching, heuristic analysis, and known-threat databases (IOCs, CISA KEV, OSV). **Novel zero-day attacks, sophisticated obfuscation, or threats not yet cataloged may evade detection.**
+- This tool is **not a substitute** for professional security audits, penetration testing, or a comprehensive security program.
+- Always verify findings manually. Both false positives and false negatives are possible.
+
+By using this software, you acknowledge these limitations and agree that the author bears no liability for security outcomes. See the [LICENSE](LICENSE) file for full legal terms.
 
 ---
 
