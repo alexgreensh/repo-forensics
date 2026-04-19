@@ -230,14 +230,24 @@ Forensify is read-only. It doesn't fix, patch, or quarantine anything. It doesn'
 v2 adds a PostToolUse hook that automatically scans when you install or clone anything. No manual invocation needed.
 
 **What triggers it:**
-- `git clone`, `pip install`, `npm install`, `yarn add`, `gem install`, `cargo install`, `go get`, `brew install`
+- `git clone`, `git pull`, `pip install`, `npm install/update`, `yarn add`, `gem install/update`, `cargo install`, `go get/install`, `brew install/upgrade`, `openclaw install/update`, `clawhub install/publish`
 - `curl ... | sh` or `wget ... | sh` (instant CRITICAL, no scan needed)
 
 **What it does:**
-1. Detects install/clone commands in Bash tool calls (<10ms for non-matching commands)
+1. Detects install/clone/update commands in Bash tool calls (<10ms for non-matching commands)
 2. Checks package names against the IOC database (known malicious packages)
 3. For cloned repos: runs 6 targeted scanners in parallel (dependencies, secrets, lifecycle, skill_threats, manifest_drift, runtime_dynamism)
-4. Returns findings as inline context in Claude Code
+4. For `git pull`: scans CWD for threats introduced by the update
+5. Returns findings as inline context in Claude Code
+
+### Pre-Execution Gate (v2.6)
+
+A PreToolUse hook blocks known-malicious packages and pipe-to-shell commands **before** the command runs:
+
+- **IOC-only**: Checks package names against the IOC database. No full scans, no subprocess calls.
+- **<10ms latency**: Fast path for non-matching commands. IOC matches <200ms.
+- **Graceful degradation**: Missing IOC database → approve. Never silently blocks legitimate work.
+- **Exit codes**: 0 = approve, 2 = block (Claude Code convention).
 
 **Setup as a plugin:**
 ```bash
@@ -314,7 +324,7 @@ Auto-detects OpenClaw skills (SKILL.md frontmatter, tools.json, SOUL.md) and run
 | **GitHub Action** | `action.yml` for CI/CD integration with exit code gating. |
 | **Runtime behavior prediction** | Detects code that will change behavior after install: time bombs, dynamic imports, fetch-then-execute, self-modification, rug pull enablers. |
 | **Manifest drift detection** | Compares declared dependencies vs actual imports. Catches phantom deps, runtime installs, and conditional import+install fallbacks. |
-| **260+ pytest tests** | Full test coverage across 16 test files with fixture repos containing known vulnerabilities. |
+| **699 pytest tests** | Full test coverage across 17 test files with fixture repos containing known vulnerabilities. |
 | **Shared core** | Duplicated `scan_patterns()` extracted to `forensics_core.py`. Silent exceptions replaced with structured findings. |
 | **OpenClaw/ClawHub scanning** | Auto-detects OpenClaw skills and checks frontmatter, tools.json, SOUL.md, .clawhubignore for ClawHavoc patterns and Full-Schema Poisoning. |
 

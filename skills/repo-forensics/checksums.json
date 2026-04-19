@@ -1,21 +1,22 @@
 {
   "version": "2",
   "generator": "repo-forensics/verify_install",
-  "file_count": 34,
+  "file_count": 35,
   "files": {
     ".gitignore": "8b2598a3359a556874b8069d42dea2686f07d46c3ca1b540c4025788b258180a",
-    "SKILL.md": "b550fb7ddc8db0f9c513d77d3b95f63add1a29af64cd863e59eec7ce7b976a8f",
+    "SKILL.md": "aad364dc8c6e91f7b1ae9d423795578e77caacdd6c280b3670e690f8f7ce682b",
     "data/README.md": "3980ad873dbef332e0db2d209cd22287d8a0d146930b40bafc8ab774166a8bc4",
     "data/compromised_versions.json": "96dfea743bc4437fb3a3bcd880c04d6e318b48cc0b81d439c1926064a2f9be62",
     "references/mcp-attack-patterns.md": "722d7a47186bfee18bde0e06a749dc55e8cc716c2418d118a64e57d60e48689a",
     "references/research_sources.md": "cbf07116ed04d87436fc1c9daf43ffb3ec2f513713f5fc882d089b53bcd7c629",
     "references/threat_patterns.md": "05c1acfcd07f96a475eed007348a3b63fc28021e77cc8cf045721949b1014507",
     "scripts/aggregate_json.py": "3fe4871e7845c400f374df2e04141c532398256574817d76d5c7cd639882fba0",
-    "scripts/auto_scan.py": "4b6a76c6159cc9a71956bbaa8d6f40b548a293a68c69859cba856ad95c1da855",
+    "scripts/auto_scan.py": "5e1145281ad4ba765ae14cfd628a334102fcb0a44240f62c7d5a29c6c2f80e61",
     "scripts/dast_sandbox.sb": "6f6e9571a73aa8a9d07e7e4c5c0e6ae49fb6447c5f34a446154d301c6c4e8875",
     "scripts/forensics_core.py": "17c9e1ae1eca31ff10dd3d0080a3702a0160d1b3e9602caf7da59b112d0e7f2b",
     "scripts/ioc_manager.py": "aaae88ac4d75d290a94b5a5483fb30001fb4b437f07e0f452c4535e33848cfc0",
     "scripts/parse_pnpm_lock.py": "720f084e11cd759ab453bdfa161950111a49455ff2c6ba55ef5a9c3e32161f0c",
+    "scripts/pre_scan.py": "a4596a00fa32b398495fb19a89b9f68a854771d555f5031ca01fc415bd55faad",
     "scripts/run_forensics.sh": "7dce49a5adc2a0eec876ccbcbe1c980ac28768a02758a830a7b07babd84a6a61",
     "scripts/scan_ast.py": "92375cea8c9e71caa5885e904b1d4407e0f6c2d4dd29d990a820cf74e907f6a0",
     "scripts/scan_binary.py": "2b2cada77440ea10234c350a001386436eedad6365b7546c2c5e7b6aec6e88f8",
@@ -44,12 +45,13 @@
   "symlink_count": 1,
   "repo_hooks": {
     "hooks/first-run-nudge.sh": "bae0579e632d529a2dd1ca88eb692fb24a770ab3d7b9a364545d8eedcc7a7fc3",
-    "hooks/hooks.json": "0112cf51ea3a4df507df688da77eb3f298901e581263c3458b24b3017affbee4",
-    "hooks/run_auto_scan.sh": "c2d171acd564f5c1c911242f5ae44368260ce3fe627faee5f2e5cb43478139ac"
+    "hooks/hooks.json": "5c5f5d7ebc51b118afdf024ec2250f7b61a52bd77a69c6c83b4ba6e76ab869b0",
+    "hooks/run_auto_scan.sh": "c2d171acd564f5c1c911242f5ae44368260ce3fe627faee5f2e5cb43478139ac",
+    "hooks/run_pre_scan.sh": "c4ba717c8a8e5030ee0d61e7dcb1eda71cb828b0692206877b410413c1d7d744"
   },
-  "hook_count": 3,
+  "hook_count": 4,
   "repo_manifests": {
-    ".claude-plugin/marketplace.json": "88e7561352b123936a8de4995ebf6fdc7477b7b3572219cdd58618da1dcd35a5",
+    ".claude-plugin/marketplace.json": "dd372614a446b75ac31ef4f03511c4ea573b638b522a2c78ebc2366dce304d15",
     ".claude-plugin/plugin.json": "6cc481a38db0428c20a1d4288e5c4527b51ac111e1b7e402715d7097f478a575"
   },
   "manifest_count": 2

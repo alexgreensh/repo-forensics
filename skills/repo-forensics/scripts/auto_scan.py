@@ -24,22 +24,30 @@ sys.path.insert(0, SCRIPTS_DIR)
 INSTALL_PATTERNS = [
     # git clone
     (re.compile(r'git\s+clone\s+(?:--[^\s]+\s+)*(?:https?://|git@)([^\s]+)(?:\s+([^\s]+))?'), 'git_clone'),
-    # pip install (with package names)
+    # git pull (update — scans CWD after pull)
+    (re.compile(r'git\s+pull(?:\s|$)'), 'git_pull'),
+    # pip install (with package names) — also catches --upgrade
     (re.compile(r'pip3?\s+install\s+(.+)'), 'pip_install'),
     # npm install (with package names)
     (re.compile(r'npm\s+(?:install|i)\s+(.+)'), 'npm_install'),
+    # npm update (missed update commands)
+    (re.compile(r'npm\s+update\s+(.+)'), 'npm_install'),
     # yarn add
     (re.compile(r'yarn\s+add\s+(.+)'), 'yarn_add'),
     # gem install
     (re.compile(r'gem\s+install\s+(.+)'), 'gem_install'),
+    # gem update
+    (re.compile(r'gem\s+update\s+(.+)'), 'gem_install'),
     # cargo install
     (re.compile(r'cargo\s+install\s+(.+)'), 'cargo_install'),
     # go get/install
     (re.compile(r'go\s+(?:get|install)\s+(.+)'), 'go_install'),
     # brew install
     (re.compile(r'brew\s+install\s+(.+)'), 'brew_install'),
-    # openclaw skills/plugins install
-    (re.compile(r'openclaw\s+(?:skills|plugins)\s+install\s+(.+)'), 'openclaw_install'),
+    # brew upgrade
+    (re.compile(r'brew\s+upgrade\s+(.+)'), 'brew_install'),
+    # openclaw skills/plugins install or update
+    (re.compile(r'openclaw\s+(?:skills|plugins)\s+(?:install|update)\s+(.+)'), 'openclaw_install'),
     # clawhub install
     (re.compile(r'clawhub\s+(?:install|publish)\s+(.+)'), 'openclaw_install'),
 ]
@@ -356,6 +364,13 @@ def main():
         clone_dir = extract_clone_target(match)
         if clone_dir and os.path.isdir(clone_dir):
             scan_findings = run_targeted_scan(clone_dir)
+            all_findings.extend(scan_findings)
+
+    # For git pull: scan CWD (repo was updated with potentially changed code)
+    if pattern_type == 'git_pull':
+        cwd = os.getcwd()
+        if os.path.isdir(cwd) and _is_safe_scan_path(cwd):
+            scan_findings = run_targeted_scan(cwd)
             all_findings.extend(scan_findings)
 
     # For pip/npm install with a local path: scan it (with path containment)

@@ -12,7 +12,7 @@
   "plugins": [
     {
       "name": "repo-forensics",
-      "description": "Security for the AI agent ecosystem. 18 scanners + forensify cross-agent self-inspection (Claude Code, Codex, OpenClaw, NanoClaw). Detects prompt injection, supply chain attacks, credential exposure, MCP tool poisoning, and cross-ecosystem risk patterns. PostToolUse auto-scan hook, macOS Seatbelt sandbox, 19 correlation rules, 127 version-pinned IOCs.",
+      "description": "Security for the AI agent ecosystem. 18 scanners + forensify cross-agent self-inspection (Claude Code, Codex, OpenClaw, NanoClaw). Detects prompt injection, supply chain attacks, credential exposure, MCP tool poisoning, and cross-ecosystem risk patterns. PostToolUse auto-scan hook + PreToolUse pre-execution gate, macOS Seatbelt sandbox, 19 correlation rules, 127 version-pinned IOCs.",
       "version": "2.6.0",
       "author": {
         "name": "Alex Greenshpun",

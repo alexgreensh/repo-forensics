@@ -1,6 +1,18 @@
 {
-  "description": "repo-forensics PostToolUse auto-scan for install/clone commands + first-run auto-update nudge at SessionStart",
+  "description": "repo-forensics PreToolUse IOC gate + PostToolUse auto-scan for install/clone/update commands + first-run auto-update nudge at SessionStart",
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/run_pre_scan.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Bash",
