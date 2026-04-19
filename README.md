@@ -24,6 +24,8 @@ You won't feel it. There are no symptoms.
 
 **Repo Forensics is the vetting step.** Audit any repo, skill, MCP server, or plugin before it touches your machine. Works across the AI agent ecosystem: Claude Code, OpenClaw, Codex, Cursor, NanoClaw, or anything that installs third-party code. 18 scanners, runtime behavior prediction, ClawHavoc campaign detection. Nothing phones home. Runs in seconds.
 
+**It doesn't stop at install.** Every `git pull`, `npm update`, `gem update`, `brew upgrade`, and plugin update is monitored too. Known-malicious packages are blocked before the command even runs. A clean install today doesn't mean a clean update tomorrow — repo-forensics watches both.
+
 **Already installed something you're not sure about?** Run it on your existing projects too. The post-incident scanner checks npm cache, install logs, node_modules, and your machine for traces of known supply chain attacks (axios RAT, liteLLM .pth injection, SANDWORM campaign) even after the malware has cleaned up after itself.
 
 ---
