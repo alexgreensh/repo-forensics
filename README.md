@@ -259,7 +259,7 @@ ln -s $(pwd) ~/.claude/plugins/repo-forensics
 
 The hook fires automatically on every Bash command. Non-matching commands exit in <10ms with zero overhead.
 
-### Session Security Scanner (v2.6.1)
+### Session Security Scanner (v2.6.2)
 
 A SessionStart hook that detects changes to plugins, skills, and MCP servers between sessions:
 

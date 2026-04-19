@@ -18,7 +18,7 @@ Deep security auditing for repositories, AI agent skills, and MCP servers.
 
 - **Auto-scan hook** (v2): PostToolUse hook auto-triggers on `git clone`, `git pull`, `pip install`, `npm install/update`, `gem install/update`, `brew install/upgrade`, etc. Zero-overhead for non-matching commands.
 - **Pre-execution gate** (v2.6): PreToolUse hook blocks known-malicious packages and pipe-to-shell commands BEFORE execution. IOC-only, <10ms latency, no subprocess calls.
-- **Session security scanner** (v2.6.1): SessionStart hook detects updated plugins/skills/MCP servers, refreshes threat databases daily, runs fast IOC check + full 18-scanner deep scan on changed items. Sub-1ms when nothing changed.
+- **Session security scanner** (v2.6.2): SessionStart hook detects updated plugins/skills/MCP servers, refreshes threat databases daily, runs fast IOC check + full 18-scanner deep scan on changed items. Sub-1ms when nothing changed.
 - **.pth file injection detection** (v2): Detects liteLLM-style Python startup injection attacks (exec/eval/base64/known IOC filenames)
 - **Transitive dependency scanning** (v2): Deep-parses `package-lock.json`, `yarn.lock`, `poetry.lock`, `Pipfile.lock` for supply chain IOCs
 - **DAST scanner** (`scan_dast.py`): Dynamic analysis of Claude Code hooks with 8 malicious payload types, sandboxed execution
