@@ -1,0 +1,48 @@
+{
+  "version": "2.6.4",
+  "updated": "2026-04-19",
+  "c2_ips": [
+    "91.92.242.30",
+    "54.91.154.110",
+    "157.245.55.238",
+    "45.77.240.42",
+    "104.248.30.47",
+    "159.65.147.111",
+    "142.11.206.73"
+  ],
+  "malicious_domains": [
+    "install.app-distribution.net",
+    "dl.dropboxusercontent.com",
+    "socifiapp.com",
+    "hackmoltrepeat.com",
+    "giftshop.club",
+    "glot.io",
+    "api.telegram.org/bot",
+    "discord.com/api/webhooks",
+    "hooks.slack.com/services",
+    "eo1n0jq9qgggt.m.pipedream.net",
+    "sfrclak.com"
+  ],
+  "malicious_npm_packages": [
+    "rimarf",
+    "yarsg",
+    "suport-color",
+    "naniod",
+    "opencraw",
+    "claud-code",
+    "cloude-code",
+    "cloude",
+    "mcp-cliient",
+    "mcp-serever",
+    "anthropic-sdk-node",
+    "claude-code-cli",
+    "clawclient",
+    "plain-crypto-js"
+  ],
+  "malicious_pypi_packages": [
+    "anthopic",
+    "antrhopic",
+    "claudes",
+    "mcp-python-sdk"
+  ]
+}

@@ -31,7 +31,7 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/run_session_scan.sh\"",
-            "timeout": 15
+            "timeout": 25
           },
           {
             "type": "command",

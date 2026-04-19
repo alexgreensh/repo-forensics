@@ -46,15 +46,15 @@
   "symlink_count": 1,
   "repo_hooks": {
     "hooks/first-run-nudge.sh": "bae0579e632d529a2dd1ca88eb692fb24a770ab3d7b9a364545d8eedcc7a7fc3",
-    "hooks/hooks.json": "5dc86bcde41eeaead1bbd36aadf1116a9e5e5ec3116e1d35fc24f795b49b5cf0",
+    "hooks/hooks.json": "334cc0b0ad4ffa1d0c34ac2f3b01d09c6fb8488ed386bd64e2e9f0609f905faf",
     "hooks/run_auto_scan.sh": "c2d171acd564f5c1c911242f5ae44368260ce3fe627faee5f2e5cb43478139ac",
     "hooks/run_pre_scan.sh": "c4ba717c8a8e5030ee0d61e7dcb1eda71cb828b0692206877b410413c1d7d744",
     "hooks/run_session_scan.sh": "c2953282d31e8425223ec5ac5f718a00fd7bf9a22e5c930274d9e8d83ad23197"
   },
   "hook_count": 5,
   "repo_manifests": {
-    ".claude-plugin/marketplace.json": "ee5b9f3f264519794a3b3609c96520f4f3ba37ea004d88fb75d70b269249dcea",
-    ".claude-plugin/plugin.json": "3b36740d1feb3423fc412bb9c269023258ed67fff315990f61a5da4e95117f94"
+    ".claude-plugin/marketplace.json": "eec9854ef5cb28613ad481e8e3c12ebc370a69811637528f87974d702d51e9df",
+    ".claude-plugin/plugin.json": "8a34ae779168669d05bac8e16177c15424eaf5ec1dc63f167ebb50c06f7d9d2b"
   },
   "manifest_count": 2
 }
