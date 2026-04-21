@@ -58,12 +58,12 @@ Deep security auditing for repositories, AI agent skills, and MCP servers.
 
 ## Quick Start
 
-Full audit (all 17 scanners):
+Full audit (all 19 scanners):
 ```bash
 ./scripts/run_forensics.sh /path/to/repo
 ```
 
-Focused AI skill scan (9 scanners, faster):
+Focused AI skill scan (10 scanners, faster):
 ```bash
 ./scripts/run_forensics.sh /path/to/repo --skill-scan
 ```

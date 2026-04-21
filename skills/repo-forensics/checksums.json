@@ -7,7 +7,7 @@
     ".ruff_cache/.gitignore": "9e3a60f1e6ec4ae60215c11d54b171392745ec25e9dded433d5bd921363af316",
     ".ruff_cache/0.15.10/1043920844443668668": "3e901cf049cbe9db5d220c0826e4d0c6d52bb0643a6d717b2ecbea177366a45a",
     ".ruff_cache/CACHEDIR.TAG": "5953156d7e0c564a427251316eaf26f8870e6483ae2197f916b630e4f93e31ae",
-    "SKILL.md": "d0ffb9e25ce1004be3c183261ed44eee28e2b1e8efe874ad3598faf62b857240",
+    "SKILL.md": "13ad1dc68e826e94a46270be8bf35524f7f94f615cbe59e775125c8475dac7de",
     "data/README.md": "3980ad873dbef332e0db2d209cd22287d8a0d146930b40bafc8ab774166a8bc4",
     "data/compromised_versions.json": "96dfea743bc4437fb3a3bcd880c04d6e318b48cc0b81d439c1926064a2f9be62",
     "references/env-secrets-research-2026-04-21.md": "a6b73f8b0b8073ba4496c86036002c7cee83708628d5c78efdd233673d4d155c",
@@ -58,8 +58,8 @@
   },
   "hook_count": 5,
   "repo_manifests": {
-    ".claude-plugin/marketplace.json": "eec9854ef5cb28613ad481e8e3c12ebc370a69811637528f87974d702d51e9df",
-    ".claude-plugin/plugin.json": "8a34ae779168669d05bac8e16177c15424eaf5ec1dc63f167ebb50c06f7d9d2b"
+    ".claude-plugin/marketplace.json": "af6a15b37e9eb13bb059a3564742c8933282570cae20217526ce790a8e2c8caa",
+    ".claude-plugin/plugin.json": "3241fb099526f26a05645c57975a27564d7906dea63e0ed6fcfa1a9e237300ae"
   },
   "manifest_count": 2
 }

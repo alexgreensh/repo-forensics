@@ -82,7 +82,7 @@ $ ./run_forensics.sh ./suspicious-skill
 ## How It Works
 
 <p align="center">
-  <img src="diagrams/pipeline.svg" alt="Scanning pipeline: input → 17 scanners → correlation → verdict" width="900"/>
+  <img src="diagrams/pipeline.svg" alt="Scanning pipeline: input → 19 scanners → correlation → verdict" width="900"/>
 </p>
 
 Point it at any repository. 19 scanners run in parallel, each checking a different attack surface. The correlation engine then cross-references findings across 21 rules to detect compound threats that no single scanner would catch (like dynamic import + network fetch = deferred payload loading).
@@ -138,7 +138,7 @@ No pip install. No API keys. No Docker. No dependencies.
 > **Installed via Claude Code plugin marketplace?** Please enable auto-update after installing. Claude Code ships third-party marketplaces with auto-update **off by default**, and plugin authors cannot change that default. So you will not get new scanners, updated IOCs, or critical detection fixes automatically unless you turn it on. In Claude Code: `/plugin` → **Marketplaces** tab → select your repo-forensics marketplace → **Enable auto-update**. One-time, ten seconds, and your security scanner stays current with the threat landscape. If you installed via `git clone` instead, you are already on the fast path — `git pull` when you want fresh IOCs, or run `--update-iocs` to refresh just the indicator set.
 
 ```bash
-# Focused AI skill/MCP scan (9 scanners, faster)
+# Focused AI skill/MCP scan (10 scanners, faster)
 ./skills/repo-forensics/scripts/run_forensics.sh /path/to/skill --skill-scan
 
 # Track file integrity between scans
