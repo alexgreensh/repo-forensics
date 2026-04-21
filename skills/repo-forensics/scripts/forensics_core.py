@@ -863,6 +863,36 @@ def correlate(findings):
                 category="lethal-trifecta"
             ))
 
+        # Rule 20: process.env exposure in error handler (same file)
+        secret_exposure_keywords = {"secret-exposure", "process.env logged", "process.env serialized", "json.stringify"}
+        error_handler_keywords = {"uncaughtexception", "unhandledrejection", "error handler", "crash report", "onerror"}
+        if has_category(file_findings, secret_exposure_keywords) and has_category(file_findings, error_handler_keywords):
+            correlated.append(Finding(
+                scanner="correlation",
+                severity="critical",
+                title="Secrets Leaked via Error Handler",
+                description="process.env is logged or serialized in a file that also contains error handling. Any crash exposes all environment secrets to logs or files.",
+                file=filepath,
+                line=0,
+                snippet="[compound: process.env exposure + error handler]",
+                category="secret-leak-chain"
+            ))
+
+        # Rule 21: Devcontainer host secret mount + credential access pattern
+        devcontainer_keywords = {"host-secret-exposure", "host secret mount", "pulls host secret", "localenv"}
+        credential_access_keywords = {"credential-exfiltration", "credential exfiltration", "credential theft", "secret exfil", "token theft", "remote-code-execution"}
+        if has_category(file_findings, devcontainer_keywords) and has_category(file_findings, credential_access_keywords):
+            correlated.append(Finding(
+                scanner="correlation",
+                severity="critical",
+                title="Devcontainer Secret Exposure Chain",
+                description="Devcontainer mounts host secrets AND code accesses credentials. Combined: full credential theft via container.",
+                file=filepath,
+                line=0,
+                snippet="[compound: devcontainer host secret + credential access]",
+                category="compound-threat"
+            ))
+
     return correlated
 
 

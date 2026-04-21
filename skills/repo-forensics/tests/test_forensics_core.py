@@ -213,6 +213,43 @@ class TestCorrelation:
         assert "Shadow Dependency with Network Access" in titles
 
 
+    def test_process_env_error_handler_chain(self):
+        """Rule 20: process.env exposure + error handler = secret leak chain."""
+        findings = [
+            core.Finding("sast", "high", "process.env Logged to Console", "secret-exposure vulnerability", "app.js", 10, "console.log(process.env)", "secret-exposure"),
+            core.Finding("sast", "high", "Error Handler", "uncaughtException handler", "app.js", 20, "process.on('uncaughtException')", "error-handling"),
+        ]
+        correlated = core.correlate(findings)
+        titles = [c.title for c in correlated]
+        assert "Secrets Leaked via Error Handler" in titles
+
+    def test_process_env_no_error_handler_no_correlation(self):
+        """Rule 20 should NOT fire without error handler in same file."""
+        findings = [
+            core.Finding("sast", "high", "process.env Logged to Console", "secret-exposure", "app.js", 10, "", "secret-exposure"),
+        ]
+        correlated = core.correlate(findings)
+        assert not any("Error Handler" in c.title for c in correlated)
+
+    def test_devcontainer_secret_exposure_chain(self):
+        """Rule 21: devcontainer host mount + credential access = compound threat."""
+        findings = [
+            core.Finding("devcontainer", "critical", "Host Secret Mount", "host-secret-exposure mount .ssh", "devcontainer.json", 0, "", "host-secret-exposure"),
+            core.Finding("devcontainer", "high", "Remote Fetch in initializeCommand", "credential exfiltration via curl", "devcontainer.json", 0, "", "remote-code-execution"),
+        ]
+        correlated = core.correlate(findings)
+        titles = [c.title for c in correlated]
+        assert "Devcontainer Secret Exposure Chain" in titles
+
+    def test_devcontainer_no_credential_access_no_correlation(self):
+        """Rule 21 should NOT fire without credential access pattern."""
+        findings = [
+            core.Finding("devcontainer", "critical", "Host Secret Mount", "host-secret-exposure", "devcontainer.json", 0, "", "host-secret-exposure"),
+        ]
+        correlated = core.correlate(findings)
+        assert not any("Devcontainer" in c.title for c in correlated)
+
+
 class TestOutputFormatting:
     def test_json_output(self):
         findings = [core.Finding("s", "high", "Test", "d", "f.py", 1, "c", "cat")]

@@ -10,8 +10,8 @@ if [ -z "${1:-}" ]; then
     echo "Usage: $0 <repo_path> [options]"
     echo ""
     echo "Modes:"
-    echo "  (default)              Full audit - all 18 scanners"
-    echo "  --skill-scan           Focused on AI skill threats (9 scanners, faster)"
+    echo "  (default)              Full audit - all 19 scanners"
+    echo "  --skill-scan           Focused on AI skill threats (10 scanners, faster)"
     echo "  --inventory            Enumerate installed AI-agent stacks (zero-LLM, JSON output)"
     echo ""
     echo "Options:"
@@ -202,10 +202,10 @@ except: print(0)
 }
 
 if $SKILL_SCAN; then
-    # Focused mode: 9 scanners most relevant to vetting skills
+    # Focused mode: 10 scanners most relevant to vetting skills
     if [ "$FORMAT" != "json" ]; then
         echo ""
-        echo "[*] Running focused skill scan (9 scanners)..."
+        echo "[*] Running focused skill scan (10 scanners)..."
     fi
 
     run_scanner "skill_threats" "scan_skill_threats.py" &
@@ -217,13 +217,14 @@ if $SKILL_SCAN; then
     run_scanner "runtime_dynamism" "scan_runtime_dynamism.py" &
     run_scanner "manifest_drift" "scan_manifest_drift.py" &
     run_scanner "openclaw_skills" "scan_openclaw_skills.py" &
+    run_scanner "devcontainer" "scan_devcontainer.py" &
     wait
 
 else
     # Full audit: all scanners in parallel
     if [ "$FORMAT" != "json" ]; then
         echo ""
-        echo "[*] Running all 18 scanners in parallel..."
+        echo "[*] Running all 19 scanners in parallel..."
     fi
     run_scanner "entropy" "scan_entropy.py" &
     run_scanner "binary" "scan_binary.py" &
@@ -247,6 +248,7 @@ else
     fi
     run_scanner "dast" "scan_dast.py" &
     run_scanner "post_incident" "scan_post_incident.py" &
+    run_scanner "devcontainer" "scan_devcontainer.py" &
     wait
 fi
 

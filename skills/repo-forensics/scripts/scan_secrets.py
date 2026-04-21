@@ -16,6 +16,12 @@ import forensics_core as core
 
 SCANNER_NAME = "secrets"
 
+ENV_FILE_VARIANTS = {
+    '.env', '.env.local', '.env.production', '.env.staging',
+    '.env.development', '.env.test', '.env.docker', '.env.container',
+}
+ENV_FILE_SAFE = {'.env.example', '.env.template', '.env.sample'}
+
 # Severity: critical = private keys, high = API keys, medium = generic assignments
 PATTERNS = [
     # --- Critical: Private Keys ---
@@ -92,6 +98,28 @@ PATTERNS = [
     {"name": "Redis Connection URI", "severity": "high",
      "regex": re.compile(r'redis://[^/\s]+:[^/\s]+@[^/\s]+')},
 
+    # --- High: Secret Manager Tokens ---
+    {"name": "1Password Connect Token (OP_CONNECT_TOKEN)", "severity": "critical",
+     "regex": re.compile(r'OP_CONNECT_TOKEN\s*=\s*[\'"]?[a-zA-Z0-9_\-]{20,}')},
+    {"name": "1Password Service Account Token", "severity": "critical",
+     "regex": re.compile(r'ops_[a-zA-Z0-9+/=_\-]{50,}')},
+    {"name": "HashiCorp Vault Token", "severity": "critical",
+     "regex": re.compile(r'hvs\.[a-zA-Z0-9_\-]{24,}')},
+
+    # --- High: Framework Exposed Secrets (browser bundle leaks) ---
+    {"name": "Framework Exposed Secret: NEXT_PUBLIC_", "severity": "high",
+     "regex": re.compile(r'NEXT_PUBLIC_[A-Z_]*(?:SECRET|TOKEN|KEY|PASSWORD|API_KEY|PRIVATE|AUTH)[A-Z_]*\s*=\s*[\'"][^\'"]{8,}[\'"]')},
+    {"name": "Framework Exposed Secret: REACT_APP_", "severity": "high",
+     "regex": re.compile(r'REACT_APP_[A-Z_]*(?:SECRET|TOKEN|KEY|PASSWORD|API_KEY|PRIVATE|AUTH)[A-Z_]*\s*=\s*[\'"][^\'"]{8,}[\'"]')},
+    {"name": "Framework Exposed Secret: VITE_", "severity": "high",
+     "regex": re.compile(r'VITE_[A-Z_]*(?:SECRET|TOKEN|KEY|PASSWORD|API_KEY|PRIVATE|AUTH)[A-Z_]*\s*=\s*[\'"][^\'"]{8,}[\'"]')},
+    {"name": "Framework Exposed Secret: EXPO_PUBLIC_", "severity": "high",
+     "regex": re.compile(r'EXPO_PUBLIC_[A-Z_]*(?:SECRET|TOKEN|KEY|PASSWORD|API_KEY|PRIVATE|AUTH)[A-Z_]*\s*=\s*[\'"][^\'"]{8,}[\'"]')},
+    {"name": "Framework Exposed Secret: GATSBY_", "severity": "high",
+     "regex": re.compile(r'GATSBY_[A-Z_]*(?:SECRET|TOKEN|KEY|PASSWORD|API_KEY|PRIVATE|AUTH)[A-Z_]*\s*=\s*[\'"][^\'"]{8,}[\'"]')},
+    {"name": "Framework Exposed Secret: NX_PUBLIC_", "severity": "high",
+     "regex": re.compile(r'NX_PUBLIC_[A-Z_]*(?:SECRET|TOKEN|KEY|PASSWORD|API_KEY|PRIVATE|AUTH)[A-Z_]*\s*=\s*[\'"][^\'"]{8,}[\'"]')},
+
     # --- High: Auth Tokens ---
     {"name": "JWT Token", "severity": "high",
      "regex": re.compile(r'eyJ[a-zA-Z0-9_-]{10,}\.eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}')},
@@ -114,6 +142,18 @@ PATTERNS = [
 
 def scan_file(file_path, rel_path):
     findings = []
+
+    basename = os.path.basename(file_path)
+    if basename in ENV_FILE_VARIANTS and basename not in ENV_FILE_SAFE:
+        findings.append(core.Finding(
+            scanner=SCANNER_NAME, severity="high",
+            title=f"Unencrypted {basename} File in Repository",
+            description=f"{basename} likely contains plaintext secrets and should be in .gitignore",
+            file=rel_path, line=0,
+            snippet=f"{basename} found in repo (should never be committed)",
+            category="secret-storage"
+        ))
+
     try:
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             lines = f.readlines()

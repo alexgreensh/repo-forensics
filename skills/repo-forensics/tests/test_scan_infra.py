@@ -31,6 +31,53 @@ class TestDockerfile:
         assert any("secret" in f.title.lower() or "secret" in f.snippet.lower() for f in findings)
 
 
+class TestDockerArgSecrets:
+    def test_detects_arg_with_secret_keyword(self, tmp_path):
+        df = tmp_path / "Dockerfile"
+        df.write_text("FROM ubuntu:latest\nARG API_KEY=sk-live-1234567890\nRUN echo $API_KEY\n")
+        findings = scanner.scan_dockerfile(str(df), "Dockerfile")
+        assert any("ARG" in f.title for f in findings)
+
+    def test_arg_secret_is_critical(self, tmp_path):
+        df = tmp_path / "Dockerfile"
+        df.write_text("FROM node:20\nARG DB_PASSWORD=hunter2\n")
+        findings = scanner.scan_dockerfile(str(df), "Dockerfile")
+        arg_findings = [f for f in findings if "ARG" in f.title]
+        assert all(f.severity == "critical" for f in arg_findings)
+
+    def test_no_false_positive_on_safe_arg(self, tmp_path):
+        df = tmp_path / "Dockerfile"
+        df.write_text("FROM python:3.12\nARG APP_VERSION=1.0.0\nARG NODE_ENV=production\n")
+        findings = scanner.scan_dockerfile(str(df), "Dockerfile")
+        assert not any("ARG" in f.title for f in findings)
+
+
+class TestDockerEnvCopy:
+    def test_detects_copy_env_file(self, tmp_path):
+        df = tmp_path / "Dockerfile"
+        df.write_text("FROM node:20\nCOPY .env /app/.env\nRUN node app.js\n")
+        findings = scanner.scan_dockerfile(str(df), "Dockerfile")
+        assert any(".env File Copied" in f.title for f in findings)
+
+    def test_detects_add_env_file(self, tmp_path):
+        df = tmp_path / "Dockerfile"
+        df.write_text("FROM node:20\nADD .env.production /app/\n")
+        findings = scanner.scan_dockerfile(str(df), "Dockerfile")
+        assert any(".env File Copied" in f.title for f in findings)
+
+    def test_no_false_positive_env_example(self, tmp_path):
+        df = tmp_path / "Dockerfile"
+        df.write_text("FROM node:20\nCOPY .env.example /app/.env.example\n")
+        findings = scanner.scan_dockerfile(str(df), "Dockerfile")
+        assert not any(".env File Copied" in f.title for f in findings)
+
+    def test_no_false_positive_environment_dir(self, tmp_path):
+        df = tmp_path / "Dockerfile"
+        df.write_text("FROM node:20\nCOPY environments/ /app/environments/\n")
+        findings = scanner.scan_dockerfile(str(df), "Dockerfile")
+        assert not any(".env File Copied" in f.title for f in findings)
+
+
 class TestGitHubActions:
     def test_detects_pull_request_target(self, repo_with_infra_issues):
         ci_path = str(repo_with_infra_issues / ".github" / "workflows" / "ci.yml")

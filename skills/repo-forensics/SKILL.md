@@ -18,7 +18,7 @@ Deep security auditing for repositories, AI agent skills, and MCP servers.
 
 - **Auto-scan hook** (v2): PostToolUse hook auto-triggers on `git clone`, `git pull`, `pip install`, `npm install/update`, `gem install/update`, `brew install/upgrade`, etc. Zero-overhead for non-matching commands.
 - **Pre-execution gate** (v2.6): PreToolUse hook blocks known-malicious packages and pipe-to-shell commands BEFORE execution. IOC-only, <10ms latency, no subprocess calls.
-- **Session security scanner** (v2.6.3): SessionStart hook detects updated plugins/skills/MCP servers, refreshes threat databases daily, runs fast IOC check + full 18-scanner deep scan on changed items. Sub-1ms when nothing changed.
+- **Session security scanner** (v2.6.3): SessionStart hook detects updated plugins/skills/MCP servers, refreshes threat databases daily, runs fast IOC check + full 19-scanner deep scan on changed items. Sub-1ms when nothing changed.
 - **.pth file injection detection** (v2): Detects liteLLM-style Python startup injection attacks (exec/eval/base64/known IOC filenames)
 - **Transitive dependency scanning** (v2): Deep-parses `package-lock.json`, `yarn.lock`, `poetry.lock`, `Pipfile.lock` for supply chain IOCs
 - **DAST scanner** (`scan_dast.py`): Dynamic analysis of Claude Code hooks with 8 malicious payload types, sandboxed execution
@@ -39,7 +39,12 @@ Deep security auditing for repositories, AI agent skills, and MCP servers.
 - **CVE-2026-33068 detection** (v2): Workspace trust bypass via bypassPermissions in Claude Code settings
 - **Post-incident forensics** (v2.2): npm cache/log artifacts, RAT binary detection, C2 persistence, node_modules traces that survive dropper self-cleanup
 - **Supply chain hardening** (v2.2): .npmrc scanning, missing lockfile detection, git/HTTP dep flagging, hostname bypass fix, unbounded Python range detection, install script severity elevation
-- **18 scanners** with 18 correlation rules
+- **Devcontainer security scanning** (v2.6.5): JSON-based analysis of devcontainer.json for host secret mounts, container escape vectors, localEnv interpolation, lifecycle command risks, and untrusted features
+- **Framework env prefix leak detection** (v2.6.5): Catches secrets exposed to browser bundles via NEXT_PUBLIC_, REACT_APP_, VITE_, EXPO_PUBLIC_, GATSBY_, NX_PUBLIC_ prefixes
+- **process.env exposure detection** (v2.6.5): Flags console.log(process.env), JSON.stringify(process.env), and crash report env dumps
+- **Docker ARG secret detection** (v2.6.5): Catches secrets passed via ARG directives (permanently visible in docker history)
+- **1Password/Vault token detection** (v2.6.5): OP_CONNECT_TOKEN, ops_ service account tokens, hvs. Vault tokens
+- **19 scanners** with 21 correlation rules
 
 ## When to Use
 
@@ -97,13 +102,14 @@ JSON output for automation:
 | **openclaw_skills** | SKILL.md frontmatter abuse, tools.json FSP, SOUL.md/AGENTS.md injection, .clawhubignore bypass, ClawHavoc IOCs | skill + full |
 | **mcp_security** | SQL injection to prompt escalation, tool poisoning, rug pull enablers, config CVEs | skill + full |
 | **dataflow** | Source-to-sink taint tracking (env vars to network calls), cross-file import taint | skill + full |
-| **secrets** | 40+ patterns: API keys, tokens, private keys, database URIs, JWTs | skill + full |
-| **sast** | Dangerous functions, injection, shell execution across 8 languages | skill + full |
+| **secrets** | 50+ patterns: API keys, tokens, private keys, database URIs, JWTs, framework env prefix leaks, 1Password/Vault tokens, .env variant files | skill + full |
+| **sast** | Dangerous functions, injection, shell execution across 8 languages, process.env exposure, path traversal | skill + full |
 | **lifecycle** | NPM hooks + Python setup.py/pyproject.toml cmdclass overrides + anti-forensics (self-deleting installers, package.json overwrite) | skill + full |
 | **integrity** | SHA256 baselines for .claude/settings.json, CLAUDE.md, hook scripts. Drift detection with `--watch` | full |
 | **dast** | Dynamic hook testing: 8 payload types (injection, traversal, amplification, env leak) in sandbox | full |
 | **entropy** | Per-string Shannon entropy, base64 blocks, hex strings (combo detection) | full |
-| **infra** | Docker, K8s, GitHub Actions, Claude Code config (CVE-2025-59536, CVE-2026-21852, CVE-2026-33068) | full |
+| **infra** | Docker (ENV/ARG secrets, .env COPY), K8s, GitHub Actions, Claude Code config (CVE-2025-59536, CVE-2026-21852, CVE-2026-33068) | full |
+| **devcontainer** | JSON-based devcontainer.json analysis: host mounts, privileged mode, docker.sock, remoteEnv localEnv interpolation, lifecycle commands, untrusted features | skill + full |
 | **dependencies** | NPM + Python typosquatting, l33t normalization, IOC packages (SANDWORM_MODE 2026), compromised version detection (Axios, liteLLM), suspicious scope detection (iflow-mcp) | full |
 | **ast_analysis** | Python AST: obfuscated exec chains, `__reduce__` backdoors, marshal/types bytecode, audit hook abuse, self-modification | full |
 | **binary** | Executables hidden as images/text files | full |

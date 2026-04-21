@@ -157,6 +157,92 @@ class TestNoFalsePositives:
         assert len(exfil) == 0
 
 
+class TestProcessEnvExposure:
+    """Tests for process.env logging and serialization patterns."""
+
+    def test_console_log_process_env(self, tmp_path):
+        js = tmp_path / "debug.js"
+        js.write_text("console.log(process.env)\n")
+        findings = _scan_repo(tmp_path)
+        assert any("process.env Logged" in f.title for f in findings)
+
+    def test_console_error_process_env(self, tmp_path):
+        js = tmp_path / "error.js"
+        js.write_text("console.error(process.env)\n")
+        findings = _scan_repo(tmp_path)
+        assert any("process.env Logged" in f.title for f in findings)
+
+    def test_json_stringify_process_env(self, tmp_path):
+        js = tmp_path / "dump.js"
+        js.write_text("const envStr = JSON.stringify(process.env)\n")
+        findings = _scan_repo(tmp_path)
+        assert any("JSON.stringify" in f.title for f in findings)
+
+    def test_process_env_in_crash_report(self, tmp_path):
+        js = tmp_path / "crash.js"
+        js.write_text("fs.writeFileSync('crash.log', JSON.stringify(process.env))\n")
+        findings = _scan_repo(tmp_path)
+        assert any("Crash Report" in f.title or "process.env" in f.title for f in findings)
+
+    def test_no_false_positive_single_env_var(self, tmp_path):
+        js = tmp_path / "safe.js"
+        js.write_text("console.log(process.env.NODE_ENV)\n")
+        findings = _scan_repo(tmp_path)
+        assert not any("process.env Logged" in f.title for f in findings)
+
+    def test_typescript_process_env_logged(self, tmp_path):
+        ts = tmp_path / "debug.ts"
+        ts.write_text("console.log(process.env)\n")
+        findings = _scan_repo(tmp_path)
+        assert any("process.env Logged" in f.title for f in findings)
+
+    def test_typescript_json_stringify(self, tmp_path):
+        ts = tmp_path / "dump.ts"
+        ts.write_text("JSON.stringify(process.env)\n")
+        findings = _scan_repo(tmp_path)
+        assert any("JSON.stringify" in f.title for f in findings)
+
+
+class TestPathTraversal:
+    """Tests for path traversal detection patterns."""
+
+    def test_sendfile_with_req_path(self, tmp_path):
+        js = tmp_path / "serve.js"
+        js.write_text("app.get('/*', (req, res) => res.sendFile(req.path))\n")
+        findings = _scan_repo(tmp_path)
+        assert any("Path Traversal" in f.title for f in findings)
+
+    def test_readfile_with_req_params(self, tmp_path):
+        js = tmp_path / "read.js"
+        js.write_text("fs.readFile(req.params.file, (err, data) => {})\n")
+        findings = _scan_repo(tmp_path)
+        assert any("Path Traversal" in f.title for f in findings)
+
+    def test_path_join_with_req_query(self, tmp_path):
+        js = tmp_path / "join.js"
+        js.write_text("const p = path.join(__dirname, req.query.file)\n")
+        findings = _scan_repo(tmp_path)
+        assert any("Path Traversal" in f.title for f in findings)
+
+    def test_proc_self_environ_access(self, tmp_path):
+        js = tmp_path / "proc.js"
+        js.write_text("fs.readFileSync('/proc/self/environ')\n")
+        findings = _scan_repo(tmp_path)
+        assert any("/proc" in f.title or "proc" in f.category for f in findings)
+
+    def test_typescript_path_traversal(self, tmp_path):
+        ts = tmp_path / "serve.ts"
+        ts.write_text("const file = path.resolve(baseDir, req.params.name)\n")
+        findings = _scan_repo(tmp_path)
+        assert any("Path Traversal" in f.title for f in findings)
+
+    def test_no_false_positive_static_path(self, tmp_path):
+        js = tmp_path / "safe.js"
+        js.write_text("const p = path.join(__dirname, 'public', 'index.html')\n")
+        findings = _scan_repo(tmp_path)
+        assert not any("Path Traversal" in f.title for f in findings)
+
+
 class TestSeverityAndCategory:
     """Verify severity and category are set correctly on new patterns."""
 

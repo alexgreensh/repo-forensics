@@ -50,6 +50,7 @@ EXPECTED_BASE_SCANNER_NAMES = {
     "dast",
     "dataflow",
     "dependencies",
+    "devcontainer",
     "entropy",
     "git_forensics",
     "infra",

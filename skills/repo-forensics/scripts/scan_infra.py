@@ -77,6 +77,24 @@ def scan_dockerfile(file_path, rel_path):
                     category="secret-in-config"
                 ))
 
+            if stripped.startswith("ARG ") and re.search(r'(?i)(secret|password|token|key|api_key|credential|private)', stripped):
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="critical",
+                    title="Docker: Secret in ARG Directive",
+                    description="ARG values are permanently visible in docker history. Use BuildKit secrets or multi-stage builds.",
+                    file=rel_path, line=i+1, snippet=stripped[:120],
+                    category="secret-in-config"
+                ))
+
+            if re.search(r'(?:COPY|ADD)\s+.*\.env\b(?!\.example|\.template|\.sample)', stripped):
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="high",
+                    title="Docker: .env File Copied into Image",
+                    description=".env file copied into Docker image layer. Visible even if deleted later. Use multi-stage builds.",
+                    file=rel_path, line=i+1, snippet=stripped[:120],
+                    category="secret-in-image"
+                ))
+
         if not has_user:
             findings.append(core.Finding(
                 scanner=SCANNER_NAME, severity="low",
