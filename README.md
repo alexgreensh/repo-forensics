@@ -6,7 +6,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-blue.svg" alt="License: PolyForm Noncommercial"></a>
   <img src="https://img.shields.io/badge/python-3.8%2B-blue.svg" alt="Python 3.8+">
   <img src="https://img.shields.io/badge/dependencies-zero-brightgreen.svg" alt="Zero Dependencies">
-  <img src="https://img.shields.io/badge/scanners-18-orange.svg" alt="18 Scanners">
+  <img src="https://img.shields.io/badge/scanners-19-orange.svg" alt="19 Scanners">
   <img src="https://img.shields.io/badge/patterns-450%2B-red.svg" alt="450+ Patterns">
   <img src="https://img.shields.io/badge/CVE%20%2B%20CISA%20KEV-live%20scanning-critical.svg" alt="Live CVE + CISA KEV scanning">
   <a href="https://github.com/sponsors/alexgreensh"><img src="https://img.shields.io/badge/Sponsor-%E2%9D%A4-ff69b4.svg?labelColor=262626" alt="Sponsor"></a>
@@ -22,7 +22,7 @@ Nobody does. The vetting step doesn't exist. [1,184 malicious skills](https://ww
 
 You won't feel it. There are no symptoms.
 
-**Repo Forensics is the vetting step.** Audit any repo, skill, MCP server, or plugin before it touches your machine. Works across the AI agent ecosystem: Claude Code, OpenClaw, Codex, Cursor, NanoClaw, or anything that installs third-party code. 18 scanners, runtime behavior prediction, ClawHavoc campaign detection. Nothing phones home. Runs in seconds.
+**Repo Forensics is the vetting step.** Audit any repo, skill, MCP server, or plugin before it touches your machine. Works across the AI agent ecosystem: Claude Code, OpenClaw, Codex, Cursor, NanoClaw, or anything that installs third-party code. 19 scanners, runtime behavior prediction, ClawHavoc campaign detection. Nothing phones home. Runs in seconds.
 
 **It doesn't stop at install.** Every `git pull`, `npm update`, `gem update`, `brew upgrade`, and plugin update is monitored too. Known-malicious packages are blocked before the command even runs. A clean install today doesn't mean a clean update tomorrow — repo-forensics watches both.
 
@@ -37,7 +37,7 @@ $ ./run_forensics.sh ./suspicious-skill
 
 ==========================================
   REPO FORENSICS v2
-  Mode: Full Audit (18 scanners)
+  Mode: Full Audit (19 scanners)
 ==========================================
 
   [CRITICAL] ClawHavoc Delivery: Fake prerequisite driver
@@ -85,7 +85,7 @@ $ ./run_forensics.sh ./suspicious-skill
   <img src="diagrams/pipeline.svg" alt="Scanning pipeline: input → 17 scanners → correlation → verdict" width="900"/>
 </p>
 
-Point it at any repository. 18 scanners run in parallel, each checking a different attack surface. The correlation engine then cross-references findings across 18 rules to detect compound threats that no single scanner would catch (like dynamic import + network fetch = deferred payload loading).
+Point it at any repository. 19 scanners run in parallel, each checking a different attack surface. The correlation engine then cross-references findings across 21 rules to detect compound threats that no single scanner would catch (like dynamic import + network fetch = deferred payload loading).
 
 The result is a severity-ranked verdict with exit codes designed for CI/CD gating.
 
@@ -99,7 +99,7 @@ The result is a severity-ranked verdict with exit codes designed for CI/CD gatin
 
 ---
 
-## The 18 Scanners
+## The 19 Scanners
 
 | Scanner | What It Detects | Approach |
 |---------|----------------|----------|
@@ -111,13 +111,14 @@ The result is a severity-ranked verdict with exit codes designed for CI/CD gatin
 | **dast** | Hook exploitation: env leaks, timeouts, command injection, path traversal | 8 malicious payloads, sandboxed subprocess execution |
 | **integrity** | Unauthorized config changes, tampered hooks, drift from baseline | SHA256 checksums, `--watch` mode for continuous monitoring |
 | **dataflow** | Source-to-sink taint: env vars and secrets reaching network calls | Forward taint analysis, cross-file import tracking |
-| **secrets** | API keys, tokens, private keys, database URIs, JWTs | 40+ patterns with entropy + format combo detection |
-| **sast** | Dangerous functions, injection, deserialization, shell execution | 8 languages: Python, JS, TS, Ruby, PHP, Java, Go, Bash |
+| **secrets** | API keys, tokens, private keys, database URIs, JWTs, framework env prefix leaks (REACT_APP_, NEXT_PUBLIC_, VITE_, EXPO_PUBLIC_, GATSBY_, NX_PUBLIC_), 1Password/Vault tokens, .env variant files | 50+ patterns with entropy + format combo detection |
+| **sast** | Dangerous functions, injection, deserialization, shell execution, process.env exposure, path traversal to /proc/self/environ | 8 languages: Python, JS, TS, Ruby, PHP, Java, Go, Bash |
 | **ast_analysis** | Obfuscated exec chains, `__reduce__` backdoors, marshal/types bytecode, audit hook abuse | Python AST walking, 12 detection patterns |
 | **dependencies** | Typosquatting, version confusion, SANDWORM_MODE IOC packages, transitive supply chain, **known CVEs + CISA KEV auto-enrichment** | 500+ popular packages, l33t normalization, lockfile deep parsing (npm/yarn/poetry/pipfile), OSV API per-package queries, KEV catalog cross-reference |
 | **lifecycle** | Malicious install hooks in npm and pip, `.pth` file injection (liteLLM-style) | `postinstall`, `preinstall`, `cmdclass`, `.pth` exec/base64/IOC detection |
 | **entropy** | Hidden payloads in base64 blocks, hex strings, high-entropy content | Per-string Shannon entropy with format-aware thresholds |
-| **infra** | Docker misconfig, K8s breakouts, GHA expression injection, Claude config CVEs | Dockerfile, YAML, workflow, and settings.json analysis |
+| **infra** | Docker misconfig (ENV/ARG secrets, .env COPY), K8s breakouts, GHA expression injection, Claude config CVEs | Dockerfile, YAML, workflow, and settings.json analysis |
+| **devcontainer** | Host secret mounts, privileged mode, docker.sock escape, remoteEnv localEnv interpolation, lifecycle command risks, untrusted features | JSON structure analysis of devcontainer.json |
 | **binary** | Executables disguised as images, text files, or documentation | Magic number detection vs. file extension |
 | **post_incident** | npm cache artifacts, RAT binaries, C2 persistence, install log traces, compromised node_modules | File existence checks, npm cache/log scanning, LaunchAgent grep |
 | **git_forensics** | Timestamp manipulation, identity spoofing, bad GPG signatures | Commit history analysis, multi-identity detection |
@@ -264,7 +265,7 @@ The hook fires automatically on every Bash command. Non-matching commands exit i
 A SessionStart hook that detects changes to plugins, skills, and MCP servers between sessions:
 
 - **Change detection**: Compares SHA256 checksums against a cached baseline. Only scans what actually changed.
-- **Two-tier scan**: Fast IOC check (milliseconds) + full 18-scanner deep scan on changed items (catches zero-day supply chain attacks, obfuscated code, C2 beaconing, manifest drift).
+- **Two-tier scan**: Fast IOC check (milliseconds) + full 19-scanner deep scan on changed items (catches zero-day supply chain attacks, obfuscated code, C2 beaconing, manifest drift).
 - **Threat database refresh**: Updates IOC and CISA KEV databases once per day (2-5s). Uses stale caches gracefully if offline.
 - **Sub-1ms common case**: When nothing changed (99% of sessions), the scanner exits in <1ms.
 - **Kill switch**: Set `REPO_FORENSICS_SESSION_SCAN=0` to disable.
@@ -352,7 +353,7 @@ Auto-detects OpenClaw skills (SKILL.md frontmatter, tools.json, SOUL.md) and run
 
 ## Correlation Engine
 
-Individual findings are useful. Compound findings are devastating. The correlation engine connects dots across scanners with 18 rules:
+Individual findings are useful. Compound findings are devastating. The correlation engine connects dots across scanners with 21 rules:
 
 | Pattern | Finding | Severity |
 |---------|---------|----------|
@@ -406,7 +407,7 @@ Research basis: CVE-2026-2297 (SourcelessFileLoader), PylangGhost RAT (March 202
 | VirusTotal + ClawHub | ClawHub signature scanning | Surface-level. Signature-based, not structural. No prompt injection detection, no taint tracking. |
 | Manual review | Reading code | Misses zero-width unicode, cross-file taint flows, tool description injection. |
 
-**repo-forensics:** 18 scanners. Zero dependencies. Fully offline. Runtime behavior prediction. Post-incident forensics. Built for the AI agent ecosystem.
+**repo-forensics:** 19 scanners. Zero dependencies. Fully offline. Runtime behavior prediction. Post-incident forensics. Built for the AI agent ecosystem.
 
 ---
 

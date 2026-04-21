@@ -199,7 +199,7 @@
     <text x="426" y="28" font-family="'SF Mono',Consolas,monospace" font-size="14" fill="#a78bfa"
           text-anchor="middle" font-weight="700" filter="url(#tg)">CORRELATION ENGINE</text>
     <text x="426" y="48" font-family="-apple-system,sans-serif" font-size="11" fill="#c9d1d9" text-anchor="middle">
-      18 rules connecting findings across scanners to expose compound attack chains
+      21 rules connecting findings across scanners to expose compound attack chains
     </text>
     <text x="426" y="66" font-family="'SF Mono',Consolas,monospace" font-size="10" fill="#8b949e" text-anchor="middle">
       env + network = exfil  |  prompt_inj + exec = RCE  |  tools.json + injection = compound

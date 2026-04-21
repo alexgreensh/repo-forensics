@@ -74,7 +74,7 @@
     <rect width="400" height="36" rx="10" fill="#1c2940"/>
     <rect y="24" width="400" height="12" fill="#1c2940"/>
     <text x="200" y="24" font-family="'SF Mono',Consolas,monospace" font-size="12" fill="#58a6ff"
-          text-anchor="middle" font-weight="700">18 PARALLEL SCANNERS</text>
+          text-anchor="middle" font-weight="700">19 PARALLEL SCANNERS</text>
     <!-- Spinning indicator -->
     <g transform="translate(352, 18)">
       <circle r="5" fill="none" stroke="#00f0ff" stroke-width="1.5" stroke-dasharray="20,12" opacity="0.6">
