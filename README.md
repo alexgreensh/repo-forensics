@@ -486,15 +486,15 @@ By using this software, you acknowledge these limitations and agree that the aut
 
 ## License
 
-**PolyForm Noncommercial 1.0.0**. Free for personal, research, educational, and non-commercial use.
+**PolyForm Noncommercial 1.0.0**. Source-available. Personal, research, educational, and non-commercial use requires no license purchase.
 
 _This FAQ is informational guidance, not a modification of the license terms. Last updated: April 2026._
 
 ### 🧑‍💻 Personal / hobby / research / education?
-Go for it. Full source, zero cost, runs locally. That's the whole point.
+Go for it. Full source, runs locally, no license purchase needed. That's the whole point.
 
 ### 🏢 Small team (under 5 people OR under $20k/month revenue)?
-You're good. Use it freely, no paperwork needed.
+Small teams get a no-cost commercial license automatically. Just use it.
 If you want to [sponsor the project](https://github.com/sponsors/alexgreensh) or buy me a coffee, not required, but always appreciated ☕
 
 ### 🔄 Started personal, now it's turning into a business?
