@@ -686,7 +686,7 @@ def correlate(findings):
             ))
 
         # Rule 14: OpenClaw skill compound attack (cross-scanner signal only)
-        if has_category(file_findings, openclaw_keywords) and has_category(file_findings, prompt_injection_keywords, exclude_scanner="openclaw_skills"):
+        if has_category(file_findings, openclaw_keywords) and has_category(file_findings, prompt_injection_keywords, exclude_scanner="agent_skills"):
             correlated.append(Finding(
                 scanner="correlation",
                 severity="critical",

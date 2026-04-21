@@ -99,7 +99,7 @@ JSON output for automation:
 | **runtime_dynamism** | Dynamic imports, fetch-then-execute, self-modification, time bombs, dynamic tool descriptions | skill + full |
 | **manifest_drift** | Phantom dependencies, runtime package installs, conditional import+install, declared-but-unused deps | skill + full |
 | **skill_threats** | Prompt injection, unicode smuggling, prerequisite attacks, ClickFix, MCP tool injection | skill + full |
-| **openclaw_skills** | SKILL.md frontmatter abuse, tools.json FSP, SOUL.md/AGENTS.md injection, .clawhubignore bypass, ClawHavoc IOCs | skill + full |
+| **agent_skills** | SKILL.md frontmatter abuse, tools.json FSP, agent config injection (SOUL.md/AGENTS.md/CLAUDE.md), .clawhubignore bypass, ClawHavoc IOCs. Covers Claude Code, OpenClaw, Codex, Cursor, MCP. | skill + full |
 | **mcp_security** | SQL injection to prompt escalation, tool poisoning, rug pull enablers, config CVEs | skill + full |
 | **dataflow** | Source-to-sink taint tracking (env vars to network calls), cross-file import taint | skill + full |
 | **secrets** | 50+ patterns: API keys, tokens, private keys, database URIs, JWTs, framework env prefix leaks, 1Password/Vault tokens, .env variant files | skill + full |

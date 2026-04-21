@@ -75,7 +75,7 @@
   <!-- Center glow halo -->
   <circle cx="450" cy="275" r="155" fill="url(#centerGlow)" opacity="0.6"/>
 
-  <!-- Connection lines from center to scanners (16 shown; openclaw_skills, post_incident, devcontainer omitted from visual) -->
+  <!-- Connection lines from center to scanners (16 shown; agent_skills, post_incident, devcontainer omitted from visual) -->
   <!-- 0: skill_threats (red) -->
   <line x1="450" y1="275" x2="450" y2="95" stroke="#ff4444" stroke-width="1.2" stroke-opacity="0.4" stroke-dasharray="4,4"/>
   <!-- 1: mcp_security (red) -->

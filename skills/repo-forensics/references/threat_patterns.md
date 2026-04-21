@@ -242,7 +242,7 @@ The OWASP Agentic Skills Top 10 extends the MCP Top 10 to cover the broader AI a
 | AS07 | Scope Escalation | `scan_skill_threats.py` Cat 6 |
 | AS08 | Anti-Forensics | `scan_lifecycle.py` anti-forensics patterns |
 | AS09 | Campaign Infrastructure Reuse | `scan_skill_threats.py` Cat 8 IOCs |
-| AS10 | Marketplace Trust Abuse | `scan_openclaw_skills.py` |
+| AS10 | Marketplace Trust Abuse | `scan_agent_skills.py` |
 
 ### Claude Code CVE-2026-33068 Workspace Trust Bypass
 Source: Anthropic Security Advisory, March 2026.

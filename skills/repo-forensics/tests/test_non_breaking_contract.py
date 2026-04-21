@@ -58,7 +58,7 @@ EXPECTED_BASE_SCANNER_NAMES = {
     "lifecycle",
     "manifest_drift",
     "mcp_security",
-    "openclaw_skills",
+    "agent_skills",
     "post_incident",
     "runtime_dynamism",
     "sast",

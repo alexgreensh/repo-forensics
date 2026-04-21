@@ -106,7 +106,7 @@ The result is a severity-ranked verdict with exit codes designed for CI/CD gatin
 | **runtime_dynamism** | Dynamic imports, fetch-then-execute, self-modification, time bombs, dynamic tool descriptions | Regex + Python AST, 5 detection categories |
 | **manifest_drift** | Phantom dependencies, runtime installs, conditional import+install, declared-but-unused deps | AST import extraction vs manifest parsing |
 | **skill_threats** | Prompt injection, unicode smuggling, ClickFix delivery, MCP injection, known campaign IOCs | 10 detection categories, 150+ regex patterns |
-| **openclaw_skills** | SKILL.md frontmatter abuse, tools.json Full-Schema Poisoning, SOUL.md/AGENTS.md injection, .clawhubignore bypass, ClawHavoc IOCs | Regex + JSON parsing, 5 detection categories |
+| **agent_skills** | SKILL.md frontmatter abuse, tools.json Full-Schema Poisoning, agent config injection (SOUL.md/AGENTS.md/CLAUDE.md), .clawhubignore bypass, ClawHavoc IOCs. Covers Claude Code, OpenClaw, Codex, Cursor, MCP. | Regex + JSON parsing, 5 detection categories |
 | **mcp_security** | SQL → prompt escalation, tool poisoning, tool shadowing, rug pull enablers, config CVEs | Schema field inspection, Invariant Labs TPA patterns |
 | **dast** | Hook exploitation: env leaks, timeouts, command injection, path traversal | 8 malicious payloads, sandboxed subprocess execution |
 | **integrity** | Unauthorized config changes, tampered hooks, drift from baseline | SHA256 checksums, `--watch` mode for continuous monitoring |
@@ -306,10 +306,10 @@ Scan any skill from ClawHub or the OpenClaw ecosystem before installing:
 ./skills/repo-forensics/scripts/run_forensics.sh ~/downloads/suspicious-skill --skill-scan
 ```
 
-Auto-detects OpenClaw skills (SKILL.md frontmatter, tools.json, SOUL.md) and runs targeted checks:
+Auto-detects agent skills across ecosystems (Claude Code, OpenClaw, Codex, Cursor, generic MCP) and runs targeted checks:
 - **Frontmatter validation**: missing author, overly broad triggers, description injection
 - **tools.json Full-Schema Poisoning**: hidden instructions in tool definitions and input schemas
-- **Agent config injection**: prompt injection in SOUL.md, AGENTS.md, memory files
+- **Agent config injection**: prompt injection in SOUL.md, AGENTS.md, CLAUDE.md, memory files
 - **ClawHavoc campaign IOCs**: known C2 IPs, AMOS stealer delivery patterns, malicious authors
 - **.clawhubignore bypass**: patterns that hide malicious code from ClawHub's own scanner
 
@@ -347,7 +347,7 @@ Auto-detects OpenClaw skills (SKILL.md frontmatter, tools.json, SOUL.md) and run
 | **Manifest drift detection** | Compares declared dependencies vs actual imports. Catches phantom deps, runtime installs, and conditional import+install fallbacks. |
 | **699 pytest tests** | Full test coverage across 17 test files with fixture repos containing known vulnerabilities. |
 | **Shared core** | Duplicated `scan_patterns()` extracted to `forensics_core.py`. Silent exceptions replaced with structured findings. |
-| **OpenClaw/ClawHub scanning** | Auto-detects OpenClaw skills and checks frontmatter, tools.json, SOUL.md, .clawhubignore for ClawHavoc patterns and Full-Schema Poisoning. |
+| **Agent skill scanning** | Auto-detects skills across Claude Code, OpenClaw, Codex, Cursor, and MCP. Checks frontmatter, tools.json, agent configs, .clawhubignore for injection and ClawHavoc patterns. |
 
 ---
 
@@ -440,7 +440,7 @@ Detection patterns are original work informed by published research:
 | [Invariant Labs: Tool Poisoning](https://invariantlabs.ai/blog/mcp-security-notification-tool-poisoning-attacks) | 2025 | `<IMPORTANT>` tag as canonical TPA | mcp_security |
 | [Trend Micro: SQL → Prompt Escalation](https://www.trendmicro.com/en_us/research/25/e/mcp-security.html) | 2025 | SQL injection stores malicious prompts | mcp_security |
 | [Koi Security: ClawHavoc Campaign](https://koisecurity.com) | 2026 | 1,184 malicious skills, AMOS stealer delivery | skill_threats |
-| [Koi Security: ClawHavoc Campaign](https://koi.ai) | 2026 | 1,184 malicious skills, AMOS stealer delivery | skill_threats, openclaw_skills |
+| [Koi Security: ClawHavoc Campaign](https://koi.ai) | 2026 | 1,184 malicious skills, AMOS stealer delivery | skill_threats, agent_skills |
 | [Socket Research: SANDWORM_MODE](https://socket.dev) | 2026 | McpInject npm worm, 17 known-malicious packages | dependencies |
 | [Snyk: ToxicSkills](https://snyk.io/blog/toxic-ai-agent-skills/) | 2025 | 36.8% of skills have flaws, 91% combine code + prompt injection | skill_threats |
 | [Repello AI: Tool Poisoning](https://repello.ai) | 2026 | 72.8% success rate for tool poisoning attacks | runtime_dynamism |

@@ -1,13 +1,14 @@
-"""Tests for scan_openclaw_skills.py - OpenClaw Skill Marketplace Threat Scanner.
+"""Tests for scan_agent_skills.py - Agent Skill Security Scanner.
 
-Tests auto-detection, frontmatter validation, tools.json poisoning,
-agent config injection, .clawhubignore bypass, and ClawHavoc delivery patterns.
+Tests auto-detection across ecosystems (Claude Code, OpenClaw, Codex, Cursor, MCP),
+frontmatter validation, tools.json poisoning, agent config injection,
+.clawhubignore bypass, and ClawHavoc delivery patterns.
 """
 
 import json
 import os
 import pytest
-import scan_openclaw_skills as scanner
+import scan_agent_skills as scanner
 
 
 # ---------------------------------------------------------------------------

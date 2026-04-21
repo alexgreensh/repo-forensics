@@ -150,13 +150,13 @@
           <text x="26" y="205" font-family="'SF Mono',Consolas,monospace" font-size="10" fill="#d29922" font-weight="600">integrity</text>
           <text x="174" y="205" font-family="'SF Mono',Consolas,monospace" font-size="9" fill="#8b949e" text-anchor="end">SHA256</text>
         </g>
-        <!-- Row 8: openclaw_skills (red) -->
+        <!-- Row 8: agent_skills (red) -->
         <g opacity="1">
           <rect y="216" width="184" height="24" rx="5" fill="#0d1117" stroke="#f8514930" stroke-width="1"/>
           <rect y="216" width="184" height="24" rx="5" fill="#f8514908"/>
           <circle cx="14" cy="228" r="4" fill="#f85149"><animate attributeName="opacity" values="0.4;1;0.4" dur="1.5s" repeatCount="indefinite"/></circle>
-          <text x="26" y="232" font-family="'SF Mono',Consolas,monospace" font-size="10" fill="#f85149" font-weight="600">openclaw</text>
-          <text x="174" y="232" font-family="'SF Mono',Consolas,monospace" font-size="9" fill="#8b949e" text-anchor="end">ClawHavoc</text>
+          <text x="26" y="232" font-family="'SF Mono',Consolas,monospace" font-size="10" fill="#f85149" font-weight="600">agent skills</text>
+          <text x="174" y="232" font-family="'SF Mono',Consolas,monospace" font-size="9" fill="#8b949e" text-anchor="end">all ecosystems</text>
         </g>
       </g>
 

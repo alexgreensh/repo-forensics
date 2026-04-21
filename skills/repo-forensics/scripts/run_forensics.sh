@@ -216,7 +216,7 @@ if $SKILL_SCAN; then
     run_scanner "mcp_security" "scan_mcp_security.py" &
     run_scanner "runtime_dynamism" "scan_runtime_dynamism.py" &
     run_scanner "manifest_drift" "scan_manifest_drift.py" &
-    run_scanner "openclaw_skills" "scan_openclaw_skills.py" &
+    run_scanner "agent_skills" "scan_agent_skills.py" &
     run_scanner "devcontainer" "scan_devcontainer.py" &
     wait
 
@@ -240,7 +240,7 @@ else
     run_scanner "ast_analysis" "scan_ast.py" &
     run_scanner "runtime_dynamism" "scan_runtime_dynamism.py" &
     run_scanner "manifest_drift" "scan_manifest_drift.py" &
-    run_scanner "openclaw_skills" "scan_openclaw_skills.py" &
+    run_scanner "agent_skills" "scan_agent_skills.py" &
     if $WATCH_MODE; then
         run_scanner "integrity" "scan_integrity.py" "--watch" &
     else

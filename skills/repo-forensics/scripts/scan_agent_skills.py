@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-scan_openclaw_skills.py - OpenClaw/NanoClaw/ClawHub Skill Scanner
+scan_agent_skills.py - Agent Skill Security Scanner
+Scans AI agent skills and plugins across ecosystems: Claude Code, OpenClaw,
+Codex, Cursor, and generic MCP servers.
 Detects: frontmatter abuse, tools.json poisoning, agent config injection,
 .clawhubignore bypass, and ClawHavoc delivery patterns.
 
@@ -12,7 +14,7 @@ import os, re, sys, json
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import forensics_core as core
 
-SCANNER_NAME = "openclaw_skills"
+SCANNER_NAME = "agent_skills"
 _F = core.Finding  # shorthand
 
 # --- Pattern lists ---
@@ -61,18 +63,36 @@ def _read(path):
         return None
 
 
-def is_openclaw_skill(repo_path):
-    """Return True if repo looks like an OpenClaw/NanoClaw/ClawHub skill or plugin.
-    Requires at least one OpenClaw-specific marker. SKILL.md alone needs
-    frontmatter (---) to distinguish from generic Claude skills.
+def is_agent_skill(repo_path):
+    """Return True if repo looks like an AI agent skill, plugin, or extension.
+    Covers: Claude Code, OpenClaw/NanoClaw/ClawHub, Codex, Cursor, generic MCP.
     """
-    # OpenClaw-specific markers (not found in generic repos)
-    for name in ('.clawhubignore', '.clawdhubignore', 'SOUL.md', 'AGENTS.md',
+    # OpenClaw/ClawHub markers
+    for name in ('.clawhubignore', '.clawdhubignore', 'SOUL.md',
                  'USER.md', 'IDENTITY.md', 'HEARTBEAT.md', 'BOOT.md', 'BOOTSTRAP.md',
                  'openclaw.plugin.json'):
         if os.path.isfile(os.path.join(repo_path, name)):
             return True
-    # package.json with openclaw namespace = native plugin
+    # Claude Code skill/plugin markers
+    if os.path.isdir(os.path.join(repo_path, '.claude')):
+        return True
+    if os.path.isdir(os.path.join(repo_path, '.claude-plugin')):
+        return True
+    # Codex markers
+    if os.path.isfile(os.path.join(repo_path, 'codex.json')):
+        return True
+    if os.path.isdir(os.path.join(repo_path, '.codex')):
+        return True
+    # Cursor extension markers
+    if os.path.isdir(os.path.join(repo_path, '.cursor')):
+        return True
+    # AGENTS.md (used by multiple agent frameworks)
+    if os.path.isfile(os.path.join(repo_path, 'AGENTS.md')):
+        return True
+    # SKILL.md (any agent skill with frontmatter or without)
+    if os.path.isfile(os.path.join(repo_path, 'SKILL.md')):
+        return True
+    # package.json with openclaw namespace
     pkg_json = os.path.join(repo_path, 'package.json')
     if os.path.isfile(pkg_json):
         content = _read(pkg_json)
@@ -83,13 +103,7 @@ def is_openclaw_skill(repo_path):
                     return True
             except (json.JSONDecodeError, TypeError):
                 pass
-    # SKILL.md with frontmatter = OpenClaw/NanoClaw style
-    skill_md = os.path.join(repo_path, 'SKILL.md')
-    if os.path.isfile(skill_md):
-        content = _read(skill_md)
-        if content and content.startswith('---'):
-            return True
-    # tools.json with MCP-style tool definitions (relevant to OpenClaw MCP integrations)
+    # tools.json with MCP-style tool definitions (any MCP server)
     tools_json = os.path.join(repo_path, 'tools.json')
     if os.path.isfile(tools_json):
         content = _read(tools_json)
@@ -101,6 +115,10 @@ def is_openclaw_skill(repo_path):
                     return True
             except (json.JSONDecodeError, IndexError, TypeError):
                 pass
+    # MCP config files (.mcp.json, mcp.json)
+    for name in ('.mcp.json', 'mcp.json'):
+        if os.path.isfile(os.path.join(repo_path, name)):
+            return True
     return False
 
 
@@ -299,15 +317,15 @@ def scan_plugin_manifest(repo_path):
 
 
 def main(args):
-    """Run all OpenClaw skill checks. Returns list[Finding].
+    """Run all agent skill checks. Returns list[Finding].
     Args can be a namespace with .repo_path or a string path (for testing).
     """
     repo_path = args if isinstance(args, str) else args.repo_path
     output_format = "text" if isinstance(args, str) else getattr(args, "format", "text")
-    if not is_openclaw_skill(repo_path):
-        core.emit_status(output_format, "[+] Not an OpenClaw skill. Skipping.")
+    if not is_agent_skill(repo_path):
+        core.emit_status(output_format, "[+] Not an agent skill. Skipping.")
         return []
-    core.emit_status(output_format, f"[*] Scanning OpenClaw skill in {repo_path}...")
+    core.emit_status(output_format, f"[*] Scanning agent skill in {repo_path}...")
     findings = []
     findings.extend(scan_frontmatter(repo_path))
     findings.extend(scan_tools_json(repo_path))
@@ -319,6 +337,6 @@ def main(args):
 
 
 if __name__ == "__main__":
-    args = core.parse_common_args(sys.argv, "OpenClaw Skill Scanner")
+    args = core.parse_common_args(sys.argv, "Agent Skill Scanner")
     findings = main(args)
     core.output_findings(findings, args.format, SCANNER_NAME)
