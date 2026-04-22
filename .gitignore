@@ -16,4 +16,3 @@ __pycache__/
 # Forensics runtime files (security-sensitive)
 .forensics-key
 .forensics-baseline.json
-signatures/
