@@ -12,7 +12,7 @@
     "data/compromised_versions.json": "96dfea743bc4437fb3a3bcd880c04d6e318b48cc0b81d439c1926064a2f9be62",
     "references/env-secrets-research-2026-04-21.md": "a6b73f8b0b8073ba4496c86036002c7cee83708628d5c78efdd233673d4d155c",
     "references/mcp-attack-patterns.md": "722d7a47186bfee18bde0e06a749dc55e8cc716c2418d118a64e57d60e48689a",
-    "references/research_sources.md": "cbf07116ed04d87436fc1c9daf43ffb3ec2f513713f5fc882d089b53bcd7c629",
+    "references/research_sources.md": "480cc40fe3ddacbb8b3aa8e56a9eef479ba1954de34972e9d7651c8d37f0a442",
     "references/threat_patterns.md": "f5a8d91f630fbc8493672527cfff5282bf7812acc3aa13629dc55849b7b6b43e",
     "scripts/aggregate_json.py": "3fe4871e7845c400f374df2e04141c532398256574817d76d5c7cd639882fba0",
     "scripts/auto_scan.py": "5e1145281ad4ba765ae14cfd628a334102fcb0a44240f62c7d5a29c6c2f80e61",
