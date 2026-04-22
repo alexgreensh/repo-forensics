@@ -9,6 +9,7 @@ This skill's AI agent threat detection capabilities are informed by published se
 - **Key insight**: 91% of malicious skills combine code patterns (100%) with prompt injection (91%)
 - **Attack vectors**: Credential exfiltration, backdoors in working code, obfuscated payloads
 - **Impact on this skill**: Informed categories 1-4 of scan_skill_threats.py
+- **Source**: [Snyk Finds Prompt Injection in 36%, 1467 Malicious Payloads in a ToxicSkills Study of Agent Skills Supply Chain Compromise](https://snyk.io/blog/toxicskills-malicious-ai-agent-skills-clawhub/)
 
 ### Koi Security: ClawHavoc Campaign
 - **Finding**: 824 malicious skills on ClawHub (7.7% of marketplace)

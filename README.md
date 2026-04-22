@@ -18,7 +18,7 @@ That MCP server with 500 downloads. The Claude Code skill someone linked in Disc
 
 Did you vet any of them?
 
-Nobody does. The vetting step doesn't exist. [1,184 malicious skills](https://www.koi.ai/blog/clawhavoc-341-malicious-clawedbot-skills-found-by-the-bot-they-were-targeting) found on ClawHub in one campaign. [36.8% of agent skills](https://snyk.io/blog/toxic-ai-agent-skills/) have security flaws. You find something useful, you install it. It runs with your credentials, your file access, your session context. If it's designed to exfiltrate data, it does it quietly while you're using it for something else entirely.
+Nobody does. The vetting step doesn't exist. [1,184 malicious skills](https://www.koi.ai/blog/clawhavoc-341-malicious-clawedbot-skills-found-by-the-bot-they-were-targeting) found on ClawHub in one campaign. [Snyk ToxicSkills research shows 36.8% of agent skills](https://snyk.io/blog/toxicskills-malicious-ai-agent-skills-clawhub) have security flaws. You find something useful, you install it. It runs with your credentials, your file access, your session context. If it's designed to exfiltrate data, it does it quietly while you're using it for something else entirely.
 
 You won't feel it. There are no symptoms.
 
@@ -442,7 +442,7 @@ Detection patterns are original work informed by published research:
 | [Koi Security: ClawHavoc Campaign](https://koisecurity.com) | 2026 | 1,184 malicious skills, AMOS stealer delivery | skill_threats |
 | [Koi Security: ClawHavoc Campaign](https://koi.ai) | 2026 | 1,184 malicious skills, AMOS stealer delivery | skill_threats, agent_skills |
 | [Socket Research: SANDWORM_MODE](https://socket.dev) | 2026 | McpInject npm worm, 17 known-malicious packages | dependencies |
-| [Snyk: ToxicSkills](https://snyk.io/blog/toxic-ai-agent-skills/) | 2025 | 36.8% of skills have flaws, 91% combine code + prompt injection | skill_threats |
+| [Snyk: ToxicSkills](https://snyk.io/blog/toxicskills-malicious-ai-agent-skills-clawhub) | 2026 | 36.8% of skills have flaws, 91% combine code + prompt injection | skill_threats |
 | [Repello AI: Tool Poisoning](https://repello.ai) | 2026 | 72.8% success rate for tool poisoning attacks | runtime_dynamism |
 | [Lukas Kania: MCP Contract Diffs](https://kania.dev) | 2026 | Tool descriptions changed without code changes | mcp_security, runtime_dynamism |
 | [OWASP MCP Top 10](https://owasp.org/www-project-top-10-for-large-language-model-applications/) | 2026 | MCP03 (Tool Poisoning), MCP07 (Rug Pull) | all |
