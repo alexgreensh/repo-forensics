@@ -25,6 +25,7 @@ if [ -z "${1:-}" ]; then
     echo "  --watch                Enable file integrity baseline tracking"
     echo "  --package-list=FILE    Load user-supplied IOC list (absolute path, see docs)"
     echo "  --include-shadows      Include shadow surfaces in inventory (backups, caches)"
+    echo "  --max-jobs=N           Max parallel scanners (default: clamp(ncpu, 4, 8), env: REPO_FORENSICS_MAX_JOBS)"
     exit 1
 fi
 
@@ -75,6 +76,10 @@ while [[ $# -gt 0 ]]; do
         --package-list)
             [[ $# -ge 2 ]] || { echo "Error: --package-list requires a FILE argument"; exit 1; }
             PACKAGE_LIST_FILE="$2"; shift 2 ;;
+        --max-jobs=*) MAX_JOBS="${1#*=}"; shift ;;
+        --max-jobs)
+            [[ $# -ge 2 ]] || { echo "Error: --max-jobs requires a number"; exit 1; }
+            MAX_JOBS="$2"; shift 2 ;;
         *) echo "Unknown arg: $1"; exit 1 ;;
     esac
 done
@@ -110,7 +115,8 @@ if $UPDATE_VULNS && ! $OFFLINE; then
     python3 "$SKILL_DIR/vuln_feed.py" --update || true
 fi
 TMPDIR=$(mktemp -d)
-trap 'rm -rf "$TMPDIR"' EXIT
+cleanup() { trap - EXIT INT TERM; kill 0 2>/dev/null; wait 2>/dev/null; exec 3>&- 2>/dev/null; rm -rf "$TMPDIR"; }
+trap cleanup EXIT INT TERM
 
 if [ "$FORMAT" != "json" ]; then
     echo "=========================================="
@@ -123,6 +129,35 @@ if [ "$FORMAT" != "json" ]; then
 fi
 
 SCANNER_TIMEOUT=120
+
+# Concurrency limiter: cap parallel scanners to avoid CPU storms
+# Priority: --max-jobs flag > REPO_FORENSICS_MAX_JOBS env > auto-detect
+MAX_JOBS=${MAX_JOBS:-${REPO_FORENSICS_MAX_JOBS:-0}}
+if [ -n "$MAX_JOBS" ] && ! [[ "$MAX_JOBS" =~ ^[0-9]+$ ]]; then
+    echo "Error: --max-jobs must be a positive integer, got: $MAX_JOBS" >&2
+    exit 1
+fi
+if [ "$MAX_JOBS" -le 0 ] 2>/dev/null; then
+    MAX_JOBS=$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
+    [ "$MAX_JOBS" -gt 8 ] && MAX_JOBS=8
+    [ "$MAX_JOBS" -lt 4 ] && MAX_JOBS=4
+fi
+[ "$MAX_JOBS" -gt 19 ] && MAX_JOBS=19
+
+# FIFO semaphore: N tokens pre-fill the pipe. throttled_run blocks on
+# read until a token is available, returns it after the job completes.
+SEMAPHORE_FIFO="$TMPDIR/.job_semaphore"
+mkfifo -m 600 "$SEMAPHORE_FIFO"
+exec 3<>"$SEMAPHORE_FIFO"
+for ((i=0; i<MAX_JOBS; i++)); do echo >&3; done
+
+throttled_run() {
+    read -r -u 3
+    local _rc=0
+    "$@" || _rc=$?
+    echo >&3
+    return $_rc
+}
 
 # Portable timeout (macOS lacks GNU timeout)
 TIMEOUT_CMD=""
@@ -173,9 +208,9 @@ run_scanner() {
     fi
 
     if [ -n "$TIMEOUT_CMD" ]; then
-        $TIMEOUT_CMD "$SCANNER_TIMEOUT" python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$internal_format" ${scanner_args[@]+"${scanner_args[@]}"} > "$output_file" 2>> "$error_file"
+        $TIMEOUT_CMD "$SCANNER_TIMEOUT" python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$internal_format" ${scanner_args[@]+"${scanner_args[@]}"} 3>&- > "$output_file" 2>> "$error_file"
     else
-        python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$internal_format" ${scanner_args[@]+"${scanner_args[@]}"} > "$output_file" 2>> "$error_file"
+        python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$internal_format" ${scanner_args[@]+"${scanner_args[@]}"} 3>&- > "$output_file" 2>> "$error_file"
     fi
     local exit_code=$?
     echo $exit_code > "$exit_file"
@@ -208,16 +243,16 @@ if $SKILL_SCAN; then
         echo "[*] Running focused skill scan (10 scanners)..."
     fi
 
-    run_scanner "skill_threats" "scan_skill_threats.py" &
-    run_scanner "secrets" "scan_secrets.py" &
-    run_scanner "dataflow" "scan_dataflow.py" &
-    run_scanner "sast" "scan_sast.py" &
-    run_scanner "lifecycle" "scan_lifecycle.py" &
-    run_scanner "mcp_security" "scan_mcp_security.py" &
-    run_scanner "runtime_dynamism" "scan_runtime_dynamism.py" &
-    run_scanner "manifest_drift" "scan_manifest_drift.py" &
-    run_scanner "agent_skills" "scan_agent_skills.py" &
-    run_scanner "devcontainer" "scan_devcontainer.py" &
+    throttled_run run_scanner "skill_threats" "scan_skill_threats.py" &
+    throttled_run run_scanner "secrets" "scan_secrets.py" &
+    throttled_run run_scanner "dataflow" "scan_dataflow.py" &
+    throttled_run run_scanner "sast" "scan_sast.py" &
+    throttled_run run_scanner "lifecycle" "scan_lifecycle.py" &
+    throttled_run run_scanner "mcp_security" "scan_mcp_security.py" &
+    throttled_run run_scanner "runtime_dynamism" "scan_runtime_dynamism.py" &
+    throttled_run run_scanner "manifest_drift" "scan_manifest_drift.py" &
+    throttled_run run_scanner "agent_skills" "scan_agent_skills.py" &
+    throttled_run run_scanner "devcontainer" "scan_devcontainer.py" &
     wait
 
 else
@@ -226,29 +261,29 @@ else
         echo ""
         echo "[*] Running all 19 scanners in parallel..."
     fi
-    run_scanner "entropy" "scan_entropy.py" &
-    run_scanner "binary" "scan_binary.py" &
-    run_scanner "git_forensics" "scan_git_forensics.py" &
-    run_scanner "dependencies" "scan_dependencies.py" &
-    run_scanner "secrets" "scan_secrets.py" &
-    run_scanner "sast" "scan_sast.py" &
-    run_scanner "infra" "scan_infra.py" &
-    run_scanner "lifecycle" "scan_lifecycle.py" &
-    run_scanner "skill_threats" "scan_skill_threats.py" &
-    run_scanner "dataflow" "scan_dataflow.py" &
-    run_scanner "mcp_security" "scan_mcp_security.py" &
-    run_scanner "ast_analysis" "scan_ast.py" &
-    run_scanner "runtime_dynamism" "scan_runtime_dynamism.py" &
-    run_scanner "manifest_drift" "scan_manifest_drift.py" &
-    run_scanner "agent_skills" "scan_agent_skills.py" &
+    throttled_run run_scanner "entropy" "scan_entropy.py" &
+    throttled_run run_scanner "binary" "scan_binary.py" &
+    throttled_run run_scanner "git_forensics" "scan_git_forensics.py" &
+    throttled_run run_scanner "dependencies" "scan_dependencies.py" &
+    throttled_run run_scanner "secrets" "scan_secrets.py" &
+    throttled_run run_scanner "sast" "scan_sast.py" &
+    throttled_run run_scanner "infra" "scan_infra.py" &
+    throttled_run run_scanner "lifecycle" "scan_lifecycle.py" &
+    throttled_run run_scanner "skill_threats" "scan_skill_threats.py" &
+    throttled_run run_scanner "dataflow" "scan_dataflow.py" &
+    throttled_run run_scanner "mcp_security" "scan_mcp_security.py" &
+    throttled_run run_scanner "ast_analysis" "scan_ast.py" &
+    throttled_run run_scanner "runtime_dynamism" "scan_runtime_dynamism.py" &
+    throttled_run run_scanner "manifest_drift" "scan_manifest_drift.py" &
+    throttled_run run_scanner "agent_skills" "scan_agent_skills.py" &
     if $WATCH_MODE; then
-        run_scanner "integrity" "scan_integrity.py" "--watch" &
+        throttled_run run_scanner "integrity" "scan_integrity.py" "--watch" &
     else
-        run_scanner "integrity" "scan_integrity.py" &
+        throttled_run run_scanner "integrity" "scan_integrity.py" &
     fi
-    run_scanner "dast" "scan_dast.py" &
-    run_scanner "post_incident" "scan_post_incident.py" &
-    run_scanner "devcontainer" "scan_devcontainer.py" &
+    throttled_run run_scanner "dast" "scan_dast.py" &
+    throttled_run run_scanner "post_incident" "scan_post_incident.py" &
+    throttled_run run_scanner "devcontainer" "scan_devcontainer.py" &
     wait
 fi
 

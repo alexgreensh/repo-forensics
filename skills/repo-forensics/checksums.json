@@ -21,7 +21,7 @@
     "scripts/ioc_manager.py": "aaae88ac4d75d290a94b5a5483fb30001fb4b437f07e0f452c4535e33848cfc0",
     "scripts/parse_pnpm_lock.py": "720f084e11cd759ab453bdfa161950111a49455ff2c6ba55ef5a9c3e32161f0c",
     "scripts/pre_scan.py": "a4596a00fa32b398495fb19a89b9f68a854771d555f5031ca01fc415bd55faad",
-    "scripts/run_forensics.sh": "4bea0690067cf29779bddab21f668b37ab1089247f62012c04fbdfff536012ff",
+    "scripts/run_forensics.sh": "2584146cb9d0b75da8c12551e84868e143b8a38e7f2003bc232e373de3fa4561",
     "scripts/scan_agent_skills.py": "db491c181e6aabbe0d995492c86fcdc9f80dc1fb512116f41a541cbd0625aa39",
     "scripts/scan_ast.py": "92375cea8c9e71caa5885e904b1d4407e0f6c2d4dd29d990a820cf74e907f6a0",
     "scripts/scan_binary.py": "2b2cada77440ea10234c350a001386436eedad6365b7546c2c5e7b6aec6e88f8",
@@ -58,8 +58,8 @@
   },
   "hook_count": 5,
   "repo_manifests": {
-    ".claude-plugin/marketplace.json": "af6a15b37e9eb13bb059a3564742c8933282570cae20217526ce790a8e2c8caa",
-    ".claude-plugin/plugin.json": "3241fb099526f26a05645c57975a27564d7906dea63e0ed6fcfa1a9e237300ae"
+    ".claude-plugin/marketplace.json": "2680be816e6e4c617dca119775dff3a634deccfe9d51d538ffc7c868a1d8affc",
+    ".claude-plugin/plugin.json": "9dc49ed21ca5877d68e16eeae911c89aaad056cc52fa0c9b8219525a5301773a"
   },
   "manifest_count": 2
 }
