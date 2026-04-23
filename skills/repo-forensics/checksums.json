@@ -21,7 +21,7 @@
     "scripts/ioc_manager.py": "aaae88ac4d75d290a94b5a5483fb30001fb4b437f07e0f452c4535e33848cfc0",
     "scripts/parse_pnpm_lock.py": "720f084e11cd759ab453bdfa161950111a49455ff2c6ba55ef5a9c3e32161f0c",
     "scripts/pre_scan.py": "a4596a00fa32b398495fb19a89b9f68a854771d555f5031ca01fc415bd55faad",
-    "scripts/run_forensics.sh": "2584146cb9d0b75da8c12551e84868e143b8a38e7f2003bc232e373de3fa4561",
+    "scripts/run_forensics.sh": "a82f90ae19b70fb7b29a06fd021109bd26806aaf8766f88042851b84265fd131",
     "scripts/scan_agent_skills.py": "db491c181e6aabbe0d995492c86fcdc9f80dc1fb512116f41a541cbd0625aa39",
     "scripts/scan_ast.py": "92375cea8c9e71caa5885e904b1d4407e0f6c2d4dd29d990a820cf74e907f6a0",
     "scripts/scan_binary.py": "2b2cada77440ea10234c350a001386436eedad6365b7546c2c5e7b6aec6e88f8",
@@ -41,7 +41,7 @@
     "scripts/scan_sast.py": "e0966f731c86c1e223bea22cfb0eea13c1d7fe77c409a799a40a576e936b4834",
     "scripts/scan_secrets.py": "b7dd163ca400579ebcd962499a7b58826dabd7d005c0b83f804d7d78052066a5",
     "scripts/scan_skill_threats.py": "73ae9041ebc43ef130b3f870afcc540256b610a18a2bcab4488202b60b31ed71",
-    "scripts/session_scan.py": "52a7eae452155a0ecce0073baabd162b164a10772036073e5778ebb2a08b5c3f",
+    "scripts/session_scan.py": "f95b7408353704d58b01e8881647e1de9e566fbe20555b83e085540d3d3deb29",
     "scripts/verify_install.py": "8adc64b2bf6fa9a02969c1a13d78e6202020b41abe4b3f09a3527e7e374d1a41",
     "scripts/vuln_feed.py": "f6628830a7410e5efc3df1af69fbf41739fb72fec979c6818363112f6f408b66"
   },
