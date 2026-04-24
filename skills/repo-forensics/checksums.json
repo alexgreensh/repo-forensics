@@ -1,16 +1,12 @@
 {
   "version": "2",
   "generator": "repo-forensics/verify_install",
-  "file_count": 41,
+  "file_count": 37,
   "files": {
     ".gitignore": "8b2598a3359a556874b8069d42dea2686f07d46c3ca1b540c4025788b258180a",
-    ".ruff_cache/.gitignore": "9e3a60f1e6ec4ae60215c11d54b171392745ec25e9dded433d5bd921363af316",
-    ".ruff_cache/0.15.10/1043920844443668668": "3e901cf049cbe9db5d220c0826e4d0c6d52bb0643a6d717b2ecbea177366a45a",
-    ".ruff_cache/CACHEDIR.TAG": "5953156d7e0c564a427251316eaf26f8870e6483ae2197f916b630e4f93e31ae",
     "SKILL.md": "13ad1dc68e826e94a46270be8bf35524f7f94f615cbe59e775125c8475dac7de",
     "data/README.md": "3980ad873dbef332e0db2d209cd22287d8a0d146930b40bafc8ab774166a8bc4",
     "data/compromised_versions.json": "96dfea743bc4437fb3a3bcd880c04d6e318b48cc0b81d439c1926064a2f9be62",
-    "references/env-secrets-research-2026-04-21.md": "a6b73f8b0b8073ba4496c86036002c7cee83708628d5c78efdd233673d4d155c",
     "references/mcp-attack-patterns.md": "722d7a47186bfee18bde0e06a749dc55e8cc716c2418d118a64e57d60e48689a",
     "references/research_sources.md": "480cc40fe3ddacbb8b3aa8e56a9eef479ba1954de34972e9d7651c8d37f0a442",
     "references/threat_patterns.md": "f5a8d91f630fbc8493672527cfff5282bf7812acc3aa13629dc55849b7b6b43e",
@@ -42,7 +38,7 @@
     "scripts/scan_secrets.py": "b7dd163ca400579ebcd962499a7b58826dabd7d005c0b83f804d7d78052066a5",
     "scripts/scan_skill_threats.py": "73ae9041ebc43ef130b3f870afcc540256b610a18a2bcab4488202b60b31ed71",
     "scripts/session_scan.py": "f95b7408353704d58b01e8881647e1de9e566fbe20555b83e085540d3d3deb29",
-    "scripts/verify_install.py": "8adc64b2bf6fa9a02969c1a13d78e6202020b41abe4b3f09a3527e7e374d1a41",
+    "scripts/verify_install.py": "9ebc2e18fc638599d56d00cbecce5da759b7be2f834995668c69262eaba14c69",
     "scripts/vuln_feed.py": "f6628830a7410e5efc3df1af69fbf41739fb72fec979c6818363112f6f408b66"
   },
   "repo_symlinks": {

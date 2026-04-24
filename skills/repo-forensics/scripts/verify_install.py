@@ -14,6 +14,7 @@ Created by Alex Greenshpun
 """
 
 import os
+import subprocess
 import sys
 import json
 
@@ -147,10 +148,34 @@ def get_tracked_symlinks(repo_root, skill_root):
 
 def get_tracked_files(skill_root):
     """Get all files that should be integrity-checked."""
-    tracked = []
-    skip_dirs = {'.git', '__pycache__', '.pytest_cache', 'tests', '.cache'}
+    skip_dirs = {'.git', '__pycache__', '.pytest_cache', 'tests', '.cache', '.ruff_cache'}
     skip_files = {'.DS_Store', '.forensics-baseline.json', '.forensics-iocs.json', 'checksums.json'}
 
+    # In a git repo, use git ls-files to avoid local-only artifacts
+    try:
+        result = subprocess.run(
+            ['git', 'ls-files', '--cached'],
+            capture_output=True, text=True, timeout=5, cwd=skill_root,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            git_files = []
+            for rel in result.stdout.strip().splitlines():
+                if any(rel.startswith(d + '/') or rel.startswith(d + os.sep) for d in skip_dirs):
+                    continue
+                if os.path.basename(rel) in skip_files:
+                    continue
+                if rel.endswith(('.pyc', '.pyo')):
+                    continue
+                fp = os.path.join(skill_root, rel)
+                if os.path.islink(fp) or not os.path.isfile(fp):
+                    continue
+                git_files.append(rel)
+            return sorted(git_files)
+    except Exception:
+        pass
+
+    # Fallback for non-git installs (marketplace/plugin path)
+    tracked = []
     for root, dirs, files in os.walk(skill_root, followlinks=False):
         dirs[:] = [d for d in dirs if d not in skip_dirs]
         for f in files:
