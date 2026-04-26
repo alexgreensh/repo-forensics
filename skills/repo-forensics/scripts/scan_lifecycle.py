@@ -16,6 +16,17 @@ import forensics_core as core
 
 SCANNER_NAME = "lifecycle"
 
+# CLI commands commonly targeted by Command-Jacking (Checkmarx, October 2024).
+# Shared across npm bin, setup.py console_scripts, and pyproject.toml [project.scripts].
+SHADOWED_COMMANDS = {
+    'aws', 'docker', 'git', 'kubectl', 'terraform', 'pip', 'pip3',
+    'npm', 'npx', 'node', 'python', 'python3', 'curl', 'wget',
+    'ssh', 'scp', 'rsync', 'ls', 'cat', 'touch', 'mkdir', 'rm',
+    'cp', 'mv', 'chmod', 'chown', 'sudo', 'su', 'gcloud', 'az',
+    'heroku', 'vercel', 'netlify', 'gh', 'brew', 'apt', 'yum',
+    'bun', 'bunx', 'deno', 'pnpm', 'yarn',
+}
+
 DANGEROUS_NPM_HOOKS = ['preinstall', 'postinstall', 'install', 'prepare', 'prepublish', 'postpublish']
 SUSPICIOUS_COMMANDS = [
     (re.compile(r'\bcurl\b'), "curl command"),
@@ -28,6 +39,8 @@ SUSPICIOUS_COMMANDS = [
     (re.compile(r'\bpython\b.*-c'), "python inline execution"),
     (re.compile(r'\bnode\b.*-e'), "node inline execution"),
     (re.compile(r'\beval\b'), "eval command"),
+    (re.compile(r'\bbunx?\b'), "bun/bunx execution (Bun runtime stager pattern)"),
+    (re.compile(r'oven-sh/bun|bun-v\d+\.\d+'), "Bun runtime download (TeamPCP stager pattern, April 2026)"),
     (re.compile(r'>\s*/dev/null.*2>&1'), "output suppression"),
 ]
 
@@ -41,6 +54,10 @@ ANTI_FORENSICS_PATTERNS = [
     (re.compile(r'(?i)child_process.*\brm\s'), "child_process used to remove files (anti-forensics)"),
 ]
 
+RELAY_PATTERN = re.compile(
+    r'^(node|python|python3|sh|bash|bun|deno)\s+[\w./-]+\.(js|mjs|cjs|py|sh)$'
+)
+
 
 def scan_package_json(file_path, rel_path):
     """Check NPM lifecycle scripts for suspicious commands."""
@@ -53,6 +70,7 @@ def scan_package_json(file_path, rel_path):
         for hook in DANGEROUS_NPM_HOOKS:
             if hook in scripts:
                 cmd = scripts[hook]
+                cmd = cmd[:10000]
 
                 # Check for suspicious commands
                 found_suspicious = False
@@ -72,10 +90,7 @@ def scan_package_json(file_path, rel_path):
                 if not found_suspicious:
                     # Check for filename relay pattern: node/python/sh/bash <file>
                     # This is THE standard supply chain attack entry point
-                    relay_pattern = re.compile(
-                        r'^(node|python|python3|sh|bash|bun|deno)\s+[\w./-]+\.(js|mjs|cjs|py|sh)$'
-                    )
-                    if relay_pattern.match(cmd.strip()):
+                    if RELAY_PATTERN.match(cmd.strip()):
                         findings.append(core.Finding(
                             scanner=SCANNER_NAME, severity="high",
                             title=f"NPM Hook: '{hook}' Runs External Script",
@@ -108,6 +123,22 @@ def scan_package_json(file_path, rel_path):
                         ))
                         break
 
+        # Check bin field for command-jacking (Checkmarx, October 2024)
+        bin_field = data.get('bin', {})
+        if isinstance(bin_field, str):
+            bin_field = {data.get('name', ''): bin_field}
+        if isinstance(bin_field, dict):
+            for cmd_name in bin_field:
+                if cmd_name.lower() in SHADOWED_COMMANDS:
+                    findings.append(core.Finding(
+                        scanner=SCANNER_NAME, severity="critical",
+                        title=f"Command-Jacking: bin '{cmd_name}' Shadows System Command",
+                        description=f"Package registers bin entry '{cmd_name}' which shadows a common CLI tool. After install, running '{cmd_name}' executes this package's code instead of the real tool (Checkmarx Command-Jacking, October 2024)",
+                        file=rel_path, line=0,
+                        snippet=f"bin.{cmd_name}: {str(bin_field[cmd_name])[:80]}",
+                        category="command-jacking"
+                    ))
+
     except (OSError, json.JSONDecodeError, UnicodeDecodeError) as e:
         print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)
     return findings
@@ -127,7 +158,7 @@ def scan_js_anti_forensics(file_path, rel_path):
 
         lines = content.split('\n')
         for i, line in enumerate(lines):
-            if len(line) > 10000:
+            if len(line) > core.MAX_LINE_LENGTH:
                 continue  # MAX_LINE_LENGTH guard
             for pattern, desc in ANTI_FORENSICS_PATTERNS:
                 if pattern.search(line):
@@ -180,6 +211,22 @@ def scan_setup_py(file_path, rel_path):
                     category="lifecycle-hook"
                 ))
 
+        # Check for Command-Jacking via console_scripts entry points
+        entry_points_match = re.search(r"entry_points\s*=\s*\{[^}]*'console_scripts'\s*:\s*\[(.*?)\]", content, re.DOTALL)
+        if entry_points_match:
+            scripts_text = entry_points_match.group(1)
+            for ep_match in re.finditer(r"['\"](\w+)\s*=", scripts_text):
+                cmd_name = ep_match.group(1)
+                if cmd_name.lower() in SHADOWED_COMMANDS:
+                    findings.append(core.Finding(
+                        scanner=SCANNER_NAME, severity="critical",
+                        title=f"Command-Jacking: console_scripts '{cmd_name}' Shadows System Command",
+                        description=f"Package registers console_scripts entry '{cmd_name}' which shadows a common CLI tool (Checkmarx Command-Jacking, October 2024)",
+                        file=rel_path, line=0,
+                        snippet=f"console_scripts: {cmd_name}",
+                        category="command-jacking"
+                    ))
+
     except (OSError, UnicodeDecodeError) as e:
         print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)
     return findings
@@ -201,6 +248,30 @@ def scan_pyproject_toml(file_path, rel_path):
                 snippet="cmdclass override in pyproject.toml",
                 category="lifecycle-hook"
             ))
+
+        # Check for Command-Jacking via [project.scripts]
+        in_scripts = False
+        for i, line in enumerate(content.split('\n')):
+            stripped = line.strip()
+            if stripped in ('[project.scripts]', '[project.entry-points.console_scripts]'):
+                in_scripts = True
+                continue
+            if in_scripts:
+                if stripped.startswith('['):
+                    in_scripts = False
+                    continue
+                ep_match = re.match(r'(\w+)\s*=', stripped)
+                if ep_match:
+                    cmd_name = ep_match.group(1)
+                    if cmd_name.lower() in SHADOWED_COMMANDS:
+                        findings.append(core.Finding(
+                            scanner=SCANNER_NAME, severity="critical",
+                            title=f"Command-Jacking: [project.scripts] '{cmd_name}' Shadows System Command",
+                            description=f"Package registers script entry '{cmd_name}' which shadows a common CLI tool (Checkmarx Command-Jacking, October 2024)",
+                            file=rel_path, line=i + 1,
+                            snippet=stripped[:120],
+                            category="command-jacking"
+                        ))
 
     except (OSError, UnicodeDecodeError) as e:
         print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)

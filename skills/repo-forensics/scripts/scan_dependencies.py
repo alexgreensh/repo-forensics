@@ -432,7 +432,10 @@ def _check_vulns(ecosystem, pkg_versions, rel_path):
 
         # Sanitize pkg identity before embedding in Finding output
         # (defense against terminal escape / BIDI injection via manifest files)
-        safe_pkg = vuln_feed._sanitize_display_text(canonical, max_len=214)
+        try:
+            safe_pkg = vuln_feed._sanitize_display_text(canonical, max_len=214)
+        except (AttributeError, TypeError):
+            safe_pkg = canonical[:214]
         for v in vulns:
             aliases = v.get("aliases") or []
             cve_label = ", ".join(aliases) if aliases else v.get("id", "unknown")
@@ -676,7 +679,7 @@ def scan_package_json(filepath, rel_path):
                     "time. Review for malicious rewrites (e.g. redirecting "
                     "chalk to a compromised version)."
                 ),
-                file=os.path.relpath(pnpmfile, os.path.dirname(filepath)) or ".pnpmfile.cjs",
+                file=os.path.join(os.path.dirname(rel_path), '.pnpmfile.cjs'),
                 line=0,
                 snippet=".pnpmfile.cjs install-time hook",
                 category="install-time-rewriter"
@@ -771,6 +774,30 @@ def scan_package_json(filepath, rel_path):
                     category="dependency-confusion"
                 ))
 
+        # StarJacking detection: package claims GitHub repo that doesn't match package name
+        # (Checkmarx, April 2022). 7.23% of npm packages have non-unique git references.
+        repo = data.get('repository', {})
+        repo_url = repo.get('url', '') if isinstance(repo, dict) else (repo if isinstance(repo, str) else '')
+        pkg_name = data.get('name', '')
+        if repo_url and pkg_name:
+            repo_url_lower = repo_url.lower().rstrip('.git').rstrip('/')
+            pkg_base = pkg_name.split('/')[-1].lower()  # strip scope
+            # Skip generic scoped package bases that always mismatch repo names
+            _GENERIC_BASES = {'core', 'cli', 'common', 'utils', 'types', 'helpers', 'config', 'shared', 'base', 'lib'}
+            if pkg_base not in _GENERIC_BASES and ('github.com/' in repo_url_lower or 'gitlab.com/' in repo_url_lower):
+                repo_name = repo_url_lower.split('/')[-1] if '/' in repo_url_lower else ''
+                if repo_name and pkg_base and repo_name != pkg_base:
+                    similarity = difflib.SequenceMatcher(None, repo_name, pkg_base).ratio()
+                    if similarity < 0.5:
+                        findings.append(core.Finding(
+                            scanner=SCANNER_NAME, severity="medium",
+                            title=f"StarJacking Signal: Repo '{repo_name}' != Package '{pkg_base}'",
+                            description=f"Package name doesn't match its claimed repository. Could be StarJacking (Checkmarx, April 2022) where a package links to a popular repo to steal its star count. Similarity: {similarity:.0%}",
+                            file=rel_path, line=0,
+                            snippet=f"repo: {repo_url[:80]}, pkg: {pkg_name}",
+                            category="starjacking"
+                        ))
+
     except (json.JSONDecodeError, KeyError, TypeError) as e:
         findings.append(core.Finding(
             scanner=SCANNER_NAME, severity="low",
@@ -830,16 +857,16 @@ def scan_python_deps(filepath, rel_path):
                         pin_m = re.search(r'==\s*([A-Za-z0-9._+\-]+)', line)
                         if pin_m:
                             pinned_pkg_versions[pkg] = pin_m.group(1)
-                    # Check version
-                    ver_m = re.search(r'[>=<]=?(\d+)', line)
-                    if ver_m and int(ver_m.group(1)) >= 90:
-                        findings.append(core.Finding(
-                            scanner=SCANNER_NAME, severity="high",
-                            title=f"Version Anomaly: {pkg}",
-                            description="Abnormally high version in requirements",
-                            file=rel_path, line=0, snippet=line[:120],
-                            category="dependency-confusion"
-                        ))
+                        # Check version
+                        ver_m = re.search(r'[>=<]=?(\d+)', line)
+                        if ver_m and int(ver_m.group(1)) >= 90:
+                            findings.append(core.Finding(
+                                scanner=SCANNER_NAME, severity="high",
+                                title=f"Version Anomaly: {pkg}",
+                                description="Abnormally high version in requirements",
+                                file=rel_path, line=0, snippet=line[:120],
+                                category="dependency-confusion"
+                            ))
 
                     # Unbounded range detection (only if no lockfile)
                     if not has_py_lockfile and pkg:
@@ -1385,6 +1412,7 @@ def load_package_list(path, scanned_repo_path=None):
         fd = os.open(real_path, os.O_RDONLY | nofollow)
     except OSError as e:
         raise ValueError(f"--package-list could not open {path!r}: {e}")
+    fd_owned = False
     try:
         fstat_result = os.fstat(fd)
         if (
@@ -1396,16 +1424,17 @@ def load_package_list(path, scanned_repo_path=None):
                 f"(possible TOCTOU attack): {path!r}"
             )
         try:
+            fd_owned = True  # os.fdopen takes ownership of fd from this point
             with os.fdopen(fd, 'r', encoding='utf-8') as f:
                 content = f.read()
         except UnicodeDecodeError as e:
             raise ValueError(f"--package-list could not decode {path!r}: {e}")
     except BaseException:
-        # fdopen takes ownership; only close manually on pre-fdopen error
-        try:
-            os.close(fd)
-        except OSError:
-            pass
+        if not fd_owned:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
         raise
 
     version_pinned = {}
@@ -1509,6 +1538,8 @@ def main():
                         help="Refresh CISA KEV cache before scanning")
     args = parser.parse_args()
 
+    _VULN_STATE["queried"] = set()
+    _VULN_STATE["kev"] = None
     _VULN_STATE["enabled"] = not args.no_vulns
     _VULN_STATE["offline"] = bool(args.offline)
     if args.update_vulns and not args.offline:

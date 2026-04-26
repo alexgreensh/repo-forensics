@@ -50,6 +50,11 @@ HARDCODED_C2_IPS = [
     "91.92.242.30", "54.91.154.110", "157.245.55.238",
     "45.77.240.42", "104.248.30.47", "159.65.147.111",
     "142.11.206.73",  # Axios supply chain RAT C2 (March 2026)
+    "83.142.209.11",   # TeamPCP Wave 1 C2 (March 2026)
+    "91.195.240.123",  # TeamPCP Wave 3 C2 (April 2026)
+    "94.154.172.43",   # TeamPCP Wave 3 audit endpoint (April 2026)
+    "45.148.10.212",   # Trivy compromise exfil (March 2026)
+    "83.142.209.203",  # Telnyx WAV steganography exfil (March 2026)
 ]
 
 HARDCODED_MALICIOUS_DOMAINS = [
@@ -68,6 +73,13 @@ HARDCODED_MALICIOUS_DOMAINS = [
     # liteLLM supply chain attack C2 (March 2026)
     "eo1n0jq9qgggt.m.pipedream.net",
     "sfrclak.com",  # Axios supply chain RAT C2 domain (March 2026)
+    "checkmarx.zone",          # TeamPCP Wave 1-2 C2 domain (March 2026)
+    "checkmarx.cx",            # TeamPCP Wave 3 C2 domain (April 2026)
+    "audit.checkmarx.cx",      # TeamPCP Wave 3 exfil endpoint (April 2026)
+    "scan.aquasecurity.org",   # Trivy compromise exfil domain (March 2026)
+    "npnjs.com",               # npm maintainer phishing (Chalk compromise, 2025)
+    "npmjs.help",              # npm maintainer phishing (2025)
+    "files.pypihosted.org",    # Fake PyPI mirror (top.gg attack, 2024)
 ]
 
 HARDCODED_MALICIOUS_NPM = {
@@ -204,6 +216,8 @@ def _load_cache(cache_dir=None):
     try:
         with open(path, 'r', encoding='utf-8') as f:
             data = json.load(f)
+        if not isinstance(data, dict):
+            return None
         # Check freshness
         cached_at = data.get('_cached_at', 0)
         age_hours = (time.time() - cached_at) / 3600
@@ -216,6 +230,8 @@ def _load_cache(cache_dir=None):
 
 def _save_cache(data, cache_dir=None):
     """Save IOCs to local cache. Does not mutate the input dict."""
+    if not isinstance(data, dict):
+        return
     path = _cache_path(cache_dir)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     to_save = dict(data)

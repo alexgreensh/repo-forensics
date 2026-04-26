@@ -7,7 +7,7 @@
   <img src="https://img.shields.io/badge/python-3.8%2B-blue.svg" alt="Python 3.8+">
   <img src="https://img.shields.io/badge/dependencies-zero-brightgreen.svg" alt="Zero Dependencies">
   <img src="https://img.shields.io/badge/scanners-19-orange.svg" alt="19 Scanners">
-  <img src="https://img.shields.io/badge/patterns-450%2B-red.svg" alt="450+ Patterns">
+  <img src="https://img.shields.io/badge/patterns-500%2B-red.svg" alt="500+ Patterns">
   <img src="https://img.shields.io/badge/CVE%20%2B%20CISA%20KEV-live%20scanning-critical.svg" alt="Live CVE + CISA KEV scanning">
   <a href="https://github.com/sponsors/alexgreensh"><img src="https://img.shields.io/badge/Sponsor-%E2%9D%A4-ff69b4.svg?labelColor=262626" alt="Sponsor"></a>
 </p>
@@ -85,7 +85,7 @@ $ ./run_forensics.sh ./suspicious-skill
   <img src="diagrams/pipeline.svg" alt="Scanning pipeline: input → 19 scanners → correlation → verdict" width="900"/>
 </p>
 
-Point it at any repository. 19 scanners run in parallel, each checking a different attack surface. The correlation engine then cross-references findings across 21 rules to detect compound threats that no single scanner would catch (like dynamic import + network fetch = deferred payload loading).
+Point it at any repository. 19 scanners run in parallel, each checking a different attack surface. The correlation engine then cross-references findings across 27 rules to detect compound threats that no single scanner would catch (like dynamic import + network fetch = deferred payload loading).
 
 The result is a severity-ranked verdict with exit codes designed for CI/CD gating.
 
@@ -105,21 +105,21 @@ The result is a severity-ranked verdict with exit codes designed for CI/CD gatin
 |---------|----------------|----------|
 | **runtime_dynamism** | Dynamic imports, fetch-then-execute, self-modification, time bombs, dynamic tool descriptions | Regex + Python AST, 5 detection categories |
 | **manifest_drift** | Phantom dependencies, runtime installs, conditional import+install, declared-but-unused deps | AST import extraction vs manifest parsing |
-| **skill_threats** | Prompt injection, unicode smuggling, ClickFix delivery, MCP injection, known campaign IOCs | 10 detection categories, 150+ regex patterns |
+| **skill_threats** | Prompt injection, unicode smuggling, ClickFix delivery, MCP injection, LITL attack padding, known campaign IOCs | 11 detection categories, 160+ regex patterns |
 | **agent_skills** | SKILL.md frontmatter abuse, tools.json Full-Schema Poisoning, agent config injection (SOUL.md/AGENTS.md/CLAUDE.md), .clawhubignore bypass, ClawHavoc IOCs. Covers Claude Code, OpenClaw, Codex, Cursor, MCP. | Regex + JSON parsing, 5 detection categories |
 | **mcp_security** | SQL → prompt escalation, tool poisoning, tool shadowing, rug pull enablers, config CVEs | Schema field inspection, Invariant Labs TPA patterns |
 | **dast** | Hook exploitation: env leaks, timeouts, command injection, path traversal | 8 malicious payloads, sandboxed subprocess execution |
 | **integrity** | Unauthorized config changes, tampered hooks, drift from baseline | SHA256 checksums, `--watch` mode for continuous monitoring |
 | **dataflow** | Source-to-sink taint: env vars and secrets reaching network calls | Forward taint analysis, cross-file import tracking |
 | **secrets** | API keys, tokens, private keys, database URIs, JWTs, framework env prefix leaks (REACT_APP_, NEXT_PUBLIC_, VITE_, EXPO_PUBLIC_, GATSBY_, NX_PUBLIC_), 1Password/Vault tokens, .env variant files | 50+ patterns with entropy + format combo detection |
-| **sast** | Dangerous functions, injection, deserialization, shell execution, process.env exposure, path traversal to /proc/self/environ | 8 languages: Python, JS, TS, Ruby, PHP, Java, Go, Bash |
+| **sast** | Dangerous functions, injection, deserialization, shell execution, process.env exposure, path traversal, Model Confusion (HuggingFace), NPM worm propagation, destructive fallback commands | 8 languages: Python, JS, TS, Ruby, PHP, Java, Go, Bash |
 | **ast_analysis** | Obfuscated exec chains, `__reduce__` backdoors, marshal/types bytecode, audit hook abuse | Python AST walking, 12 detection patterns |
-| **dependencies** | Typosquatting, version confusion, SANDWORM_MODE IOC packages, transitive supply chain, **known CVEs + CISA KEV auto-enrichment** | 500+ popular packages, l33t normalization, lockfile deep parsing (npm/yarn/poetry/pipfile), OSV API per-package queries, KEV catalog cross-reference |
-| **lifecycle** | Malicious install hooks in npm and pip, `.pth` file injection (liteLLM-style) | `postinstall`, `preinstall`, `cmdclass`, `.pth` exec/base64/IOC detection |
+| **dependencies** | Typosquatting, version confusion, SANDWORM_MODE IOC packages, StarJacking detection, transitive supply chain, **known CVEs + CISA KEV auto-enrichment** | 500+ popular packages, l33t normalization, repo-to-package validation, lockfile deep parsing (npm/yarn/poetry/pipfile), OSV API per-package queries, KEV catalog cross-reference |
+| **lifecycle** | Malicious install hooks in npm and pip, `.pth` file injection (liteLLM-style), Command-Jacking (entry point hijacking), Bun runtime stager detection | `postinstall`, `preinstall`, `cmdclass`, `.pth` exec/base64/IOC detection, bin/console_scripts shadow detection |
 | **entropy** | Hidden payloads in base64 blocks, hex strings, high-entropy content | Per-string Shannon entropy with format-aware thresholds |
-| **infra** | Docker misconfig (ENV/ARG secrets, .env COPY), K8s breakouts, GHA expression injection, Claude config CVEs | Dockerfile, YAML, workflow, and settings.json analysis |
+| **infra** | Docker misconfig (ENV/ARG secrets, .env COPY), K8s breakouts, GHA expression injection, **known compromised GitHub Actions** (tj-actions, reviewdog, TeamPCP), Claude config CVEs | Dockerfile, YAML, workflow, and settings.json analysis |
 | **devcontainer** | Host secret mounts, privileged mode, docker.sock escape, remoteEnv localEnv interpolation, lifecycle command risks, untrusted features | JSON structure analysis of devcontainer.json |
-| **binary** | Executables disguised as images, text files, or documentation | Magic number detection vs. file extension |
+| **binary** | Executables disguised as images/text/docs, **audio steganography** (executable payloads in WAV/MP3/FLAC) | Magic number detection, audio data section analysis |
 | **post_incident** | npm cache artifacts, RAT binaries, C2 persistence, install log traces, compromised node_modules | File existence checks, npm cache/log scanning, LaunchAgent grep |
 | **git_forensics** | Timestamp manipulation, identity spoofing, bad GPG signatures | Commit history analysis, multi-identity detection |
 
@@ -345,7 +345,7 @@ Auto-detects agent skills across ecosystems (Claude Code, OpenClaw, Codex, Curso
 | **GitHub Action** | `action.yml` for CI/CD integration with exit code gating. |
 | **Runtime behavior prediction** | Detects code that will change behavior after install: time bombs, dynamic imports, fetch-then-execute, self-modification, rug pull enablers. |
 | **Manifest drift detection** | Compares declared dependencies vs actual imports. Catches phantom deps, runtime installs, and conditional import+install fallbacks. |
-| **699 pytest tests** | Full test coverage across 17 test files with fixture repos containing known vulnerabilities. |
+| **812 pytest tests** | Full test coverage across 20 test files with fixture repos containing known vulnerabilities. |
 | **Shared core** | Duplicated `scan_patterns()` extracted to `forensics_core.py`. Silent exceptions replaced with structured findings. |
 | **Agent skill scanning** | Auto-detects skills across Claude Code, OpenClaw, Codex, Cursor, and MCP. Checks frontmatter, tools.json, agent configs, .clawhubignore for injection and ClawHavoc patterns. |
 
@@ -353,7 +353,7 @@ Auto-detects agent skills across ecosystems (Claude Code, OpenClaw, Codex, Curso
 
 ## Correlation Engine
 
-Individual findings are useful. Compound findings are devastating. The correlation engine connects dots across scanners with 21 rules:
+Individual findings are useful. Compound findings are devastating. The correlation engine connects dots across scanners with 27 rules:
 
 | Pattern | Finding | Severity |
 |---------|---------|----------|
@@ -375,6 +375,12 @@ Individual findings are useful. Compound findings are devastating. The correlati
 | .pth file + known IOC | **Known Supply Chain .pth Attack** | critical |
 | git dependency + lifecycle hook | **Git Dependency with Lifecycle Hook** | high |
 | missing integrity + untrusted URL | **Lockfile Tampering Indicator** | critical |
+| command-jacking + network call | **Command-Jacking Chain** | critical |
+| model confusion + code execution | **Model Confusion RCE** | critical |
+| compromised action + secrets | **Compromised Action Exfil** | critical |
+| audio steganography + network | **Steganographic Payload Delivery** | critical |
+| npm publish + token access | **NPM Worm Propagation** | critical |
+| destructive command + credential access | **Destructive Fallback** | critical |
 
 ---
 
@@ -455,6 +461,13 @@ Detection patterns are original work informed by published research:
 | PylangGhost RAT | 2026 | Benign v1.0.0 weaponized in v1.0.1 | manifest_drift, runtime_dynamism |
 | liteLLM .pth injection | 2026 | Malicious `.pth` file in PyPI package auto-exfiltrates credentials on `pip install`. 97M monthly downloads. Spread transitively via dspy. | lifecycle, dependencies |
 | Axios supply chain compromise | 2026 | Hijacked maintainer account published RAT dropper via `plain-crypto-js`. Self-deleting postinstall, anti-forensics version swap. 100M+ weekly downloads. | dependencies, lifecycle, post_incident |
+| [Checkmarx: Command-Jacking](https://checkmarx.com/blog/this-new-supply-chain-attack-technique-can-trojanize-all-your-cli-commands) | 2024 | Entry point hijacking via console_scripts/bin field shadows system CLI commands | lifecycle |
+| [Checkmarx: StarJacking](https://checkmarx.com/blog/starjacking-making-your-new-open-source-package-popular-in-a-snap/) | 2022 | Packages claim popular repos to steal star counts (3% PyPI, 7% npm) | dependencies |
+| [Checkmarx: Model Confusion](https://checkmarx.com/zero-post/hugs-from-strangers-ai-model-confusion-supply-chain-attack/) | 2026 | Dependency confusion for AI model registries (HuggingFace from_pretrained) | sast |
+| [Checkmarx: Lies-in-the-Loop](https://checkmarx.com/zero-post/bypassing-ai-agent-defenses-with-lies-in-the-loop/) | 2025 | HITL dialog manipulation via text padding, false safety assertions | skill_threats |
+| [Checkmarx: 11 MCP Risks](https://checkmarx.com/zero-post/11-emerging-ai-security-risks-with-mcp-model-context-protocol/) | 2025 | Comprehensive MCP attack taxonomy (tool poisoning, rug pulls, context poisoning) | mcp_security |
+| TeamPCP campaign | 2026 | Cascading supply chain: Trivy → Checkmarx Actions → Bitwarden npm worm, WAV steganography | infra, dependencies, binary, skill_threats |
+| [Checkmarx: Shai-Hulud](https://checkmarx.com/zero-post/inside-shai-huluds-maw-how-the-npm-worm-exploits-and-propagates/) | 2025 | First NPM worm, destructive fallback, self-hosted runner backdoor | sast, skill_threats, dependencies |
 
 ---
 

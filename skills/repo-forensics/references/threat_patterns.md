@@ -250,3 +250,92 @@ Source: Anthropic Security Advisory, March 2026.
 **CVE-2026-33068** (CVSS 7.7): Workspace trust bypass in Claude Code. A `.claude/settings.json` file committed to a repository can set `bypassPermissions` or elevated permission modes. When a developer clones and opens the repo, Claude Code auto-applies the settings, bypassing the workspace trust boundary. This allows attacker-planted configs to auto-approve dangerous tool calls without user consent.
 
 **Detection**: Check for `.claude/settings.json` files in repos that contain `bypassPermissions` or `permission_mode: bypass` patterns.
+
+## 11. Checkmarx-Sourced Attack Patterns (2024-2026)
+
+### Command-Jacking / Entry Point Hijacking (October 2024)
+Source: Checkmarx Zero, "This New Supply Chain Attack Technique Can Trojanize All Your CLI Commands"
+
+Attackers register packages with `console_scripts` (Python) or `bin` (npm) entries that shadow popular CLI tools. After install, the malicious entry point takes PATH priority. The "command wrapping" variant calls the real binary after running the payload, making the attack invisible.
+
+**Targeted commands**: `aws`, `docker`, `git`, `kubectl`, `terraform`, `pip`, `npm`, `curl`, `wget`, `ssh`, `gcloud`, `heroku`, `ls`, `touch`, `mkdir`
+
+**Detection**: Check `setup.py` entry_points, `pyproject.toml` [project.scripts], and `package.json` bin field for entries matching system command names.
+
+**Cross-ecosystem**: Confirmed in PyPI, npm, Ruby Gems, NuGet, Dart Pub, Rust Crates.
+
+### StarJacking (April 2022)
+Source: Checkmarx, "StarJacking: Making Your New Open Source Package Popular in a Snap"
+
+Packages link to popular GitHub repos they don't own to steal star counts. 3.03% of PyPI and 7.23% of npm packages have non-unique Git references.
+
+**Detection**: Flag packages where `repository.url` doesn't match the package name (similarity < 0.6).
+
+### Model Confusion / AI Model Registry Supply Chain (January 2026)
+Source: Checkmarx Zero, "Hugs From Strangers: AI Model Confusion Supply Chain Attack"
+
+Analogous to dependency confusion but for AI models. When code uses `from_pretrained("org/model")` with a bare path, Hugging Face downloads from Hub if local model is missing. Attacker registers the matching username.
+
+**Vulnerable HF usernames**: `checkpoints`, `outputs`, `pretrained`, `models-tmp`, `results`, `ckpts`, `namespace`, `output`, `result`, `tmp`, `checkpoint`
+
+**Detection**: Flag `from_pretrained()` with bare two-component paths, `trust_remote_code=True` without `revision=` SHA pin, `torch.load()` with `weights_only=False`.
+
+### Lies-in-the-Loop (LITL) Attack (September 2025)
+Source: Checkmarx Zero, "Bypassing AI Agent Defenses with Lies-in-the-Loop"
+
+Exploits HITL safety mechanisms. Attacker-planted content tells the AI to describe a dangerous action as safe. Text padding pushes malicious commands off-screen. Recognized by OWASP as an official attack pattern.
+
+**Detection**: Oversized lines (>2000 chars) with action/approval keywords, instructions referencing "permission prompt" or "approval dialog", false safety assertions ("this is a routine operation").
+
+### TeamPCP Campaign (March-April 2026)
+Source: Checkmarx Security Update, Orca Security, Phoenix Security
+
+Multi-wave cascading supply chain attack. Compromised Trivy → Checkmarx Actions → Bitwarden npm. Credential harvesting, self-propagating npm worm, WAV steganography for payload delivery.
+
+**IOCs**:
+- Domains: `checkmarx[.]zone`, `checkmarx[.]cx`, `audit.checkmarx[.]cx`, `scan.aquasecurity[.]org`
+- IPs: 83.142.209.11, 91.195.240.123, 94.154.172.43, 45.148.10.212, 83.142.209.203
+- Exfil artifact: `docs-tpcp` repo, `tpcp.tar.gz` filename
+- Commit C2: `^LongLiveTheResistanceAgainstMachines:`, `beautifulcastle`
+- Persistence: `sysmon.service` in `/root/.config/systemd/user/`
+- AI targeting: `~/.claude.json`, `~/.claude/mcp.json` harvesting
+
+### WAV Audio Steganography (March 2026)
+Source: TeamPCP/Telnyx compromise
+
+Executable code hidden in spec-valid WAV audio files (`ringtone.wav`, `hangup.wav`). Payload XOR-encrypted in audio frames, decoded with first 8 bytes as key, piped to Python stdin (never written to disk).
+
+**Detection**: Check audio files for executable magic bytes (ELF/PE/Mach-O) in data sections, high text-to-binary ratio in audio frames (>70% printable chars = suspicious).
+
+### Shai-Hulud NPM Worm (September-December 2025)
+Source: Checkmarx Zero, "Inside Shai-Hulud's Maw"
+
+First self-propagating npm worm. Steals npm tokens, enumerates packages, republishes with malicious payload. v2 added destructive fallback (`shred -uvz` on Linux, `cipher /w:` on Windows) and self-hosted runner backdoor (`SHA1HULUD`).
+
+**Detection**: `npm whoami`, `npm access ls-packages`, `npm publish` in code. Runner config: `config.sh --url`, `svc.sh install`. Destructive: `shred`, `cipher /w:`.
+
+### Compromised GitHub Actions (2025-2026)
+
+| Action | Compromise Date | CVE | Notes |
+|--------|----------------|-----|-------|
+| tj-actions/changed-files | March 2025 | CVE-2025-30066 | Secret exfil via CI logs |
+| reviewdog/* (6 actions) | March 2025 | - | Same chain as tj-actions |
+| aquasecurity/trivy-action | March 2026 | - | 75/76 tags, TeamPCP |
+| aquasecurity/setup-trivy | March 2026 | - | 7 tags, TeamPCP |
+| checkmarx/kics-github-action | March-April 2026 | - | All tags pre-v2.1.20 |
+| checkmarx/ast-github-action | March-April 2026 | - | v2.3.28, v2.3.35 |
+
+### Registry Impersonation Phishing Domains
+
+| Domain | Target | Campaign |
+|--------|--------|----------|
+| `npnjs[.]com` | npm maintainers | got-fetch, July 2025 |
+| `npmjs[.]help` | npm maintainers | Chalk compromise, September 2025 |
+| `files[.]pypihosted[.]org` | PyPI mirror | top.gg attack, March 2024 |
+
+### Bun Runtime as Stager (April 2026)
+Source: TeamPCP Bitwarden compromise
+
+Lifecycle hooks download Bun runtime from `github.com/oven-sh/bun/releases/` to execute large obfuscated JS bundles. Fast startup + single binary makes it ideal for supply chain stagers.
+
+**Detection**: `oven-sh/bun`, `bun-v\d+\.\d+` in lifecycle hooks, `bunx` execution patterns.

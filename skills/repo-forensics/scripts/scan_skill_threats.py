@@ -40,6 +40,9 @@ PROMPT_INJECTION_PATTERNS = [
     (re.compile(r'(?i)act\s+as\s+(if|though)\s+you\s+(have|had)\s+no\s+(restrictions|limits|rules)'), "Restriction bypass directive"),
     (re.compile(r'(?i)forget\s+(everything|all|your)\s+(you|instructions|training|rules)'), "Memory wipe directive"),
     (re.compile(r'(?i)new\s+system\s+prompt'), "System prompt replacement"),
+    (re.compile(r'(?i)this\s+(is\s+)?(a\s+)?(safe|routine|standard|normal)\s+(operation|action|step|task|command)'), "LITL: False safety assertion (Checkmarx Lies-in-the-Loop, September 2025)"),
+    (re.compile(r'(?i)press\s+(enter|return|y|yes)\s+to\s+(continue|proceed|approve|confirm)'), "LITL: Approval coercion directive"),
+    (re.compile(r'(?i)(summarize|describe|present)\s+(this|the)\s+(action|command|operation)\s+as\s+(safe|benign|routine|harmless)'), "LITL: Action description tampering (HITL dialog forging)"),
 ]
 
 # ============================================================
@@ -99,6 +102,11 @@ PREREQUISITE_PATTERNS = [
     (re.compile(r'\$\{\{.*\}\}'), "Variable interpolation in hook script (command injection risk)"),
     (re.compile(r'(?i)(pip|npm|gem)\s+install\b.*(?:PreToolUse|PostToolUse|hook)'), "Hidden package install in hook context"),
     (re.compile(r'(?i)curl\s+-s\b.*\|\s*(eval|bash|sh)\b'), "Silent curl piped to eval/shell in hook"),
+    # Destructive command patterns (Shai-Hulud destructive fallback)
+    (re.compile(r'(?i)\bshred\b.*(-[uvzn]|--remove)'), "Destructive: File shredding command (Shai-Hulud destructive fallback)"),
+    (re.compile(r'(?i)\brm\s+(-[rf]+\s+)+(\$HOME|~/|~\b|/home/)'), "Destructive: Home directory deletion"),
+    (re.compile(r'(?i)\bcipher\s+/[wW]:'), "Destructive: Windows cipher wipe (Shai-Hulud destructive fallback)"),
+    (re.compile(r'(?i)\bdd\s+if=/dev/(zero|random)\s+of=/dev/'), "Destructive: Disk overwrite"),
 ]
 
 # ============================================================
@@ -129,6 +137,9 @@ PERSISTENCE_PATTERNS = [
     (re.compile(r'(?i)\.(bashrc|zshrc|profile|bash_profile|zprofile)'), "Shell RC file modification"),
     (re.compile(r'(?i)(HKEY_|RegOpenKey|RegSetValue)'), "Windows registry modification"),
     (re.compile(r'(?i)schtasks\s+/create'), "Windows scheduled task creation"),
+    (re.compile(r'(?i)config\.sh\s+--url.*--token'), "GHA Self-Hosted Runner Installation (Shai-Hulud backdoor pattern)"),
+    (re.compile(r'(?i)svc\.sh\s+(install|start)'), "GHA Runner Service Installation (Shai-Hulud backdoor pattern)"),
+    (re.compile(r'(?i)actions[/-]runner'), "GitHub Actions Runner Binary Reference"),
 ]
 
 # ============================================================
@@ -228,6 +239,10 @@ CLICKFIX_PATTERNS = [
     # AMOS stealer delivery patterns (ClawHavoc campaign)
     (re.compile(r'(?i)(OpenClawDriver|ClawDriver)'), "Fake prerequisite name (AMOS stealer delivery)"),
     (re.compile(r'(?i)(pass|password)\s*:\s*openclaw'), "Password-protected ZIP with known AMOS password"),
+    # TeamPCP C2 patterns (Bitwarden worm, April 2026)
+    (re.compile(r'LongLiveTheResistanceAgainstMachines'), "TeamPCP C2: GitHub commit dead-drop pattern (Bitwarden worm, April 2026)"),
+    (re.compile(r'beautifulcastle\s+[A-Za-z0-9+/=]'), "TeamPCP C2: RSA-signed command delivery (Bitwarden worm, April 2026)"),
+    (re.compile(r'docs-tpcp'), "TeamPCP: Exfiltration repo indicator (April 2026)"),
 ]
 
 # ============================================================
@@ -252,8 +267,12 @@ def scan_unicode_smuggling(content, rel_path):
     """Category 2: Detect zero-width chars, RTL overrides, homoglyphs."""
     findings = []
 
-    # Count zero-width characters
-    zw_count = len(ZERO_WIDTH_PATTERN.findall(content))
+    # Count zero-width characters (capped at 100 to prevent ReDoS on large files)
+    zw_count = 0
+    for _ in ZERO_WIDTH_PATTERN.finditer(content):
+        zw_count += 1
+        if zw_count >= 100:
+            break
     if zw_count >= 3:
         findings.append(core.Finding(
             scanner=SCANNER_NAME, severity="critical",
@@ -310,6 +329,8 @@ def scan_known_iocs(content, rel_path):
     c2_ips, malicious_domains = _get_ioc_lists()
 
     for i, line in enumerate(lines):
+        if len(line) > core.MAX_LINE_LENGTH:
+            continue
         for ip in c2_ips:
             if ip in line:
                 findings.append(core.Finding(
@@ -408,6 +429,23 @@ def scan_file(file_path, rel_path):
     # Cat 10: MCP tool definition injection (.json, .py, .ts, .js, .md)
     if ext in ('.json', '.py', '.ts', '.js', '.md', '.toml'):
         findings.extend(scan_patterns(content, rel_path, MCP_TOOL_INJECTION_PATTERNS, "mcp-tool-injection", "critical"))
+
+    # Category 11: LITL text padding detection (Checkmarx, September 2025)
+    # Detect excessively long tool descriptions or instructions designed to push
+    # malicious content off-screen in HITL approval dialogs
+    if ext in {'.md', '.txt', '.yml', '.yaml', '.toml'}:
+        lines = content.split('\n')
+        for i, line in enumerate(lines):
+            if len(line) > 2000 and any(kw in line.lower() for kw in ('approve', 'permission', 'confirm', 'execute', 'allow')):
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="high",
+                    title="LITL: Oversized Line with Action Keywords",
+                    description="Line exceeds 2000 chars and contains action/approval keywords. May be LITL text padding to push malicious commands off-screen (Checkmarx Lies-in-the-Loop attack).",
+                    file=rel_path, line=i + 1,
+                    snippet=line[:120],
+                    category="litl-attack"
+                ))
+                break
 
     return findings
 

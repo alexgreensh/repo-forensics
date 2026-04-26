@@ -19,6 +19,22 @@ SCANNER_NAME = "infra"
 # npm recommends >= 3 days to allow malware detection before install (npm 11+)
 MIN_RELEASE_AGE_DAYS = 3
 
+# Known compromised GitHub Actions (2025-2026 supply chain attacks)
+COMPROMISED_ACTIONS = {
+    "tj-actions/changed-files": "CVE-2025-30066: Secret exfiltration via CI logs (March 2025)",
+    "tj-actions/eslint-changed-files": "Compromised in same campaign as tj-actions/changed-files (March 2025)",
+    "reviewdog/action-setup": "Compromised March 2025 (tj-actions/changed-files chain)",
+    "reviewdog/action-shellcheck": "Compromised March 2025 (tj-actions/changed-files chain)",
+    "reviewdog/action-composite-template": "Compromised March 2025 (tj-actions/changed-files chain)",
+    "reviewdog/action-staticcheck": "Compromised March 2025 (tj-actions/changed-files chain)",
+    "reviewdog/action-ast-grep": "Compromised March 2025 (tj-actions/changed-files chain)",
+    "reviewdog/action-typos": "Compromised March 2025 (tj-actions/changed-files chain)",
+    "aquasecurity/trivy-action": "TeamPCP: 75 of 76 tags compromised (March 2026)",
+    "aquasecurity/setup-trivy": "TeamPCP: 7 tags compromised (March 2026)",
+    "checkmarx/kics-github-action": "TeamPCP: All tags pre-v2.1.20 compromised (March-April 2026)",
+    "checkmarx/ast-github-action": "TeamPCP: v2.3.28 and v2.3.35 compromised (March-April 2026)",
+}
+
 
 def _strip_shell_comment(line):
     """Strip shell comments, respecting single and double quotes.
@@ -168,8 +184,20 @@ def scan_github_actions(file_path, rel_path):
             if m:
                 action = m.group(1)
                 ref = m.group(2).strip()
-                # Official actions are lower risk, but third-party unpinned is high
-                is_official = action.startswith('actions/') or action.startswith('github/')
+                action_lower = action.lower()
+
+                # Check against known compromised actions
+                if action_lower in COMPROMISED_ACTIONS:
+                    findings.append(core.Finding(
+                        scanner=SCANNER_NAME, severity="critical",
+                        title=f"GHA: Known Compromised Action: {action}",
+                        description=f"This action was compromised in a supply chain attack. {COMPROMISED_ACTIONS[action_lower]}",
+                        file=rel_path, line=i+1, snippet=stripped[:120],
+                        category="compromised-action"
+                    ))
+
+                # Existing unpinned action checks...
+                is_official = action_lower.startswith('actions/') or action_lower.startswith('github/')
                 is_sha_pinned = bool(re.match(r'^[a-f0-9]{40}', ref))
 
                 if not is_sha_pinned and not is_official:
@@ -250,17 +278,19 @@ def scan_github_actions(file_path, rel_path):
 
         # Multi-line run block check
         content = ''.join(lines)
+        secret_lines = {f.line for f in findings if 'Secret' in f.title}
         for m in re.finditer(r'run:\s*[|>]-?\s*\n((?:\s+.*\n)+)', content):
             block = m.group(1)
             line_no = content[:m.start()].count('\n') + 1
             if '${{ secrets.' in block:
-                findings.append(core.Finding(
-                    scanner=SCANNER_NAME, severity="critical",
-                    title="GHA: Secret in Multi-line Run Block",
-                    description="Secret interpolated in multi-line shell script",
-                    file=rel_path, line=line_no, snippet=block.strip()[:120],
-                    category="ci-cd"
-                ))
+                if line_no not in secret_lines:
+                    findings.append(core.Finding(
+                        scanner=SCANNER_NAME, severity="critical",
+                        title="GHA: Secret in Multi-line Run Block",
+                        description="Secret interpolated in multi-line shell script",
+                        file=rel_path, line=line_no, snippet=block.strip()[:120],
+                        category="ci-cd"
+                    ))
             # Check for expression injection in multi-line blocks (attacker-controlled inputs)
             for expr in ('${{ github.event.', '${{ github.head_ref', '${{ github.event_path', '${{ inputs.'):
                 if expr in block:

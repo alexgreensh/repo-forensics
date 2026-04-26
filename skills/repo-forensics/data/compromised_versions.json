@@ -234,6 +234,37 @@
         "buildrunner-dev": ["*"],
         "eslint-verify-plugin": ["*"]
       }
+    },
+    "teampcp_wave1_mar_2026": {
+      "title": "TeamPCP Wave 1: Trivy to Checkmarx Actions compromise",
+      "ecosystem": "npm",
+      "disclosed": "2026-03",
+      "family": "credential stealer + lateral movement",
+      "reference": "https://checkmarx.com/blog/checkmarx-security-update/",
+      "notes": "TeamPCP used stolen Trivy CI credentials to compromise Checkmarx GitHub Actions. Payload harvested CI secrets, SSH keys, cloud credentials. Exfil to checkmarx[.]zone.",
+      "packages": {}
+    },
+    "teampcp_wave3_bitwarden_apr_2026": {
+      "title": "TeamPCP Wave 3: Bitwarden CLI npm worm",
+      "ecosystem": "npm",
+      "disclosed": "2026-04",
+      "family": "self-propagating worm + credential stealer",
+      "reference": "https://phoenix.security/teampcp-supply-chain-attack-trivy-checkmarx-github-actions-npm-canisterworm/",
+      "notes": "Cascading from Checkmarx Actions compromise. @bitwarden/cli 2026.4.0 contained self-propagating npm worm with Bun-based JS loader, GitHub commit dead-drop C2, and credential harvesting targeting AI coding assistant configs (~/.claude.json).",
+      "packages": {
+        "@bitwarden/cli": ["2026.4.0"]
+      }
+    },
+    "telnyx_wav_steg_apr_2026": {
+      "title": "Telnyx WAV steganography compromise",
+      "ecosystem": "pypi",
+      "disclosed": "2026-04",
+      "family": "steganographic payload delivery",
+      "reference": "https://checkmarx.com/zero-post/rapid-exploitation-and-clever-malware-in-the-supply-chain-last-week-in-appsec-2026-04-02/",
+      "notes": "TeamPCP compromised Telnyx PyPI package. Payload hidden in spec-valid WAV audio files (ringtone.wav/hangup.wav). XOR-encrypted executable decoded from audio frames.",
+      "packages": {
+        "telnyx": ["4.87.1", "4.87.2"]
+      }
     }
   }
 }

@@ -30,6 +30,12 @@ SAST_PATTERNS = {
         {"name": "Shell Injection (os)", "severity": "critical", "regex": re.compile(r'\bos\.(popen|system)\s*\('), "category": "shell-injection"},
         {"name": "SQL Injection Pattern", "severity": "high", "regex": re.compile(r'(?i)(execute|cursor\.execute)\s*\([^)]*(%s|%d|\+|\.format|f[\'"])'), "category": "injection"},
         {"name": "Hardcoded IP", "severity": "low", "regex": re.compile(r'[\'\"]\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}[\'"]'), "category": "hardcoded"},
+        {"name": "Model Confusion: Bare from_pretrained Path", "severity": "high", "regex": re.compile(r'from_pretrained\s*\(\s*[\'"][a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+[\'"]'), "category": "model-confusion"},
+        {"name": "Model Confusion: trust_remote_code=True", "severity": "critical", "regex": re.compile(r'trust_remote_code\s*=\s*True'), "category": "model-confusion"},
+        {"name": "Unsafe Model Load: torch.load weights_only=False", "severity": "critical", "regex": re.compile(r'torch\.load\s*\([^)]*weights_only\s*=\s*False'), "category": "model-confusion"},
+        {"name": "Unsafe Pickle Model Load", "severity": "high", "regex": re.compile(r'torch\.load\s*\((?![^)]*\bweights_only\b)'), "category": "model-confusion"},
+        {"name": "Destructive: shutil.rmtree on Home", "severity": "critical", "regex": re.compile(r'shutil\.rmtree\s*\(\s*(?:os\.path\.expanduser\([^)]*~|os\.environ[^)]*HOME)'), "category": "destructive-command"},
+        {"name": "PyPI Worm: Programmatic Publish", "severity": "critical", "regex": re.compile(r'twine\s+upload|subprocess.*twine.*upload|setup\.py\s+sdist\s+upload'), "category": "worm-propagation"},
     ],
     ".js": [
         {"name": "Dangerous Eval", "severity": "high", "regex": re.compile(r'\beval\s*\('), "category": "code-execution"},
@@ -46,6 +52,9 @@ SAST_PATTERNS = {
         {"name": "Path Traversal: Unsanitized File Serve", "severity": "high", "regex": re.compile(r'(?:sendFile|readFile|readFileSync|createReadStream)\s*\([^)]*(?:req\.path|req\.params|req\.query|req\.url)'), "category": "path-traversal"},
         {"name": "Path Traversal: Unsanitized path.join", "severity": "high", "regex": re.compile(r'path\.(?:join|resolve)\s*\([^)]*(?:req\.path|req\.params|req\.query|req\.url)'), "category": "path-traversal"},
         {"name": "Direct /proc Filesystem Access", "severity": "high", "regex": re.compile(r'''['"]/proc/self/environ['"]'''), "category": "path-traversal"},
+        {"name": "NPM Worm: Package Enumeration", "severity": "critical", "regex": re.compile(r'npm\s+access\s+ls-packages|npm\s+whoami|registry\.npmjs\.org.*/-/v1/search'), "category": "worm-propagation"},
+        {"name": "NPM Worm: Programmatic Publish", "severity": "critical", "regex": re.compile(r'npm\s+publish|child_process.*npm.*publish|exec.*npm\s+publish'), "category": "worm-propagation"},
+        {"name": "NPM Token Theft", "severity": "critical", "regex": re.compile(r'\.npmrc|NPM_TOKEN|npm_token|npm-token'), "category": "credential-theft"},
     ],
     ".ts": [
         {"name": "Dangerous Eval", "severity": "high", "regex": re.compile(r'\beval\s*\('), "category": "code-execution"},
@@ -93,6 +102,12 @@ SAST_PATTERNS = {
         {"name": "Pipe Exfiltration: sensitive file to network", "severity": "critical", "regex": re.compile(r'cat\s+[^\|]*(?:\.env|credential|password|secret|\.ssh|\.aws|\.gnupg|id_rsa|shadow)[^\|]*\|.*\b(curl|wget|nc|ncat)\b', re.IGNORECASE), "category": "exfiltration"},
         {"name": "Redirect to /dev/tcp", "severity": "critical", "regex": re.compile(r'>\s*/dev/tcp/', re.IGNORECASE), "category": "exfiltration"},
         {"name": "Reverse shell pattern", "severity": "critical", "regex": re.compile(r'bash\s+-i\s+>&\s*/dev/tcp/|nc\s+(-e|--exec)\s+/bin/(ba)?sh', re.IGNORECASE), "category": "exfiltration"},
+        {"name": "Destructive: File Shredding", "severity": "critical", "regex": re.compile(r'\bshred\s+(-[uvzn\s]+)*.*(\$HOME|~/|/home/)'), "category": "destructive-command"},
+        {"name": "Destructive: Home Directory Wipe", "severity": "critical", "regex": re.compile(r'\brm\s+(-[rf]+\s+)+(\$HOME|~/|~\b|/home/)'), "category": "destructive-command"},
+        {"name": "Destructive: Disk Overwrite", "severity": "critical", "regex": re.compile(r'\bdd\s+if=/dev/(zero|random|urandom)\s+of=/dev/(sd|nvme|vd)'), "category": "destructive-command"},
+        {"name": "Destructive: Windows Cipher Wipe", "severity": "critical", "regex": re.compile(r'\bcipher\s+/[wW]:', re.IGNORECASE), "category": "destructive-command"},
+        {"name": "GHA Runner Backdoor: Config Script", "severity": "critical", "regex": re.compile(r'config\.sh\s+--url\s+https://github\.com/.*--token'), "category": "runner-backdoor"},
+        {"name": "GHA Runner Backdoor: Service Install", "severity": "high", "regex": re.compile(r'svc\.sh\s+(install|start)'), "category": "runner-backdoor"},
     ],
 }
 

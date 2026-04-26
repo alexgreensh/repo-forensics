@@ -8,6 +8,7 @@ Created by Alex Greenshpun
 """
 
 import os
+import re
 import sys
 import json
 import hashlib
@@ -92,7 +93,7 @@ def load_ignore_patterns(repo_path):
                     line = line.strip()
                     if line and not line.startswith('#'):
                         patterns.append(line)
-        except Exception as e:
+        except (OSError, UnicodeDecodeError) as e:
             print(f"[!] Warning: Could not read .forensicsignore: {e}", file=sys.stderr)
 
     return patterns
@@ -281,20 +282,18 @@ def walk_repo(repo_path, ignore_patterns=None, skip_dirs=None, skip_lockfiles=Tr
 # aggregate_json.py before correlate().
 # (Fix for 2026-04-05 security review A6.)
 
-import re as _re_trifecta
-
 # Each regex matches ONLY actionable code patterns — method calls with parens,
 # specific file paths, or named constant references. Bare descriptive keywords
 # (`webhook`, `api_key`, `browser data`, `reverse shell`, `keychain`) were
 # removed in the 2026-04-05 torture review (CRC-F2) because they matched
 # legitimate code comments, variable names, and doc strings and caused
 # false-positive Rule 19 hits on every CI/integration test repo.
-_TRIFECTA_EXEC_RE = _re_trifecta.compile(
+_TRIFECTA_EXEC_RE = re.compile(
     r'(?:os\.system\s*\(|subprocess\.(?:run|call|Popen|check_output|check_call)\s*\(|'
     r'child_process\.(?:exec|spawn|execSync)\s*\(|(?<![a-zA-Z_])eval\s*\(|'
     r'(?<![a-zA-Z_])exec\s*\(|shell\s*=\s*True)'
 )
-_TRIFECTA_NETWORK_RE = _re_trifecta.compile(
+_TRIFECTA_NETWORK_RE = re.compile(
     # Only actionable outbound network primitives with concrete call syntax.
     # Removed bare `webhook`, `reverse[\s_-]?shell`, and `node-fetch` which
     # were prose-level keywords that matched comments and docstrings.
@@ -304,7 +303,7 @@ _TRIFECTA_NETWORK_RE = _re_trifecta.compile(
     r'\bfetch\s*\(\s*[\'"]https?://|'
     r'/dev/tcp/)'
 )
-_TRIFECTA_CREDENTIAL_RE = _re_trifecta.compile(
+_TRIFECTA_CREDENTIAL_RE = re.compile(
     # Specific file paths and named environment variables. Removed bare
     # `api_key`, `private_key`, `browser data`, `keychain` which matched
     # legitimate variable names and comments in any file with auth code.
@@ -494,6 +493,16 @@ def correlate(findings):
     phantom_dep_keywords = {"phantom-dependency", "phantom dep", "shadow dependency"}
     pipe_exfil_keywords = {"pipe exfiltration", "reverse shell", "/dev/tcp", "pipe-exfiltration"}
     openclaw_keywords = {"tool-poisoning", "agent-injection", "frontmatter", "clawhavoc-delivery", "clawhubignore-bypass"}
+
+    # Rules 22-27: Checkmarx-sourced compound threat keywords
+    command_jacking_keywords = {"command-jacking", "shadows system command"}
+    model_confusion_keywords = {"model-confusion", "from_pretrained", "trust_remote_code"}
+    compromised_action_keywords = {"compromised-action", "compromised action"}
+    secrets_keywords = {"secret", "credential", "token", "password", "api.key"}
+    steg_keywords = {"audio-steganography", "steganography", "audio steg"}
+    worm_keywords = {"worm-propagation", "npm publish", "package enumeration"}
+    npm_token_keywords = {"npmrc", "npm_token", "npm-token", "credential-theft"}
+    destructive_keywords = {"destructive-command", "shred", "cipher /w", "disk overwrite", "home directory"}
 
     def has_category(file_findings, keywords, exclude_scanner=None):
         for f in file_findings:
@@ -891,6 +900,84 @@ def correlate(findings):
                 line=0,
                 snippet="[compound: devcontainer host secret + credential access]",
                 category="compound-threat"
+            ))
+
+        # Rule 22: Command-Jacking (entry point shadows system command)
+        if has_category(file_findings, command_jacking_keywords) and has_category(file_findings, network_keywords):
+            correlated.append(Finding(
+                scanner="correlation",
+                severity="critical",
+                title="Command-Jacking + Network Access",
+                description="Package shadows a system CLI command AND makes network calls. Combined: command wrapping with credential exfiltration (Checkmarx Command-Jacking, October 2024).",
+                file=filepath,
+                line=0,
+                snippet="[compound: command-jacking + network call]",
+                category="command-jacking-chain"
+            ))
+
+        # Rule 23: Model Confusion + trust_remote_code
+        if has_category(file_findings, model_confusion_keywords) and has_category(file_findings, exec_keywords):
+            correlated.append(Finding(
+                scanner="correlation",
+                severity="critical",
+                title="Model Confusion + Code Execution",
+                description="File loads AI models with bare paths AND enables code execution (trust_remote_code or torch.load). Combined: full RCE via model registry confusion (Checkmarx Model Confusion, January 2026).",
+                file=filepath,
+                line=0,
+                snippet="[compound: model confusion + code execution]",
+                category="model-confusion-chain"
+            ))
+
+        # Rule 24: Compromised GitHub Action + secrets exposure
+        if has_category(file_findings, compromised_action_keywords) and has_category(file_findings, secrets_keywords):
+            correlated.append(Finding(
+                scanner="correlation",
+                severity="critical",
+                title="Compromised Action + Secret Access",
+                description="Workflow uses a known-compromised GitHub Action AND handles secrets. Combined: direct secret exfiltration via supply chain (TeamPCP/tj-actions pattern).",
+                file=filepath,
+                line=0,
+                snippet="[compound: compromised action + secrets]",
+                category="compromised-action-chain"
+            ))
+
+        # Rule 25: Audio steganography + network call
+        if has_category(file_findings, steg_keywords) and has_category(file_findings, network_keywords):
+            correlated.append(Finding(
+                scanner="correlation",
+                severity="critical",
+                title="Audio Steganography + Network Fetch",
+                description="Audio file contains hidden executable content AND network calls detected in same context. Combined: steganographic payload delivery (TeamPCP Telnyx pattern, March 2026).",
+                file=filepath,
+                line=0,
+                snippet="[compound: audio steganography + network]",
+                category="steganography-chain"
+            ))
+
+        # Rule 26: NPM worm propagation pattern
+        if has_category(file_findings, worm_keywords) and has_category(file_findings, npm_token_keywords):
+            correlated.append(Finding(
+                scanner="correlation",
+                severity="critical",
+                title="NPM Worm: Publish + Token Access",
+                description="Code contains npm publish capabilities AND accesses npm tokens. Combined: self-propagating npm worm pattern (Shai-Hulud, September 2025).",
+                file=filepath,
+                line=0,
+                snippet="[compound: npm publish + token theft]",
+                category="worm-propagation-chain"
+            ))
+
+        # Rule 27: Destructive command + credential failure
+        if has_category(file_findings, destructive_keywords) and has_category(file_findings, env_keywords):
+            correlated.append(Finding(
+                scanner="correlation",
+                severity="critical",
+                title="Destructive Fallback + Credential Access",
+                description="File contains destructive commands AND credential access. Combined: destructive fallback when exfiltration fails (Shai-Hulud v2 pattern, November 2025).",
+                file=filepath,
+                line=0,
+                snippet="[compound: destructive command + credential access]",
+                category="destructive-fallback-chain"
             ))
 
     return correlated
