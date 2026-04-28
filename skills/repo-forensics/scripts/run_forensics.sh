@@ -98,13 +98,14 @@ fi
 SKILL_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Kill orphaned scanners from previous runs (stuck beyond SCANNER_TIMEOUT)
+# shellcheck disable=SC2009  # pgrep can't provide etime; we need ps output for age filtering
 _stale_pids=$(ps ax -o pid=,etime=,command= 2>/dev/null | grep '[r]epo-forensics/.*scan_.*\.py' | awk '{
     split($2, t, "[-:]"); n = length(t)
     secs = t[n]+0 + (t[n-1]+0)*60
     if (n >= 3) secs += (t[n-2]+0)*3600
     if (n >= 4) secs += (t[n-3]+0)*86400
     if (secs > 150) print $1
-}')
+}' || true)
 if [ -n "$_stale_pids" ]; then
     echo "[repo-forensics] Cleaning up stale scanner processes from a previous run..." >&2
     echo "$_stale_pids" | xargs kill 2>/dev/null || true
@@ -119,7 +120,7 @@ fi
 # Handle --update-iocs before scanning
 if $UPDATE_IOCS; then
     echo "[*] Updating IOC database..."
-    python3 "$SKILL_DIR/ioc_manager.py" --update
+    python3 "$SKILL_DIR/ioc_manager.py" --update || echo "[!] IOC update failed, scanning with cached data" >&2
 fi
 
 # Handle --update-vulns (CISA KEV) before scanning
@@ -128,7 +129,8 @@ if $UPDATE_VULNS && ! $OFFLINE; then
     python3 "$SKILL_DIR/vuln_feed.py" --update || true
 fi
 TMPDIR=$(mktemp -d)
-cleanup() { trap - EXIT INT TERM; kill 0 2>/dev/null; wait 2>/dev/null; exec 3>&- 2>/dev/null; rm -rf "$TMPDIR"; }
+# shellcheck disable=SC2329  # invoked indirectly via trap
+cleanup() { trap - EXIT INT TERM; jobs -p | xargs kill 2>/dev/null; wait 2>/dev/null; exec 3>&- 2>/dev/null; rm -rf "$TMPDIR"; }
 trap cleanup EXIT INT TERM
 
 if [ "$FORMAT" != "json" ]; then
@@ -166,9 +168,9 @@ for ((i=0; i<MAX_JOBS; i++)); do echo >&3; done
 
 throttled_run() {
     read -r -u 3
+    trap 'echo >&3' RETURN
     local _rc=0
     "$@" || _rc=$?
-    echo >&3
     return $_rc
 }
 
@@ -199,6 +201,7 @@ if [ -d "$SKILL_DIR/.git" ] || [ -f "$SKILL_DIR/../../.git" ] || [ -f "$SKILL_DI
     fi
 fi
 
+# shellcheck disable=SC2329  # invoked indirectly via throttled_run
 run_scanner() {
     local name="$1"
     local script="$2"
@@ -212,7 +215,7 @@ run_scanner() {
     local internal_format="json"
 
     local -a scanner_args=()
-    [ -n "$extra_args" ] && scanner_args+=($extra_args)
+    [ -n "$extra_args" ] && scanner_args+=("$extra_args")
 
     if [ "$name" = "dependencies" ]; then
         [ -n "$PACKAGE_LIST_FILE" ] && scanner_args+=("--package-list=$PACKAGE_LIST_FILE")
@@ -226,7 +229,7 @@ run_scanner() {
         python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$internal_format" ${scanner_args[@]+"${scanner_args[@]}"} 3>&- > "$output_file" 2>> "$error_file"
     fi
     local exit_code=$?
-    echo $exit_code > "$exit_file"
+    echo "$exit_code" > "$exit_file"
 
     # Per-scanner progress line (TTY only, silent in CI/piped output)
     if $PROGRESS; then
