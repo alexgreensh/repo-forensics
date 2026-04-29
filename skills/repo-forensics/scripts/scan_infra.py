@@ -179,6 +179,17 @@ def scan_github_actions(file_path, rel_path):
                     category="ci-cd"
                 ))
 
+            # Mini Shai-Hulud: discussion-triggered C2 workflow (TeamPCP Wave 6)
+            if re.match(r'discussion\s*:', stripped):
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="high",
+                    title="GHA: Discussion-Triggered Workflow",
+                    description="Workflow triggers on discussion events. Mini Shai-Hulud uses discussion.yaml as a C2 channel "
+                        "with expression injection via discussion body (TeamPCP Wave 6)",
+                    file=rel_path, line=i+1, snippet=stripped[:120],
+                    category="ci-cd"
+                ))
+
             # Unpinned third-party actions (not pinned to SHA)
             m = re.match(r'\s*-?\s*uses:\s*([^@\s]+)@(.+)', stripped)
             if m:
@@ -255,7 +266,13 @@ def scan_github_actions(file_path, rel_path):
                 ))
 
             # GHA expression injection: attacker-controlled inputs in run blocks
-            _injection_exprs = ('${{ github.event.', '${{ github.head_ref', '${{ github.event_path', '${{ inputs.')
+            _injection_exprs = (
+                '${{ github.event.', '${{ github.head_ref',
+                '${{ github.event_path', '${{ inputs.',
+                '${{ github.event.discussion.body',
+                '${{ github.event.discussion.title',
+                '${{ github.event.comment.body',
+            )
             for _expr in _injection_exprs:
                 if _expr in stripped and ('run:' in stripped or 'run: |' in stripped):
                     findings.append(core.Finding(
@@ -266,6 +283,16 @@ def scan_github_actions(file_path, rel_path):
                         category="ci-cd"
                     ))
                     break
+
+            # Mini Shai-Hulud: OIDC token exchange in workflow (TeamPCP Wave 6)
+            if re.search(r'ACTIONS_ID_TOKEN_REQUEST_TOKEN|ACTIONS_ID_TOKEN_REQUEST_URL|oidc/token/exchange', stripped):
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="critical",
+                    title="GHA: OIDC Token Exchange",
+                    description="Workflow accesses OIDC token exchange endpoints. Mini Shai-Hulud abused this to mint npm publish tokens (TeamPCP Wave 6)",
+                    file=rel_path, line=i+1, snippet=stripped[:120],
+                    category="ci-token-abuse"
+                ))
 
             if re.search(r'\brun\s*:\s*(?:.+\s)?npm\s+(?:install|i)(?=\s|$)', _strip_shell_comment(stripped)):
                 findings.append(core.Finding(

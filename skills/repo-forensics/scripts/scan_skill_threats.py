@@ -239,10 +239,20 @@ CLICKFIX_PATTERNS = [
     # AMOS stealer delivery patterns (ClawHavoc campaign)
     (re.compile(r'(?i)(OpenClawDriver|ClawDriver)'), "Fake prerequisite name (AMOS stealer delivery)"),
     (re.compile(r'(?i)(pass|password)\s*:\s*openclaw'), "Password-protected ZIP with known AMOS password"),
-    # TeamPCP C2 patterns (Bitwarden worm, April 2026)
+    # TeamPCP C2 patterns (Bitwarden worm + Mini Shai-Hulud, April 2026)
     (re.compile(r'LongLiveTheResistanceAgainstMachines'), "TeamPCP C2: GitHub commit dead-drop pattern (Bitwarden worm, April 2026)"),
     (re.compile(r'beautifulcastle\s+[A-Za-z0-9+/=]'), "TeamPCP C2: RSA-signed command delivery (Bitwarden worm, April 2026)"),
     (re.compile(r'docs-tpcp'), "TeamPCP: Exfiltration repo indicator (April 2026)"),
+    # Mini Shai-Hulud IOC strings (TeamPCP Wave 6, April 29 2026)
+    (re.compile(r'OhNoWhatsGoingOnWithGitHub'), "Mini Shai-Hulud: GitHub commit dead-drop token sharing marker (TeamPCP Wave 6)"),
+    (re.compile(r'A Mini Shai-Hulud has Appeared'), "Mini Shai-Hulud: Exfiltration repo description marker (TeamPCP Wave 6)"),
+    (re.compile(r'ctf-scramble-v2'), "Mini Shai-Hulud: PBKDF2 obfuscation salt (TeamPCP shared indicator across Waves 5-6)"),
+    (re.compile(r'tmp\.987654321\.lock'), "Mini Shai-Hulud: Anti-re-execution lock file (TeamPCP Wave 6)"),
+    (re.compile(r'\bSHA1HULUD\b'), "Mini Shai-Hulud: Self-hosted GHA runner name (TeamPCP Wave 6)"),
+    (re.compile(r'\.dev-env/(config|run)\.(sh|cmd)'), "Mini Shai-Hulud: GHA runner installation path (TeamPCP Wave 6)"),
+    (re.compile(r'api\.cloud-aws\.adc-e\.uk'), "Mini Shai-Hulud: Attacker-controlled C2 domain (TeamPCP Wave 6)"),
+    (re.compile(r'Exiting as russian language detected'), "TeamPCP: Anti-attribution locale check (Waves 5-6)"),
+    (re.compile(r'__DAEMONIZED'), "Mini Shai-Hulud: Anti-re-execution environment variable guard (TeamPCP Wave 6)"),
 ]
 
 # ============================================================

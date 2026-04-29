@@ -21,7 +21,8 @@
     "discord.com/api/webhooks",
     "hooks.slack.com/services",
     "eo1n0jq9qgggt.m.pipedream.net",
-    "sfrclak.com"
+    "sfrclak.com",
+    "api.cloud-aws.adc-e.uk"
   ],
   "malicious_npm_packages": [
     "rimarf",

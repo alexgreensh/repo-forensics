@@ -265,6 +265,20 @@
       "packages": {
         "telnyx": ["4.87.1", "4.87.2"]
       }
+    },
+    "mini_shai_hulud_apr_2026": {
+      "title": "Mini Shai-Hulud: SAP CAP framework worm (TeamPCP Wave 6)",
+      "ecosystem": "npm",
+      "disclosed": "2026-04-29",
+      "family": "self-propagating worm + credential stealer + CI abuse",
+      "reference": "https://socket.dev/blog/mini-shai-hulud-cap-js-supply-chain",
+      "notes": "TeamPCP Wave 6. Cascading from Bitwarden CLI compromise (Wave 5). Preinstall hook downloads Bun 1.3.13, executes 11.7MB obfuscated JS (PBKDF2+SHA256 cipher, salt 'ctf-scramble-v2'). Steals credentials from 39+ file paths (GitHub, npm, AWS, Azure, GCP, SSH, Kubernetes, Terraform, crypto wallets, FileZilla). Exfiltrates via victim's own GitHub account (creates public repos with description 'A Mini Shai-Hulud has Appeared'). Injects Claude Code SessionStart hooks and VS Code folderOpen tasks for persistence. Installs self-hosted GHA runner named 'SHA1HULUD' with discussion.yaml C2 workflow. SAP CI abused via OIDC token exchange to publish @cap-js packages.",
+      "packages": {
+        "@cap-js/db-service": ["2.10.1"],
+        "@cap-js/postgres": ["2.2.2"],
+        "@cap-js/sqlite": ["2.2.2"],
+        "mbt": ["1.2.48"]
+      }
     }
   }
 }

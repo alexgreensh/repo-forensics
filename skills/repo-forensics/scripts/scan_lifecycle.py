@@ -408,6 +408,100 @@ def scan_pth_files(file_path, rel_path):
     return findings
 
 
+def scan_claude_settings(file_path, rel_path):
+    """Detect malicious Claude Code hook injection in .claude/settings.json.
+
+    Mini Shai-Hulud (TeamPCP Wave 6, April 2026) injects SessionStart hooks
+    that execute dropper scripts on every Claude Code session start.
+    """
+    findings = []
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        hooks = data.get('hooks', {})
+        for event_name, event_hooks in hooks.items():
+            if not isinstance(event_hooks, list):
+                continue
+            for hook_entry in event_hooks:
+                if not isinstance(hook_entry, dict):
+                    continue
+                # Support both nested format ({matcher, hooks: [{command}]})
+                # and flat format ({command, type}) used in Claude Code docs
+                if 'hooks' in hook_entry:
+                    hook_list = hook_entry.get('hooks', [])
+                elif 'command' in hook_entry:
+                    hook_list = [hook_entry]
+                else:
+                    continue
+                for hook in hook_list:
+                    if not isinstance(hook, dict):
+                        continue
+                    cmd = hook.get('command', '')
+                    if not cmd:
+                        continue
+                    for pattern, desc in SUSPICIOUS_COMMANDS:
+                        if pattern.search(cmd):
+                            findings.append(core.Finding(
+                                scanner=SCANNER_NAME, severity="critical",
+                                title=f"Claude Code Hook Injection: {event_name}",
+                                description=f"Claude Code {event_name} hook contains {desc}. "
+                                    "Mini Shai-Hulud injects SessionStart hooks to re-execute "
+                                    "dropper on every session (TeamPCP Wave 6, April 2026)",
+                                file=rel_path, line=0,
+                                snippet=f"{event_name}: {cmd[:120]}",
+                                category="ai-tool-persistence"
+                            ))
+                            break
+                    if re.search(r'setup\.mjs|execution\.js|config\.mjs', cmd):
+                        findings.append(core.Finding(
+                            scanner=SCANNER_NAME, severity="critical",
+                            title="Claude Code Hook: Shai-Hulud Dropper",
+                            description="Claude Code hook executes known TeamPCP dropper filename",
+                            file=rel_path, line=0,
+                            snippet=f"{event_name}: {cmd[:120]}",
+                            category="ai-tool-persistence"
+                        ))
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError, TypeError, AttributeError):
+        pass
+    return findings
+
+
+def scan_vscode_tasks(file_path, rel_path):
+    """Detect malicious VS Code tasks with folderOpen auto-run.
+
+    Mini Shai-Hulud injects tasks.json with runOptions.runOn: folderOpen
+    to execute dropper when a developer opens the project in VS Code.
+    """
+    findings = []
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        for task in data.get('tasks', []):
+            run_options = task.get('runOptions', {})
+            if run_options.get('runOn') == 'folderOpen':
+                cmd = task.get('command', '')
+                label = task.get('label', '')
+                has_suspicious = any(p.search(cmd) for p, _ in SUSPICIOUS_COMMANDS)
+                if has_suspicious or re.search(r'setup\.mjs|execution\.js|config\.mjs', cmd):
+                    severity = "critical"
+                else:
+                    severity = "medium"
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity=severity,
+                    title="VS Code Task: Auto-Execute on Folder Open",
+                    description=f"Task '{label}' runs automatically when project is opened. "
+                        "Mini Shai-Hulud uses this as a persistence vector (TeamPCP Wave 6)",
+                    file=rel_path, line=0,
+                    snippet=f"runOn: folderOpen, command: {cmd[:100]}",
+                    category="ai-tool-persistence"
+                ))
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError, TypeError, AttributeError):
+        pass
+    return findings
+
+
 def main():
     args = core.parse_common_args(sys.argv, "Lifecycle Script Scanner")
     repo_path = args.repo_path
@@ -428,7 +522,8 @@ def main():
             all_findings.extend(scan_pyproject_toml(file_path, rel_path))
         elif basename.endswith('.pth'):
             all_findings.extend(scan_pth_files(file_path, rel_path))
-        elif basename in ('setup.js', 'install.js', 'postinstall.js', 'preinstall.js'):
+        elif basename in ('setup.js', 'install.js', 'postinstall.js', 'preinstall.js',
+                          'setup.mjs', 'config.mjs'):
             all_findings.extend(scan_js_anti_forensics(file_path, rel_path))
         elif basename == 'binding.gyp':
             all_findings.append(core.Finding(
@@ -439,6 +534,10 @@ def main():
                 snippet="binding.gyp present (implicit install-time execution)",
                 category="lifecycle-hook"
             ))
+        elif basename == 'settings.json' and (os.sep + '.claude' + os.sep) in (os.sep + rel_path):
+            all_findings.extend(scan_claude_settings(file_path, rel_path))
+        elif basename == 'tasks.json' and (os.sep + '.vscode' + os.sep) in (os.sep + rel_path):
+            all_findings.extend(scan_vscode_tasks(file_path, rel_path))
 
     core.output_findings(all_findings, args.format, SCANNER_NAME)
 

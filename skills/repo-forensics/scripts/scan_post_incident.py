@@ -7,10 +7,11 @@ Checks npm cache, install logs, node_modules artifacts, host IOCs, and persisten
 Created by Alex Greenshpun
 """
 
+import json
 import os
-import re
 import sys
 import glob
+import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import forensics_core as core
@@ -26,6 +27,15 @@ MALICIOUS_PACKAGES = {
     "mcp-serever": "SANDWORM_MODE campaign",
 }
 
+# Packages where only specific versions are compromised (legitimate at other versions).
+# scan_node_modules checks installed version before flagging.
+VERSION_PINNED_MALICIOUS = {
+    "@cap-js/db-service": {"versions": ["2.10.1"], "desc": "Mini Shai-Hulud worm (TeamPCP Wave 6, April 2026)"},
+    "@cap-js/postgres": {"versions": ["2.2.2"], "desc": "Mini Shai-Hulud worm (TeamPCP Wave 6, April 2026)"},
+    "@cap-js/sqlite": {"versions": ["2.2.2"], "desc": "Mini Shai-Hulud worm (TeamPCP Wave 6, April 2026)"},
+    "mbt": {"versions": ["1.2.48"], "desc": "Mini Shai-Hulud worm (TeamPCP Wave 6, April 2026)"},
+}
+
 # Known RAT binary paths (per platform)
 RAT_BINARY_PATHS = [
     "/Library/Caches/com.apple.act.mond",              # macOS axios RAT
@@ -37,12 +47,24 @@ RAT_BINARY_PATHS = [
 C2_INDICATORS = [
     "sfrclak.com",
     "142.11.206.73",
+    "api.cloud-aws.adc-e.uk",
 ]
 
 # Compromised versions (version in lockfile vs tampered package.json)
 VERSION_MISMATCHES = {
     "plain-crypto-js": {"real": "4.2.1", "tampered": "4.2.0"},
 }
+
+
+def _read_installed_version(pkg_dir):
+    """Read the version from an installed package's package.json."""
+    pj = os.path.join(pkg_dir, "package.json")
+    try:
+        with open(pj, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        return data.get("version", "")
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return ""
 
 
 def scan_node_modules(repo_path):
@@ -52,6 +74,8 @@ def scan_node_modules(repo_path):
         if 'node_modules' not in root:
             dirs[:] = [d for d in dirs if d != '.git']
             continue
+
+        # Entirely malicious packages (any version is bad)
         for pkg_name, description in MALICIOUS_PACKAGES.items():
             pkg_dir = os.path.join(root, pkg_name)
             if os.path.isdir(pkg_dir):
@@ -64,6 +88,23 @@ def scan_node_modules(repo_path):
                     snippet=f"node_modules/{pkg_name}/ directory present",
                     category="post-incident"
                 ))
+
+        # Version-pinned packages (only specific versions are compromised)
+        for pkg_name, info in VERSION_PINNED_MALICIOUS.items():
+            pkg_dir = os.path.join(root, pkg_name)
+            if os.path.isdir(pkg_dir):
+                installed_ver = _read_installed_version(pkg_dir)
+                if installed_ver in info["versions"]:
+                    rel = os.path.relpath(pkg_dir, repo_path)
+                    findings.append(core.Finding(
+                        scanner=SCANNER_NAME, severity="critical",
+                        title=f"Compromised Package Installed: {pkg_name}@{installed_ver}",
+                        description=f"Compromised version {installed_ver} installed ({info['desc']}). The dropper likely already executed.",
+                        file=rel, line=0,
+                        snippet=f"node_modules/{pkg_name}@{installed_ver}",
+                        category="post-incident"
+                    ))
+
         dirs[:] = []  # Don't recurse deeper into node_modules
     return findings
 
@@ -90,8 +131,11 @@ def scan_npm_cache():
                 try:
                     with open(fpath, 'r', encoding='utf-8', errors='replace') as f:
                         content = f.read(4096)
+
+                    # Entirely malicious packages (any version)
                     for pkg_name, desc in MALICIOUS_PACKAGES.items():
-                        if pkg_name in content:
+                        # Match on tarball URL pattern to avoid substring false positives
+                        if f"/{pkg_name}/-/" in content or f"/{pkg_name}" in content.split('"key"')[0:1]:
                             findings.append(core.Finding(
                                 scanner=SCANNER_NAME, severity="critical",
                                 title=f"Compromised Package in npm Cache: {pkg_name}",
@@ -102,6 +146,21 @@ def scan_npm_cache():
                                 category="post-incident"
                             ))
                             break
+
+                    # Version-pinned packages (check version in tarball URL)
+                    for pkg_name, info in VERSION_PINNED_MALICIOUS.items():
+                        for ver in info["versions"]:
+                            tarball_fragment = f"{pkg_name}/-/{pkg_name.split('/')[-1]}-{ver}.tgz"
+                            if tarball_fragment in content:
+                                findings.append(core.Finding(
+                                    scanner=SCANNER_NAME, severity="critical",
+                                    title=f"Compromised Package in npm Cache: {pkg_name}@{ver}",
+                                    description=f"npm cache contains tarball for '{pkg_name}@{ver}' ({info['desc']}). Compromised version was downloaded.",
+                                    file=os.path.relpath(fpath, os.path.expanduser("~")),
+                                    line=0,
+                                    snippet=f"Cache entry: {tarball_fragment}",
+                                    category="post-incident"
+                                ))
                 except (OSError, UnicodeDecodeError):
                     continue
     return findings
@@ -142,6 +201,51 @@ def scan_npm_logs():
                     ))
         except (OSError, UnicodeDecodeError):
             continue
+    return findings
+
+
+def scan_shai_hulud_artifacts():
+    """Check for Mini Shai-Hulud (TeamPCP Wave 6) post-incident artifacts."""
+    findings = []
+
+    # Anti-re-execution lock file
+    lock_path = os.path.join(tempfile.gettempdir(), "tmp.987654321.lock")
+    if os.path.exists(lock_path):
+        findings.append(core.Finding(
+            scanner=SCANNER_NAME, severity="critical",
+            title="Mini Shai-Hulud: Lock File Found",
+            description=f"Anti-re-execution lock file exists at {lock_path}. "
+                "This machine was infected by the Mini Shai-Hulud worm (TeamPCP Wave 6)",
+            file=lock_path, line=0,
+            snippet=f"Lock file present: {lock_path}",
+            category="post-incident"
+        ))
+
+    # Self-hosted runner installation directory
+    runner_dir = os.path.expanduser("~/.dev-env")
+    if os.path.isdir(runner_dir):
+        runner_file = os.path.join(runner_dir, ".runner")
+        confirmed = False
+        if os.path.exists(runner_file) and not os.path.islink(runner_file):
+            try:
+                with open(runner_file, 'r', encoding='utf-8', errors='replace') as f:
+                    content = f.read(4096)
+                if 'SHA1HULUD' in content:
+                    confirmed = True
+            except OSError:
+                pass
+        severity = "critical" if confirmed else "high"
+        desc = ("Runner config contains 'SHA1HULUD' name (confirmed TeamPCP Wave 6)"
+                if confirmed else "GHA self-hosted runner directory exists (investigate)")
+        findings.append(core.Finding(
+            scanner=SCANNER_NAME, severity=severity,
+            title="Mini Shai-Hulud: GHA Runner Installation",
+            description=f"{desc} at {runner_dir}",
+            file=runner_dir, line=0,
+            snippet=f"Directory exists: {runner_dir}",
+            category="post-incident"
+        ))
+
     return findings
 
 
@@ -213,6 +317,7 @@ def main():
     all_findings.extend(scan_npm_cache())
     all_findings.extend(scan_npm_logs())
     all_findings.extend(scan_host_artifacts())
+    all_findings.extend(scan_shai_hulud_artifacts())
 
     core.output_findings(all_findings, args.format, SCANNER_NAME)
 

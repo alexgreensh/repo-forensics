@@ -980,6 +980,34 @@ def correlate(findings):
                 category="destructive-fallback-chain"
             ))
 
+        # Rule 28: AI tool persistence + credential theft (Mini Shai-Hulud, April 2026)
+        ai_persistence_keywords = {"ai-tool-persistence", "claude code hook", "sessionstart", "folder open", "vscode task"}
+        if has_category(file_findings, ai_persistence_keywords) and has_category(file_findings, env_keywords | sensitive_read_keywords):
+            correlated.append(Finding(
+                scanner="correlation",
+                severity="critical",
+                title="AI Tool Persistence + Credential Theft",
+                description="AI tool hook injection combined with credential access. Combined: Mini Shai-Hulud persistence pattern. Infected repos re-execute dropper on every Claude Code/VS Code session (TeamPCP Wave 6, April 2026).",
+                file=filepath,
+                line=0,
+                snippet="[compound: AI tool hook + credential access]",
+                category="ai-persistence-chain"
+            ))
+
+        # Rule 29: Git-based exfiltration + credential collection (Mini Shai-Hulud, April 2026)
+        git_exfil_keywords = {"git-exfiltration", "repo creation", "content push", "commit search"}
+        if has_category(file_findings, git_exfil_keywords) and has_category(file_findings, env_keywords | sensitive_read_keywords):
+            correlated.append(Finding(
+                scanner="correlation",
+                severity="critical",
+                title="Git-Based Data Exfiltration Chain",
+                description="GitHub API calls for repo creation/content push combined with credential access. Combined: Mini Shai-Hulud exfiltrates stolen data by committing to victim's own GitHub account (TeamPCP Wave 6, April 2026).",
+                file=filepath,
+                line=0,
+                snippet="[compound: git API exfil + credential access]",
+                category="git-exfiltration-chain"
+            ))
+
     return correlated
 
 

@@ -27,15 +27,15 @@ PYTHON_SOURCES = [
     (re.compile(r'(\w+)\s*=\s*os\.environ\.get\('), "os.environ.get()"),
     (re.compile(r'(\w+)\s*=\s*os\.environ\['), "os.environ[] access"),
     (re.compile(r'(\w+)\s*=\s*getattr\s*\(\s*os\s*,\s*["\']environ["\']\)'), "getattr(os, 'environ') evasion"),
-    (re.compile(r'(\w+)\s*=\s*open\s*\([^)]*(?:\.env|\.ssh|\.aws|credentials|\.gnupg|\.config)'), "Sensitive file read"),
-    (re.compile(r'(\w+)\s*=\s*pathlib\.Path\s*\([^)]*(?:\.env|\.ssh|\.aws|credentials)'), "Sensitive path access"),
+    (re.compile(r'(\w+)\s*=\s*open\s*\([^)]*(?:\.env|\.ssh|\.aws|credentials|\.gnupg|\.config|\.claude|\.kiro|\.kube|\.terraform|sitemanager\.xml|recentservers\.xml|\.atomic|msal_token_cache|\.remmina|\.ovpn|\.npmrc|\.git-credentials)'), "Sensitive file read"),
+    (re.compile(r'(\w+)\s*=\s*pathlib\.Path\s*\([^)]*(?:\.env|\.ssh|\.aws|credentials|\.claude|\.kiro|\.kube|\.terraform|msal_token_cache|sitemanager\.xml|\.atomic)'), "Sensitive path access"),
     (re.compile(r'(\w+)\s*=\s*dotenv\.dotenv_values\('), "dotenv values load"),
 ]
 
 JS_SOURCES = [
     (re.compile(r'(?:const|let|var)\s+(\w+)\s*=\s*process\.env\b'), "process.env access"),
     (re.compile(r'(?:const|let|var)\s+(\w+)\s*=\s*Object\.keys\s*\(\s*process\.env'), "process.env enumeration"),
-    (re.compile(r'(?:const|let|var)\s+(\w+)\s*=\s*(?:fs\.)?readFileSync\s*\([^)]*(?:\.env|\.ssh|\.aws|credential)'), "Sensitive file read"),
+    (re.compile(r'(?:const|let|var)\s+(\w+)\s*=\s*(?:fs\.)?readFileSync\s*\([^)]*(?:\.env|\.ssh|\.aws|credential|\.claude|\.kiro|\.kube|\.terraform|sitemanager\.xml|\.atomic|msal_token_cache|\.npmrc|\.git-credentials)'), "Sensitive file read"),
     (re.compile(r'(?:const|let|var)\s+(\w+)\s*=\s*require\s*\(["\']dotenv["\']\)'), "dotenv require"),
     (re.compile(r'(?:const|let|var)\s+(\w+)\s*=\s*JSON\.parse\s*\(\s*(?:fs\.)?readFileSync'), "JSON file parse"),
 ]
