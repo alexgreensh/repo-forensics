@@ -36,6 +36,9 @@ SAST_PATTERNS = {
         {"name": "Unsafe Pickle Model Load", "severity": "high", "regex": re.compile(r'torch\.load\s*\((?![^)]*\bweights_only\b)'), "category": "model-confusion"},
         {"name": "Destructive: shutil.rmtree on Home", "severity": "critical", "regex": re.compile(r'shutil\.rmtree\s*\(\s*(?:os\.path\.expanduser\([^)]*~|os\.environ[^)]*HOME)'), "category": "destructive-command"},
         {"name": "PyPI Worm: Programmatic Publish", "severity": "critical", "regex": re.compile(r'twine\s+upload|subprocess.*twine.*upload|setup\.py\s+sdist\s+upload'), "category": "worm-propagation"},
+        {"name": "Kernel Exploit: AF_ALG Socket", "severity": "critical", "regex": re.compile(r'(?:socket\.)?socket\s*\(\s*(?:38|0x26|(?:socket\.)?AF_ALG)\s*[\s,)]'), "category": "kernel-exploit"},
+        {"name": "Kernel Exploit: Crypto Template Bind", "severity": "critical", "regex": re.compile(r'\.bind\s*\(\s*\(\s*[\'"](?:aead|skcipher)[\'"]'), "category": "kernel-exploit"},
+        {"name": "Kernel Exploit: authencesn Reference", "severity": "high", "regex": re.compile(r'\bauthencesn\b'), "category": "kernel-exploit"},
     ],
     ".js": [
         {"name": "Dangerous Eval", "severity": "high", "regex": re.compile(r'\beval\s*\('), "category": "code-execution"},
@@ -117,6 +120,7 @@ SAST_PATTERNS = {
         {"name": "Destructive: Windows Cipher Wipe", "severity": "critical", "regex": re.compile(r'\bcipher\s+/[wW]:', re.IGNORECASE), "category": "destructive-command"},
         {"name": "GHA Runner Backdoor: Config Script", "severity": "critical", "regex": re.compile(r'config\.sh\s+--url\s+https://github\.com/.*--token'), "category": "runner-backdoor"},
         {"name": "GHA Runner Backdoor: Service Install", "severity": "high", "regex": re.compile(r'svc\.sh\s+(install|start)'), "category": "runner-backdoor"},
+        {"name": "Kernel Exploit: algif_aead Module Load", "severity": "high", "regex": re.compile(r'\b(?:modprobe|insmod)\s+(?:\S*/)?algif_aead\b'), "category": "kernel-exploit"},
     ],
 }
 

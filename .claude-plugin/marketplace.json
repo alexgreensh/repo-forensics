@@ -7,13 +7,13 @@
   },
   "metadata": {
     "description": "Zero-dependency security scanner for AI agent ecosystems",
-    "version": "2.7.3"
+    "version": "2.7.4"
   },
   "plugins": [
     {
       "name": "repo-forensics",
       "description": "Security for the AI agent ecosystem. 19 scanners + forensify cross-agent self-inspection (Claude Code, Codex, OpenClaw, NanoClaw). Detects prompt injection, supply chain attacks, credential exposure, MCP tool poisoning, command-jacking, model confusion, audio steganography, AI tool hook injection, git-based exfiltration, and cross-ecosystem risk patterns. PostToolUse auto-scan hook + PreToolUse pre-execution gate + SessionStart session security scanner, macOS Seatbelt sandbox, 29 correlation rules, 140+ package IOCs.",
-      "version": "2.7.3",
+      "version": "2.7.4",
       "author": {
         "name": "Alex Greenshpun",
         "url": "https://linkedin.com/in/alexgreensh"

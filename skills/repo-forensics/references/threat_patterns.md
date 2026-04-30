@@ -339,3 +339,49 @@ Source: TeamPCP Bitwarden compromise
 Lifecycle hooks download Bun runtime from `github.com/oven-sh/bun/releases/` to execute large obfuscated JS bundles. Fast startup + single binary makes it ideal for supply chain stagers.
 
 **Detection**: `oven-sh/bun`, `bun-v\d+\.\d+` in lifecycle hooks, `bunx` execution patterns.
+
+## 12. Kernel Page Cache Corruption (CVE-2026-31431)
+
+Source: xint.io, April 29, 2026.
+
+### Overview
+
+A logic flaw in the Linux kernel's `authencesn` cryptographic template allows unprivileged local users to corrupt the in-memory page cache of any readable file without marking pages dirty for disk writeback. Standard file integrity tools comparing on-disk checksums miss the corruption entirely because the on-disk file is unchanged.
+
+### Attack Chain
+
+1. Attacker opens an AF_ALG socket (socket family 38, unprivileged)
+2. Binds to the `authencesn` AEAD crypto template
+3. Chains kernel primitives to corrupt target binary's in-memory page cache
+4. Target binary is corrupted in memory, on-disk copy stays clean
+
+Full technical details: https://xint.io/blog/copy-fail-linux-distributions
+
+### Affected Kernels
+
+Vulnerable since 2017 (commit 72548b093ee3, in-place optimization). Confirmed on kernel lines 6.12, 6.17, 6.18 across Ubuntu, Amazon Linux, RHEL, SUSE.
+
+### Why This Matters for Repo Forensics
+
+This attack demonstrates a class of **integrity evasion** where disk-based hash verification is insufficient. While repo-forensics operates at the application layer (git repos, packages), the concept applies to:
+- Exploit PoC code appearing in repos (AF_ALG socket creation in Python is extremely unusual in application code)
+- Dependencies that use kernel crypto APIs for non-obvious reasons
+- The general principle that "file hash matches" does not guarantee runtime integrity
+
+### Detection Patterns (Added to scan_sast.py)
+
+| Language | Pattern | Severity | Description |
+|----------|---------|----------|-------------|
+| Python | `socket.socket(38/0x26/AF_ALG, ...)` or bare `socket(AF_ALG, ...)` | CRITICAL | AF_ALG socket creation, almost never legitimate in application code |
+| Python | `.bind(("aead"/"skcipher", ...))` | CRITICAL | Binding to kernel crypto template used in exploit chain |
+| Python | `authencesn` | HIGH | Reference to the specific vulnerable crypto template |
+| Shell | `modprobe algif_aead` / `insmod [path/]algif_aead` | HIGH | Explicit loading of the vulnerable kernel module |
+
+### CVE Details
+
+- **CVE**: CVE-2026-31431
+- **Reported**: 2026-03-23
+- **Patched**: 2026-04-01 (commit a664bf3d603d)
+- **Disclosed**: 2026-04-29
+- **Fix**: Reverts algif_aead.c to out-of-place operation, removing the 2017 in-place optimization
+- **Mitigation**: `echo "install algif_aead /bin/false" > /etc/modprobe.d/disable-algif-aead.conf`

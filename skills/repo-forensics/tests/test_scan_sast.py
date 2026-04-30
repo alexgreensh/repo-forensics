@@ -261,6 +261,110 @@ class TestSeverityAndCategory:
         assert all(f.severity == "critical" for f in exfil)
 
 
+class TestKernelExploitPatterns:
+    """Tests for Linux AF_ALG kernel exploit detection patterns (CVE-2026-31431)."""
+
+    def test_af_alg_socket_numeric(self, tmp_path):
+        py = tmp_path / "exploit.py"
+        py.write_text("import socket\na = socket.socket(38, 5, 0)\n")
+        findings = _scan_repo(tmp_path)
+        assert any("AF_ALG Socket" in f.title for f in findings)
+
+    def test_af_alg_socket_hex(self, tmp_path):
+        py = tmp_path / "exploit.py"
+        py.write_text("import socket\na = socket.socket(0x26, 5, 0)\n")
+        findings = _scan_repo(tmp_path)
+        assert any("AF_ALG Socket" in f.title for f in findings)
+
+    def test_af_alg_socket_constant(self, tmp_path):
+        py = tmp_path / "exploit.py"
+        py.write_text("import socket\na = socket.socket(socket.AF_ALG, socket.SOCK_SEQPACKET, 0)\n")
+        findings = _scan_repo(tmp_path)
+        assert any("AF_ALG Socket" in f.title for f in findings)
+
+    def test_af_alg_socket_bare_import(self, tmp_path):
+        py = tmp_path / "exploit.py"
+        py.write_text("from socket import *\ns = socket(AF_ALG, 5)\n")
+        findings = _scan_repo(tmp_path)
+        assert any("AF_ALG Socket" in f.title for f in findings)
+
+    def test_af_alg_socket_single_arg(self, tmp_path):
+        py = tmp_path / "exploit.py"
+        py.write_text("import socket\na = socket.socket(socket.AF_ALG)\n")
+        findings = _scan_repo(tmp_path)
+        assert any("AF_ALG Socket" in f.title for f in findings)
+
+    def test_aead_bind(self, tmp_path):
+        py = tmp_path / "exploit.py"
+        py.write_text('a.bind(("aead", "authencesn(hmac(sha256),cbc(aes))"))\n')
+        findings = _scan_repo(tmp_path)
+        assert any("Crypto Template Bind" in f.title for f in findings)
+
+    def test_skcipher_bind(self, tmp_path):
+        py = tmp_path / "crypto.py"
+        py.write_text("s.bind(('skcipher', 'cbc(aes)'))\n")
+        findings = _scan_repo(tmp_path)
+        assert any("Crypto Template Bind" in f.title for f in findings)
+
+    def test_no_false_positive_hash_bind(self, tmp_path):
+        py = tmp_path / "crypto.py"
+        py.write_text("s.bind(('hash', 'sha256'))\n")
+        findings = _scan_repo(tmp_path)
+        kernel = [f for f in findings if f.category == "kernel-exploit"]
+        assert len(kernel) == 0
+
+    def test_authencesn_reference(self, tmp_path):
+        py = tmp_path / "poc.py"
+        py.write_text('template = "authencesn(hmac(sha256),cbc(aes))"\n')
+        findings = _scan_repo(tmp_path)
+        assert any("authencesn" in f.title for f in findings)
+
+    def test_algif_aead_modprobe(self, tmp_path):
+        sh = tmp_path / "setup.sh"
+        sh.write_text("#!/bin/bash\nmodprobe algif_aead\n")
+        findings = _scan_repo(tmp_path)
+        assert any("algif_aead" in f.title for f in findings)
+
+    def test_algif_aead_insmod(self, tmp_path):
+        sh = tmp_path / "load.sh"
+        sh.write_text("#!/bin/bash\ninsmod algif_aead\n")
+        findings = _scan_repo(tmp_path)
+        assert any("algif_aead" in f.title for f in findings)
+
+    def test_algif_aead_insmod_full_path(self, tmp_path):
+        sh = tmp_path / "load.sh"
+        sh.write_text("#!/bin/bash\ninsmod /lib/modules/5.15.0/kernel/crypto/algif_aead.ko\n")
+        findings = _scan_repo(tmp_path)
+        assert any("algif_aead" in f.title for f in findings)
+
+    def test_kernel_exploit_severity(self, tmp_path):
+        py = tmp_path / "exploit.py"
+        py.write_text(
+            "import socket\n"
+            "a = socket.socket(38, 5, 0)\n"
+            'a.bind(("aead", "authencesn(hmac(sha256),cbc(aes))"))\n'
+        )
+        findings = _scan_repo(tmp_path)
+        kernel = [f for f in findings if f.category == "kernel-exploit"]
+        assert len(kernel) == 3
+        critical = [f for f in kernel if f.severity == "critical"]
+        assert len(critical) == 2
+
+    def test_no_false_positive_regular_socket(self, tmp_path):
+        py = tmp_path / "server.py"
+        py.write_text("import socket\ns = socket.socket(socket.AF_INET, socket.SOCK_STREAM)\n")
+        findings = _scan_repo(tmp_path)
+        kernel = [f for f in findings if f.category == "kernel-exploit"]
+        assert len(kernel) == 0
+
+    def test_no_false_positive_bind_non_crypto(self, tmp_path):
+        py = tmp_path / "server.py"
+        py.write_text("s.bind(('0.0.0.0', 8080))\n")
+        findings = _scan_repo(tmp_path)
+        kernel = [f for f in findings if f.category == "kernel-exploit"]
+        assert len(kernel) == 0
+
+
 def _scan_repo(repo_path):
     import forensics_core as core
     findings = []

@@ -9,7 +9,7 @@
     "data/compromised_versions.json": "4821a7046c30670b5212b76b1182dda2a0dfd4ef1ae22a72fbbc8e0aac80b7ac",
     "references/mcp-attack-patterns.md": "722d7a47186bfee18bde0e06a749dc55e8cc716c2418d118a64e57d60e48689a",
     "references/research_sources.md": "480cc40fe3ddacbb8b3aa8e56a9eef479ba1954de34972e9d7651c8d37f0a442",
-    "references/threat_patterns.md": "fee269a62d5b32d6691e90c20afc44bb2b1ab0a97fbbdcff9ec491819f4c68fa",
+    "references/threat_patterns.md": "ae24833171b787a7aedca7e1d1baee278ac58c84a6446c89c6cbf70bd1f5152e",
     "scripts/aggregate_json.py": "3fe4871e7845c400f374df2e04141c532398256574817d76d5c7cd639882fba0",
     "scripts/auto_scan.py": "5e1145281ad4ba765ae14cfd628a334102fcb0a44240f62c7d5a29c6c2f80e61",
     "scripts/dast_sandbox.sb": "6f6e9571a73aa8a9d07e7e4c5c0e6ae49fb6447c5f34a446154d301c6c4e8875",
@@ -34,7 +34,7 @@
     "scripts/scan_mcp_security.py": "052c7d77a6ac561e64fe122cfb0e30dcc57f1e78f52e561ebec138124e1bd33d",
     "scripts/scan_post_incident.py": "31094491af8a2e89260cba4cf6427501d5657b55b4e8430f019db1d844f49cfe",
     "scripts/scan_runtime_dynamism.py": "4cee558efbc670d416af4e28abdea09eaf1ede55f7126df132ff951248713b37",
-    "scripts/scan_sast.py": "a3278b7f262cda39b2074a348a852c94119ccee1b19233767fad4c14c5b604fe",
+    "scripts/scan_sast.py": "3060696f2136e3ab05f4b688da1384ab55ec40eb8e8f94247380400ecfe235f9",
     "scripts/scan_secrets.py": "b7dd163ca400579ebcd962499a7b58826dabd7d005c0b83f804d7d78052066a5",
     "scripts/scan_skill_threats.py": "0adf52d8e000423ec447d78e16505394ebb9145ba5eca71ad7e59ec6e389b83a",
     "scripts/session_scan.py": "f95b7408353704d58b01e8881647e1de9e566fbe20555b83e085540d3d3deb29",
@@ -54,8 +54,8 @@
   },
   "hook_count": 5,
   "repo_manifests": {
-    ".claude-plugin/marketplace.json": "85fe5ff3d54bdf2f549eae302d00c20243ab46557cbbfae0d494221dd4b3770b",
-    ".claude-plugin/plugin.json": "e16cf75d7bee6676fc7cc23bfdd01a8cca25c6ebbca946436f563491b32fdf7e"
+    ".claude-plugin/marketplace.json": "a1a775f6341640a341436076134a3285d97643009fac2e12682bb098b8e9685a",
+    ".claude-plugin/plugin.json": "37d4bb8120a4f21396567bf088e15672c34a4047dddcd0108c537dd38782d287"
   },
   "manifest_count": 2
 }
