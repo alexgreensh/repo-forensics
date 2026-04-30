@@ -47,20 +47,95 @@ PROMPT_INJECTION_PATTERNS = [
 
 # ============================================================
 # Category 2: Invisible Unicode Smuggling (critical)
+# Character sets from anti-trojan-source (Liran Tal) + Unicode 15.1 spec.
 # ============================================================
 ZERO_WIDTH_CHARS = set([
     '\u200b',  # ZERO WIDTH SPACE
     '\u200c',  # ZERO WIDTH NON-JOINER
     '\u200d',  # ZERO WIDTH JOINER
     '\u2060',  # WORD JOINER
+    '\u2061',  # FUNCTION APPLICATION
+    '\u2062',  # INVISIBLE TIMES
+    '\u2063',  # INVISIBLE SEPARATOR
+    '\u2064',  # INVISIBLE PLUS
     '\ufeff',  # ZERO WIDTH NO-BREAK SPACE (BOM)
     '\u00ad',  # SOFT HYPHEN
     '\u200e',  # LEFT-TO-RIGHT MARK
     '\u200f',  # RIGHT-TO-LEFT MARK
+    '\u180e',  # MONGOLIAN VOWEL SEPARATOR
+    '\u061c',  # ARABIC LETTER MARK
 ])
 
-RTL_OVERRIDE = '\u202e'  # RIGHT-TO-LEFT OVERRIDE
-ZERO_WIDTH_PATTERN = re.compile('[' + ''.join(ZERO_WIDTH_CHARS) + ']')
+# Trojan Source bidi controls: override visual text direction in renderers.
+# All 10 chars from Unicode Bidirectional Algorithm (UAX #9).
+BIDI_CONTROL_CHARS = set([
+    '\u202a',  # LEFT-TO-RIGHT EMBEDDING (LRE)
+    '\u202b',  # RIGHT-TO-LEFT EMBEDDING (RLE)
+    '\u202c',  # POP DIRECTIONAL FORMATTING (PDF)
+    '\u202d',  # LEFT-TO-RIGHT OVERRIDE (LRO)
+    '\u202e',  # RIGHT-TO-LEFT OVERRIDE (RLO)
+    '\u2066',  # LEFT-TO-RIGHT ISOLATE (LRI)
+    '\u2067',  # RIGHT-TO-LEFT ISOLATE (RLI)
+    '\u2068',  # FIRST STRONG ISOLATE (FSI)
+    '\u2069',  # POP DIRECTIONAL ISOLATE (PDI)
+    '\u206a',  # INHIBIT SYMMETRIC SWAPPING
+    '\u206b',  # ACTIVATE SYMMETRIC SWAPPING
+    '\u206c',  # INHIBIT ARABIC FORM SHAPING
+    '\u206d',  # ACTIVATE ARABIC FORM SHAPING
+    '\u206e',  # NATIONAL DIGIT SHAPES
+    '\u206f',  # NOMINAL DIGIT SHAPES
+])
+
+# Variation selectors alter glyph appearance without changing semantics.
+VARIATION_SELECTORS = set(
+    [chr(cp) for cp in range(0xFE00, 0xFE10)]  # VS1-VS16
+)
+
+# Confusable space characters (Glassworm attack vector).
+CONFUSABLE_SPACES = set([
+    '\u00a0',  # NO-BREAK SPACE (most common Glassworm vector)
+    '\u2000',  # EN QUAD
+    '\u2001',  # EM QUAD
+    '\u2002',  # EN SPACE
+    '\u2003',  # EM SPACE
+    '\u2004',  # THREE-PER-EM SPACE
+    '\u2005',  # FOUR-PER-EM SPACE
+    '\u2006',  # SIX-PER-EM SPACE
+    '\u2007',  # FIGURE SPACE
+    '\u2008',  # PUNCTUATION SPACE
+    '\u2009',  # THIN SPACE
+    '\u200a',  # HAIR SPACE
+    '\u205f',  # MEDIUM MATHEMATICAL SPACE
+    '\u3000',  # IDEOGRAPHIC SPACE
+])
+
+# Tag characters (invisible Unicode plane 14 tags).
+TAG_CHARS = set(
+    [chr(0xE0001)]  # LANGUAGE TAG
+    + [chr(cp) for cp in range(0xE0020, 0xE0080)]  # TAG SPACE..CANCEL TAG
+)
+
+# Interlinear annotation chars.
+ANNOTATION_CHARS = set([
+    '\ufff9',  # INTERLINEAR ANNOTATION ANCHOR
+    '\ufffa',  # INTERLINEAR ANNOTATION SEPARATOR
+    '\ufffb',  # INTERLINEAR ANNOTATION TERMINATOR
+])
+
+# Combined pattern for all invisible/smuggling characters (fast boolean check).
+_ALL_INVISIBLE = (ZERO_WIDTH_CHARS | BIDI_CONTROL_CHARS | CONFUSABLE_SPACES
+                  | ANNOTATION_CHARS | VARIATION_SELECTORS | TAG_CHARS)
+ZERO_WIDTH_PATTERN = re.compile('[' + re.escape(''.join(_ALL_INVISIBLE)) + ']')
+BIDI_PATTERN = re.compile('[' + re.escape(''.join(BIDI_CONTROL_CHARS)) + ']')
+VARIATION_SELECTOR_PATTERN = re.compile('[' + re.escape(''.join(VARIATION_SELECTORS)) + ']')
+TAG_CHAR_PATTERN = re.compile('[' + re.escape(''.join(TAG_CHARS)) + ']')
+CONFUSABLE_SPACE_PATTERN = re.compile('[' + re.escape(''.join(CONFUSABLE_SPACES)) + ']')
+# C1 controls (0x80-0x9F) + C0 non-whitespace (0x00-0x08, 0x0B, 0x0E-0x1F, 0x7F)
+C1_CONTROL_PATTERN = re.compile(r'[\x00-\x08\x0b\x0e-\x1f\x7f-\x9f]')
+
+# Shared code file extensions for Unicode checks.
+UNICODE_CODE_EXTS = {'.py', '.js', '.ts', '.jsx', '.tsx', '.rb', '.go', '.rs', '.sh', '.bash',
+                     '.mjs', '.cjs', '.php', '.java', '.c', '.cpp', '.h', '.swift', '.kt', '.zsh'}
 
 # Cyrillic confusables for Latin letters
 HOMOGLYPHS = {
@@ -274,10 +349,14 @@ MCP_TOOL_INJECTION_PATTERNS = [
 
 
 def scan_unicode_smuggling(content, rel_path):
-    """Category 2: Detect zero-width chars, RTL overrides, homoglyphs."""
+    """Category 2: Detect invisible Unicode chars, Trojan Source bidi controls,
+    variation selectors, confusable spaces, and homoglyphs.
+    Character sets informed by anti-trojan-source (Liran Tal) + Unicode 15.1.
+    All checks use compiled regex patterns (C-speed inner loop, no O(N^2)).
+    """
     findings = []
 
-    # Count zero-width characters (capped at 100 to prevent ReDoS on large files)
+    # Count zero-width/invisible characters (capped to prevent slow scans)
     zw_count = 0
     for _ in ZERO_WIDTH_PATTERN.finditer(content):
         zw_count += 1
@@ -293,22 +372,81 @@ def scan_unicode_smuggling(content, rel_path):
             category="unicode-smuggling"
         ))
 
-    # RTL override
-    if RTL_OVERRIDE in content:
-        line_no = content[:content.index(RTL_OVERRIDE)].count('\n') + 1
+    # Trojan Source: bidirectional control characters (critical)
+    m = BIDI_PATTERN.search(content)
+    if m:
+        cp = ord(m.group(0))
+        line_no = content[:m.start()].count('\n') + 1
         findings.append(core.Finding(
             scanner=SCANNER_NAME, severity="critical",
-            title="Right-to-Left Override Character",
-            description="RTL override (U+202E) can hide true text direction to disguise file extensions or code",
+            title="Trojan Source: Bidirectional Control Character",
+            description=f"Bidi control U+{cp:04X} can make code render differently than it executes (trojansource.codes)",
             file=rel_path, line=line_no,
-            snippet="Contains U+202E RTL override",
+            snippet=f"Contains U+{cp:04X} bidi control",
             category="unicode-smuggling"
         ))
 
-    # Homoglyph detection in code files
-    code_exts = {'.py', '.js', '.ts', '.jsx', '.tsx', '.rb', '.go', '.rs', '.sh', '.bash'}
+    # Variation selectors (alter glyph rendering invisibly)
+    m = VARIATION_SELECTOR_PATTERN.search(content)
+    if m:
+        cp = ord(m.group(0))
+        line_no = content[:m.start()].count('\n') + 1
+        findings.append(core.Finding(
+            scanner=SCANNER_NAME, severity="high",
+            title="Unicode Variation Selector",
+            description=f"Variation selector U+{cp:04X} alters character appearance without changing semantics",
+            file=rel_path, line=line_no,
+            snippet=f"Contains U+{cp:04X} variation selector",
+            category="unicode-smuggling"
+        ))
+
+    # Tag characters (invisible Unicode plane 14)
+    m = TAG_CHAR_PATTERN.search(content)
+    if m:
+        cp = ord(m.group(0))
+        line_no = content[:m.start()].count('\n') + 1
+        findings.append(core.Finding(
+            scanner=SCANNER_NAME, severity="high",
+            title="Unicode Tag Character",
+            description=f"Tag character U+{cp:04X} is invisible and can embed hidden metadata",
+            file=rel_path, line=line_no,
+            snippet=f"Contains U+{cp:04X} tag character",
+            category="unicode-smuggling"
+        ))
+
     ext = os.path.splitext(rel_path)[1].lower()
-    if ext in code_exts:
+    if ext in UNICODE_CODE_EXTS:
+        # C1 control characters in source code
+        m = C1_CONTROL_PATTERN.search(content)
+        if m:
+            cp = ord(m.group(0))
+            line_no = content[:m.start()].count('\n') + 1
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="medium",
+                title="Control Character in Source Code",
+                description=f"Control character U+{cp:04X} in source file (potential terminal injection or obfuscation)",
+                file=rel_path, line=line_no,
+                snippet=f"Contains U+{cp:04X} control char",
+                category="unicode-smuggling"
+            ))
+
+        # Confusable space in code (Glassworm vector)
+        m = CONFUSABLE_SPACE_PATTERN.search(content)
+        if m:
+            cp = ord(m.group(0))
+            line_no = content[:m.start()].count('\n') + 1
+            lines = content.split('\n')
+            line_content = lines[line_no - 1] if line_no <= len(lines) else ""
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="medium",
+                title="Glassworm: Confusable Space in Code",
+                description=f"Non-standard space U+{cp:04X} looks identical to regular space but has different semantics",
+                file=rel_path, line=line_no,
+                snippet=line_content.strip()[:120],
+                category="unicode-smuggling"
+            ))
+
+        # Homoglyph detection
         m = HOMOGLYPH_PATTERN.search(content)
         if m:
             ch = m.group(0)
