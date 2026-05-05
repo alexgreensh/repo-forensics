@@ -26,6 +26,7 @@ Created by Alex Greenshpun
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -36,7 +37,20 @@ sys.path.insert(0, SCRIPTS_DIR)
 # Baseline location — persisted between sessions
 BASELINE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "repo-forensics")
 BASELINE_FILE = os.path.join(BASELINE_DIR, "session-baseline.json")
-BASELINE_VERSION = 1
+BASELINE_VERSION = 2
+
+# Threat DB freshness check (refresh moved to refresh_threat_dbs.py launchd job)
+LAST_RUN_MARKER = os.path.join(BASELINE_DIR, ".last-refresh")
+STALE_WARN_DAYS = 7
+
+# Mtime gate: re-hash files whose mtime is more than this far in the future.
+# Catches NTP step, restored-from-backup, manual clock changes — anything that
+# could let a stale hash silently pair with disk content the gate would
+# otherwise treat as unchanged.
+CLOCK_SKEW_TOLERANCE_NS = 60 * 1_000_000_000
+
+# Stale scanner reaper: kill orphan scan_*.py processes older than this.
+STALE_SCANNER_KILL_SEC = 150
 
 # File extensions we checksum (executable/config files only)
 SCANNABLE_EXTENSIONS = {
@@ -57,69 +71,50 @@ ENV_KILL_SWITCH = "REPO_FORENSICS_SESSION_SCAN"
 
 
 # ========================================================================
-# Step 1: Refresh threat databases if stale
+# Step 1: Read-only threat DB freshness check
+# (Network-based refresh moved to refresh_threat_dbs.py launchd job to keep
+#  SessionStart latency under 2s.)
 # ========================================================================
 
-def _is_ioc_cache_stale():
-    """Check if IOC cache is older than 24h or missing."""
-    try:
-        import ioc_manager
-        path = ioc_manager._cache_path()
-        if not os.path.exists(path):
-            return True
-        cache = ioc_manager._load_cache()
-        return cache is None  # None = stale or missing
-    except (ImportError, Exception):
-        return True
-
-
-def _is_kev_cache_stale():
-    """Check if KEV cache is older than 24h or missing."""
-    try:
-        import vuln_feed
-        path = vuln_feed._cache_path(vuln_feed.KEV_CACHE_FILENAME)
-        if not os.path.exists(path):
-            return True
-        cached = vuln_feed._load_cache(path, vuln_feed.KEV_CACHE_MAX_AGE_HOURS)
-        return cached is None
-    except (ImportError, Exception):
-        return True
-
-
-def refresh_threat_databases():
-    """Refresh IOC + KEV caches if stale. Returns status messages (may be empty)."""
+def check_threat_db_freshness():
+    """Read-only check; no network calls. Returns warning messages if stale.
+    Uses the marker file's mtime (kernel-managed) instead of reading a
+    timestamp from its contents — robust against userspace clock jumps,
+    NTP step adjustments, and DST shifts."""
     messages = []
-    ioc_stale = _is_ioc_cache_stale()
-    kev_stale = _is_kev_cache_stale()
+    ioc_path = os.path.join(BASELINE_DIR, ".forensics-iocs.json")
+    kev_path = os.path.join(BASELINE_DIR, "kev.json")
 
-    if not ioc_stale and not kev_stale:
-        return messages
-
-    messages.append("Updating threat databases (daily)...")
-
-    if ioc_stale:
-        try:
-            import ioc_manager
-            ok, msg = ioc_manager.update_iocs()
-            if ok:
-                messages.append(f"  IOC: {msg}")
-        except (ImportError, Exception):
-            pass  # Graceful — hardcoded IOCs still work
-
-    if kev_stale:
-        try:
-            import vuln_feed
-            ok, msg = vuln_feed.update_kev_cache()
-            if ok:
-                messages.append(f"  KEV: {msg}")
-        except (ImportError, Exception):
-            pass  # Graceful — scanner continues without KEV
-
+    try:
+        last_ts = os.path.getmtime(LAST_RUN_MARKER)
+        age_days = (time.time() - last_ts) / 86400.0
+        # Negative age (clock jumped backward) — treat as fresh, don't alarm.
+        if age_days > STALE_WARN_DAYS:
+            messages.append(
+                f"Threat DBs haven't refreshed in {age_days:.0f} days. "
+                f"Check: launchctl list | grep repo-forensics-refresh"
+            )
+    except OSError:
+        # Marker missing — first run, OR daemon never installed.
+        if os.path.isfile(ioc_path) or os.path.isfile(kev_path):
+            messages.append(
+                "Threat DB refresh daemon not running. "
+                "Install: bash hooks/install_refresh_daemon.sh"
+            )
     return messages
+
+
+# Compatibility alias — callers expect this name
+def refresh_threat_databases():
+    """Backwards-compat wrapper. Network refresh now in launchd daemon.
+    This is now a fast read-only freshness check (<10ms)."""
+    return check_threat_db_freshness()
 
 
 # ========================================================================
 # Step 2: Detect changes since last session
+# (Hardened gate: tuple includes mtime_ns + size + ctime_ns + inode.
+#  ctime cannot be set by userspace touch; defeats os.utime() spoofing.)
 # ========================================================================
 
 def _compute_file_hash(filepath):
@@ -137,12 +132,15 @@ def _compute_file_hash(filepath):
         return None
 
 
-def _scan_directory(dirpath, label):
-    """Walk a directory and return {relative_path: sha256} for scannable files.
-    Returns (checksums_dict, item_name) or (None, None) if dir doesn't exist."""
+def _scan_directory(dirpath, old_entries=None):
+    """Walk dir; reuse cached hash when (mtime_ns, size, ctime_ns, inode) all match.
+    Returns {rel_path: [hash, mtime_ns, size, ctime_ns, inode]} or None if
+    dirpath doesn't exist."""
     if not os.path.isdir(dirpath):
-        return None, None
-    checksums = {}
+        return None
+    old_entries = old_entries or {}
+    entries = {}
+    now_ns = time.time_ns()
     try:
         for root, _dirs, files in os.walk(dirpath):
             for fname in files:
@@ -151,12 +149,36 @@ def _scan_directory(dirpath, label):
                     continue
                 full = os.path.join(root, fname)
                 rel = os.path.relpath(full, dirpath)
+                try:
+                    st = os.stat(full)
+                except OSError:
+                    continue
+                mtime_ns = st.st_mtime_ns
+                size = st.st_size
+                ctime_ns = st.st_ctime_ns
+                inode = st.st_ino
+
+                # Future-dated mtime → re-hash (catches NTP step, restore from backup)
+                if mtime_ns > now_ns + CLOCK_SKEW_TOLERANCE_NS:
+                    h = _compute_file_hash(full)
+                    if h:
+                        entries[rel] = [h, mtime_ns, size, ctime_ns, inode]
+                    continue
+
+                # Reuse cached hash only if ALL four metadata fields match
+                old = old_entries.get(rel)
+                if (isinstance(old, list) and len(old) == 5
+                        and old[1] == mtime_ns and old[2] == size
+                        and old[3] == ctime_ns and old[4] == inode):
+                    entries[rel] = old
+                    continue
+
                 h = _compute_file_hash(full)
                 if h:
-                    checksums[rel] = h
-    except (OSError, PermissionError):
-        return None, None
-    return checksums, label
+                    entries[rel] = [h, mtime_ns, size, ctime_ns, inode]
+    except OSError:
+        return None
+    return entries
 
 
 def discover_items():
@@ -247,7 +269,9 @@ def _extract_mcp_dirs(settings_path):
 
 
 def load_baseline():
-    """Load the session baseline file. Returns dict or None."""
+    """Load the session baseline file. Returns dict or None.
+    Auto-migrates v1 baselines (hash-only) to v2 (hash+stat tuple) by stat'ing
+    files on disk — preserves coverage without forcing full re-hash."""
     if not os.path.isfile(BASELINE_FILE):
         return None
     try:
@@ -255,46 +279,120 @@ def load_baseline():
             data = json.load(f)
         if not isinstance(data, dict):
             return None
-        if data.get('version') != BASELINE_VERSION:
-            return None
-        return data
+
+        ver = data.get('version')
+        if ver == BASELINE_VERSION:
+            return data
+        if ver == 1:
+            # Migrate {path: hash_str} → {path: [hash, MIGRATE_SENTINEL, ...]}
+            #
+            # CRITICAL: do NOT pair the old hash with current stat metadata.
+            # If the file was modified between the v1 baseline write and now
+            # (the upgrade window may be days/weeks), pairing old_hash with
+            # fresh mtime/size/ctime/inode would suppress re-hashing forever
+            # (the gate would reuse old_hash because metadata "matches").
+            # Instead, write a sentinel that can never match on disk so the
+            # gate falls through to recompute on the very next _scan_directory.
+            # The migration's only value is preserving the OLD hash for change
+            # comparison — fresh stats get written naturally on first re-hash.
+            SENTINEL_MTIME = -1
+            migrated_items = {}
+            # Build allowlist of valid base_dirs from current discovery to
+            # defang path-traversal in attacker-crafted item_key entries.
+            current_items = discover_items()
+            valid_dirs = {dirpath for dirpath, _, _ in current_items}
+            for item_key, file_map in data.get('items', {}).items():
+                if not isinstance(file_map, dict):
+                    continue
+                parts = item_key.split(":", 1)
+                if len(parts) != 2:
+                    continue
+                base_dir = parts[1]
+                # Containment check: base_dir must be a known monitored dir.
+                if base_dir not in valid_dirs:
+                    continue
+                new_map = {}
+                for rel_path, old_hash in file_map.items():
+                    if not isinstance(old_hash, str):
+                        continue
+                    if not isinstance(rel_path, str) or '..' in rel_path.split(os.sep):
+                        continue
+                    new_map[rel_path] = [old_hash, SENTINEL_MTIME, -1, -1, -1]
+                migrated_items[item_key] = new_map
+            data['version'] = BASELINE_VERSION
+            data['items'] = migrated_items
+            return data
+        return None
     except (OSError, json.JSONDecodeError, ValueError):
         return None
 
 
 def save_baseline(items_checksums):
-    """Save baseline to disk. items_checksums: {item_key: {rel_path: hash}}"""
+    """Save baseline atomically (temp + fsync + os.replace).
+    Concurrent SessionStart hooks or power loss must never produce corrupt JSON;
+    a corrupt baseline silently downgrades the next session to first-run scan
+    coverage (cap kicks in), which is a security regression."""
     os.makedirs(BASELINE_DIR, exist_ok=True)
     payload = {
         'version': BASELINE_VERSION,
         '_saved_at': time.time(),
         'items': items_checksums,
     }
+    # uuid + pid suffix avoids tmp-file collision across PID-reuse and
+    # concurrent writers; 0o600 keeps the baseline private to the user.
+    import uuid as _uuid
+    tmp_path = f"{BASELINE_FILE}.tmp.{os.getpid()}.{_uuid.uuid4().hex}"
     try:
-        with open(BASELINE_FILE, 'w', encoding='utf-8') as f:
-            json.dump(payload, f, indent=2)
+        fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                json.dump(payload, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+        except BaseException:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
+        os.replace(tmp_path, BASELINE_FILE)
     except OSError:
-        pass  # Non-fatal
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        # Non-fatal: stale baseline beats no baseline
+        return
 
 
 def detect_changes(items, baseline):
-    """Compare current items against baseline. Returns list of changed items.
-    Each changed item: (directory_path, label, item_type, checksums_dict)."""
+    """Compare current items against baseline. Returns (changed_list, all_entries_dict).
+    - changed_list entries: (directory_path, label, item_type, entries_dict)
+    - all_entries_dict: {item_key: entries_dict} for every successfully scanned item.
+    Entries are [hash, mtime_ns, size, ctime_ns, inode].
+
+    Returning all_entries lets the save path snapshot the dict directly without
+    re-walking — eliminates the second O(stat) traversal across the full tree."""
     changed = []
+    all_entries = {}
     baseline_items = baseline.get('items', {}) if baseline else {}
 
     for dirpath, label, item_type in items:
-        checksums, _ = _scan_directory(dirpath, label)
-        if checksums is None:
-            continue
-
         item_key = f"{item_type}:{dirpath}"
-        old_checksums = baseline_items.get(item_key, {})
+        old_entries = baseline_items.get(item_key, {})
+        entries = _scan_directory(dirpath, old_entries=old_entries)
+        if entries is None:
+            continue
+        all_entries[item_key] = entries
 
-        if checksums != old_checksums:
-            changed.append((dirpath, label, item_type, checksums))
+        # Compare hashes only (position 0); ignore metadata for change detection.
+        old_hashes = {k: v[0] for k, v in old_entries.items() if isinstance(v, list)}
+        new_hashes = {k: v[0] for k, v in entries.items()}
 
-    return changed
+        if new_hashes != old_hashes:
+            changed.append((dirpath, label, item_type, entries))
+
+    return changed, all_entries
 
 
 # ========================================================================
@@ -310,7 +408,7 @@ def scan_item(dirpath, label, item_type, checksums):
     try:
         import ioc_manager
         iocs = ioc_manager.get_iocs()
-    except (ImportError, Exception):
+    except (ImportError, OSError, AttributeError):
         iocs = None
 
     # Check for known-malicious package names
@@ -467,7 +565,6 @@ def _extract_dependencies(dirpath):
                     if not line or line.startswith('#'):
                         continue
                     # Parse: package==1.2.3 or package>=1.2.3
-                    import re
                     m = re.match(r'^([a-zA-Z0-9_.-]+)\s*[=><!]+\s*([^\s,;]+)', line)
                     if m:
                         deps.append((m.group(1), m.group(2)))
@@ -547,7 +644,7 @@ def _kill_stale_scanners():
             secs = 0
             for i, seg in enumerate(reversed(segments)):
                 secs += int(seg) * (60 ** min(i, 2)) * (24 if i == 3 else 1)
-            if secs > 150:
+            if secs > STALE_SCANNER_KILL_SEC:
                 try:
                     os.kill(int(pid_str), 15)
                 except (ProcessLookupError, PermissionError):
@@ -557,12 +654,13 @@ def _kill_stale_scanners():
 
 
 def main():
-    _kill_stale_scanners()
-
-    # Kill switch
+    # Kill switch FIRST — disabled means truly disabled, no side effects.
     if os.environ.get(ENV_KILL_SWITCH, '').lower() in ('0', 'false', 'no', 'off'):
         output_session_context([])
         return
+
+    # Reap orphaned scanner processes from prior crashed sessions.
+    _kill_stale_scanners()
 
     # Step 1: Refresh threat databases if stale
     refresh_messages = refresh_threat_databases()
@@ -579,7 +677,7 @@ def main():
     baseline = load_baseline()
     is_first_run = baseline is None
 
-    changed = detect_changes(items, baseline)
+    changed, all_entries = detect_changes(items, baseline)
 
     # Cap first run scans
     scan_items = changed
@@ -618,15 +716,11 @@ def main():
         is_first_run, len(items)
     )
 
-    # Save baseline BEFORE exit (output_session_context calls sys.exit)
-    new_baseline = {}
-    for dirpath, label, itype, *rest in items:
-        checksums, _ = _scan_directory(dirpath, label)
-        if checksums is not None:
-            new_baseline[f"{itype}:{dirpath}"] = checksums
-    for dirpath, label, itype, checksums in changed:
-        new_baseline[f"{itype}:{dirpath}"] = checksums
-    save_baseline(new_baseline)
+    # Save baseline before exit (output_session_context calls sys.exit).
+    # detect_changes already produced fresh entries for every item; reuse them
+    # directly instead of re-walking the tree. Avoids ~150-300ms of redundant
+    # stat syscalls on warm sessions.
+    save_baseline(all_entries)
 
     output_session_context(lines)
 
