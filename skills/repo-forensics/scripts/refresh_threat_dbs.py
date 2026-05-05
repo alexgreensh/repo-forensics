@@ -150,22 +150,38 @@ def _acquire_lock():
         return None
 
 
-def _write_marker():
-    """Atomic marker write."""
+def _write_marker(forensics_core=None):
+    """Atomic marker write. Uses forensics_core.atomic_write_text when the
+    helper is available; otherwise falls back to inline temp+rename. The
+    feature-check (hasattr) handles the case where an older forensics_core
+    is loaded from a stale plugin cache during version transitions."""
     try:
         os.makedirs(CACHE_DIR, exist_ok=True)
+        if forensics_core is not None and hasattr(forensics_core, "atomic_write_text"):
+            forensics_core.atomic_write_text(
+                LAST_RUN_MARKER, str(time.time()), mode=0o600
+            )
+            return
         tmp = LAST_RUN_MARKER + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             f.write(str(time.time()))
         os.replace(tmp, LAST_RUN_MARKER)
+        os.chmod(LAST_RUN_MARKER, 0o600)
     except OSError as e:
         _log(f"marker write failed: {e}")
 
 
 def _resolve_scripts_dir():
-    """Find scripts dir without polluting sys.path. Version-agnostic:
-    discovers the newest installed version under the plugin cache, or
-    falls back to the dir this script lives in."""
+    """Find scripts dir without polluting sys.path.
+
+    Resolution order:
+      1. Newest installed version under ~/.claude/plugins/cache that has all
+         required siblings. This wins so a stale launchd plist registered
+         against an old version still picks up newly-installed code after
+         the user runs `claude /plugins update repo-forensics`.
+      2. This script's own directory if it has the expected siblings —
+         covers source-repo dogfood and standalone-copy installs.
+    """
     home = os.path.expanduser("~")
     plugin_root = os.path.join(home, ".claude", "plugins", "cache")
     if os.path.isdir(plugin_root):
@@ -180,7 +196,9 @@ def _resolve_scripts_dir():
                         rf_dir, ver, "skills", "repo-forensics", "scripts"
                     )
                     if (os.path.isdir(scripts)
-                            and os.path.isfile(os.path.join(scripts, "ioc_manager.py"))):
+                            and os.path.isfile(os.path.join(scripts, "ioc_manager.py"))
+                            and os.path.isfile(os.path.join(scripts, "forensics_core.py"))
+                            and os.path.isfile(os.path.join(scripts, "vuln_feed.py"))):
                         try:
                             mtime = os.path.getmtime(scripts)
                         except OSError:
@@ -189,12 +207,12 @@ def _resolve_scripts_dir():
         except OSError:
             pass
         if candidates:
-            candidates.sort(reverse=True)  # Newest first
+            candidates.sort(reverse=True)
             return candidates[0][1]
 
-    # Fallback: this script's own directory (source-repo dogfood)
     here = os.path.dirname(os.path.abspath(__file__))
-    if os.path.isfile(os.path.join(here, "ioc_manager.py")):
+    if (os.path.isfile(os.path.join(here, "ioc_manager.py"))
+            and os.path.isfile(os.path.join(here, "forensics_core.py"))):
         return here
     return None
 
@@ -277,9 +295,15 @@ def main():
             _log("scripts dir not found — exiting")
             return
         _log(f"refresh start (scripts_dir={scripts_dir})")
+        # Pre-load forensics_core for the shared atomic-write helper used by marker.
+        try:
+            fc_path = os.path.join(scripts_dir, "forensics_core.py")
+            forensics_core = _import_module_by_path("forensics_core", fc_path)
+        except Exception:
+            forensics_core = None
         ok_ioc = _refresh_iocs(scripts_dir)
         ok_kev = _refresh_kev(scripts_dir)
-        _write_marker()
+        _write_marker(forensics_core=forensics_core)
         _log(f"refresh done (ioc={ok_ioc}, kev={ok_kev})")
     finally:
         try:

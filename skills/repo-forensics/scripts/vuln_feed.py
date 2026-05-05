@@ -43,9 +43,13 @@ import sys
 import json
 import re
 import time
-import tempfile
 import urllib.request
 import urllib.error
+
+# Ensure sibling forensics_core is importable regardless of load context.
+_SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
 
 # ---- Hardcoded feed endpoints (NO user override at public API) ------------
 KEV_FEED_URL = (
@@ -124,22 +128,10 @@ def _cache_path(filename, cache_dir=None):
 
 
 def _atomic_write(path, data):
-    """Write JSON atomically with mode 0o600. Prevents partial-file reads
-    and prevents another local user on the box from seeing cache contents."""
-    dirpath = os.path.dirname(path)
-    os.makedirs(dirpath, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(prefix=".tmp-", dir=dirpath)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(data, f)
-        os.chmod(tmp, 0o600)
-        os.replace(tmp, path)
-    except Exception:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
+    """Write JSON atomically with mode 0o600. Delegates to the shared helper
+    in forensics_core for consistent semantics across all cache writers."""
+    import forensics_core
+    forensics_core.atomic_write_json(path, data, mode=0o600, do_fsync=True)
 
 
 _CACHE_FILE_MAX_BYTES = 50 * 1024 * 1024  # hard ceiling for any cache read

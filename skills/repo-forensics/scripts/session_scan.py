@@ -30,6 +30,11 @@ import re
 import subprocess
 import sys
 import time
+from collections import namedtuple
+
+# Typed warning record for threat-DB freshness checks. Caller pattern-matches
+# on `kind` to route by category instead of substring-matching messages.
+ThreatDBWarning = namedtuple("ThreatDBWarning", "kind detail remediation")
 
 SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPTS_DIR)
@@ -77,11 +82,18 @@ ENV_KILL_SWITCH = "REPO_FORENSICS_SESSION_SCAN"
 # ========================================================================
 
 def check_threat_db_freshness():
-    """Read-only check; no network calls. Returns warning messages if stale.
-    Uses the marker file's mtime (kernel-managed) instead of reading a
-    timestamp from its contents — robust against userspace clock jumps,
-    NTP step adjustments, and DST shifts."""
-    messages = []
+    """Read-only check; no network calls. Returns a list of ThreatDBWarning
+    records. Uses the marker file's mtime (kernel-managed) instead of reading
+    a timestamp from its contents — robust against userspace clock jumps,
+    NTP step adjustments, and DST shifts.
+
+    Warning kinds:
+      - "stale_marker": daemon ran recently in the past but hasn't refreshed
+        in over STALE_WARN_DAYS days.
+      - "daemon_missing": IOC or KEV cache exists but no refresh marker —
+        daemon is likely not installed.
+    """
+    warnings = []
     ioc_path = os.path.join(BASELINE_DIR, ".forensics-iocs.json")
     kev_path = os.path.join(BASELINE_DIR, "kev.json")
 
@@ -90,18 +102,20 @@ def check_threat_db_freshness():
         age_days = (time.time() - last_ts) / 86400.0
         # Negative age (clock jumped backward) — treat as fresh, don't alarm.
         if age_days > STALE_WARN_DAYS:
-            messages.append(
-                f"Threat DBs haven't refreshed in {age_days:.0f} days. "
-                f"Check: launchctl list | grep repo-forensics-refresh"
-            )
+            warnings.append(ThreatDBWarning(
+                kind="stale_marker",
+                detail=f"{age_days:.0f} days since last refresh",
+                remediation="launchctl list | grep repo-forensics-refresh",
+            ))
     except OSError:
         # Marker missing — first run, OR daemon never installed.
         if os.path.isfile(ioc_path) or os.path.isfile(kev_path):
-            messages.append(
-                "Threat DB refresh daemon not running. "
-                "Install: bash hooks/install_refresh_daemon.sh"
-            )
-    return messages
+            warnings.append(ThreatDBWarning(
+                kind="daemon_missing",
+                detail="caches exist but no refresh marker found",
+                remediation="bash hooks/install_refresh_daemon.sh",
+            ))
+    return warnings
 
 
 # Compatibility alias — callers expect this name
@@ -328,41 +342,20 @@ def load_baseline():
 
 
 def save_baseline(items_checksums):
-    """Save baseline atomically (temp + fsync + os.replace).
-    Concurrent SessionStart hooks or power loss must never produce corrupt JSON;
-    a corrupt baseline silently downgrades the next session to first-run scan
-    coverage (cap kicks in), which is a security regression."""
-    os.makedirs(BASELINE_DIR, exist_ok=True)
+    """Save baseline atomically. Delegates to forensics_core for the shared
+    atomic-write implementation. Non-fatal on failure: a stale baseline is
+    safer than no baseline (a missing baseline silently triggers first-run
+    cap, capping coverage)."""
     payload = {
         'version': BASELINE_VERSION,
         '_saved_at': time.time(),
         'items': items_checksums,
     }
-    # uuid + pid suffix avoids tmp-file collision across PID-reuse and
-    # concurrent writers; 0o600 keeps the baseline private to the user.
-    import uuid as _uuid
-    tmp_path = f"{BASELINE_FILE}.tmp.{os.getpid()}.{_uuid.uuid4().hex}"
     try:
-        fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        try:
-            with os.fdopen(fd, 'w', encoding='utf-8') as f:
-                json.dump(payload, f, indent=2)
-                f.flush()
-                os.fsync(f.fileno())
-        except BaseException:
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
-            raise
-        os.replace(tmp_path, BASELINE_FILE)
+        import forensics_core
+        forensics_core.atomic_write_json(BASELINE_FILE, payload, mode=0o600)
     except OSError:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-        # Non-fatal: stale baseline beats no baseline
-        return
+        return  # Non-fatal: keep prior baseline if disk is full / read-only.
 
 
 def detect_changes(items, baseline):
@@ -578,14 +571,23 @@ def _extract_dependencies(dirpath):
 # Main orchestrator
 # ========================================================================
 
+def _render_warning(w):
+    """Render a ThreatDBWarning into a single user-facing line."""
+    if w.kind == "stale_marker":
+        return f"Threat DBs are {w.detail}. Check: {w.remediation}"
+    if w.kind == "daemon_missing":
+        return f"Threat DB refresh daemon not running ({w.detail}). Install: {w.remediation}"
+    return f"{w.kind}: {w.detail}"
+
+
 def format_output(refresh_messages, changed_items, scan_results, is_first_run, total_items):
     """Format the SessionStart hook output as additional context."""
     lines = []
 
-    # Refresh messages (only if databases were updated)
+    # Refresh warnings (typed records or legacy strings)
     if refresh_messages:
         for msg in refresh_messages:
-            lines.append(msg)
+            lines.append(_render_warning(msg))
 
     # First run message
     if is_first_run:

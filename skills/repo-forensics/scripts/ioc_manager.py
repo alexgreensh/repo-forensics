@@ -28,6 +28,14 @@ import sys
 import json
 import time
 
+# Ensure sibling modules (forensics_core, etc.) are importable regardless of
+# how this module gets loaded — direct CLI, hook subprocess, or daemon
+# importlib bootstrap. Inserting our own dir at sys.path[0] is contained to
+# this process and aligns with session_scan/auto_scan's existing pattern.
+_SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
+
 # Default IOC feed URL (GitHub raw from repo-forensics releases)
 IOC_FEED_URL = "https://raw.githubusercontent.com/alexgreensh/repo-forensics/main/iocs/latest.json"
 
@@ -229,38 +237,15 @@ def _load_cache(cache_dir=None):
 
 
 def _save_cache(data, cache_dir=None):
-    """Save IOCs to local cache atomically (temp + fsync + os.replace).
-    File is written with mode 0o600 to keep IOC contents private to the user
-    on multi-user systems. Temp suffix combines PID and uuid to avoid
-    collisions with concurrent writers or stale tmp files from prior crashes."""
+    """Save IOCs to local cache atomically. Delegates to forensics_core
+    for the shared atomic-write implementation (temp + fsync + os.replace,
+    mode 0o600, uuid-suffixed temp file)."""
     if not isinstance(data, dict):
         return
-    import uuid as _uuid
-    path = _cache_path(cache_dir)
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    import forensics_core
     to_save = dict(data)
     to_save['_cached_at'] = time.time()
-    tmp_path = f"{path}.tmp.{os.getpid()}.{_uuid.uuid4().hex}"
-    try:
-        fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        try:
-            with os.fdopen(fd, 'w', encoding='utf-8') as f:
-                json.dump(to_save, f, indent=2)
-                f.flush()
-                os.fsync(f.fileno())
-        except BaseException:
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
-            raise
-        os.replace(tmp_path, path)
-    except OSError:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-        raise
+    forensics_core.atomic_write_json(_cache_path(cache_dir), to_save, mode=0o600)
 
 
 # Hardened fetcher: HTTPS only, hostname allowlist, strict size cap.

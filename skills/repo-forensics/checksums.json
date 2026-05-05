@@ -13,11 +13,11 @@
     "scripts/aggregate_json.py": "3fe4871e7845c400f374df2e04141c532398256574817d76d5c7cd639882fba0",
     "scripts/auto_scan.py": "ec5d88f62553780af6399b0738b357b66e6811c5e1d76e8208f66cb46aae4805",
     "scripts/dast_sandbox.sb": "6f6e9571a73aa8a9d07e7e4c5c0e6ae49fb6447c5f34a446154d301c6c4e8875",
-    "scripts/forensics_core.py": "ef573248937ca3cdb4f0a91d711d1c52b2d024754a872a9b12c021f78f09e9c8",
-    "scripts/ioc_manager.py": "ac797fde4617e9cd9b00edbf62f84fb6007c54e133c3e3c55af345169122bdd2",
+    "scripts/forensics_core.py": "8ec0530e841e998811e4e27e7f08cb0a00064e44f19fdf309e79a41d014a49a6",
+    "scripts/ioc_manager.py": "9b593727602b2c07fcf71f0852b45507da17d87975bc0678b61bbe9a6fab348a",
     "scripts/parse_pnpm_lock.py": "720f084e11cd759ab453bdfa161950111a49455ff2c6ba55ef5a9c3e32161f0c",
     "scripts/pre_scan.py": "a4596a00fa32b398495fb19a89b9f68a854771d555f5031ca01fc415bd55faad",
-    "scripts/refresh_threat_dbs.py": "736128ee5c0ad4450e8986c292e2870bf0a124edfc49bd5ccfe75ae18c5ab00f",
+    "scripts/refresh_threat_dbs.py": "f14310dc528f1a383f17c7a4e94c6ebca403839dc92a924d3d97a2205ac7ede2",
     "scripts/run_forensics.sh": "fecabd78f1aae2e882c64debda533c03cc898bd6fdf8502f1943e7274b029615",
     "scripts/scan_agent_skills.py": "db491c181e6aabbe0d995492c86fcdc9f80dc1fb512116f41a541cbd0625aa39",
     "scripts/scan_ast.py": "92375cea8c9e71caa5885e904b1d4407e0f6c2d4dd29d990a820cf74e907f6a0",
@@ -38,9 +38,9 @@
     "scripts/scan_sast.py": "3060696f2136e3ab05f4b688da1384ab55ec40eb8e8f94247380400ecfe235f9",
     "scripts/scan_secrets.py": "b7dd163ca400579ebcd962499a7b58826dabd7d005c0b83f804d7d78052066a5",
     "scripts/scan_skill_threats.py": "0adf52d8e000423ec447d78e16505394ebb9145ba5eca71ad7e59ec6e389b83a",
-    "scripts/session_scan.py": "0b1d60891d15946b1a484e391610c40889afc00989680189bd388fcbfb0463a5",
+    "scripts/session_scan.py": "f69b013c124beaf837af55c81e6420fd0535623d9c4607089b0ae220389d168c",
     "scripts/verify_install.py": "9ebc2e18fc638599d56d00cbecce5da759b7be2f834995668c69262eaba14c69",
-    "scripts/vuln_feed.py": "f6628830a7410e5efc3df1af69fbf41739fb72fec979c6818363112f6f408b66"
+    "scripts/vuln_feed.py": "994c18d1fbda7e5d0d8aa7c03cbe7824bf691d35d48781cf7cc8fb61bb170e5c"
   },
   "repo_symlinks": {
     "skill": "skills/repo-forensics"
@@ -57,8 +57,8 @@
   },
   "hook_count": 7,
   "repo_manifests": {
-    ".claude-plugin/marketplace.json": "907eb918d8313cd204e84f64ff7138f4f96b23d6a31b65c7ecf0e04d45ca0133",
-    ".claude-plugin/plugin.json": "48c9ff407dfdcbaa30b5b395a2ffde9591e78fe7e27f430899b2cff5200082a5"
+    ".claude-plugin/marketplace.json": "b21ec9894139cb936d73b67cd2f02d57be52e8c36c2ccb2d020c8ec4e2d4717c",
+    ".claude-plugin/plugin.json": "9fd833dba40a19207e1c7d3d866b83fa648245e4b222b6a642e98314901621d7"
   },
   "manifest_count": 2
 }

@@ -2,6 +2,34 @@
 
 All notable changes to repo-forensics. Versions follow semver.
 
+## [2.7.6] - 2026-05-05
+
+### Internals
+
+- Consolidated atomic-write logic into a single `forensics_core.atomic_write_json`
+  / `atomic_write_text` helper, called by every cache writer (IOC, KEV, baseline,
+  refresh marker). All cache writes now share identical guarantees:
+  `O_EXCL` temp file + explicit `fchmod(0o600)` + `fsync` + `os.replace`.
+- Explicit `fchmod` after open ensures the `0o600` permission is honored
+  regardless of the user's umask.
+- Threat-DB freshness warnings are now structured `ThreatDBWarning` records
+  (`kind`, `detail`, `remediation`) instead of free-form strings — easier to
+  route, suppress, or test.
+- Added `forensics_core.import_module_by_path` for loading sibling modules by
+  absolute path, with `BaseException` cleanup so signal-handler interrupts can't
+  wedge half-imported modules in `sys.modules`.
+- `refresh_threat_dbs._resolve_scripts_dir` requires `forensics_core.py` and
+  `vuln_feed.py` siblings before accepting a candidate directory — survives
+  partial installs cleanly.
+- `_write_marker` feature-checks `atomic_write_text` so the daemon stays
+  compatible across plugin-cache versions during upgrade transitions.
+
+### Maintenance
+
+- `vuln_feed.py` no longer imports `tempfile` (delegated atomic write).
+- `_render_warning` dropped its dead `str` fallback path.
+- Removed redundant per-file `do_fsync` knob (always on).
+
 ## [2.7.5] - 2026-05-05
 
 ### Performance

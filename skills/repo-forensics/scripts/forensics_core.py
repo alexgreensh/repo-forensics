@@ -1085,3 +1085,81 @@ def output_findings(findings, output_format="text", scanner_name=""):
             print(format_findings(findings, "text"))
         else:
             print(f"\n[+] No issues found.")
+
+
+# ---------------------------------------------------------------------------
+# Shared atomic-write helper (consolidates the four near-duplicate impls
+# previously scattered across vuln_feed, ioc_manager, session_scan, and
+# refresh_threat_dbs). Always temp+fsync+chmod+replace, mode 0o600,
+# explicit cleanup on any failure (including BaseException).
+# ---------------------------------------------------------------------------
+
+def _atomic_write_via(path, mode, write_fn):
+    """Internal atomic-write engine. write_fn(file_obj) does the actual write."""
+    import os as _os
+    import uuid as _uuid
+
+    dirpath = _os.path.dirname(path) or "."
+    _os.makedirs(dirpath, exist_ok=True)
+    tmp_path = f"{path}.tmp.{_os.getpid()}.{_uuid.uuid4().hex}"
+    try:
+        fd = _os.open(tmp_path, _os.O_WRONLY | _os.O_CREAT | _os.O_EXCL, mode)
+        try:
+            # Explicit fchmod beats umask interference on shared systems.
+            try:
+                _os.fchmod(fd, mode)
+            except OSError:
+                pass
+            with _os.fdopen(fd, "w", encoding="utf-8") as f:
+                write_fn(f)
+                f.flush()
+                _os.fsync(f.fileno())
+        except BaseException:
+            try:
+                _os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
+        _os.replace(tmp_path, path)
+    except OSError:
+        try:
+            _os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+def atomic_write_json(path, data, mode=0o600):
+    """Write `data` (any JSON-serializable value) to `path` atomically with
+    fsync, fchmod, and rename. Mode defaults to 0o600 (user-only)."""
+    import json as _json
+    _atomic_write_via(path, mode, lambda f: _json.dump(data, f, indent=2))
+
+
+def atomic_write_text(path, text, mode=0o600):
+    """Write a plain text string atomically. Same guarantees as atomic_write_json."""
+    _atomic_write_via(path, mode, lambda f: f.write(text))
+
+
+def import_module_by_path(name, path):
+    """Load a Python module by absolute path without polluting sys.path.
+
+    Catches BaseException so SIGALRM / KeyboardInterrupt during exec_module
+    can't leave a half-imported module wedged in sys.modules.
+
+    Returns the module on success, None if the spec couldn't be built.
+    """
+    import importlib.util as _ilu
+    import sys as _sys
+
+    spec = _ilu.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        return None
+    mod = _ilu.module_from_spec(spec)
+    _sys.modules[name] = mod
+    try:
+        spec.loader.exec_module(mod)
+    except BaseException:
+        _sys.modules.pop(name, None)
+        raise
+    return mod
