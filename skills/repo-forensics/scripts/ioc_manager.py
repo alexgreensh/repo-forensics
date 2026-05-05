@@ -229,15 +229,38 @@ def _load_cache(cache_dir=None):
 
 
 def _save_cache(data, cache_dir=None):
-    """Save IOCs to local cache. Does not mutate the input dict."""
+    """Save IOCs to local cache atomically (temp + fsync + os.replace).
+    File is written with mode 0o600 to keep IOC contents private to the user
+    on multi-user systems. Temp suffix combines PID and uuid to avoid
+    collisions with concurrent writers or stale tmp files from prior crashes."""
     if not isinstance(data, dict):
         return
+    import uuid as _uuid
     path = _cache_path(cache_dir)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     to_save = dict(data)
     to_save['_cached_at'] = time.time()
-    with open(path, 'w', encoding='utf-8') as f:
-        json.dump(to_save, f, indent=2)
+    tmp_path = f"{path}.tmp.{os.getpid()}.{_uuid.uuid4().hex}"
+    try:
+        fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                json.dump(to_save, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+        except BaseException:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
+        os.replace(tmp_path, path)
+    except OSError:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
 
 
 # Hardened fetcher: HTTPS only, hostname allowlist, strict size cap.

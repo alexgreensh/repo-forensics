@@ -50,6 +50,9 @@ INSTALL_PATTERNS = [
     (re.compile(r'openclaw\s+(?:skills|plugins)\s+(?:install|update)\s+(.+)'), 'openclaw_install'),
     # clawhub install
     (re.compile(r'clawhub\s+(?:install|publish)\s+(.+)'), 'openclaw_install'),
+    # claude plugins install/update/add (CLI variants: `claude plugins install`,
+    # `claude plugins:install`, `claude /plugins install`, `claude plugins enable`)
+    (re.compile(r'claude\s+/?plugins[:\s]+(?:install|update|add|enable)\s+(.+)'), 'claude_plugin_install'),
 ]
 
 # Pipe-to-shell patterns (instant CRITICAL)
@@ -111,15 +114,18 @@ def detect_install_command(command):
 def extract_package_names(pattern_type, match):
     """Extract package names from install command match."""
     if pattern_type in ('pip_install', 'npm_install', 'yarn_add', 'gem_install',
-                        'cargo_install', 'go_install', 'brew_install', 'openclaw_install'):
+                        'cargo_install', 'go_install', 'brew_install', 'openclaw_install',
+                        'claude_plugin_install'):
         raw = match.group(1)
         # Strip flags
         cleaned = INSTALL_FLAGS.sub('', raw).strip()
         # Split on whitespace, filter empties and flags
         names = [n.strip() for n in cleaned.split() if n.strip() and not n.startswith('-')]
-        # Strip version specifiers for pip
+        # Strip version specifiers for pip; .strip() handles `pkg @ url` form
+        # which leaves trailing whitespace after the @ split.
         if pattern_type == 'pip_install':
-            names = [re.split(r'[>=<!\[\];@]', n)[0] for n in names]
+            names = [re.split(r'[>=<!\[\];@]', n)[0].strip() for n in names]
+            names = [n for n in names if n]
         return names
     return []
 
