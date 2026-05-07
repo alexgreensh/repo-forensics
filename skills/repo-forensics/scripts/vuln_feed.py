@@ -131,7 +131,7 @@ def _atomic_write(path, data):
     """Write JSON atomically with mode 0o600. Delegates to the shared helper
     in forensics_core for consistent semantics across all cache writers."""
     import forensics_core
-    forensics_core.atomic_write_json(path, data, mode=0o600, do_fsync=True)
+    forensics_core.atomic_write_json(path, data, mode=0o600)
 
 
 _CACHE_FILE_MAX_BYTES = 50 * 1024 * 1024  # hard ceiling for any cache read

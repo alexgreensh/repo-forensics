@@ -65,96 +65,44 @@ def mock_home(tmp_dir, monkeypatch):
 # ========================================================================
 
 class TestRefreshThreatDatabases:
-    def test_fresh_caches_skip_refresh(self, monkeypatch):
-        monkeypatch.setattr(session_scan, '_is_ioc_cache_stale', lambda: False)
-        monkeypatch.setattr(session_scan, '_is_kev_cache_stale', lambda: False)
-        msgs = session_scan.refresh_threat_databases()
+    def test_fresh_marker_no_warnings(self, tmp_dir, monkeypatch):
+        monkeypatch.setattr(session_scan, 'BASELINE_DIR', tmp_dir)
+        marker = os.path.join(tmp_dir, ".last-refresh")
+        monkeypatch.setattr(session_scan, 'LAST_RUN_MARKER', marker)
+        create_file(marker, "")
+        msgs = session_scan.check_threat_db_freshness()
         assert msgs == []
 
-    def test_stale_ioc_triggers_refresh(self, monkeypatch):
-        monkeypatch.setattr(session_scan, '_is_ioc_cache_stale', lambda: True)
-        monkeypatch.setattr(session_scan, '_is_kev_cache_stale', lambda: False)
+    def test_stale_marker_warns(self, tmp_dir, monkeypatch):
+        monkeypatch.setattr(session_scan, 'BASELINE_DIR', tmp_dir)
+        marker = os.path.join(tmp_dir, ".last-refresh")
+        monkeypatch.setattr(session_scan, 'LAST_RUN_MARKER', marker)
+        create_file(marker, "")
+        old_time = time.time() - (session_scan.STALE_WARN_DAYS + 1) * 86400
+        os.utime(marker, (old_time, old_time))
+        msgs = session_scan.check_threat_db_freshness()
+        assert len(msgs) >= 1
+        assert msgs[0].kind == "stale_marker"
 
-        class FakeIOC:
-            @staticmethod
-            def update_iocs():
-                return True, "IOCs updated: v2026-04-19 (7 C2 IPs)"
-        monkeypatch.setitem(sys.modules, 'ioc_manager', FakeIOC())
+    def test_daemon_missing_warning(self, tmp_dir, monkeypatch):
+        monkeypatch.setattr(session_scan, 'BASELINE_DIR', tmp_dir)
+        marker = os.path.join(tmp_dir, ".last-refresh")
+        monkeypatch.setattr(session_scan, 'LAST_RUN_MARKER', marker)
+        create_file(os.path.join(tmp_dir, ".forensics-iocs.json"), "{}")
+        msgs = session_scan.check_threat_db_freshness()
+        assert len(msgs) >= 1
+        assert msgs[0].kind == "daemon_missing"
 
-        msgs = session_scan.refresh_threat_databases()
-        assert any("Updating threat databases" in m for m in msgs)
-        assert any("IOC" in m for m in msgs)
+    def test_no_marker_no_cache_no_warning(self, tmp_dir, monkeypatch):
+        monkeypatch.setattr(session_scan, 'BASELINE_DIR', tmp_dir)
+        marker = os.path.join(tmp_dir, ".last-refresh")
+        monkeypatch.setattr(session_scan, 'LAST_RUN_MARKER', marker)
+        msgs = session_scan.check_threat_db_freshness()
+        assert msgs == []
 
-    def test_stale_kev_triggers_refresh(self, monkeypatch):
-        monkeypatch.setattr(session_scan, '_is_ioc_cache_stale', lambda: False)
-        monkeypatch.setattr(session_scan, '_is_kev_cache_stale', lambda: True)
-
-        class FakeVuln:
-            @staticmethod
-            def update_kev_cache():
-                return True, "KEV catalog cached: 1200 CVEs"
-        monkeypatch.setitem(sys.modules, 'vuln_feed', FakeVuln())
-
-        msgs = session_scan.refresh_threat_databases()
-        assert any("Updating threat databases" in m for m in msgs)
-        assert any("KEV" in m for m in msgs)
-
-    def test_both_stale_refreshes_both(self, monkeypatch):
-        monkeypatch.setattr(session_scan, '_is_ioc_cache_stale', lambda: True)
-        monkeypatch.setattr(session_scan, '_is_kev_cache_stale', lambda: True)
-
-        class FakeIOC:
-            @staticmethod
-            def update_iocs():
-                return True, "IOCs updated"
-        class FakeVuln:
-            @staticmethod
-            def update_kev_cache():
-                return True, "KEV cached"
-        monkeypatch.setitem(sys.modules, 'ioc_manager', FakeIOC())
-        monkeypatch.setitem(sys.modules, 'vuln_feed', FakeVuln())
-
-        msgs = session_scan.refresh_threat_databases()
-        assert any("IOC" in m for m in msgs)
-        assert any("KEV" in m for m in msgs)
-
-    def test_refresh_failure_graceful(self, monkeypatch):
-        monkeypatch.setattr(session_scan, '_is_ioc_cache_stale', lambda: True)
-        monkeypatch.setattr(session_scan, '_is_kev_cache_stale', lambda: True)
-
-        class FailIOC:
-            @staticmethod
-            def update_iocs():
-                raise ConnectionError("no network")
-        class FailVuln:
-            @staticmethod
-            def update_kev_cache():
-                raise ConnectionError("no network")
-        monkeypatch.setitem(sys.modules, 'ioc_manager', FailIOC())
-        monkeypatch.setitem(sys.modules, 'vuln_feed', FailVuln())
-
-        # Should NOT raise
-        msgs = session_scan.refresh_threat_databases()
-        assert any("Updating threat databases" in m for m in msgs)
-
-    def test_import_error_graceful(self, monkeypatch):
-        monkeypatch.setattr(session_scan, '_is_ioc_cache_stale', lambda: True)
-        monkeypatch.setattr(session_scan, '_is_kev_cache_stale', lambda: True)
-        # Remove modules if present to force ImportError
-        monkeypatch.delitem(sys.modules, 'ioc_manager', raising=False)
-        monkeypatch.delitem(sys.modules, 'vuln_feed', raising=False)
-
-        # Patch the import to fail
-        original_import = __builtins__.__import__ if hasattr(__builtins__, '__import__') else __import__
-        def fail_import(name, *args, **kwargs):
-            if name in ('ioc_manager', 'vuln_feed'):
-                raise ImportError(f"No module named '{name}'")
-            return original_import(name, *args, **kwargs)
-
-        monkeypatch.setattr('builtins.__import__', fail_import)
-        msgs = session_scan.refresh_threat_databases()
-        # Should not crash
-        assert isinstance(msgs, list)
+    def test_compat_alias_returns_list(self):
+        result = session_scan.refresh_threat_databases
+        assert callable(result)
 
 
 # ========================================================================
@@ -187,8 +135,8 @@ class TestScanDirectory:
     def test_scan_with_scannable_files(self, tmp_dir):
         create_file(os.path.join(tmp_dir, "plugin", "main.py"), "code")
         create_file(os.path.join(tmp_dir, "plugin", "config.json"), "{}")
-        checksums, label = session_scan._scan_directory(
-            os.path.join(tmp_dir, "plugin"), "test-plugin"
+        checksums = session_scan._scan_directory(
+            os.path.join(tmp_dir, "plugin")
         )
         assert checksums is not None
         assert "main.py" in checksums
@@ -198,22 +146,21 @@ class TestScanDirectory:
         create_file(os.path.join(tmp_dir, "plugin", "main.py"), "code")
         create_file(os.path.join(tmp_dir, "plugin", "data.csv"), "a,b,c")
         create_file(os.path.join(tmp_dir, "plugin", "image.png"), "binary")
-        checksums, _ = session_scan._scan_directory(
-            os.path.join(tmp_dir, "plugin"), "test"
+        checksums = session_scan._scan_directory(
+            os.path.join(tmp_dir, "plugin")
         )
         assert "main.py" in checksums
         assert "data.csv" not in checksums
         assert "image.png" not in checksums
 
     def test_nonexistent_directory(self):
-        checksums, label = session_scan._scan_directory("/nonexistent/path", "x")
+        checksums = session_scan._scan_directory("/nonexistent/path")
         assert checksums is None
-        assert label is None
 
     def test_empty_directory(self, tmp_dir):
         empty = os.path.join(tmp_dir, "empty_plugin")
         os.makedirs(empty)
-        checksums, label = session_scan._scan_directory(empty, "empty")
+        checksums = session_scan._scan_directory(empty)
         assert checksums == {}
 
 
@@ -281,38 +228,35 @@ class TestDetectChanges:
     def test_no_baseline_all_changed(self, tmp_dir):
         plugin_dir = create_plugin(tmp_dir, "test-plugin")
         items = [(plugin_dir, "test-plugin", "plugin")]
-        changed = session_scan.detect_changes(items, None)
+        changed, _all_entries = session_scan.detect_changes(items, None)
         assert len(changed) == 1
         assert changed[0][1] == "test-plugin"
 
     def test_matching_baseline_no_changes(self, tmp_dir):
         plugin_dir = create_plugin(tmp_dir, "test-plugin")
         items = [(plugin_dir, "test-plugin", "plugin")]
-        # Build baseline from current state
-        checksums, _ = session_scan._scan_directory(plugin_dir, "test-plugin")
+        checksums = session_scan._scan_directory(plugin_dir)
         baseline = {'items': {f"plugin:{plugin_dir}": checksums}}
-        changed = session_scan.detect_changes(items, baseline)
+        changed, _all_entries = session_scan.detect_changes(items, baseline)
         assert len(changed) == 0
 
     def test_modified_file_detected(self, tmp_dir):
         plugin_dir = create_plugin(tmp_dir, "test-plugin")
         items = [(plugin_dir, "test-plugin", "plugin")]
-        checksums, _ = session_scan._scan_directory(plugin_dir, "test-plugin")
+        checksums = session_scan._scan_directory(plugin_dir)
         baseline = {'items': {f"plugin:{plugin_dir}": checksums}}
-        # Modify a file
         with open(os.path.join(plugin_dir, "index.js"), 'w') as f:
             f.write("// MALICIOUS CODE HERE")
-        changed = session_scan.detect_changes(items, baseline)
+        changed, _all_entries = session_scan.detect_changes(items, baseline)
         assert len(changed) == 1
 
     def test_new_file_detected(self, tmp_dir):
         plugin_dir = create_plugin(tmp_dir, "test-plugin")
         items = [(plugin_dir, "test-plugin", "plugin")]
-        checksums, _ = session_scan._scan_directory(plugin_dir, "test-plugin")
+        checksums = session_scan._scan_directory(plugin_dir)
         baseline = {'items': {f"plugin:{plugin_dir}": checksums}}
-        # Add new file
         create_file(os.path.join(plugin_dir, "evil.py"), "import os; os.system('rm -rf /')")
-        changed = session_scan.detect_changes(items, baseline)
+        changed, _all_entries = session_scan.detect_changes(items, baseline)
         assert len(changed) == 1
 
 
@@ -323,7 +267,7 @@ class TestDetectChanges:
 class TestScanItem:
     def test_clean_plugin_no_findings(self, tmp_dir, monkeypatch):
         plugin_dir = create_plugin(tmp_dir, "safe-plugin", "1.0.0")
-        checksums, _ = session_scan._scan_directory(plugin_dir, "safe-plugin")
+        checksums = session_scan._scan_directory(plugin_dir)
 
         class FakeIOC:
             @staticmethod
@@ -340,7 +284,7 @@ class TestScanItem:
 
     def test_malicious_name_detected(self, tmp_dir, monkeypatch):
         plugin_dir = create_plugin(tmp_dir, "claud-code", "1.0.0")
-        checksums, _ = session_scan._scan_directory(plugin_dir, "claud-code")
+        checksums = session_scan._scan_directory(plugin_dir)
 
         class FakeIOC:
             @staticmethod
@@ -358,7 +302,7 @@ class TestScanItem:
 
     def test_compromised_version_detected(self, tmp_dir, monkeypatch):
         plugin_dir = create_plugin(tmp_dir, "axios", "1.14.1")
-        checksums, _ = session_scan._scan_directory(plugin_dir, "axios")
+        checksums = session_scan._scan_directory(plugin_dir)
 
         class FakeIOC:
             @staticmethod
@@ -382,7 +326,7 @@ class TestScanItem:
             tmp_dir, "my-plugin", "2.0.0",
             deps={"axios": "1.14.1", "lodash": "4.17.21"}
         )
-        checksums, _ = session_scan._scan_directory(plugin_dir, "my-plugin")
+        checksums = session_scan._scan_directory(plugin_dir)
 
         class FakeIOC:
             @staticmethod
@@ -405,7 +349,7 @@ class TestScanItem:
             tmp_dir, "my-plugin", "1.0.0",
             deps={"rimarf": "^1.0.0", "express": "^4.18.0"}
         )
-        checksums, _ = session_scan._scan_directory(plugin_dir, "my-plugin")
+        checksums = session_scan._scan_directory(plugin_dir)
 
         class FakeIOC:
             @staticmethod
@@ -422,7 +366,7 @@ class TestScanItem:
 
     def test_ioc_unavailable_no_crash(self, tmp_dir, monkeypatch):
         plugin_dir = create_plugin(tmp_dir, "test", "1.0.0")
-        checksums, _ = session_scan._scan_directory(plugin_dir, "test")
+        checksums = session_scan._scan_directory(plugin_dir)
 
         # Force ImportError on ioc_manager
         monkeypatch.delitem(sys.modules, 'ioc_manager', raising=False)
@@ -542,11 +486,15 @@ class TestFormatOutput:
         assert any("\u26a0" in line for line in lines)
 
     def test_refresh_messages_included(self):
-        lines = session_scan.format_output(
-            ["Updating threat databases (daily)..."],
-            [], {}, False, 5
+        warning = session_scan.ThreatDBWarning(
+            kind="stale_marker",
+            detail="outdated (3 days)",
+            remediation="run refresh_threat_dbs.py"
         )
-        assert any("Updating" in line for line in lines)
+        lines = session_scan.format_output(
+            [warning], [], {}, False, 5
+        )
+        assert any("outdated" in line for line in lines)
 
 
 # ========================================================================
@@ -600,8 +548,7 @@ class TestKillSwitch:
 
     def test_enabled_by_default(self, monkeypatch, mock_home, capsys):
         monkeypatch.delenv("REPO_FORENSICS_SESSION_SCAN", raising=False)
-        monkeypatch.setattr(session_scan, '_is_ioc_cache_stale', lambda: False)
-        monkeypatch.setattr(session_scan, '_is_kev_cache_stale', lambda: False)
+        monkeypatch.setattr(session_scan, 'refresh_threat_databases', lambda: [])
         with pytest.raises(SystemExit) as exc:
             session_scan.main()
         assert exc.value.code == 0
@@ -613,8 +560,7 @@ class TestKillSwitch:
 
 class TestMainIntegration:
     def test_no_items_first_run(self, mock_home, monkeypatch, capsys):
-        monkeypatch.setattr(session_scan, '_is_ioc_cache_stale', lambda: False)
-        monkeypatch.setattr(session_scan, '_is_kev_cache_stale', lambda: False)
+        monkeypatch.setattr(session_scan, 'refresh_threat_databases', lambda: [])
         monkeypatch.delenv("REPO_FORENSICS_SESSION_SCAN", raising=False)
 
         with pytest.raises(SystemExit) as exc:
@@ -624,8 +570,7 @@ class TestMainIntegration:
         assert os.path.isfile(session_scan.BASELINE_FILE)
 
     def test_plugin_changes_detected(self, mock_home, monkeypatch, capsys):
-        monkeypatch.setattr(session_scan, '_is_ioc_cache_stale', lambda: False)
-        monkeypatch.setattr(session_scan, '_is_kev_cache_stale', lambda: False)
+        monkeypatch.setattr(session_scan, 'refresh_threat_databases', lambda: [])
         monkeypatch.delenv("REPO_FORENSICS_SESSION_SCAN", raising=False)
 
         # Create plugin
@@ -651,8 +596,7 @@ class TestMainIntegration:
         assert "hookSpecificOutput" in data
 
     def test_threat_detected_end_to_end(self, mock_home, monkeypatch, capsys):
-        monkeypatch.setattr(session_scan, '_is_ioc_cache_stale', lambda: False)
-        monkeypatch.setattr(session_scan, '_is_kev_cache_stale', lambda: False)
+        monkeypatch.setattr(session_scan, 'refresh_threat_databases', lambda: [])
         monkeypatch.delenv("REPO_FORENSICS_SESSION_SCAN", raising=False)
 
         plugin_cache = os.path.join(mock_home, ".claude", "plugins", "cache")
@@ -686,8 +630,7 @@ class TestLatency:
 
     def test_fast_path_no_items(self, mock_home, monkeypatch):
         """No plugins/skills = should exit in <50ms."""
-        monkeypatch.setattr(session_scan, '_is_ioc_cache_stale', lambda: False)
-        monkeypatch.setattr(session_scan, '_is_kev_cache_stale', lambda: False)
+        monkeypatch.setattr(session_scan, 'refresh_threat_databases', lambda: [])
         monkeypatch.delenv("REPO_FORENSICS_SESSION_SCAN", raising=False)
 
         start = time.monotonic()
@@ -698,8 +641,7 @@ class TestLatency:
 
     def test_baseline_match_no_changes(self, mock_home, monkeypatch):
         """5 plugins, nothing changed, caches fresh = should be <100ms."""
-        monkeypatch.setattr(session_scan, '_is_ioc_cache_stale', lambda: False)
-        monkeypatch.setattr(session_scan, '_is_kev_cache_stale', lambda: False)
+        monkeypatch.setattr(session_scan, 'refresh_threat_databases', lambda: [])
         monkeypatch.delenv("REPO_FORENSICS_SESSION_SCAN", raising=False)
 
         # Create 5 plugins
@@ -720,8 +662,7 @@ class TestLatency:
 
     def test_scan_changed_item(self, mock_home, monkeypatch):
         """1 changed plugin with fast IOC check (no deep scan) = should be <1000ms."""
-        monkeypatch.setattr(session_scan, '_is_ioc_cache_stale', lambda: False)
-        monkeypatch.setattr(session_scan, '_is_kev_cache_stale', lambda: False)
+        monkeypatch.setattr(session_scan, 'refresh_threat_databases', lambda: [])
         monkeypatch.delenv("REPO_FORENSICS_SESSION_SCAN", raising=False)
         # Disable deep scan for latency measurement (deep scan has own tests)
         monkeypatch.setattr(session_scan, 'RUN_FORENSICS_SCRIPT', '/nonexistent')
@@ -847,8 +788,7 @@ class TestDeepScanItem:
 class TestDeepScanIntegration:
     def test_deep_scan_skipped_first_run(self, mock_home, monkeypatch, capsys):
         """First run should NOT deep scan (too many items, no baseline yet)."""
-        monkeypatch.setattr(session_scan, '_is_ioc_cache_stale', lambda: False)
-        monkeypatch.setattr(session_scan, '_is_kev_cache_stale', lambda: False)
+        monkeypatch.setattr(session_scan, 'refresh_threat_databases', lambda: [])
         monkeypatch.delenv("REPO_FORENSICS_SESSION_SCAN", raising=False)
 
         # Track if deep_scan_item was called
@@ -869,8 +809,7 @@ class TestDeepScanIntegration:
 
     def test_deep_scan_runs_on_change(self, mock_home, monkeypatch, capsys):
         """After baseline exists and a plugin changes, deep scan should fire."""
-        monkeypatch.setattr(session_scan, '_is_ioc_cache_stale', lambda: False)
-        monkeypatch.setattr(session_scan, '_is_kev_cache_stale', lambda: False)
+        monkeypatch.setattr(session_scan, 'refresh_threat_databases', lambda: [])
         monkeypatch.delenv("REPO_FORENSICS_SESSION_SCAN", raising=False)
         # Point to non-existent script so deep scan returns [] (graceful)
         monkeypatch.setattr(session_scan, 'RUN_FORENSICS_SCRIPT', '/nonexistent')

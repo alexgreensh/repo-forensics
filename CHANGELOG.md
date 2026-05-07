@@ -2,6 +2,26 @@
 
 All notable changes to repo-forensics. Versions follow semver.
 
+## [2.7.7] - 2026-05-07
+
+### Detection
+
+- Added **Pipe to Shell Interpreter** detection (critical): catches arbitrary
+  input piped to `bash`, `sh`, `zsh`, `ksh`, or `dash`. Previously only
+  `curl | bash` was detected. (Fixes #15)
+- Added **Nested Command Substitution** detection (high): flags `$(... $(...) ...)`
+  patterns commonly used to obfuscate command injection in shell scripts.
+  (Fixes #15)
+
+### Fixes
+
+- Fixed `vuln_feed.py` passing unsupported `do_fsync` kwarg to
+  `forensics_core.atomic_write_json`.
+- Fixed `run_forensics.sh` cleanup trap overwriting the intended exit code,
+  causing clean repos to exit 1 instead of 0.
+- Aligned `test_session_scan.py` tests with refactored `_scan_directory`,
+  `detect_changes`, and `ThreatDBWarning` APIs.
+
 ## [2.7.6] - 2026-05-05
 
 ### Internals

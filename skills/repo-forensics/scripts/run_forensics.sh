@@ -130,7 +130,7 @@ if $UPDATE_VULNS && ! $OFFLINE; then
 fi
 TMPDIR=$(mktemp -d)
 # shellcheck disable=SC2329  # invoked indirectly via trap
-cleanup() { trap - EXIT INT TERM; jobs -p | xargs kill 2>/dev/null; wait 2>/dev/null; exec 3>&- 2>/dev/null; rm -rf "$TMPDIR"; }
+cleanup() { local _saved=$?; trap - EXIT INT TERM; set +e; jobs -p | xargs kill 2>/dev/null; wait 2>/dev/null; exec 3>&- 2>/dev/null; rm -rf "$TMPDIR"; exit "$_saved"; }
 trap cleanup EXIT INT TERM
 
 if [ "$FORMAT" != "json" ]; then
