@@ -9,7 +9,10 @@ Detects: frontmatter abuse, tools.json poisoning, agent config injection,
 Sources: Koi Security (ClawHavoc), OWASP MCP Top 10 (2026), Snyk ToxicSkills.
 Created by Alex Greenshpun
 """
-import os, re, sys, json
+import json
+import os
+import re
+import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import forensics_core as core
@@ -188,7 +191,7 @@ def scan_tools_json(repo_path):
                 continue
             for pat, title, sev in TOOL_INJECTION_KW:
                 if pat.search(val):
-                    ln = next((i+1 for i, l in enumerate(raw_lines) if val[:40] in l), 0)
+                    ln = next((i+1 for i, line in enumerate(raw_lines) if val[:40] in line), 0)
                     findings.append(_F(SCANNER_NAME, sev, title,
                         f"Tool '{tname}' field '{fld}' contains injection pattern.",
                         "tools.json", ln, val[:120], "tool-poisoning"))
@@ -316,6 +319,110 @@ def scan_plugin_manifest(repo_path):
     return findings
 
 
+# ============================================================
+# Cat 7: Workspace Config Write Requests (high)
+# Skills that instruct agents to write to auto-executed config files.
+# Source: Terra Security OpenClaw vulnerability research (May 2026)
+# ============================================================
+_AUTO_EXEC_FILES = r'(?:HEARTBEAT\.md|CLAUDE\.md|AGENTS\.md|settings\.json|\.claude/|commands/|hooks\.json)'
+_WRITE_VERBS = r'(?:add|append|write|modify|update|edit|create|insert|put|place|include)'
+
+CONFIG_WRITE_PATTERNS = [
+    (re.compile(r'(?i)\b' + _WRITE_VERBS + r'\b[^\n]{0,60}\b(?:to|in|into)\s+' + _AUTO_EXEC_FILES), "Config write request: modify auto-executed file (Terra Security OpenClaw, May 2026)"),
+    (re.compile(r'(?i)\b' + _WRITE_VERBS + r'\b[^\n]{0,40}' + _AUTO_EXEC_FILES), "Config write request: target auto-executed file (Terra Security OpenClaw, May 2026)"),
+    (re.compile(r'(?i)\b(?:create|install|register|set\s+up)\s+(?:a\s+)?(?:PreToolUse|PostToolUse|SessionStart|hook)\b'), "Config write request: hook installation directive (Terra Security OpenClaw, May 2026)"),
+]
+
+
+def scan_config_write_requests(repo_path):
+    """Cat 7: Detect skills that instruct agents to write to auto-executed config files."""
+    findings = []
+    for root, _dirs, files in os.walk(repo_path):
+        for fname in files:
+            ext = os.path.splitext(fname)[1].lower()
+            if ext not in ('.md', '.txt'):
+                continue
+            fpath = os.path.join(root, fname)
+            content = _read(fpath)
+            if not content:
+                continue
+            rel = os.path.relpath(fpath, repo_path)
+            for i, line in enumerate(content.split('\n')):
+                if len(line) > core.MAX_LINE_LENGTH:
+                    continue
+                for pat, title in CONFIG_WRITE_PATTERNS:
+                    if pat.search(line):
+                        if re.search(r'(?i)\b(?:users?\s+can|you\s+(?:can|may)|documentation|how\s+to)\b', line):
+                            continue
+                        findings.append(_F(SCANNER_NAME, "high", title,
+                            "Skill instructs agent to write to auto-executed config file",
+                            rel, i + 1, line.strip()[:120], "config-write-request"))
+                        break
+    return findings
+
+
+# ============================================================
+# Cat 8: Trusted File Reference Chains (medium/high)
+# Transitive reference chains that create trust-laundering pipelines.
+# Source: Terra Security OpenClaw vulnerability research (May 2026)
+# ============================================================
+_SEED_FILES = {'SKILL.md', 'SOUL.md', 'HEARTBEAT.md', 'ROUTINE.md', 'AGENTS.md', 'BOOT.md', 'BOOTSTRAP.md'}
+_GIT_UPDATABLE = {'changelog.md', 'readme.md', 'updates.md', 'release_notes.md', 'release-notes.md', 'news.md'}
+_REF_PATTERN = re.compile(r'(?i)\b(?:read|follow|run|execute|apply|check)\s+(\S+\.md)\b')
+_MAX_CHAIN_DEPTH = 5
+
+
+def scan_reference_chains(repo_path):
+    """Cat 8: Detect transitive file reference chains from seed config files."""
+    findings = []
+    graph = {}
+    for seed in _SEED_FILES:
+        seed_path = os.path.join(repo_path, seed)
+        content = _read(seed_path)
+        if not content:
+            continue
+        refs = _REF_PATTERN.findall(content)
+        if refs:
+            graph[seed] = [r for r in refs if r.lower() != seed.lower()]
+
+    for ref_file in list(graph.values()):
+        for rf in ref_file:
+            rf_path = os.path.join(repo_path, rf)
+            content = _read(rf_path)
+            if not content:
+                continue
+            refs = _REF_PATTERN.findall(content)
+            if refs:
+                graph[rf] = [r for r in refs if r.lower() != rf.lower()]
+
+    for seed in _SEED_FILES:
+        if seed not in graph:
+            continue
+        _find_chains(seed, graph, [], findings, repo_path)
+
+    return findings
+
+
+def _find_chains(current, graph, path, findings, repo_path):
+    if len(path) >= _MAX_CHAIN_DEPTH:
+        return
+    for ref in graph.get(current, []):
+        if ref in path:
+            continue
+        new_path = path + [current]
+        chain_depth = len(new_path)
+        if chain_depth >= 2:
+            terminates_at_updatable = ref.lower() in _GIT_UPDATABLE
+            severity = "high" if chain_depth >= 3 or terminates_at_updatable else "medium"
+            chain_str = " -> ".join(new_path + [ref])
+            findings.append(_F(SCANNER_NAME, severity,
+                f"Trusted file reference chain (depth {chain_depth})",
+                f"Chain: {chain_str}. Transitive references create a trust-laundering pipeline (Terra Security OpenClaw, May 2026).",
+                new_path[0], 0, chain_str[:120], "reference-chain"))
+        if ref in graph:
+            _find_chains(ref, graph, new_path, findings, repo_path)
+
+
 def main(args):
     """Run all agent skill checks. Returns list[Finding].
     Args can be a namespace with .repo_path or a string path (for testing).
@@ -333,6 +440,8 @@ def main(args):
     findings.extend(scan_clawhubignore(repo_path))
     findings.extend(scan_clawhavoc(repo_path))
     findings.extend(scan_plugin_manifest(repo_path))
+    findings.extend(scan_config_write_requests(repo_path))
+    findings.extend(scan_reference_chains(repo_path))
     return findings
 
 

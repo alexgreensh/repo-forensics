@@ -2,6 +2,41 @@
 
 All notable changes to repo-forensics. Versions follow semver.
 
+## [2.7.8] - 2026-05-07
+
+### Detection
+
+- Added **Deferred Update Channel** detection (high): catches skills that create
+  persistent remote-control channels via "check for updates", "apply procedures
+  from [file]", or "run [file] each heartbeat" directives. Filename-gated to
+  skill config files only (SKILL.md, ROUTINE.md, HEARTBEAT.md, etc.).
+  (Source: Terra Security OpenClaw, May 2026)
+- Added **Prose Imperative Exfiltration** detection (medium/high): catches
+  natural language instructions like "Send openclaw.json to https://..." that
+  an AI agent would follow as commands. Tracks markdown code fences, allowlists
+  safe domains, excludes emails. (Source: Terra Security OpenClaw, May 2026)
+- Added **Workspace Config Write Request** detection (high): catches skills
+  that instruct agents to write to auto-executed config files (HEARTBEAT.md,
+  CLAUDE.md, .claude/settings.json, hooks). Documentation-phrasing excluded.
+  (Source: Terra Security OpenClaw, May 2026)
+- Added **Trusted File Reference Chain** detection (medium/high): BFS from
+  seed config files detects A->B->C trust-laundering pipelines. Escalates
+  for chains terminating at git-updatable files (CHANGELOG.md, README.md).
+  (Source: Terra Security OpenClaw, May 2026)
+- Added **Correlation Rule 30: Staged Injection Kill Chain** (critical):
+  update-channel + prose-imperative across repo triggers critical alert.
+- Added **Correlation Rule 31: Workspace Persistence Setup** (critical):
+  config-write-request + update-channel across repo triggers critical alert.
+- Rules 30-31 use a new repo-wide correlation pass (not per-file), extending
+  the correlation engine for cross-file compound threat detection.
+
+### Fixes
+
+- Fixed unused `field` import in `forensics_core.py`.
+- Fixed f-string without placeholders in `forensics_core.py` and
+  `scan_agent_skills.py`.
+- Fixed multi-import line and ambiguous variable name in `scan_agent_skills.py`.
+
 ## [2.7.7] - 2026-05-07
 
 ### Detection

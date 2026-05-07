@@ -13,7 +13,7 @@ import sys
 import json
 import hashlib
 import fnmatch
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, asdict
 
 # --- Severity System ---
 SEVERITY = {"critical": 4, "high": 3, "medium": 2, "low": 1}
@@ -1008,6 +1008,46 @@ def correlate(findings):
                 category="git-exfiltration-chain"
             ))
 
+    # ================================================================
+    # Repo-wide correlation rules (not per-file)
+    # These rules check for compound threats across the entire repo,
+    # not limited to co-occurrence within a single file.
+    # Source: Terra Security OpenClaw vulnerability research (May 2026)
+    # ================================================================
+    update_channel_keywords = {"update-channel", "deferred update channel", "update channel"}
+    prose_imperative_keywords = {"prose-imperative", "prose imperative", "exfiltration instruction"}
+    config_write_keywords = {"config-write-request", "config write request", "hook installation"}
+
+    has_update_channel = has_category(findings, update_channel_keywords)
+    has_prose_imperative = has_category(findings, prose_imperative_keywords)
+    has_config_write = has_category(findings, config_write_keywords)
+
+    # Rule 30: Staged Injection Kill Chain (Terra Security OpenClaw, May 2026)
+    if has_update_channel and has_prose_imperative:
+        correlated.append(Finding(
+            scanner="correlation",
+            severity="critical",
+            title="Staged Injection Kill Chain (update channel + prose exfiltration)",
+            description="Skill creates an update channel AND contains prose exfiltration instructions. Matches Terra Security staged injection pattern (May 2026): benign skill installs update mechanism, then delivers malicious prose via repo updates.",
+            file="",
+            line=0,
+            snippet="[compound: update channel + prose imperative across repo]",
+            category="staged-injection-chain"
+        ))
+
+    # Rule 31: Workspace Persistence Setup (Terra Security OpenClaw, May 2026)
+    if has_config_write and has_update_channel:
+        correlated.append(Finding(
+            scanner="correlation",
+            severity="critical",
+            title="Workspace Persistence Setup (config write + update channel)",
+            description="Skill requests writing to auto-executed config files AND creates an update channel. Combined: persistent remote control via workspace file modification (Terra Security OpenClaw, May 2026).",
+            file="",
+            line=0,
+            snippet="[compound: config write request + update channel across repo]",
+            category="workspace-persistence-chain"
+        ))
+
     return correlated
 
 
@@ -1084,7 +1124,7 @@ def output_findings(findings, output_format="text", scanner_name=""):
             print(f"\n[!] Found {len(findings)} issue(s):")
             print(format_findings(findings, "text"))
         else:
-            print(f"\n[+] No issues found.")
+            print("\n[+] No issues found.")
 
 
 # ---------------------------------------------------------------------------

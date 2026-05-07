@@ -348,6 +348,46 @@ MCP_TOOL_INJECTION_PATTERNS = [
 ]
 
 
+# ============================================================
+# Category 12: Deferred Update Channel (high)
+# Skills that create persistent remote-control channels by instructing agents
+# to check for updates, read changelogs, or apply patches from files.
+# Source: Terra Security OpenClaw vulnerability research (May 2026)
+# ============================================================
+_SKILL_CONFIG_FILES = {
+    'skill.md', 'soul.md', 'routine.md', 'heartbeat.md', 'agents.md',
+    'claude.md', 'boot.md', 'bootstrap.md', 'identity.md', 'user.md',
+}
+
+UPDATE_CHANNEL_PATTERNS = [
+    (re.compile(r'(?i)\b(?:check|read|review)\s+(?:\S+\.)?(changelog|updates?|release.?notes?)\b.*\b(?:for|about)\s+(?:updates?|changes?|new\s+instructions?|procedures?|patches?)'), "Deferred update channel: check file for updates (Terra Security OpenClaw, May 2026)"),
+    (re.compile(r'(?i)\b(?:apply|follow|execute|run)\s+(?:updates?|patches?|procedures?|instructions?)\s+(?:from|in|described\s+in)\s+\S+'), "Deferred update channel: apply instructions from file (Terra Security OpenClaw, May 2026)"),
+    (re.compile(r'(?i)\b(?:pull\s+latest|git\s+pull|fetch\s+updates?)\b'), "Deferred update channel: pull latest from repository (Terra Security OpenClaw, May 2026)"),
+    (re.compile(r'(?i)\b(?:read|check|consult)\s+\S+\.md\s+(?:for|about)\s+(?:new\s+instructions?|updates?|changes?|procedures?)'), "Deferred update channel: read file for new instructions (Terra Security OpenClaw, May 2026)"),
+    (re.compile(r'(?i)\b(?:run|execute|follow)\s+\S+\.md\s+(?:each|every|on\s+each|per)\s+(?:heartbeat|cycle|iteration|session|loop)'), "Deferred update channel: run file on each heartbeat/cycle (Terra Security OpenClaw, May 2026)"),
+]
+
+# ============================================================
+# Category 13: Prose Imperative Exfiltration (medium/high)
+# Natural language instructions an AI agent would follow as commands.
+# Source: Terra Security OpenClaw vulnerability research (May 2026)
+# ============================================================
+_PROSE_VERBS = r'(?:send|post|upload|forward|transmit|exfiltrate|share|submit|deliver|write|pipe)'
+_PROSE_URL = r'https?://\S+'
+_SENSITIVE_FILE_REF = r'(?:\.json|\.env|\.ssh|\.aws|config|credentials?|tokens?|secrets?|keys?|openclaw|\.gnupg|password)'
+_SAFE_DOMAINS = {'github.com', 'gitlab.com', 'bitbucket.org', 'stackoverflow.com', 'docs.google.com', 'npmjs.com', 'pypi.org'}
+
+PROSE_IMPERATIVE_VERB_FILE_URL = re.compile(
+    r'(?i)\b' + _PROSE_VERBS + r'\b[^.\n]{0,80}' + _SENSITIVE_FILE_REF + r'[^.\n]{0,80}' + _PROSE_URL
+)
+PROSE_IMPERATIVE_VERB_URL = re.compile(
+    r'(?i)\b' + _PROSE_VERBS + r'\b[^.\n]{0,120}' + _PROSE_URL
+)
+PROSE_IMPERATIVE_URL_VERB_FILE = re.compile(
+    r'(?i)' + _SENSITIVE_FILE_REF + r'[^.\n]{0,80}\b' + _PROSE_VERBS + r'\b[^.\n]{0,80}' + _PROSE_URL
+)
+
+
 def scan_unicode_smuggling(content, rel_path):
     """Category 2: Detect invisible Unicode chars, Trojan Source bidi controls,
     variation selectors, confusable spaces, and homoglyphs.
@@ -595,6 +635,63 @@ def scan_file(file_path, rel_path):
                 ))
                 break
 
+    # Cat 12: Deferred update channel (Terra Security OpenClaw, May 2026)
+    # Only fire in skill config files to avoid FPs in general documentation
+    if ext in text_exts:
+        basename_lower = os.path.basename(rel_path).lower()
+        if basename_lower in _SKILL_CONFIG_FILES:
+            findings.extend(scan_patterns(content, rel_path, UPDATE_CHANNEL_PATTERNS, "update-channel", "high"))
+
+    # Cat 13: Prose imperative exfiltration (Terra Security OpenClaw, May 2026)
+    if ext in text_exts:
+        findings.extend(_scan_prose_imperatives(content, rel_path))
+
+    return findings
+
+
+def _scan_prose_imperatives(content, rel_path):
+    """Category 13: Detect natural language exfiltration instructions.
+    Tracks markdown code fences to skip code examples."""
+    findings = []
+    in_code_fence = False
+    lines = content.split('\n')
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith('```'):
+            in_code_fence = not in_code_fence
+            continue
+        if in_code_fence:
+            continue
+        if len(line) > core.MAX_LINE_LENGTH:
+            continue
+
+        url_match = re.search(r'https?://(\S+)', line)
+        if not url_match:
+            continue
+        domain = url_match.group(1).split('/')[0].lower()
+        if domain in _SAFE_DOMAINS:
+            continue
+        if '@' in line[:url_match.start()] and 'http' not in line[:url_match.start()]:
+            continue
+
+        if PROSE_IMPERATIVE_VERB_FILE_URL.search(line) or PROSE_IMPERATIVE_URL_VERB_FILE.search(line):
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="high",
+                title="Prose Imperative: Exfiltration instruction with file reference",
+                description="Natural language instruction to send/upload a sensitive file to a URL. AI agents may follow this as a command (Terra Security OpenClaw, May 2026).",
+                file=rel_path, line=i + 1,
+                snippet=line.strip()[:120],
+                category="prose-imperative"
+            ))
+        elif PROSE_IMPERATIVE_VERB_URL.search(line):
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="medium",
+                title="Prose Imperative: Action directive with URL",
+                description="Natural language instruction with imperative verb and URL target. May be benign documentation or agent-directed exfiltration (Terra Security OpenClaw, May 2026).",
+                file=rel_path, line=i + 1,
+                snippet=line.strip()[:120],
+                category="prose-imperative"
+            ))
     return findings
 
 

@@ -280,3 +280,71 @@ class TestOutputFormatting:
 
     def test_empty_findings(self):
         assert core.format_findings([], "text") == "  No findings."
+
+
+class TestRepoWideCorrelation:
+    """Tests for Rules 30-31: repo-wide correlation (Terra Security OpenClaw)."""
+
+    def test_rule_30_staged_injection(self):
+        findings = [
+            core.Finding("skill_threats", "high", "Deferred update channel",
+                "update-channel pattern in ROUTINE.md", "ROUTINE.md", 1, "", "update-channel"),
+            core.Finding("skill_threats", "medium", "Prose Imperative",
+                "prose-imperative exfiltration instruction", "CHANGELOG.md", 5, "", "prose-imperative"),
+        ]
+        correlated = core.correlate(findings)
+        titles = [c.title for c in correlated]
+        assert any("Staged Injection" in t for t in titles)
+        staged = [c for c in correlated if "Staged Injection" in c.title]
+        assert staged[0].severity == "critical"
+
+    def test_rule_31_workspace_persistence(self):
+        findings = [
+            core.Finding("agent_skills", "high", "Config write request",
+                "config-write-request to HEARTBEAT.md", "SKILL.md", 1, "", "config-write-request"),
+            core.Finding("skill_threats", "high", "Deferred update channel",
+                "update-channel in ROUTINE.md", "ROUTINE.md", 3, "", "update-channel"),
+        ]
+        correlated = core.correlate(findings)
+        titles = [c.title for c in correlated]
+        assert any("Workspace Persistence" in t for t in titles)
+
+    def test_both_rules_fire_together(self):
+        findings = [
+            core.Finding("agent_skills", "high", "Config write request",
+                "config-write-request", "SKILL.md", 1, "", "config-write-request"),
+            core.Finding("skill_threats", "high", "Deferred update channel",
+                "update-channel", "ROUTINE.md", 3, "", "update-channel"),
+            core.Finding("skill_threats", "medium", "Prose Imperative",
+                "prose-imperative", "CHANGELOG.md", 5, "", "prose-imperative"),
+        ]
+        correlated = core.correlate(findings)
+        titles = [c.title for c in correlated]
+        assert any("Staged Injection" in t for t in titles)
+        assert any("Workspace Persistence" in t for t in titles)
+
+    def test_update_channel_alone_no_rule_30(self):
+        findings = [
+            core.Finding("skill_threats", "high", "Deferred update channel",
+                "update-channel", "ROUTINE.md", 1, "", "update-channel"),
+        ]
+        correlated = core.correlate(findings)
+        assert not any("Staged Injection" in c.title for c in correlated)
+
+    def test_prose_imperative_alone_no_rule_30(self):
+        findings = [
+            core.Finding("skill_threats", "medium", "Prose Imperative",
+                "prose-imperative", "CHANGELOG.md", 5, "", "prose-imperative"),
+        ]
+        correlated = core.correlate(findings)
+        assert not any("Staged Injection" in c.title for c in correlated)
+
+    def test_rule_30_fires_same_file(self):
+        findings = [
+            core.Finding("skill_threats", "high", "Deferred update channel",
+                "update-channel", "ROUTINE.md", 1, "", "update-channel"),
+            core.Finding("skill_threats", "medium", "Prose Imperative",
+                "prose-imperative", "ROUTINE.md", 10, "", "prose-imperative"),
+        ]
+        correlated = core.correlate(findings)
+        assert any("Staged Injection" in c.title for c in correlated)
