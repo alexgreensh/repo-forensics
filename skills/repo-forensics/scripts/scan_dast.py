@@ -30,6 +30,7 @@ Created by Alex Greenshpun
 import os
 import sys
 import json
+import shutil
 import subprocess
 import tempfile
 import time
@@ -46,6 +47,9 @@ MAX_OUTPUT_BYTES = 1024 * 100  # 100KB - anything more is amplification
 # re-allows reads on the specific hook script via HOOK_PATH/HOOK_DIR -D params)
 SANDBOX_PROFILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'dast_sandbox.sb')
 SANDBOX_AVAILABLE = os.path.exists('/usr/bin/sandbox-exec') and os.path.exists(SANDBOX_PROFILE)
+
+# Linux bubblewrap sandbox (fallback when macOS Seatbelt is unavailable)
+BWRAP_AVAILABLE = shutil.which("bwrap") is not None
 
 # 8 malicious payload types for hook testing
 PAYLOADS = [
@@ -221,6 +225,7 @@ def execute_hook_with_payload(hook, payload, repo_path):
     # Wrap in macOS Seatbelt sandbox. The profile denies /Users reads broadly;
     # -D params re-allow reads on the specific hook script path so bash can
     # actually load it (without this, every /Users-hosted hook silently fails).
+    sandboxed = True
     if SANDBOX_AVAILABLE:
         # Seatbelt matches rules against the fully-resolved path, so we must
         # pass the realpath — otherwise a symlinked hook would be denied even
@@ -234,6 +239,19 @@ def execute_hook_with_payload(hook, payload, repo_path):
             '-D', f'HOOK_DIR={os.path.dirname(hook_real)}',
             '-f', SANDBOX_PROFILE,
         ] + exec_cmd
+    elif BWRAP_AVAILABLE:
+        # Linux bubblewrap sandbox: read-only root, no network, isolated /tmp.
+        # --die-with-parent ensures the sandboxed process cannot outlive us.
+        exec_cmd = [
+            'bwrap',
+            '--ro-bind', '/', '/',
+            '--dev', '/dev',
+            '--tmpfs', '/tmp',
+            '--unshare-net',
+            '--die-with-parent',
+        ] + exec_cmd
+    else:
+        sandboxed = False
 
     start = time.monotonic()
     try:
@@ -261,6 +279,25 @@ def execute_hook_with_payload(hook, payload, repo_path):
         return findings
 
     result['duration_ms'] = int((time.monotonic() - start) * 1000)
+
+    # Warn once per hook (on the first payload run) when no sandbox is available.
+    # We still execute the hook to preserve existing behavior, but flag reduced
+    # confidence in the findings. Only emit the warning on the first payload so
+    # callers don't get N duplicate findings for N payloads.
+    if not sandboxed and payload == PAYLOADS[0]:
+        findings.append(core.Finding(
+            scanner=SCANNER_NAME, severity="medium",
+            title=f"DAST hook executed without sandbox isolation: {hook['event']}",
+            description=(
+                "Hook script was executed without sandbox isolation. "
+                "Neither macOS sandbox-exec nor Linux bwrap is available on this host. "
+                "DAST findings for this hook have reduced confidence — a malicious hook "
+                "could have affected the host filesystem or network during testing."
+            ),
+            file=hook['source'], line=0,
+            snippet="No sandbox available (sandbox-exec and bwrap both absent)",
+            category="dast-unsandboxed"
+        ))
 
     # Check for canary leaks (env exfiltration)
     combined_output = result['stdout'] + result['stderr']

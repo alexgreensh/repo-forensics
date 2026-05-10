@@ -26,6 +26,7 @@ Created by Alex Greenshpun
 import os
 import sys
 import json
+import tempfile
 import time
 
 # Ensure sibling modules (forensics_core, etc.) are importable regardless of
@@ -41,6 +42,10 @@ IOC_FEED_URL = "https://raw.githubusercontent.com/alexgreensh/repo-forensics/mai
 
 CACHE_FILENAME = ".forensics-iocs.json"
 CACHE_MAX_AGE_HOURS = 24
+# Configurable TTL for the on-disk IOC cache. Adjusting this constant controls
+# how long a successfully-fetched remote feed is trusted before the scanner
+# considers itself degraded and emits a warning.
+_IOC_CACHE_TTL_HOURS = 24
 
 # Shipped IOC database (version-pinned compromises). Loaded from
 # skills/repo-forensics/data/compromised_versions.json next to this script. This file ships
@@ -216,8 +221,12 @@ def _cache_path(cache_dir=None):
     return os.path.join(os.path.expanduser("~"), ".cache", "repo-forensics", CACHE_FILENAME)
 
 
-def _load_cache(cache_dir=None):
-    """Load cached IOCs if fresh enough."""
+def _load_cache(cache_dir=None, ttl_hours=None):
+    """Load cached IOCs if fresh enough.
+
+    ttl_hours overrides the module-level _IOC_CACHE_TTL_HOURS default.
+    Returns None when the cache is absent, unreadable, or stale.
+    """
     path = _cache_path(cache_dir)
     if not os.path.exists(path):
         return None
@@ -229,7 +238,8 @@ def _load_cache(cache_dir=None):
         # Check freshness
         cached_at = data.get('_cached_at', 0)
         age_hours = (time.time() - cached_at) / 3600
-        if age_hours > CACHE_MAX_AGE_HOURS:
+        max_age = ttl_hours if ttl_hours is not None else _IOC_CACHE_TTL_HOURS
+        if age_hours > max_age:
             return None
         return data
     except (json.JSONDecodeError, OSError):
@@ -326,8 +336,16 @@ def get_iocs(cache_dir=None):
       - compromised_versions: dict[str, dict[str, str]] keyed by lower-case
         package name -> {version_string: campaign_id}. Only populated from
         the shipped JSON file; the hardcoded sets do not carry version info.
+      - _ioc_degraded: bool — True when no fresh remote-feed cache is available.
+        Callers should surface a warning to the user when this is True, since
+        threat intelligence is limited to hardcoded fallback data only.
     """
     cached = _load_cache(cache_dir)
+
+    # Track whether we are operating with a fresh remote feed. When degraded,
+    # callers should emit a warning: new IOCs published since the last
+    # successful update will not be detected.
+    ioc_degraded = cached is None
 
     # Start with hardcoded
     result = {
@@ -337,6 +355,7 @@ def get_iocs(cache_dir=None):
         'malicious_pypi': set(HARDCODED_MALICIOUS_PYPI),
         'malicious_pth_files': set(HARDCODED_MALICIOUS_PTH_FILES),
         'compromised_versions': {},
+        '_ioc_degraded': ioc_degraded,
     }
 
     # Merge remote IOCs if available

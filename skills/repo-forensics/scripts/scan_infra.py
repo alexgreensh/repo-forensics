@@ -303,6 +303,28 @@ def scan_github_actions(file_path, rel_path):
                     category="ci-cd"
                 ))
 
+            # Auto-commit legitimization loop: git push in workflow with [skip ci]
+            if re.search(r'git\s+push', stripped):
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="high",
+                    title="GHA: Auto-Push to Repository",
+                    description="Workflow pushes commits directly. Combined with auto-generated content, "
+                        "this creates a legitimization loop where tampered files get fresh checksums/lockfiles",
+                    file=rel_path, line=i+1, snippet=stripped[:120],
+                    category="ci-integrity"
+                ))
+
+            # Deprecated workflow commands (log injection vectors)
+            if '::set-output' in stripped or '::save-state' in stripped:
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="high",
+                    title="GHA: Deprecated Workflow Command",
+                    description="Deprecated ::set-output or ::save-state enables log command injection. "
+                        "Use $GITHUB_OUTPUT / $GITHUB_STATE instead (deprecated since Nov 2022)",
+                    file=rel_path, line=i+1, snippet=stripped[:120],
+                    category="ci-cd"
+                ))
+
         # Multi-line run block check
         content = ''.join(lines)
         secret_lines = {f.line for f in findings if 'Secret' in f.title}
@@ -551,6 +573,93 @@ def scan_claude_config(file_path, rel_path):
     return findings
 
 
+def scan_sandbox_profile(file_path, rel_path):
+    """Detect overly permissive sandbox policies (.sb seatbelt, seccomp, apparmor)."""
+    findings = []
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        if file_path.endswith('.sb'):
+            if '(allow default)' in content:
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="critical",
+                    title="Sandbox: allow-default Policy (Inverted)",
+                    description="macOS Seatbelt profile uses (allow default) with selective denies. "
+                        "Sub-agents can read all host files (SSH keys, AWS creds, keychains). "
+                        "Invert to (deny default) with explicit allows",
+                    file=rel_path, line=1, snippet="(allow default)",
+                    category="sandbox-policy"
+                ))
+
+        if file_path.endswith('.json') and 'seccomp' in rel_path.lower():
+            if '"SCMP_ACT_ALLOW"' in content and '"defaultAction"' in content:
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="critical",
+                    title="Sandbox: Seccomp Default Allow",
+                    description="Seccomp profile defaults to ALLOW. All syscalls permitted unless explicitly denied. "
+                        "Use SCMP_ACT_ERRNO or SCMP_ACT_KILL as default",
+                    file=rel_path, line=1, snippet='defaultAction: SCMP_ACT_ALLOW',
+                    category="sandbox-policy"
+                ))
+    except (OSError, UnicodeDecodeError):
+        pass
+    return findings
+
+
+def scan_shell_script(file_path, rel_path):
+    """Detect supply-chain and integrity issues in shell scripts."""
+    findings = []
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+
+        has_curl_pipe = False
+        has_checksum_verify = False
+
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped.startswith('#'):
+                continue
+
+            # Pipe-to-shell without integrity check
+            if re.search(r'curl\s.*\|\s*(ba)?sh|wget\s.*\|\s*(ba)?sh', stripped):
+                has_curl_pipe = True
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="high",
+                    title="Shell: Pipe-to-Shell Install",
+                    description="Downloads and executes remote code in one pipeline without integrity verification. "
+                        "Add checksum verification between download and execution",
+                    file=rel_path, line=i+1, snippet=stripped[:120],
+                    category="supply-chain"
+                ))
+
+            # git pull without pinning (auto-update pattern)
+            if re.search(r'git\s+pull\b', stripped) and 'ff-only' in stripped:
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="medium",
+                    title="Shell: Unpinned Git Pull (Auto-Update)",
+                    description="git pull --ff-only without commit SHA verification. "
+                        "If the remote is compromised, arbitrary code is pulled automatically",
+                    file=rel_path, line=i+1, snippet=stripped[:120],
+                    category="supply-chain"
+                ))
+
+            # Track if checksum verification exists anywhere in the script
+            if re.search(r'sha256sum|shasum|gpg\s+--verify|cosign\s+verify', stripped):
+                has_checksum_verify = True
+
+        # If there's a curl|bash but also checksum verification, downgrade the finding
+        if has_curl_pipe and has_checksum_verify:
+            for f in findings:
+                if 'Pipe-to-Shell' in f.title:
+                    f.severity = "low"
+
+    except (OSError, UnicodeDecodeError):
+        pass
+    return findings
+
+
 def main():
     args = core.parse_common_args(sys.argv, "Infrastructure Security Scanner")
     repo_path = args.repo_path
@@ -588,6 +697,14 @@ def main():
         if basename in ('claude_desktop_config.json', '.mcp.json') or \
            (basename == 'settings.json' and '.claude' in file_path):
             all_findings.extend(scan_claude_config(file_path, rel_path))
+
+        # Sandbox profiles (macOS Seatbelt, seccomp)
+        if basename.endswith('.sb') or ('seccomp' in rel_path.lower() and basename.endswith('.json')):
+            all_findings.extend(scan_sandbox_profile(file_path, rel_path))
+
+        # Shell scripts (supply-chain patterns)
+        if basename.endswith('.sh') or basename == 'Makefile':
+            all_findings.extend(scan_shell_script(file_path, rel_path))
 
     core.output_findings(all_findings, args.format, SCANNER_NAME)
 

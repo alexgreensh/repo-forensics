@@ -110,12 +110,29 @@ def extract_package_names(pattern_type, match):
 
 
 def check_ioc_packages(package_names):
-    """Check package names against IOC database. Returns list of malicious names."""
+    """Check package names against IOC database. Returns list of malicious names.
+
+    Fail-open: if ioc_manager cannot be loaded at all, returns [] (approve).
+    When the remote-feed cache is stale or absent, approves but emits a WARNING
+    to stderr so the operator knows threat intelligence is degraded.
+    """
     try:
         import ioc_manager
         iocs = ioc_manager.get_iocs()
     except (ImportError, AttributeError, KeyError, TypeError):
         return []
+
+    # Warn when operating without a fresh remote IOC feed. We still approve
+    # (fail-open) to avoid blocking legitimate work, but the degraded flag
+    # tells the operator to run `ioc_manager.py --update` to refresh.
+    if iocs.get('_ioc_degraded'):
+        print(
+            "[repo-forensics] WARNING: IOC database unavailable, operating without "
+            "threat intelligence. Remote feed cache is absent or stale. Run "
+            "`python3 ioc_manager.py --update` to refresh. Only hardcoded IOCs "
+            "are active; recently-discovered malicious packages may not be detected.",
+            file=sys.stderr,
+        )
 
     malicious_npm = iocs.get('malicious_npm', set())
     malicious_pypi = iocs.get('malicious_pypi', set())
