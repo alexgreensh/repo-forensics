@@ -203,6 +203,17 @@ EXFIL_PATTERNS = [
 ]
 
 # ============================================================
+# Category 4b: Credential-Path Directives (high)
+# Instruction files directing agents to read sensitive credential paths.
+# ============================================================
+_CRED_PATHS = r'(~/.aws/credentials|~/.ssh/id_|~/.gnupg/|~/.config/gh/hosts\.yml|~/.claude/settings\.json|~/.gitconfig|/etc/shadow|\.env\b)'
+_CRED_VERBS = r'(?:include|read|cat|output|print|show|display|add\s+to|copy|send|upload|forward|open|access)'
+CREDENTIAL_PATH_PATTERNS = [
+    (re.compile(r'(?i)\b' + _CRED_VERBS + r'\b[^.\n]{0,80}' + _CRED_PATHS), "Credential-path directive: instruction to access sensitive file"),
+    (re.compile(r'(?i)' + _CRED_PATHS + r'[^.\n]{0,80}\b' + _CRED_VERBS + r'\b'), "Credential-path directive: sensitive file referenced with action verb"),
+]
+
+# ============================================================
 # Category 5: Persistence Mechanisms (high)
 # ============================================================
 PERSISTENCE_PATTERNS = [
@@ -263,6 +274,10 @@ _FALLBACK_MALICIOUS_DOMAINS = [
     "eo1n0jq9qgggt.m.pipedream.net",
     # Axios supply chain RAT C2 domain (March 2026)
     "sfrclak.com",
+    # LiteLLM supply chain compromise (March 2026)
+    "models.litellm.cloud",
+    # Checkmarx TeamPCP infrastructure (2026)
+    "checkmarx.zone",
 ]
 
 # Known malicious binary paths (host IOCs)
@@ -584,7 +599,14 @@ def scan_file(file_path, rel_path):
     code_exts = {'.py', '.js', '.ts', '.jsx', '.tsx', '.rb', '.sh', '.bash', '.zsh',
                  '.go', '.rs', '.php', '.java', '.swift', '.kt'}
 
-    if ext in text_exts or ext in code_exts or os.path.basename(rel_path).upper() in ('SKILL.MD', 'README.MD', 'CLAUDE.MD'):
+    # AI agent instruction files: treat like SKILL.MD for prompt injection + exfiltration + persistence
+    _AGENT_INSTRUCTION_FILES = {'SKILL.MD', 'README.MD', 'CLAUDE.MD', '.CURSORRULES', '.WINDSURFRULES'}
+    basename_upper = os.path.basename(rel_path).upper()
+    # Also match .github/copilot-instructions.md by path
+    is_copilot_instructions = rel_path.replace('\\', '/').endswith('.github/copilot-instructions.md')
+    is_agent_instruction_file = basename_upper in _AGENT_INSTRUCTION_FILES or is_copilot_instructions
+
+    if ext in text_exts or ext in code_exts or is_agent_instruction_file:
         # Cat 1: Prompt injection (most relevant in .md, .txt, .yml)
         findings.extend(scan_patterns(content, rel_path, PROMPT_INJECTION_PATTERNS, "prompt-injection", "critical"))
 
@@ -595,7 +617,7 @@ def scan_file(file_path, rel_path):
         # Cat 3: Prerequisite red flags
         findings.extend(scan_patterns(content, rel_path, PREREQUISITE_PATTERNS, "prerequisite-attack", "critical"))
 
-    if ext in code_exts:
+    if ext in code_exts or is_agent_instruction_file:
         # Cat 4: Credential exfiltration (bulk = critical, single = medium)
         findings.extend(scan_patterns(content, rel_path, EXFIL_PATTERNS_CRITICAL, "credential-exfiltration", "critical"))
         findings.extend(scan_patterns(content, rel_path, EXFIL_PATTERNS_MEDIUM, "credential-exfiltration", "medium"))
@@ -606,6 +628,10 @@ def scan_file(file_path, rel_path):
         findings.extend(scan_patterns(content, rel_path, SCOPE_PATTERNS, "scope-escalation", "high"))
         # Cat 7: Stealth
         findings.extend(scan_patterns(content, rel_path, STEALTH_PATTERNS, "stealth", "high"))
+
+    # Cat 4b: Credential-path directives (agent instruction files + text files)
+    if is_agent_instruction_file or ext in text_exts:
+        findings.extend(scan_patterns(content, rel_path, CREDENTIAL_PATH_PATTERNS, "credential-path-directive", "high"))
 
     # Cat 8: IOCs (all files)
     findings.extend(scan_known_iocs(content, rel_path))

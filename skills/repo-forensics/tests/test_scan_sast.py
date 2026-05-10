@@ -461,6 +461,151 @@ class TestKernelExploitPatterns:
         assert len(kernel) == 0
 
 
+class TestReflectionRCE:
+    """Tests for reflection-based RCE detection (Item 5)."""
+
+    def test_java_method_invoke_variable(self, tmp_path):
+        """Java Method.invoke with variable argument should flag."""
+        java = tmp_path / "Evil.java"
+        java.write_text(
+            "public class Evil {\n"
+            "    public void run(Object target, String methodName) throws Exception {\n"
+            "        Method m = target.getClass().getMethod(methodName);\n"
+            "        m.invoke(target);\n"
+            "    }\n"
+            "}\n"
+        )
+        findings = _scan_repo(tmp_path)
+        assert any(f.category == "reflection-rce" for f in findings)
+
+    def test_java_class_forname_variable(self, tmp_path):
+        """Java Class.forName with variable should flag."""
+        java = tmp_path / "Loader.java"
+        java.write_text(
+            "public class Loader {\n"
+            "    public Object load(String className) throws Exception {\n"
+            "        return Class.forName(className).newInstance();\n"
+            "    }\n"
+            "}\n"
+        )
+        findings = _scan_repo(tmp_path)
+        assert any("Class.forName" in f.title for f in findings)
+
+    def test_java_class_forname_literal_not_flagged(self, tmp_path):
+        """Java Class.forName with string literal should NOT flag."""
+        java = tmp_path / "Safe.java"
+        java.write_text(
+            'public class Safe {\n'
+            '    public Object load() throws Exception {\n'
+            '        return Class.forName("java.util.HashMap").newInstance();\n'
+            '    }\n'
+            '}\n'
+        )
+        findings = _scan_repo(tmp_path)
+        forname = [f for f in findings if "Class.forName" in f.title]
+        assert len(forname) == 0
+
+    def test_go_reflect_valueof_variable(self, tmp_path):
+        """Go reflect.ValueOf with variable should flag."""
+        go_file = tmp_path / "evil.go"
+        go_file.write_text(
+            "package main\n"
+            "import \"reflect\"\n"
+            "func call(target interface{}) {\n"
+            "    v := reflect.ValueOf(target)\n"
+            "}\n"
+        )
+        findings = _scan_repo(tmp_path)
+        assert any(f.category == "reflection-rce" for f in findings)
+
+    def test_csharp_methodinfo_invoke(self, tmp_path):
+        """C# MethodInfo.Invoke with variable should flag."""
+        cs_file = tmp_path / "Evil.cs"
+        cs_file.write_text(
+            "using System.Reflection;\n"
+            "public class Evil {\n"
+            "    public void Run(object target) {\n"
+            "        MethodInfo mi = target.GetType().GetMethod(methodName);\n"
+            "        mi.Invoke(target, args);\n"
+            "    }\n"
+            "}\n"
+        )
+        findings = _scan_repo(tmp_path)
+        assert any(f.category == "reflection-rce" for f in findings)
+
+    def test_csharp_assembly_load(self, tmp_path):
+        """C# Assembly.Load with variable should flag."""
+        cs_file = tmp_path / "Loader.cs"
+        cs_file.write_text(
+            "using System.Reflection;\n"
+            "public class Loader {\n"
+            "    public void Load(byte[] assemblyBytes) {\n"
+            "        Assembly.Load(assemblyBytes);\n"
+            "    }\n"
+            "}\n"
+        )
+        findings = _scan_repo(tmp_path)
+        assert any("Assembly.Load" in f.title for f in findings)
+
+    def test_csharp_activator_create_instance(self, tmp_path):
+        """C# Activator.CreateInstance with variable should flag."""
+        cs_file = tmp_path / "Factory.cs"
+        cs_file.write_text(
+            "using System;\n"
+            "public class Factory {\n"
+            "    public object Create(Type type) {\n"
+            "        return Activator.CreateInstance(type);\n"
+            "    }\n"
+            "}\n"
+        )
+        findings = _scan_repo(tmp_path)
+        assert any("Activator.CreateInstance" in f.title for f in findings)
+
+    def test_ruby_send_with_variable(self, tmp_path):
+        """Ruby send with variable argument should flag."""
+        rb = tmp_path / "evil.rb"
+        rb.write_text(
+            "def dispatch(obj, method_name)\n"
+            "  obj.send(method_name)\n"
+            "end\n"
+        )
+        findings = _scan_repo(tmp_path)
+        reflection = [f for f in findings if f.category == "reflection-rce"]
+        assert len(reflection) > 0
+
+    def test_ruby_public_send_with_variable(self, tmp_path):
+        """Ruby public_send with variable argument should flag."""
+        rb = tmp_path / "dispatch.rb"
+        rb.write_text(
+            "def safe_dispatch(obj, method_name)\n"
+            "  obj.public_send(method_name)\n"
+            "end\n"
+        )
+        findings = _scan_repo(tmp_path)
+        reflection = [f for f in findings if f.category == "reflection-rce"]
+        assert len(reflection) > 0
+
+    def test_ruby_method_with_variable(self, tmp_path):
+        """Ruby .method() with variable should flag."""
+        rb = tmp_path / "meta.rb"
+        rb.write_text(
+            "def get_method(obj, name)\n"
+            "  obj.method(name).call\n"
+            "end\n"
+        )
+        findings = _scan_repo(tmp_path)
+        reflection = [f for f in findings if f.category == "reflection-rce"]
+        assert len(reflection) > 0
+
+    def test_python_getattr_import_combo(self, tmp_path):
+        """Python getattr(__import__(...)) combo should flag."""
+        py = tmp_path / "evil.py"
+        py.write_text("result = getattr(__import__('os'), 'system')('whoami')\n")
+        findings = _scan_repo(tmp_path)
+        reflection = [f for f in findings if f.category == "reflection-rce"]
+        assert len(reflection) > 0
+
+
 def _scan_repo(repo_path):
     import forensics_core as core
     findings = []

@@ -7,7 +7,7 @@
   <img src="https://img.shields.io/badge/python-3.8%2B-blue.svg" alt="Python 3.8+">
   <img src="https://img.shields.io/badge/dependencies-zero-brightgreen.svg" alt="Zero Dependencies">
   <img src="https://img.shields.io/badge/scanners-19-orange.svg" alt="19 Scanners">
-  <img src="https://img.shields.io/badge/patterns-500%2B-red.svg" alt="500+ Patterns">
+  <img src="https://img.shields.io/badge/patterns-700%2B-red.svg" alt="700+ Patterns">
   <img src="https://img.shields.io/badge/CVE%20%2B%20CISA%20KEV-live%20scanning-critical.svg" alt="Live CVE + CISA KEV scanning">
   <a href="https://github.com/sponsors/alexgreensh"><img src="https://img.shields.io/badge/Sponsor-%E2%9D%A4-ff69b4.svg?labelColor=262626" alt="Sponsor"></a>
 </p>

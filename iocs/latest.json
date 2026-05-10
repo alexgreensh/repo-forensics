@@ -22,7 +22,9 @@
     "hooks.slack.com/services",
     "eo1n0jq9qgggt.m.pipedream.net",
     "sfrclak.com",
-    "api.cloud-aws.adc-e.uk"
+    "api.cloud-aws.adc-e.uk",
+    "models.litellm.cloud",
+    "checkmarx.zone"
   ],
   "malicious_npm_packages": [
     "rimarf",

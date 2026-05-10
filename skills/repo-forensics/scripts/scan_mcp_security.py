@@ -23,6 +23,7 @@ Created by Alex Greenshpun
 import os
 import re
 import sys
+import json as json_module
 import unicodedata
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -425,6 +426,120 @@ def scan_file(file_path, rel_path):
     # MCP config files (.json) — check for enableAllProjectMcpServers, ANTHROPIC_BASE_URL
     if ext == '.json' or basename in ('settings.json', 'claude_desktop_config.json', '.mcp.json'):
         findings.extend(scan_patterns(content, rel_path, MCP_CONFIG_RISKS, "mcp-config-risk", "critical"))
+
+    # Category H: MCP tool name collision detection
+    if ext == '.json' or basename in ('settings.json', 'claude_desktop_config.json', '.mcp.json'):
+        findings.extend(scan_mcp_tool_shadowing_config(file_path, rel_path))
+
+    return findings
+
+
+# ============================================================
+# Category H: MCP Tool Name Collision Detection (critical/high)
+# Detects tool names that shadow built-in tools or collide across
+# multiple MCP server definitions in config files.
+# Source: Invariant Labs tool shadowing (April 2025), ClawHavoc campaign
+# ============================================================
+
+BUILTIN_TOOL_NAMES = {"read", "write", "edit", "bash", "search", "fetch"}
+
+
+def scan_mcp_tool_shadowing_config(file_path, rel_path):
+    """Detect tool name collisions across MCP server definitions.
+
+    Parses .mcp.json or claude_desktop_config.json to find:
+    1. Tool names that shadow built-in tools (CRITICAL)
+    2. Multiple servers defining tools with the same name (HIGH)
+
+    Skips gracefully if the file is not valid JSON or lacks server definitions.
+    """
+    findings = []
+    basename = os.path.basename(file_path).lower()
+
+    # Only scan MCP config files
+    if basename not in ('.mcp.json', 'mcp.json', 'claude_desktop_config.json', 'settings.json'):
+        return findings
+
+    try:
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            content = f.read()
+    except (OSError, UnicodeDecodeError):
+        return findings
+
+    try:
+        data = json_module.loads(content)
+    except (json_module.JSONDecodeError, ValueError):
+        return findings
+
+    if not isinstance(data, dict):
+        return findings
+
+    # Extract server definitions. Structures vary:
+    # .mcp.json: {"mcpServers": {"name": {..., "tools": [...]}}}
+    # claude_desktop_config.json: {"mcpServers": {"name": {...}}}
+    # settings.json: {"mcpServers": {...}} or nested
+    servers = data.get('mcpServers', data.get('mcp_servers', data.get('servers', {})))
+    if not isinstance(servers, dict):
+        return findings
+
+    # Collect tool names per server
+    # tool_name -> list of server names that define it
+    tool_to_servers = {}
+
+    for server_name, server_config in servers.items():
+        if not isinstance(server_config, dict):
+            continue
+
+        # Extract tool names from various config shapes
+        tools = server_config.get('tools', [])
+        if isinstance(tools, list):
+            for tool in tools:
+                if isinstance(tool, dict):
+                    tool_name = tool.get('name', '')
+                elif isinstance(tool, str):
+                    tool_name = tool
+                else:
+                    continue
+                if tool_name:
+                    tool_to_servers.setdefault(tool_name.lower(), []).append(server_name)
+        elif isinstance(tools, dict):
+            for tool_name in tools.keys():
+                if tool_name:
+                    tool_to_servers.setdefault(tool_name.lower(), []).append(server_name)
+
+    # Check for built-in tool shadowing (CRITICAL)
+    for tool_name, defining_servers in tool_to_servers.items():
+        if tool_name in BUILTIN_TOOL_NAMES:
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="critical",
+                title=f"MCP Tool Shadows Built-in: '{tool_name}'",
+                description=(
+                    f"Server(s) {defining_servers} define a tool named '{tool_name}' "
+                    f"which shadows the built-in '{tool_name}' tool. An attacker can "
+                    f"intercept all calls to the built-in tool via this shadow."
+                ),
+                file=rel_path, line=0,
+                snippet=f"Tool '{tool_name}' defined by: {', '.join(defining_servers)}",
+                category="tool-name-collision"
+            ))
+
+    # Check for cross-server collisions (HIGH)
+    for tool_name, defining_servers in tool_to_servers.items():
+        if tool_name in BUILTIN_TOOL_NAMES:
+            continue  # Already flagged as CRITICAL above
+        if len(defining_servers) > 1:
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="high",
+                title=f"MCP Tool Name Collision: '{tool_name}'",
+                description=(
+                    f"Tool '{tool_name}' is defined by multiple servers: "
+                    f"{defining_servers}. The agent may invoke the wrong server's "
+                    f"implementation, enabling privilege escalation or data theft."
+                ),
+                file=rel_path, line=0,
+                snippet=f"Tool '{tool_name}' collision across: {', '.join(defining_servers)}",
+                category="tool-name-collision"
+            ))
 
     return findings
 

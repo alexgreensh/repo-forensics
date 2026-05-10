@@ -256,6 +256,16 @@ def scan_github_actions(file_path, rel_path):
                     category="ci-cd"
                 ))
 
+            # secrets: inherit passes ALL caller secrets to reusable workflow
+            if re.match(r'\s*secrets\s*:\s*inherit\s*$', stripped):
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="high",
+                    title="GHA: secrets: inherit Passes All Secrets",
+                    description="secrets: inherit passes ALL caller secrets to the reusable workflow and any third-party actions it uses. Prefer explicit secret forwarding.",
+                    file=rel_path, line=i+1, snippet=stripped[:120],
+                    category="ci-cd"
+                ))
+
             if '${{ secrets.' in stripped and ('run:' in stripped or 'run: |' in stripped):
                 findings.append(core.Finding(
                     scanner=SCANNER_NAME, severity="critical",
@@ -364,6 +374,63 @@ def scan_github_actions(file_path, rel_path):
                     file=rel_path, line=line_no, snippet=block.strip()[:120],
                     category="ci-cd"
                 ))
+
+        # Item 7: Zombie workflow detection - workflow_dispatch only + write permissions
+        has_workflow_dispatch = False
+        has_other_trigger = False
+        has_write_perm = False
+        for line in lines:
+            stripped_l = line.strip()
+            if re.match(r'workflow_dispatch\s*:', stripped_l) or stripped_l == 'workflow_dispatch':
+                has_workflow_dispatch = True
+            # Check for other triggers (push, pull_request, schedule, etc.)
+            for trigger in ('push', 'pull_request', 'pull_request_target', 'schedule',
+                            'release', 'issues', 'issue_comment', 'watch', 'fork',
+                            'create', 'delete', 'deployment', 'repository_dispatch'):
+                if re.match(rf'{trigger}\s*:', stripped_l) or stripped_l == trigger:
+                    has_other_trigger = True
+                    break
+            # Check for write permissions
+            if re.search(r'(contents|packages|actions|security-events|deployments|pages)\s*:\s*write', stripped_l):
+                has_write_perm = True
+            if re.search(r'permissions\s*:\s*write-all', stripped_l):
+                has_write_perm = True
+
+        if has_workflow_dispatch and not has_other_trigger and has_write_perm:
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="medium",
+                title="GHA: Zombie Workflow (dispatch-only with write permissions)",
+                description="Workflow has only workflow_dispatch trigger but retains write permissions. "
+                    "Dormant workflows with elevated permissions can be manually triggered by anyone with repo access.",
+                file=rel_path, line=0, snippet="workflow_dispatch-only + write permissions",
+                category="ci-cd"
+            ))
+
+        # Item 8: GHA cache poisoning - actions/cache without content hash in key
+        for line in lines:
+            stripped_l = line.strip()
+            m_cache = re.search(r'uses:\s*actions/cache@', stripped_l)
+            if m_cache:
+                # Look ahead for the key: field within next few lines
+                cache_line_idx = lines.index(line)
+                key_content = ""
+                for look_line in lines[cache_line_idx:min(cache_line_idx + 10, len(lines))]:
+                    key_match = re.search(r'key\s*:\s*(.+)', look_line)
+                    if key_match:
+                        key_content = key_match.group(1).strip()
+                        break
+                if key_content:
+                    has_hash = 'hashFiles' in key_content or 'hash' in key_content.lower()
+                    if not has_hash:
+                        findings.append(core.Finding(
+                            scanner=SCANNER_NAME, severity="medium",
+                            title="GHA: Cache Key Without Content Hash",
+                            description="Cache key without content hash (hashFiles) allows cache poisoning via stale injection. "
+                                "Use hashFiles('**/lockfile') in cache key to ensure integrity.",
+                            file=rel_path, line=cache_line_idx + 1, snippet=key_content[:120],
+                            category="ci-cd"
+                        ))
+                        break  # One finding per workflow is sufficient
 
     except (OSError, UnicodeDecodeError) as e:
         print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)

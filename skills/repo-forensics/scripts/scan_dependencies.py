@@ -1512,6 +1512,362 @@ def _merge_user_package_list_into_db(path, repo_path):
     )
 
 
+# ============================================================
+# Manifest Confusion Detection (Item 2)
+# Detects package.json inconsistencies that indicate manifest confusion:
+# the attack where npm metadata differs from tarball content.
+# ============================================================
+
+import math
+
+
+def _compute_entropy(data):
+    """Compute Shannon entropy of a byte string or text string."""
+    if not data:
+        return 0.0
+    if isinstance(data, str):
+        data = data.encode('utf-8', errors='replace')
+    byte_counts = [0] * 256
+    for b in data:
+        byte_counts[b] += 1
+    length = len(data)
+    entropy = 0.0
+    for count in byte_counts:
+        if count == 0:
+            continue
+        p = count / length
+        entropy -= p * math.log2(p)
+    return entropy
+
+
+def _check_suspicious_bin_content(content):
+    """Check if bin script content has suspicious shell commands."""
+    suspicious_patterns = [
+        re.compile(r'\bcurl\b.*\|.*\b(ba)?sh\b'),
+        re.compile(r'\bwget\b.*\|.*\b(ba)?sh\b'),
+        re.compile(r'\bcurl\b.*-[oO]\s'),
+        re.compile(r'\bwget\b.*-O\s'),
+        re.compile(r'\beval\b.*\$\('),
+    ]
+    for pattern in suspicious_patterns:
+        if pattern.search(content):
+            return True
+    return False
+
+
+def scan_manifest_confusion(filepath, rel_path):
+    """Detect manifest confusion indicators in package.json.
+
+    Checks for:
+    - scripts referencing non-existent files
+    - main/exports pointing to high-entropy (obfuscated) files
+    - bin entries with suspicious content (curl, wget piped to shell)
+    """
+    findings = []
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return findings
+
+    if not isinstance(data, dict):
+        return findings
+
+    pkg_dir = os.path.dirname(filepath)
+
+    # Check scripts referencing non-existent files
+    scripts = data.get('scripts', {})
+    if isinstance(scripts, dict):
+        for script_name, script_cmd in scripts.items():
+            if not isinstance(script_cmd, str):
+                continue
+            # Extract file references from script commands (node file.js, ./file.sh, etc)
+            file_refs = re.findall(r'(?:node\s+|\.\/|sh\s+|bash\s+)([a-zA-Z0-9_./\-]+\.\w+)', script_cmd)
+            for ref in file_refs:
+                ref_path = os.path.join(pkg_dir, ref)
+                if not os.path.exists(ref_path) and not ref.startswith('node_modules'):
+                    findings.append(core.Finding(
+                        scanner=SCANNER_NAME, severity="medium",
+                        title=f"Manifest Confusion: Script '{script_name}' references missing file",
+                        description=(
+                            f"Script '{script_name}' references '{ref}' which does not exist "
+                            f"in the repo. May indicate tarball content differs from metadata."
+                        ),
+                        file=rel_path, line=0,
+                        snippet=f"{script_name}: {script_cmd[:100]}",
+                        category="manifest-confusion"
+                    ))
+
+    # Check main/exports pointing to high-entropy files
+    entry_fields = []
+    main_field = data.get('main', '')
+    if isinstance(main_field, str) and main_field:
+        entry_fields.append(('main', main_field))
+    exports = data.get('exports', {})
+    if isinstance(exports, str):
+        entry_fields.append(('exports', exports))
+    elif isinstance(exports, dict):
+        for key, val in exports.items():
+            if isinstance(val, str):
+                entry_fields.append((f'exports[{key}]', val))
+
+    for field_name, entry_path in entry_fields:
+        full_path = os.path.join(pkg_dir, entry_path)
+        if os.path.exists(full_path):
+            try:
+                with open(full_path, 'r', encoding='utf-8', errors='replace') as ef:
+                    entry_content = ef.read(4096)
+                entropy = _compute_entropy(entry_content)
+                # High entropy (>5.5) suggests obfuscation/minification with
+                # potential hidden payloads
+                if entropy > 5.5 and len(entry_content) > 500:
+                    findings.append(core.Finding(
+                        scanner=SCANNER_NAME, severity="medium",
+                        title=f"Manifest Confusion: '{field_name}' points to high-entropy file",
+                        description=(
+                            f"Entry point '{entry_path}' has Shannon entropy {entropy:.2f} "
+                            f"(threshold 5.5). May be obfuscated to hide malicious payload."
+                        ),
+                        file=rel_path, line=0,
+                        snippet=f"{field_name}: {entry_path} (entropy: {entropy:.2f})",
+                        category="manifest-confusion"
+                    ))
+            except OSError:
+                pass
+
+    # Check bin entries for suspicious content
+    bin_field = data.get('bin', {})
+    if isinstance(bin_field, str):
+        bin_field = {data.get('name', 'unknown'): bin_field}
+    if isinstance(bin_field, dict):
+        for bin_name, bin_path in bin_field.items():
+            if not isinstance(bin_path, str):
+                continue
+            full_bin_path = os.path.join(pkg_dir, bin_path)
+            if os.path.exists(full_bin_path):
+                try:
+                    with open(full_bin_path, 'r', encoding='utf-8', errors='replace') as bf:
+                        bin_content = bf.read(4096)
+                    if _check_suspicious_bin_content(bin_content):
+                        findings.append(core.Finding(
+                            scanner=SCANNER_NAME, severity="high",
+                            title=f"Manifest Confusion: Suspicious bin entry '{bin_name}'",
+                            description=(
+                                f"Binary '{bin_path}' contains suspicious shell commands "
+                                f"(curl/wget piped to shell). May be a supply chain attack vector."
+                            ),
+                            file=rel_path, line=0,
+                            snippet=f"bin[{bin_name}]: {bin_path}",
+                            category="manifest-confusion"
+                        ))
+                except OSError:
+                    pass
+
+    return findings
+
+
+# ============================================================
+# Lockfile Injection Detection (Item 3)
+# Detects integrity issues in lockfiles that indicate tampering.
+# ============================================================
+
+def scan_lockfile_injection(filepath, rel_path):
+    """Detect lockfile integrity issues that indicate injection or tampering.
+
+    Checks for:
+    - pnpm-lock.yaml entries with HTTP (not HTTPS) tarball URLs
+    - package-lock.json entries missing integrity field
+    - yarn.lock entries with resolved pointing to non-registry URLs
+    - Any lockfile entry where resolved URL domain doesn't match expected registry
+    """
+    findings = []
+    basename = os.path.basename(filepath)
+
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            content = f.read()
+    except (OSError, UnicodeDecodeError):
+        return findings
+
+    if basename == 'pnpm-lock.yaml':
+        # Check for HTTP tarball URLs in pnpm-lock.yaml
+        http_tarballs = re.findall(r'(?:resolution|tarball):\s*["\']?(http://[^\s"\']+\.tgz)["\']?', content)
+        for url in http_tarballs:
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="high",
+                title="Lockfile Injection: HTTP tarball in pnpm-lock.yaml",
+                description=(
+                    "pnpm-lock.yaml resolves a package via unencrypted HTTP. "
+                    "This enables MITM attacks to inject malicious code at install time."
+                ),
+                file=rel_path, line=0,
+                snippet=url[:120],
+                category="lockfile-injection"
+            ))
+
+    elif basename == 'package-lock.json':
+        # Parse JSON and check for missing integrity fields
+        try:
+            data = json.load(open(filepath, 'r', encoding='utf-8'))
+            packages = data.get('packages', {})
+            lockfile_version = data.get('lockfileVersion', 1)
+            if lockfile_version >= 2:
+                for pkg_path, pkg_info in packages.items():
+                    if not pkg_path or pkg_path == '':
+                        continue
+                    # Skip workspace links
+                    if pkg_info.get('link'):
+                        continue
+                    # Check for missing integrity with a resolved URL
+                    resolved = pkg_info.get('resolved', '')
+                    if resolved and 'integrity' not in pkg_info:
+                        pkg_name = pkg_path.split('node_modules/')[-1] if 'node_modules/' in pkg_path else pkg_path
+                        findings.append(core.Finding(
+                            scanner=SCANNER_NAME, severity="medium",
+                            title=f"Lockfile Injection: Missing integrity hash for '{pkg_name}'",
+                            description=(
+                                "Package has a resolved URL but no integrity (SHA) hash. "
+                                "The lockfile may have been tampered with to point to a "
+                                "different tarball without detection."
+                            ),
+                            file=rel_path, line=0,
+                            snippet=f"{pkg_name}: resolved={resolved[:80]}, no integrity",
+                            category="lockfile-injection"
+                        ))
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    elif basename == 'yarn.lock':
+        # Check for resolved URLs pointing to non-registry domains
+        resolved_urls = re.findall(r'resolved\s+"(https?://[^"]+)"', content)
+        for url in resolved_urls:
+            parsed = urlparse(url)
+            hostname = parsed.hostname or ''
+            is_trusted = any(
+                hostname == t or hostname.endswith('.' + t)
+                for t in TRUSTED_REGISTRIES
+            )
+            if not is_trusted and hostname:
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="high",
+                    title="Lockfile Injection: Non-registry resolved URL in yarn.lock",
+                    description=(
+                        f"yarn.lock resolves to '{hostname}' which is not a known "
+                        f"package registry. May indicate a lockfile injection attack."
+                    ),
+                    file=rel_path, line=0,
+                    snippet=url[:120],
+                    category="lockfile-injection"
+                ))
+
+    return findings
+
+
+# ============================================================
+# Behavioral Scoring (Item 7)
+# Simplified behavioral model flagging packages with suspicious
+# signal combinations (network + fs writes, obfuscated install scripts,
+# postinstall download-and-exec).
+# ============================================================
+
+def scan_behavioral_signals(filepath, rel_path):
+    """Flag packages with suspicious behavioral signal combinations.
+
+    A simplified version of Socket.dev's behavioral model. Checks for:
+    - Package with both network access AND filesystem write in install scripts
+    - Obfuscated install scripts (high entropy)
+    - postinstall that downloads and executes something
+    """
+    findings = []
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return findings
+
+    if not isinstance(data, dict):
+        return findings
+
+    scripts = data.get('scripts', {})
+    if not isinstance(scripts, dict):
+        return findings
+
+    install_scripts = {}
+    for key in ('preinstall', 'install', 'postinstall', 'prepare'):
+        if key in scripts and isinstance(scripts[key], str):
+            install_scripts[key] = scripts[key]
+
+    if not install_scripts:
+        return findings
+
+    # Network patterns in install scripts
+    network_patterns = re.compile(
+        r'\b(curl|wget|fetch|http|https|axios|request|net\.connect|socket)\b'
+    )
+    # Filesystem write patterns in install scripts
+    fs_write_patterns = re.compile(
+        r'(\bwrite\b|\bwriteFile\b|\bwriteFileSync\b|\bfs\.open\b|\bopen\s*\(|[^-]>|>>|\bcp\s|\bmv\s|\binstall\s)'
+    )
+    # Download-and-execute patterns
+    download_exec_patterns = re.compile(
+        r'(curl|wget|fetch).*\|.*(sh|bash|node|python|exec|eval)|'
+        r'(curl|wget).*-[oO].*&&.*(sh|bash|node|chmod\s+\+x)'
+    )
+
+    for script_name, script_cmd in install_scripts.items():
+        has_network = bool(network_patterns.search(script_cmd))
+        has_fs_write = bool(fs_write_patterns.search(script_cmd))
+
+        # Signal 1: Both network AND filesystem write in install script
+        if has_network and has_fs_write:
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="medium",
+                title=f"Behavioral Signal: '{script_name}' has network + filesystem access",
+                description=(
+                    f"Install script '{script_name}' combines network access with "
+                    f"filesystem writes. This signal combination is characteristic of "
+                    f"supply chain malware (downloads then persists payload)."
+                ),
+                file=rel_path, line=0,
+                snippet=f"{script_name}: {script_cmd[:100]}",
+                category="behavioral-signal"
+            ))
+
+        # Signal 2: Obfuscated install script (high entropy)
+        if len(script_cmd) > 60:
+            entropy = _compute_entropy(script_cmd)
+            if entropy > 4.5:
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="medium",
+                    title=f"Behavioral Signal: '{script_name}' appears obfuscated",
+                    description=(
+                        f"Install script '{script_name}' has high entropy ({entropy:.2f}). "
+                        f"Obfuscated install scripts are a strong indicator of malicious "
+                        f"intent (hiding the true behavior from code review)."
+                    ),
+                    file=rel_path, line=0,
+                    snippet=f"{script_name}: entropy={entropy:.2f}, len={len(script_cmd)}",
+                    category="behavioral-signal"
+                ))
+
+        # Signal 3: postinstall that downloads and executes
+        if script_name == 'postinstall' and download_exec_patterns.search(script_cmd):
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="medium",
+                title="Behavioral Signal: postinstall downloads and executes",
+                description=(
+                    "postinstall script downloads content from the network and "
+                    "immediately executes it. This is the #1 npm malware pattern "
+                    "(Socket.dev 2025-2026 research)."
+                ),
+                file=rel_path, line=0,
+                snippet=f"postinstall: {script_cmd[:100]}",
+                category="behavioral-signal"
+            ))
+
+    return findings
+
+
 def main():
     # Follow the same pattern as scan_integrity.py: when a scanner needs
     # extra CLI flags beyond those in core.parse_common_args, build a local
@@ -1570,15 +1926,20 @@ def main():
 
         if basename == 'package.json':
             all_findings.extend(scan_package_json(file_path, rel_path))
+            all_findings.extend(scan_manifest_confusion(file_path, rel_path))
+            all_findings.extend(scan_behavioral_signals(file_path, rel_path))
         elif basename == 'package-lock.json':
             all_findings.extend(scan_lockfile(file_path, rel_path))
             all_findings.extend(parse_package_lock_json(file_path, rel_path))
+            all_findings.extend(scan_lockfile_injection(file_path, rel_path))
         elif basename == 'yarn.lock':
             all_findings.extend(scan_lockfile(file_path, rel_path))
             all_findings.extend(parse_yarn_lock(file_path, rel_path))
+            all_findings.extend(scan_lockfile_injection(file_path, rel_path))
         elif basename == 'pnpm-lock.yaml':
             all_findings.extend(scan_lockfile(file_path, rel_path))
             all_findings.extend(parse_pnpm_lock_file(file_path, rel_path))
+            all_findings.extend(scan_lockfile_injection(file_path, rel_path))
         elif basename == 'poetry.lock':
             all_findings.extend(parse_poetry_lock(file_path, rel_path))
         elif basename == 'Pipfile.lock':

@@ -195,3 +195,169 @@ class TestImportlibReload:
         )
         findings = scanner.scan_file(str(f), "evil.py")
         assert any("reload" in f.title.lower() for f in findings)
+
+
+class TestSelfPropagatingWorm:
+    """Tests for Category 6: Self-propagating worm detection (Item 4)."""
+
+    def test_fs_write_to_node_modules(self, tmp_path):
+        """fs.writeFileSync targeting node_modules should flag as critical."""
+        f = tmp_path / "worm.js"
+        f.write_text(
+            "const fs = require('fs');\n"
+            "fs.writeFileSync('./node_modules/lodash/index.js', payload);\n"
+        )
+        findings = scanner.scan_file(str(f), "worm.js")
+        worm = [fi for fi in findings if fi.category == "worm-propagation"]
+        assert len(worm) > 0
+        assert all(fi.severity == "critical" for fi in worm)
+
+    def test_fs_write_to_site_packages(self, tmp_path):
+        """fs.writeFile targeting site-packages should flag."""
+        f = tmp_path / "worm.js"
+        f.write_text(
+            "const fs = require('fs');\n"
+            "fs.writeFile('/usr/lib/python3/site-packages/requests/__init__.py', code, cb);\n"
+        )
+        findings = scanner.scan_file(str(f), "worm.js")
+        worm = [fi for fi in findings if fi.category == "worm-propagation"]
+        assert len(worm) > 0
+
+    def test_python_open_write_node_modules(self, tmp_path):
+        """Python open() writing to node_modules should flag."""
+        f = tmp_path / "worm.py"
+        f.write_text(
+            "with open('node_modules/express/index.js', 'w') as fh:\n"
+            "    fh.write(payload)\n"
+        )
+        findings = scanner.scan_file(str(f), "worm.py")
+        worm = [fi for fi in findings if fi.category == "worm-propagation"]
+        assert len(worm) > 0
+
+    def test_python_open_write_site_packages(self, tmp_path):
+        """Python open() writing to site-packages should flag."""
+        f = tmp_path / "worm.py"
+        f.write_text(
+            "f = open('/usr/lib/python3.11/site-packages/pip/__init__.py', 'w')\n"
+            "f.write(malicious_code)\n"
+        )
+        findings = scanner.scan_file(str(f), "worm.py")
+        worm = [fi for fi in findings if fi.category == "worm-propagation"]
+        assert len(worm) > 0
+
+    def test_shutil_copy_to_node_modules(self, tmp_path):
+        """shutil.copy targeting node_modules should flag."""
+        f = tmp_path / "worm.py"
+        f.write_text(
+            "import shutil\n"
+            "shutil.copy('payload.py', 'node_modules/axios/dist/index.js')\n"
+        )
+        findings = scanner.scan_file(str(f), "worm.py")
+        worm = [fi for fi in findings if fi.category == "worm-propagation"]
+        assert len(worm) > 0
+
+    def test_os_rename_in_site_packages(self, tmp_path):
+        """os.rename targeting site-packages should flag."""
+        f = tmp_path / "worm.py"
+        f.write_text(
+            "import os\n"
+            "os.rename('backdoor.py', '/usr/lib/site-packages/requests/api.py')\n"
+        )
+        findings = scanner.scan_file(str(f), "worm.py")
+        worm = [fi for fi in findings if fi.category == "worm-propagation"]
+        assert len(worm) > 0
+
+    def test_clean_fs_write_not_flagged(self, tmp_path):
+        """Normal fs.writeFileSync to non-node_modules path should not flag."""
+        f = tmp_path / "safe.js"
+        f.write_text(
+            "const fs = require('fs');\n"
+            "fs.writeFileSync('./output/report.json', data);\n"
+        )
+        findings = scanner.scan_file(str(f), "safe.js")
+        worm = [fi for fi in findings if fi.category == "worm-propagation"]
+        assert len(worm) == 0
+
+
+class TestCounterProbabilisticActivation:
+    """Tests for Category 7: Counter/probabilistic activation (Item 6)."""
+
+    def test_math_random_threshold(self, tmp_path):
+        """Math.random() < threshold should flag."""
+        f = tmp_path / "sneaky.js"
+        f.write_text("if (Math.random() < 0.01) { require('./payload'); }\n")
+        findings = scanner.scan_file(str(f), "sneaky.js")
+        cats = [fi.category for fi in findings]
+        assert "probabilistic-activation" in cats
+
+    def test_python_random_threshold(self, tmp_path):
+        """random.random() < threshold should flag."""
+        f = tmp_path / "sneaky.py"
+        f.write_text(
+            "import random\n"
+            "if random.random() < 0.001:\n"
+            "    activate()\n"
+        )
+        findings = scanner.scan_file(str(f), "sneaky.py")
+        cats = [fi.category for fi in findings]
+        assert "probabilistic-activation" in cats
+
+    def test_process_env_ci_conditional(self, tmp_path):
+        """process.env.CI conditional should flag as environment-detection."""
+        f = tmp_path / "sneaky.js"
+        f.write_text("if (process.env.CI && true) { runDifferentCode(); }\n")
+        findings = scanner.scan_file(str(f), "sneaky.js")
+        cats = [fi.category for fi in findings]
+        assert "environment-detection" in cats
+
+    def test_process_env_github_actions(self, tmp_path):
+        """process.env.GITHUB_ACTIONS conditional should flag."""
+        f = tmp_path / "ci_aware.js"
+        f.write_text("if (process.env.GITHUB_ACTIONS && true) { exfil(); }\n")
+        findings = scanner.scan_file(str(f), "ci_aware.js")
+        cats = [fi.category for fi in findings]
+        assert "environment-detection" in cats
+
+    def test_python_os_environ_ci(self, tmp_path):
+        """os.environ.get('CI') should flag."""
+        f = tmp_path / "ci_check.py"
+        f.write_text(
+            "import os\n"
+            "if os.environ.get('CI'):\n"
+            "    do_something_different()\n"
+        )
+        findings = scanner.scan_file(str(f), "ci_check.py")
+        cats = [fi.category for fi in findings]
+        assert "environment-detection" in cats
+
+    def test_python_os_getenv_github_actions(self, tmp_path):
+        """os.getenv('GITHUB_ACTIONS') should flag."""
+        f = tmp_path / "ci_check.py"
+        f.write_text(
+            "import os\n"
+            "running_in_ci = os.getenv('GITHUB_ACTIONS')\n"
+        )
+        findings = scanner.scan_file(str(f), "ci_check.py")
+        cats = [fi.category for fi in findings]
+        assert "environment-detection" in cats
+
+    def test_environment_detection_is_medium(self, tmp_path):
+        """Environment detection severity should be MEDIUM."""
+        f = tmp_path / "ci.py"
+        f.write_text("x = os.environ.get('CI')\n")
+        findings = scanner.scan_file(str(f), "ci.py")
+        env = [fi for fi in findings if fi.category == "environment-detection"]
+        assert all(fi.severity == "medium" for fi in env)
+
+    def test_clean_code_not_flagged(self, tmp_path):
+        """Normal code without these patterns should be clean."""
+        f = tmp_path / "safe.py"
+        f.write_text(
+            "import os\n"
+            "import random\n"
+            "x = random.randint(1, 100)\n"
+            "print(os.environ.get('HOME'))\n"
+        )
+        findings = scanner.scan_file(str(f), "safe.py")
+        prob = [fi for fi in findings if fi.category in ("probabilistic-activation", "environment-detection")]
+        assert len(prob) == 0

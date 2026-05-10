@@ -39,6 +39,8 @@ SAST_PATTERNS = {
         {"name": "Kernel Exploit: AF_ALG Socket", "severity": "critical", "regex": re.compile(r'(?:socket\.)?socket\s*\(\s*(?:38|0x26|(?:socket\.)?AF_ALG)\s*[\s,)]'), "category": "kernel-exploit"},
         {"name": "Kernel Exploit: Crypto Template Bind", "severity": "critical", "regex": re.compile(r'\.bind\s*\(\s*\(\s*[\'"](?:aead|skcipher)[\'"]'), "category": "kernel-exploit"},
         {"name": "Kernel Exploit: authencesn Reference", "severity": "high", "regex": re.compile(r'\bauthencesn\b'), "category": "kernel-exploit"},
+        # Reflection-based RCE: getattr + __import__ combo (dynamic attribute dispatch)
+        {"name": "Reflection RCE: getattr + __import__ combo", "severity": "high", "regex": re.compile(r'getattr\s*\(\s*__import__\s*\('), "category": "reflection-rce"},
     ],
     ".js": [
         {"name": "Dangerous Eval", "severity": "high", "regex": re.compile(r'\beval\s*\('), "category": "code-execution"},
@@ -97,15 +99,32 @@ SAST_PATTERNS = {
         {"name": "Command Execution", "severity": "critical", "regex": re.compile(r'Runtime\.getRuntime\(\)\.exec'), "category": "shell-injection"},
         {"name": "ProcessBuilder", "severity": "high", "regex": re.compile(r'new\s+ProcessBuilder\s*\('), "category": "shell-injection"},
         {"name": "Unsafe Deserialization", "severity": "critical", "regex": re.compile(r'ObjectInputStream.*readObject'), "category": "deserialization"},
+        # Reflection-based RCE: only flag when argument is a variable (not string literal)
+        {"name": "Reflection RCE: Method.invoke", "severity": "high", "regex": re.compile(r'\.invoke\s*\(\s*[a-zA-Z_]\w*'), "category": "reflection-rce"},
+        {"name": "Reflection RCE: Class.forName", "severity": "high", "regex": re.compile(r'Class\.forName\s*\(\s*[a-zA-Z_]\w*'), "category": "reflection-rce"},
+        {"name": "Reflection RCE: getMethod", "severity": "high", "regex": re.compile(r'getMethod\s*\(\s*[a-zA-Z_]\w*'), "category": "reflection-rce"},
+        {"name": "Reflection RCE: getDeclaredMethod", "severity": "high", "regex": re.compile(r'getDeclaredMethod\s*\(\s*[a-zA-Z_]\w*'), "category": "reflection-rce"},
     ],
     ".go": [
         {"name": "Command Execution", "severity": "high", "regex": re.compile(r'exec\.Command\s*\('), "category": "shell-injection"},
         {"name": "Unsafe Pointer", "severity": "medium", "regex": re.compile(r'unsafe\.Pointer'), "category": "memory-safety"},
+        # Reflection-based RCE: only flag when argument is a variable
+        {"name": "Reflection RCE: reflect.ValueOf", "severity": "high", "regex": re.compile(r'reflect\.ValueOf\s*\(\s*[a-zA-Z_]\w*'), "category": "reflection-rce"},
+        {"name": "Reflection RCE: reflect.Call", "severity": "high", "regex": re.compile(r'\.Call\s*\(\s*\[\s*\]reflect\.Value'), "category": "reflection-rce"},
     ],
     ".rb": [
         {"name": "Eval", "severity": "high", "regex": re.compile(r'\beval\s*\('), "category": "code-execution"},
         {"name": "System Call", "severity": "critical", "regex": re.compile(r'\b(system|exec|`|%x)\s*[\(\[]'), "category": "shell-injection"},
         {"name": "Send Method", "severity": "medium", "regex": re.compile(r'\bsend\s*\(\s*params'), "category": "code-execution"},
+        # Reflection-based RCE: send/public_send/method with variable argument
+        {"name": "Reflection RCE: send with variable", "severity": "high", "regex": re.compile(r'\b(?:public_)?send\s*\(\s*[a-zA-Z_]\w*(?!\s*["\'])'), "category": "reflection-rce"},
+        {"name": "Reflection RCE: method() with variable", "severity": "high", "regex": re.compile(r'\.method\s*\(\s*[a-zA-Z_]\w*'), "category": "reflection-rce"},
+    ],
+    ".cs": [
+        # Reflection-based RCE: only flag when argument is a variable (not string literal)
+        {"name": "Reflection RCE: MethodInfo.Invoke", "severity": "high", "regex": re.compile(r'\.Invoke\s*\(\s*[a-zA-Z_]\w*'), "category": "reflection-rce"},
+        {"name": "Reflection RCE: Assembly.Load", "severity": "high", "regex": re.compile(r'Assembly\.Load\w*\s*\(\s*[a-zA-Z_]\w*'), "category": "reflection-rce"},
+        {"name": "Reflection RCE: Activator.CreateInstance", "severity": "high", "regex": re.compile(r'Activator\.CreateInstance\s*\(\s*[a-zA-Z_]\w*'), "category": "reflection-rce"},
     ],
     ".sh": [
         {"name": "Eval in Shell", "severity": "high", "regex": re.compile(r'\beval\s+'), "category": "code-execution"},

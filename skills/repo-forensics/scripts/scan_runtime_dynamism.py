@@ -108,6 +108,45 @@ TIME_BOMB_PATTERNS = [
 # scan_mcp_security.py (RUG_PULL_PATTERNS). Removed from here to avoid
 # duplicate findings on MCP server files.
 
+# ============================================================
+# Category 6: Self-Propagating Worm (critical)
+# Code that modifies files in node_modules or site-packages.
+# Source: Sonatype "Self-Propagating NPM Worm" report (April 2026)
+# ============================================================
+WORM_PROPAGATION_PATTERNS = [
+    # JavaScript: fs.writeFileSync / fs.writeFile targeting node_modules
+    (re.compile(r'fs\.(writeFileSync|writeFile)\s*\([^)]*node_modules'), "Self-propagating worm: fs.write targeting node_modules"),
+    (re.compile(r'fs\.(writeFileSync|writeFile)\s*\([^)]*site.packages'), "Self-propagating worm: fs.write targeting site-packages"),
+    # Python: open(..., 'w') with path containing node_modules or site-packages
+    (re.compile(r'open\s*\([^)]*(?:node_modules|site.packages)[^)]*,\s*["\']w'), "Self-propagating worm: open() write to package directory"),
+    (re.compile(r'open\s*\([^)]*(?:node_modules|site.packages)[^)]*,\s*["\']a'), "Self-propagating worm: open() append to package directory"),
+    # Python: shutil.copy / os.rename targeting package dirs
+    (re.compile(r'shutil\.copy\w*\s*\([^)]*(?:node_modules|site.packages)'), "Self-propagating worm: shutil.copy to package directory"),
+    (re.compile(r'os\.rename\s*\([^)]*(?:node_modules|site.packages)'), "Self-propagating worm: os.rename in package directory"),
+    # JavaScript: require.resolve + fs.write combo (resolve sibling then modify)
+    (re.compile(r'require\.resolve\s*\([^)]*\).*fs\.(write|writeFile|writeFileSync)'), "Self-propagating worm: require.resolve + fs.write (sibling package modification)"),
+    # JavaScript: path resolution into node_modules then write
+    (re.compile(r'path\.(join|resolve)\s*\([^)]*node_modules[^)]*\).*fs\.(write|writeFile|writeFileSync)'), "Self-propagating worm: path into node_modules + write"),
+]
+
+# ============================================================
+# Category 7: Counter/Probabilistic Activation (medium-high)
+# Activation triggers that don't use time references.
+# ============================================================
+COUNTER_PROBABILISTIC_PATTERNS = [
+    # Random activation with code execution
+    (re.compile(r'Math\.random\(\)\s*[<>]=?\s*0\.\d+.*(?:exec|eval|fetch|require|import)'), "Probabilistic activation: Math.random() threshold with code execution"),
+    (re.compile(r'Math\.random\(\)\s*[<>]=?\s*0\.\d+'), "Probabilistic activation: Math.random() threshold gate"),
+    (re.compile(r'random\.random\(\)\s*[<>]=?\s*0\.\d+'), "Probabilistic activation: random.random() threshold gate"),
+    # CI/CD environment detection — different behavior in CI vs local
+    (re.compile(r'process\.env\.CI\b.*(?:if|&&|\?|\|\|)'), "Environment-aware activation: process.env.CI conditional"),
+    (re.compile(r'process\.env\.GITHUB_ACTIONS\b.*(?:if|&&|\?|\|\|)'), "Environment-aware activation: process.env.GITHUB_ACTIONS conditional"),
+    (re.compile(r'os\.environ\.get\s*\(\s*["\']CI["\']'), "Environment-aware activation: os.environ.get('CI')"),
+    (re.compile(r'os\.getenv\s*\(\s*["\']CI["\']'), "Environment-aware activation: os.getenv('CI')"),
+    (re.compile(r'os\.environ\.get\s*\(\s*["\']GITHUB_ACTIONS["\']'), "Environment-aware activation: os.environ.get('GITHUB_ACTIONS')"),
+    (re.compile(r'os\.getenv\s*\(\s*["\']GITHUB_ACTIONS["\']'), "Environment-aware activation: os.getenv('GITHUB_ACTIONS')"),
+]
+
 
 class RuntimeDynamismASTVisitor(ast.NodeVisitor):
     """AST visitor for patterns that regex alone can't reliably catch."""
@@ -258,6 +297,30 @@ def scan_file_regex(file_path, rel_path):
     ))
 
     # NOTE: Category 5 (Dynamic Tool Descriptions) moved to scan_mcp_security.py
+
+    # Category 6: Self-propagating worm (critical)
+    findings.extend(core.scan_patterns(
+        content, rel_path, WORM_PROPAGATION_PATTERNS,
+        "worm-propagation", "critical", SCANNER_NAME
+    ))
+
+    # Category 7: Counter/probabilistic activation
+    # Environment detection is MEDIUM; random/counter with exec is HIGH
+    env_findings = core.scan_patterns(
+        content, rel_path, COUNTER_PROBABILISTIC_PATTERNS[:2],
+        "probabilistic-activation", "high", SCANNER_NAME
+    )
+    findings.extend(env_findings)
+    # random.random() threshold
+    findings.extend(core.scan_patterns(
+        content, rel_path, COUNTER_PROBABILISTIC_PATTERNS[2:3],
+        "probabilistic-activation", "high", SCANNER_NAME
+    ))
+    # CI environment detection patterns (medium severity)
+    findings.extend(core.scan_patterns(
+        content, rel_path, COUNTER_PROBABILISTIC_PATTERNS[3:],
+        "environment-detection", "medium", SCANNER_NAME
+    ))
 
     return findings
 

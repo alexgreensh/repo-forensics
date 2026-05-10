@@ -87,6 +87,7 @@ HARDCODED_MALICIOUS_DOMAINS = [
     "eo1n0jq9qgggt.m.pipedream.net",
     "sfrclak.com",  # Axios supply chain RAT C2 domain (March 2026)
     "checkmarx.zone",          # TeamPCP Wave 1-2 C2 domain (March 2026)
+    "models.litellm.cloud",    # LiteLLM supply chain compromise (March 2026)
     "checkmarx.cx",            # TeamPCP Wave 3 C2 domain (April 2026)
     "audit.checkmarx.cx",      # TeamPCP Wave 3 exfil endpoint (April 2026)
     "scan.aquasecurity.org",   # Trivy compromise exfil domain (March 2026)
