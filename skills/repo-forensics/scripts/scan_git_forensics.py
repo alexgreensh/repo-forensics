@@ -176,11 +176,10 @@ def scan_replace_refs(repo_path):
             cmd, cwd=repo_path, capture_output=True, text=True, check=True, env=env
         )
         output = result.stdout.strip()
-    except subprocess.CalledProcessError:
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
         return findings
 
     if output:
-        # Each line is: <hash> <type> <refname>
         ref_lines = [l for l in output.splitlines() if l.strip()]
         ref_names = []
         for line in ref_lines:
@@ -217,7 +216,18 @@ def scan_grafts(repo_path):
     Detection: check if .git/info/grafts exists and is non-empty.
     """
     findings = []
-    grafts_path = os.path.join(repo_path, '.git', 'info', 'grafts')
+    dot_git = os.path.join(repo_path, '.git')
+    if os.path.isfile(dot_git):
+        try:
+            with open(dot_git, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read().strip()
+            if content.startswith('gitdir:'):
+                dot_git = content[7:].strip()
+                if not os.path.isabs(dot_git):
+                    dot_git = os.path.join(repo_path, dot_git)
+        except OSError:
+            pass
+    grafts_path = os.path.join(dot_git, 'info', 'grafts')
 
     if not os.path.isfile(grafts_path):
         return findings

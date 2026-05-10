@@ -131,7 +131,7 @@ ANNOTATION_CHARS = set([
 
 # Combined pattern for all invisible/smuggling characters (fast boolean check).
 _ALL_INVISIBLE = (ZERO_WIDTH_CHARS | BIDI_CONTROL_CHARS | CONFUSABLE_SPACES
-                  | ANNOTATION_CHARS | VARIATION_SELECTORS | SUPPLEMENTAL_VARIATION_SELECTORS
+                  | ANNOTATION_CHARS | VARIATION_SELECTORS
                   | TAG_CHARS)
 ZERO_WIDTH_PATTERN = re.compile('[' + re.escape(''.join(_ALL_INVISIBLE)) + ']')
 BIDI_PATTERN = re.compile('[' + re.escape(''.join(BIDI_CONTROL_CHARS)) + ']')

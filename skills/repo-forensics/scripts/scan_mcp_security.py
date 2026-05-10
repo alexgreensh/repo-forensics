@@ -462,6 +462,26 @@ BUILTIN_TOOL_NAMES = {"read", "write", "edit", "bash", "search", "fetch"}
 # traditional binary payload.
 # ============================================================
 
+_MCP_SERVER_KEYS = {'mcpservers', 'mcp_servers', 'servers'}
+
+
+def _find_mcp_servers(data, depth=0):
+    """Find mcpServers dict up to 3 levels deep in a JSON structure."""
+    if depth > 3 or not isinstance(data, dict):
+        return {}
+    for key in data:
+        if key.lower() in _MCP_SERVER_KEYS:
+            val = data[key]
+            if isinstance(val, dict):
+                return val
+    for val in data.values():
+        if isinstance(val, dict):
+            result = _find_mcp_servers(val, depth + 1)
+            if result:
+                return result
+    return {}
+
+
 # Commands that support inline code execution via flags
 _INLINE_EXEC_COMMANDS = {"node", "python", "python3", "bash", "sh", "deno", "bun"}
 
@@ -508,8 +528,8 @@ def scan_trustfall_mcp_json(file_path, rel_path):
     if not isinstance(data, dict):
         return findings
 
-    servers = data.get('mcpServers', data.get('mcp_servers', data.get('servers', {})))
-    if not isinstance(servers, dict):
+    servers = _find_mcp_servers(data)
+    if not servers:
         return findings
 
     for server_name, server_config in servers.items():
@@ -524,9 +544,35 @@ def scan_trustfall_mcp_json(file_path, rel_path):
         if not isinstance(args, list):
             args = []
 
-        command_lower = command.strip().lower()
+        command_lower = os.path.basename(command.strip()).lower()
         args_strs = [str(a) for a in args]
         args_joined = ' '.join(args_strs)
+
+        # Detection 4: dangerous env vars (NODE_OPTIONS, PYTHONSTARTUP, etc.)
+        env = server_config.get('env', {})
+        if isinstance(env, dict):
+            _DANGEROUS_ENV = {
+                'NODE_OPTIONS': 'Node.js pre-load',
+                'PYTHONSTARTUP': 'Python startup script',
+                'PYTHONPATH': 'Python module path hijack',
+                'DENO_DIR': 'Deno module path hijack',
+                'NODE_PATH': 'Node.js module path hijack',
+                'LD_PRELOAD': 'Shared library injection',
+            }
+            for env_key, env_val in env.items():
+                if env_key.upper() in _DANGEROUS_ENV:
+                    findings.append(core.Finding(
+                        scanner=SCANNER_NAME, severity="critical",
+                        title=f"TrustFall: Dangerous Env Var in .mcp.json",
+                        description=(
+                            f"Server '{server_name}' sets {env_key}={str(env_val)[:80]} — "
+                            f"{_DANGEROUS_ENV[env_key.upper()]} enables code execution "
+                            f"without inline flags (Adversa AI TrustFall variant)"
+                        ),
+                        file=rel_path, line=0,
+                        snippet=f"env.{env_key}={str(env_val)[:80]}",
+                        category="trustfall-inline-exec"
+                    ))
 
         # Detection 1: interpreter + inline-eval flag
         if command_lower in _INLINE_EXEC_COMMANDS:

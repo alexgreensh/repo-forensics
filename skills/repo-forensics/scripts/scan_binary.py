@@ -134,23 +134,34 @@ def scan_embedded_pe(filepath, rel_path):
             if offset < 0:
                 break
 
-            # Validate PE signature at the location indicated by the MZ header
             try:
                 pe_offset_loc = offset + 0x3C
                 if pe_offset_loc + 4 <= len(content):
                     pe_offset = int.from_bytes(content[pe_offset_loc:pe_offset_loc + 4], 'little')
+                    if pe_offset > 1024 * 1024:
+                        offset += 2
+                        continue
                     pe_sig_loc = offset + pe_offset
+                    pe_sig = None
                     if pe_sig_loc + 4 <= len(content):
-                        if content[pe_sig_loc:pe_sig_loc + 4] == b'PE\x00\x00':
-                            findings.append(core.Finding(
-                                scanner=SCANNER_NAME, severity="critical",
-                                title=f"Embedded PE Executable in {ext.upper() or 'file'}",
-                                description=f"PE executable found at offset {offset} inside non-PE file. Polyglot file technique used in APT campaigns (UNK_CraftyCamel, Proofpoint Sosano).",
-                                file=rel_path, line=0,
-                                snippet=f"MZ+PE signature at offset {offset}",
-                                category="embedded-executable"
-                            ))
-                            break  # One finding per file is enough
+                        pe_sig = content[pe_sig_loc:pe_sig_loc + 4]
+                    elif pe_sig_loc + 4 <= file_size:
+                        try:
+                            with open(filepath, 'rb') as f2:
+                                f2.seek(pe_sig_loc)
+                                pe_sig = f2.read(4)
+                        except OSError:
+                            pass
+                    if pe_sig == b'PE\x00\x00':
+                        findings.append(core.Finding(
+                            scanner=SCANNER_NAME, severity="critical",
+                            title=f"Embedded PE Executable in {ext.upper() or 'file'}",
+                            description=f"PE executable found at offset {offset} inside non-PE file. Polyglot file technique used in APT campaigns (UNK_CraftyCamel, Proofpoint Sosano).",
+                            file=rel_path, line=0,
+                            snippet=f"MZ+PE signature at offset {offset}",
+                            category="embedded-executable"
+                        ))
+                        break
             except (IndexError, OverflowError):
                 pass
 
