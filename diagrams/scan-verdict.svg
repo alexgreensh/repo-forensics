@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 280" width="900" height="280">
+  <defs>
+    <linearGradient id="svbg" x1="0" y1="0" x2="900" y2="280" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0a0e14"/>
+      <stop offset="100%" stop-color="#111921"/>
+    </linearGradient>
+    <linearGradient id="scanline" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#58a6ff" stop-opacity="0"/>
+      <stop offset="40%" stop-color="#58a6ff" stop-opacity="0"/>
+      <stop offset="49%" stop-color="#58a6ff" stop-opacity="0.12"/>
+      <stop offset="50%" stop-color="#58a6ff" stop-opacity="0.4"/>
+      <stop offset="51%" stop-color="#58a6ff" stop-opacity="0.12"/>
+      <stop offset="60%" stop-color="#58a6ff" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#58a6ff" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-strong">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <clipPath id="termclip"><rect width="900" height="280" rx="10"/></clipPath>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="280" rx="10" fill="url(#svbg)"/>
+
+  <!-- Scan line sweep -->
+  <g clip-path="url(#termclip)">
+    <rect x="-300" y="0" width="400" height="280" fill="url(#scanline)">
+      <animateTransform attributeName="transform" type="translate" from="-300,0" to="1200,0" dur="5s" repeatCount="indefinite"/>
+    </rect>
+  </g>
+
+  <!-- Terminal title bar -->
+  <rect width="900" height="30" rx="10" fill="#1c2128"/>
+  <rect y="20" width="900" height="10" fill="#1c2128"/>
+  <circle cx="18" cy="15" r="5.5" fill="#f85149" opacity="0.85"/>
+  <circle cx="38" cy="15" r="5.5" fill="#d29922" opacity="0.85"/>
+  <circle cx="58" cy="15" r="5.5" fill="#3fb950" opacity="0.85"/>
+  <text x="450" y="19" font-family="'SF Mono','Fira Code',Consolas,monospace" font-size="11" fill="#6e7681" text-anchor="middle">repo-forensics -- scan output</text>
+
+  <!-- Command line -->
+  <text x="24" y="56" font-family="'SF Mono','Fira Code',Consolas,monospace" font-size="12" fill="#6e7681">
+    <tspan fill="#3fb950">$</tspan> ./run_forensics.sh ./suspicious-mcp-server
+  </text>
+
+  <!-- Scanning progress indicator -->
+  <text x="24" y="78" font-family="'SF Mono','Fira Code',Consolas,monospace" font-size="11" fill="#58a6ff" opacity="0">
+    [*] Running all 19 scanners in parallel...
+    <animate attributeName="opacity" values="0;0;0.8;0.8" keyTimes="0;0.1;0.15;1" dur="6s" repeatCount="indefinite"/>
+  </text>
+
+  <!-- Finding 1: fades in -->
+  <g opacity="0">
+    <animate attributeName="opacity" values="0;0;0;1;1" keyTimes="0;0.15;0.2;0.25;1" dur="6s" repeatCount="indefinite"/>
+    <text x="24" y="100" font-family="'SF Mono','Fira Code',Consolas,monospace" font-size="11.5">
+      <tspan fill="#f85149" font-weight="700">  [CRITICAL]</tspan>
+      <tspan fill="#c9d1d9"> TrustFall: Inline Code Execution in .mcp.json</tspan>
+    </text>
+    <text x="130" y="114" font-family="'SF Mono','Fira Code',Consolas,monospace" font-size="10" fill="#6e7681">.mcp.json -- node -e "fetch('https://...')"</text>
+    <!-- Red pulse dot -->
+    <circle cx="14" cy="96" r="3" fill="#f85149" filter="url(#glow)">
+      <animate attributeName="opacity" values="0.4;1;0.4" dur="1.5s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+
+  <!-- Finding 2: fades in later -->
+  <g opacity="0">
+    <animate attributeName="opacity" values="0;0;0;0;1;1" keyTimes="0;0.25;0.3;0.35;0.4;1" dur="6s" repeatCount="indefinite"/>
+    <text x="24" y="138" font-family="'SF Mono','Fira Code',Consolas,monospace" font-size="11.5">
+      <tspan fill="#f85149" font-weight="700">  [CRITICAL]</tspan>
+      <tspan fill="#c9d1d9"> Git Replace Objects Detected</tspan>
+    </text>
+    <text x="130" y="152" font-family="'SF Mono','Fira Code',Consolas,monospace" font-size="10" fill="#6e7681">.git/refs/replace/ -- 3 objects rewriting history</text>
+    <circle cx="14" cy="134" r="3" fill="#f85149" filter="url(#glow)">
+      <animate attributeName="opacity" values="0.4;1;0.4" dur="1.5s" repeatCount="indefinite" begin="0.5s"/>
+    </circle>
+  </g>
+
+  <!-- Finding 3: fades in later -->
+  <g opacity="0">
+    <animate attributeName="opacity" values="0;0;0;0;0;1;1" keyTimes="0;0.35;0.4;0.45;0.48;0.52;1" dur="6s" repeatCount="indefinite"/>
+    <text x="24" y="176" font-family="'SF Mono','Fira Code',Consolas,monospace" font-size="11.5">
+      <tspan fill="#d29922" font-weight="700">  [HIGH]</tspan>
+      <tspan fill="#c9d1d9">     Paste Service URL in postinstall Hook</tspan>
+    </text>
+    <text x="130" y="190" font-family="'SF Mono','Fira Code',Consolas,monospace" font-size="10" fill="#6e7681">package.json -- pastebin.com/raw/... in postinstall</text>
+    <circle cx="14" cy="172" r="3" fill="#d29922" filter="url(#glow)">
+      <animate attributeName="opacity" values="0.4;1;0.4" dur="1.5s" repeatCount="indefinite" begin="1s"/>
+    </circle>
+  </g>
+
+  <!-- Separator line draws itself -->
+  <line x1="24" y1="208" x2="876" y2="208" stroke="#30363d" stroke-width="1" stroke-dasharray="852" stroke-dashoffset="852">
+    <animate attributeName="stroke-dashoffset" values="852;852;852;0;0" keyTimes="0;0.5;0.6;0.65;1" dur="6s" repeatCount="indefinite"/>
+  </line>
+
+  <!-- Verdict appears with glow -->
+  <g opacity="0" filter="url(#glow-strong)">
+    <animate attributeName="opacity" values="0;0;0;0;0;0;1;1" keyTimes="0;0.55;0.6;0.63;0.65;0.68;0.72;1" dur="6s" repeatCount="indefinite"/>
+    <text x="24" y="234" font-family="'SF Mono','Fira Code',Consolas,monospace" font-size="13" font-weight="700" fill="#f85149">
+      VERDICT: 14 findings (5 critical, 6 high, 2 medium, 1 low)
+    </text>
+    <text x="24" y="254" font-family="'SF Mono','Fira Code',Consolas,monospace" font-size="13" font-weight="700" fill="#f85149">
+      EXIT CODE: 2
+    </text>
+    <text x="180" y="254" font-family="'SF Mono','Fira Code',Consolas,monospace" font-size="13" font-weight="700" fill="#f85149" opacity="0.7">
+      -- do not install
+    </text>
+  </g>
+
+  <!-- Border -->
+  <rect width="900" height="280" rx="10" fill="none" stroke="#1c2940" stroke-width="1"/>
+</svg>
