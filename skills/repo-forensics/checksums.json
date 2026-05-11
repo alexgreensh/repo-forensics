@@ -38,7 +38,7 @@
     "scripts/scan_sast.py": "554e8a6800ba3a86de9f5644e2a2eb222afe05f4a63dd8af4371737f576a6182",
     "scripts/scan_secrets.py": "b7dd163ca400579ebcd962499a7b58826dabd7d005c0b83f804d7d78052066a5",
     "scripts/scan_skill_threats.py": "7bd115a4a00328f539af72c35c1662c6ff3fcb5124600c14aa120fd5e3bb0ddc",
-    "scripts/session_scan.py": "f69b013c124beaf837af55c81e6420fd0535623d9c4607089b0ae220389d168c",
+    "scripts/session_scan.py": "e9e42cf88579cacfdcc081576a5d93961664fafdd15fe8afe140858f04e39283",
     "scripts/verify_install.py": "9ebc2e18fc638599d56d00cbecce5da759b7be2f834995668c69262eaba14c69",
     "scripts/vuln_feed.py": "7e2404b70b40fc13f31f49aac6331a4318cff1e21837ad42f2bdd9bbc73cc428"
   },
@@ -57,8 +57,8 @@
   },
   "hook_count": 7,
   "repo_manifests": {
-    ".claude-plugin/marketplace.json": "7c62368fa1742bdcc0a8c73751cd91ac4212c7370f5d2a073854a9015e4abac7",
-    ".claude-plugin/plugin.json": "070a9b347b15c1d79a7c92c0480345fda51f79d3d17a739f241163938b3e1d86"
+    ".claude-plugin/marketplace.json": "722d3b904bde934a16102dcf2fa1d3bb767a34a532cca5eecc013854ac0471ab",
+    ".claude-plugin/plugin.json": "315e6ef6aa4747b7d00b0c40b4f30506b0346cc35441c33ea1e998e3d819da72"
   },
   "manifest_count": 2
 }

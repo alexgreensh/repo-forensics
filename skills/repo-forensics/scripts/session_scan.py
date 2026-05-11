@@ -27,6 +27,7 @@ import hashlib
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
 import time
@@ -450,11 +451,9 @@ def scan_item(dirpath, label, item_type, checksums):
 def deep_scan_item(dirpath, label, item_type, timeout=None):
     """Run the full run_forensics.sh scanner suite on a changed item.
 
-    This catches zero-day supply chain attacks, obfuscated code, C2 beaconing,
-    manifest drift, and other threats that IOC-only checks miss.
-
-    Safe to call from SessionStart hooks (no recursion risk — SessionStart
-    fires once, before any tools run).
+    Uses start_new_session=True so the entire process tree (bash + all
+    backgrounded scanner children) shares a process group. On timeout,
+    os.killpg kills the whole group, preventing orphaned scanner zombies.
 
     Returns list of finding strings (empty = clean). Never raises.
     """
@@ -463,48 +462,89 @@ def deep_scan_item(dirpath, label, item_type, timeout=None):
     if not os.path.isdir(dirpath):
         return []
 
-    effective_timeout = timeout or DEEP_SCAN_TIMEOUT_PER_ITEM
+    effective_timeout = timeout if timeout is not None else DEEP_SCAN_TIMEOUT_PER_ITEM
+    if effective_timeout <= 0:
+        return []
+
+    proc = None
+    stdout = ""
     try:
-        result = subprocess.run(
+        proc = subprocess.Popen(
             ["bash", RUN_FORENSICS_SCRIPT, dirpath, "--format", "json"],
-            capture_output=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
             text=True,
-            timeout=effective_timeout,
+            encoding="utf-8",
+            errors="replace",
             cwd=dirpath,
+            start_new_session=True,
         )
+        pgid = os.getpgid(proc.pid)
+        stdout, _ = proc.communicate(timeout=effective_timeout)
     except subprocess.TimeoutExpired:
+        _kill_process_group(pgid, proc)
         return [f"deep scan timed out after {effective_timeout}s (partial results unavailable)"]
-    except (OSError, PermissionError):
+    except OSError:
+        if proc is not None:
+            _kill_process_group(getattr(proc, 'pid', None), proc)
         return []
+    finally:
+        if proc is not None and proc.stdout and not proc.stdout.closed:
+            proc.stdout.close()
 
-    # Exit codes: 0=clean, 1=warnings, 2=critical
-    if result.returncode == 0:
+    if proc.returncode == 0:
         return []
+    if proc.returncode < 0:
+        return [f"deep scan killed by signal {-proc.returncode}"]
 
-    # Parse JSON output for findings
     findings = []
     try:
-        data = json.loads(result.stdout)
+        data = json.loads(stdout)
         if isinstance(data, dict):
-            scanners = data.get('scanners', [])
-            if isinstance(scanners, list):
-                for scanner in scanners:
-                    if not isinstance(scanner, dict):
-                        continue
-                    sev = scanner.get('severity', '')
-                    if sev in ('critical', 'high', 'warning'):
-                        scanner_name = scanner.get('name', 'unknown')
-                        detail = scanner.get('detail', scanner.get('message', ''))
-                        if detail:
-                            findings.append(f"[{sev.upper()}] {scanner_name}: {detail}")
+            for scanner in data.get('scanners', []):
+                if not isinstance(scanner, dict):
+                    continue
+                sev = scanner.get('severity', '')
+                if sev in ('critical', 'high', 'warning'):
+                    scanner_name = scanner.get('name', 'unknown')
+                    detail = scanner.get('detail', scanner.get('message', ''))
+                    if detail:
+                        findings.append(f"[{sev.upper()}] {scanner_name}: {detail}")
     except (json.JSONDecodeError, ValueError):
-        # Fallback: use exit code as signal
-        if result.returncode == 2:
+        if proc.returncode == 2:
             findings.append("deep scan found CRITICAL issues (parse failed, check manually)")
-        elif result.returncode == 1:
+        elif proc.returncode == 1:
             findings.append("deep scan found warnings (parse failed, check manually)")
 
     return findings
+
+
+def _kill_process_group(pgid, proc):
+    """SIGTERM a process group, wait briefly, then escalate to SIGKILL."""
+    if pgid:
+        try:
+            os.killpg(pgid, signal.SIGTERM)
+        except OSError:
+            pass
+        try:
+            proc.wait(timeout=1)
+            return
+        except (subprocess.TimeoutExpired, OSError):
+            pass
+        try:
+            os.killpg(pgid, signal.SIGKILL)
+        except OSError:
+            pass
+    if proc is not None:
+        try:
+            proc.kill()
+        except OSError:
+            pass
+        try:
+            proc.wait(timeout=2)
+        except (subprocess.TimeoutExpired, OSError):
+            pass
 
 
 def _extract_version_info(dirpath):
