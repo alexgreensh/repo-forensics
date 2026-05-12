@@ -11,9 +11,9 @@ set -u
 SCRIPT="${CLAUDE_PLUGIN_ROOT}/skills/repo-forensics/scripts/pre_scan.py"
 
 if [ ! -f "$SCRIPT" ]; then
-    echo "[repo-forensics] WARNING: pre_scan.py not found at: $SCRIPT" >&2
-    echo "[repo-forensics] Plugin install may be corrupt, or the skill layout may have changed." >&2
-    echo "[repo-forensics] Pre-scan hook disabled for this command. Run: /plugin update repo-forensics" >&2
+    echo "[repo-forensics] WARNING: pre_scan.py not found at: $SCRIPT"
+    echo "[repo-forensics] Plugin install may be corrupt, or the skill layout may have changed."
+    echo "[repo-forensics] Pre-scan hook disabled for this command. Run: /plugin update repo-forensics"
     # exit 0 = approve. NEVER exit 2 when the script is missing — that would
     # block every Bash command.
     exit 0

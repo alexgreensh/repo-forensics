@@ -293,44 +293,48 @@ def build_pipe_to_shell_warning(command):
     }]
 
 
-def format_output(findings, command='', pattern_type=''):
-    """Format findings as hook JSON output with additionalContext."""
-    if not findings:
-        return '{}'
+def format_output(findings, command='', pattern_type='', scanned_target=''):
+    """Format scan results as plain text so Claude Code surfaces it to the model.
 
+    Always produces output when a scan ran (even if clean) so the model knows
+    the security check happened. Returns empty string only when no scan was
+    triggered (non-matching command).
+    """
     severity_order = {'critical': 0, 'high': 1, 'medium': 2, 'low': 3}
+
+    if not findings:
+        if scanned_target:
+            return f"[repo-forensics] auto-scan complete: {scanned_target} — no issues found."
+        return ''
+
     findings.sort(key=lambda f: severity_order.get(f.get('severity', 'low'), 3))
 
     critical_count = sum(1 for f in findings if f.get('severity') == 'critical')
     high_count = sum(1 for f in findings if f.get('severity') == 'high')
 
-    # Build summary
     lines = []
-    lines.append(f"## repo-forensics auto-scan: {len(findings)} finding(s)")
+    lines.append(f"[repo-forensics] auto-scan: {len(findings)} finding(s)")
     if pattern_type:
-        lines.append(f"Triggered by: `{pattern_type}` command")
-    lines.append("")
+        lines.append(f"Triggered by: {pattern_type} command")
 
-    for f in findings[:15]:  # Cap at 15 findings for readability
+    for f in findings[:15]:
         sev = f.get('severity', 'low').upper()
-        lines.append(f"**[{sev}]** {f.get('title', 'Unknown')}")
-        lines.append(f"  {f.get('description', '')}")
+        title = f.get('title', 'Unknown').replace('\n', ' ')
+        desc = f.get('description', '').replace('\n', ' ')
+        lines.append(f"[{sev}] {title}: {desc}")
         if f.get('snippet'):
-            lines.append(f"  `{f['snippet'][:120]}`")
-        lines.append("")
+            snippet = f['snippet'][:120].replace('\n', ' ')
+            lines.append(f"  {snippet}")
 
     if len(findings) > 15:
         lines.append(f"... and {len(findings) - 15} more findings. Run full scan for details.")
 
     if critical_count > 0:
-        lines.append(f"**VERDICT: {critical_count} CRITICAL finding(s). Do not proceed without review.**")
+        lines.append(f"VERDICT: {critical_count} CRITICAL finding(s). Do not proceed without review.")
     elif high_count > 0:
-        lines.append(f"**VERDICT: {high_count} HIGH finding(s). Review before proceeding.**")
+        lines.append(f"VERDICT: {high_count} HIGH finding(s). Review before proceeding.")
 
-    output = {
-        'additionalContext': '\n'.join(lines)
-    }
-    return json.dumps(output)
+    return '\n'.join(lines)
 
 
 def main():
@@ -339,29 +343,31 @@ def main():
     command = extract_command(data)
 
     if not command:
-        print('{}')
         sys.exit(0)
 
     # Detect install/clone pattern
     pattern_type, match = detect_install_command(command)
 
     if not pattern_type:
-        print('{}')
         sys.exit(0)
 
     # Pipe-to-shell: instant CRITICAL, no scan needed
     if pattern_type == 'pipe_to_shell':
         findings = build_pipe_to_shell_warning(command)
-        print(format_output(findings, command, pattern_type))
+        output = format_output(findings, command, pattern_type, scanned_target='pipe-to-shell')
+        if output:
+            print(output)
         sys.exit(0)
 
     all_findings = []
+    scanned_target = ''
 
     # For package install commands: check IOC list
     package_names = []
     if pattern_type != 'git_clone':
         package_names = extract_package_names(pattern_type, match)
         if package_names:
+            scanned_target = ', '.join(package_names)
             ioc_findings = check_ioc_packages(package_names)
             all_findings.extend(ioc_findings)
 
@@ -369,6 +375,7 @@ def main():
     if pattern_type == 'git_clone':
         clone_dir = extract_clone_target(match)
         if clone_dir and os.path.isdir(clone_dir):
+            scanned_target = clone_dir
             scan_findings = run_targeted_scan(clone_dir)
             all_findings.extend(scan_findings)
 
@@ -376,6 +383,7 @@ def main():
     if pattern_type == 'git_pull':
         cwd = os.getcwd()
         if os.path.isdir(cwd) and _is_safe_scan_path(cwd):
+            scanned_target = cwd
             scan_findings = run_targeted_scan(cwd)
             all_findings.extend(scan_findings)
 
@@ -384,10 +392,13 @@ def main():
         for pkg in package_names:
             pkg_path = os.path.realpath(pkg)
             if os.path.isdir(pkg_path) and _is_safe_scan_path(pkg_path):
+                scanned_target = pkg_path
                 scan_findings = run_targeted_scan(pkg_path)
                 all_findings.extend(scan_findings)
 
-    print(format_output(all_findings, command, pattern_type))
+    output = format_output(all_findings, command, pattern_type, scanned_target)
+    if output:
+        print(output)
     sys.exit(0)
 
 

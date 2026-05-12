@@ -768,19 +768,11 @@ def main():
 
 
 def output_session_context(lines):
-    """Output SessionStart hook JSON with additional context."""
+    """Output SessionStart hook as plain text so Claude Code surfaces it."""
     if not lines:
-        print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart"}}))
         sys.exit(0)
 
-    context = "[repo-forensics] " + "\n".join(lines)
-    result = {
-        "hookSpecificOutput": {
-            "hookEventName": "SessionStart",
-            "additionalContext": context
-        }
-    }
-    print(json.dumps(result))
+    print("[repo-forensics] " + "\n".join(lines))
     sys.exit(0)
 
 
