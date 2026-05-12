@@ -308,3 +308,48 @@ class TestCleanRepo:
         findings = _scan_repo(clean_repo)
         critical = [f for f in findings if f.severity == "critical"]
         assert len(critical) == 0
+
+
+class TestTanStackCIVector:
+    """pull_request_target + id-token: write combo detection."""
+
+    def test_prt_plus_id_token_write_critical(self, tmp_path):
+        workflow = tmp_path / ".github" / "workflows"
+        workflow.mkdir(parents=True)
+        ci = workflow / "ci.yml"
+        ci.write_text(
+            "name: CI\non:\n  pull_request_target:\n"
+            "permissions:\n  id-token: write\n  contents: read\n"
+            "jobs:\n  build:\n    runs-on: ubuntu-latest\n"
+        )
+        findings = scanner.scan_github_actions(str(ci), ".github/workflows/ci.yml")
+        combo = [f for f in findings if "TanStack" in f.title]
+        assert len(combo) >= 1
+        assert combo[0].severity == "critical"
+
+    def test_id_token_write_alone_medium(self, tmp_path):
+        workflow = tmp_path / ".github" / "workflows"
+        workflow.mkdir(parents=True)
+        ci = workflow / "ci.yml"
+        ci.write_text(
+            "name: CI\non:\n  push:\n"
+            "permissions:\n  id-token: write\n"
+            "jobs:\n  build:\n    runs-on: ubuntu-latest\n"
+        )
+        findings = scanner.scan_github_actions(str(ci), ".github/workflows/ci.yml")
+        id_token = [f for f in findings if "id-token" in f.title.lower()]
+        assert len(id_token) >= 1
+        assert any(f.severity == "medium" for f in id_token)
+
+    def test_prt_without_id_token_no_combo(self, tmp_path):
+        workflow = tmp_path / ".github" / "workflows"
+        workflow.mkdir(parents=True)
+        ci = workflow / "ci.yml"
+        ci.write_text(
+            "name: CI\non:\n  pull_request_target:\n"
+            "permissions:\n  contents: read\n"
+            "jobs:\n  build:\n    runs-on: ubuntu-latest\n"
+        )
+        findings = scanner.scan_github_actions(str(ci), ".github/workflows/ci.yml")
+        combo = [f for f in findings if "TanStack" in f.title]
+        assert len(combo) == 0

@@ -169,6 +169,41 @@ HOMOGLYPHS = {
 }
 HOMOGLYPH_PATTERN = re.compile('[' + ''.join(HOMOGLYPHS.keys()) + ']')
 
+
+def _is_emoji_codepoint(cp):
+    """Return True if codepoint is an emoji base character (not ZWJ/VS16 themselves)."""
+    return (0x1F300 <= cp <= 0x1FFFF      # Misc Symbols, Emoticons, Transport, Supplemental
+            or 0x2600 <= cp <= 0x27BF     # Misc Symbols, Dingbats
+            or 0x2300 <= cp <= 0x23FF     # Misc Technical (hourglass, watch, etc.)
+            or 0x20E3 == cp               # Combining Enclosing Keycap
+            or 0x1F1E0 <= cp <= 0x1F1FF   # Regional Indicator Symbols (flags)
+            or cp in (0x2702, 0x2705, 0x2708, 0x2709, 0x270A, 0x270B,
+                      0x270C, 0x270D, 0x270F, 0x2712, 0x2714, 0x2716,
+                      0x2728, 0x2733, 0x2734, 0x2744, 0x2747, 0x274C,
+                      0x274E, 0x2753, 0x2754, 0x2755, 0x2757, 0x2763,
+                      0x2764, 0x27A1, 0x2934, 0x2935, 0x2B05, 0x2B06,
+                      0x2B07, 0x2B1B, 0x2B1C, 0x2B50, 0x2B55, 0x3030,
+                      0x303D, 0x3297, 0x3299, 0xA9, 0xAE))
+
+
+def _is_emoji_context(content, pos, char):
+    """Return True if the invisible char at `pos` is part of a legitimate emoji
+    sequence (adjacent to an actual emoji codepoint).
+
+    Only whitelists U+200D (ZWJ) and U+FE0F (VS16). Requires the adjacent
+    character to be in a Unicode emoji range, not just any non-ASCII char.
+    This prevents bypass via accented Latin (e.g. 'é') or CJK characters.
+    """
+    if char not in ('‍', '️'):
+        return False
+    for offset in (-1, -2, 1, 2):
+        adj_pos = pos + offset
+        if 0 <= adj_pos < len(content):
+            if _is_emoji_codepoint(ord(content[adj_pos])):
+                return True
+    return False
+
+
 # ============================================================
 # Category 3: Prerequisite Red Flags (critical)
 # ============================================================
@@ -287,6 +322,11 @@ _FALLBACK_MALICIOUS_DOMAINS = [
     "models.litellm.cloud",
     # Checkmarx TeamPCP infrastructure (2026)
     "checkmarx.zone",
+    # TanStack worm: Session P2P exfiltration (May 2026)
+    "filev2.getsession.org",
+    "seed1.getsession.org",
+    "seed2.getsession.org",
+    "seed3.getsession.org",
 ]
 
 # Known malicious binary paths (host IOCs)
@@ -352,6 +392,11 @@ CLICKFIX_PATTERNS = [
     (re.compile(r'api\.cloud-aws\.adc-e\.uk'), "Mini Shai-Hulud: Attacker-controlled C2 domain (TeamPCP Wave 6)"),
     (re.compile(r'Exiting as russian language detected'), "TeamPCP: Anti-attribution locale check (Waves 5-6)"),
     (re.compile(r'__DAEMONIZED'), "Mini Shai-Hulud: Anti-re-execution environment variable guard (TeamPCP Wave 6)"),
+    (re.compile(r'thebeautifulmarchoftime'), "TanStack Shai-Hulud: beautify() cipher key marker (TeamPCP Wave 7, May 2026)"),
+    (re.compile(r'thebeautifulsandsoftime'), "TanStack Shai-Hulud: beautify() cipher key marker (TeamPCP Wave 7, May 2026)"),
+    (re.compile(r'\brouter_init\.js\b'), "TanStack Shai-Hulud: Malicious payload filename (TeamPCP Wave 7, May 2026)"),
+    (re.compile(r'getsession\.org'), "TanStack Shai-Hulud: Session P2P exfiltration network (TeamPCP Wave 7, May 2026)"),
+    (re.compile(r'voicproducoes'), "TanStack Shai-Hulud: Attacker git identity (TeamPCP Wave 7, May 2026)"),
 ]
 
 # ============================================================
@@ -420,9 +465,12 @@ def scan_unicode_smuggling(content, rel_path):
     """
     findings = []
 
-    # Count zero-width/invisible characters (capped to prevent slow scans)
+    # Count zero-width/invisible characters (capped to prevent slow scans).
+    # Skip ZWJ/VS16 that are part of legitimate emoji sequences.
     zw_count = 0
-    for _ in ZERO_WIDTH_PATTERN.finditer(content):
+    for m in ZERO_WIDTH_PATTERN.finditer(content):
+        if _is_emoji_context(content, m.start(), m.group(0)):
+            continue
         zw_count += 1
         if zw_count >= 100:
             break
@@ -450,9 +498,11 @@ def scan_unicode_smuggling(content, rel_path):
             category="unicode-smuggling"
         ))
 
-    # Variation selectors (alter glyph rendering invisibly)
-    m = VARIATION_SELECTOR_PATTERN.search(content)
-    if m:
+    # Variation selectors (alter glyph rendering invisibly).
+    # Skip VS16 (U+FE0F) when used in emoji sequences.
+    for m in VARIATION_SELECTOR_PATTERN.finditer(content):
+        if _is_emoji_context(content, m.start(), m.group(0)):
+            continue
         cp = ord(m.group(0))
         line_no = content[:m.start()].count('\n') + 1
         findings.append(core.Finding(
@@ -463,6 +513,7 @@ def scan_unicode_smuggling(content, rel_path):
             snippet=f"Contains U+{cp:04X} variation selector",
             category="unicode-smuggling"
         ))
+        break
 
     # Supplemental variation selectors (VS17-VS256, GlassWorm campaign range)
     m = SUPPLEMENTAL_VS_PATTERN.search(content)

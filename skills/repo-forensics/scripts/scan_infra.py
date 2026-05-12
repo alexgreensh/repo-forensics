@@ -432,6 +432,40 @@ def scan_github_actions(file_path, rel_path):
                         ))
                         break  # One finding per workflow is sufficient
 
+        # TanStack attack vector: pull_request_target + id-token: write.
+        # Forked PRs get write permissions AND can mint OIDC tokens for npm publish.
+        non_comment = [l for l in lines if not l.lstrip().startswith('#')]
+        has_prt = any("pull_request_target" in line for line in non_comment)
+        has_id_token_write = any(
+            re.search(r'id-token\s*:\s*write', line) for line in non_comment
+        )
+        if has_prt and has_id_token_write:
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="critical",
+                title="GHA: pull_request_target + id-token: write (TanStack Attack Vector)",
+                description=(
+                    "Workflow combines pull_request_target trigger with id-token: write permission. "
+                    "Forked PRs can mint OIDC tokens exchangeable for npm publish tokens. "
+                    "This exact combination was exploited in the TanStack supply chain attack "
+                    "(CVE-2026-45321, TeamPCP Wave 7, May 2026)"
+                ),
+                file=rel_path, line=0,
+                snippet="pull_request_target + id-token: write",
+                category="ci-token-abuse"
+            ))
+
+        if has_id_token_write and not has_prt:
+            for i, line in enumerate(lines):
+                if re.search(r'id-token\s*:\s*write', line):
+                    findings.append(core.Finding(
+                        scanner=SCANNER_NAME, severity="medium",
+                        title="GHA: id-token: write Permission",
+                        description="Workflow can request OIDC tokens (used for npm provenance, cloud auth). Verify this is intentional.",
+                        file=rel_path, line=i + 1, snippet=line.strip()[:120],
+                        category="ci-cd"
+                    ))
+                    break
+
     except (OSError, UnicodeDecodeError) as e:
         print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)
     return findings

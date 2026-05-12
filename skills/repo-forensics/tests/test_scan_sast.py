@@ -612,3 +612,43 @@ def _scan_repo(repo_path):
     for fp, rp in core.walk_repo(str(repo_path)):
         findings.extend(scanner.scan_file(fp, rp))
     return findings
+
+
+class TestTanStackSASTPatterns:
+    """TanStack worm code pattern detection."""
+
+    def test_session_p2p_exfiltration(self, tmp_path):
+        js = tmp_path / "exfil.js"
+        js.write_text("const url = 'https://filev2.getsession.org/upload';\n")
+        findings = scanner.scan_file(str(js), "exfil.js")
+        assert any("Session P2P" in f.title for f in findings)
+
+    def test_session_p2p_in_ts(self, tmp_path):
+        ts = tmp_path / "exfil.ts"
+        ts.write_text("const endpoint = 'https://seed1.getsession.org';\n")
+        findings = scanner.scan_file(str(ts), "exfil.ts")
+        assert any("Session P2P" in f.title for f in findings)
+
+    def test_tarball_manipulation(self, tmp_path):
+        js = tmp_path / "worm.js"
+        js.write_text("await updateTarball(pkg, payload);\n")
+        findings = scanner.scan_file(str(js), "worm.js")
+        assert any("Tarball" in f.title for f in findings)
+
+    def test_beautify_obfuscation(self, tmp_path):
+        js = tmp_path / "obf.js"
+        js.write_text('const x = beautify("4a2f3b8c9d0e1f2a3b4c");\n')
+        findings = scanner.scan_file(str(js), "obf.js")
+        assert any("beautify" in f.title.lower() for f in findings)
+
+    def test_dead_man_wiper(self, tmp_path):
+        js = tmp_path / "evil.js"
+        js.write_text("exec('find ~ -type f -writable | xargs shred -uvz');\n")
+        findings = scanner.scan_file(str(js), "evil.js")
+        assert any("Wiper" in f.title or "shred" in f.snippet for f in findings)
+
+    def test_provenance_forging(self, tmp_path):
+        js = tmp_path / "forge.js"
+        js.write_text("const keys = crypto.generateKeyPairSync('ed25519'); keys.sign(attestation);\n")
+        findings = scanner.scan_file(str(js), "forge.js")
+        assert any("Provenance" in f.title for f in findings)

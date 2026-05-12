@@ -486,3 +486,52 @@ class TestBehavioralSignals:
         }))
         findings = scanner.scan_behavioral_signals(str(pkg), "package.json")
         assert len(findings) == 0
+
+
+class TestOrphanCommitDetection:
+    """TanStack worm: orphan commit references in optionalDependencies."""
+
+    def test_orphan_commit_in_optional_deps(self, tmp_path):
+        pkg = tmp_path / "package.json"
+        pkg.write_text(json.dumps({
+            "name": "test",
+            "optionalDependencies": {
+                "@tanstack/setup": "github:TanStack/router#79ac49eedf774dd4b0cfa308722bc463cfe5885c"
+            }
+        }))
+        findings = scanner.scan_package_json(str(pkg), "package.json")
+        assert any(f.category == "orphan-commit" for f in findings)
+
+    def test_normal_dep_not_flagged(self, tmp_path):
+        pkg = tmp_path / "package.json"
+        pkg.write_text(json.dumps({
+            "name": "test",
+            "dependencies": {"lodash": "^4.17.21"}
+        }))
+        findings = scanner.scan_package_json(str(pkg), "package.json")
+        assert not any(f.category == "orphan-commit" for f in findings)
+
+    def test_regular_github_dep_not_orphan(self, tmp_path):
+        pkg = tmp_path / "package.json"
+        pkg.write_text(json.dumps({
+            "name": "test",
+            "optionalDependencies": {
+                "some-lib": "github:org/repo"
+            }
+        }))
+        findings = scanner.scan_package_json(str(pkg), "package.json")
+        assert not any(f.category == "orphan-commit" for f in findings)
+
+
+class TestTanStackSetupIOC:
+    """@tanstack/setup should be detected as known malicious."""
+
+    def test_tanstack_setup_flagged(self, tmp_path):
+        pkg = tmp_path / "package.json"
+        pkg.write_text(json.dumps({
+            "name": "test",
+            "dependencies": {"@tanstack/setup": "1.0.0"}
+        }))
+        findings = scanner.scan_package_json(str(pkg), "package.json")
+        ioc_findings = [f for f in findings if f.category == "known-ioc"]
+        assert len(ioc_findings) >= 1

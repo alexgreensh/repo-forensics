@@ -69,6 +69,12 @@ SAST_PATTERNS = {
         {"name": "AWS STS Credential Validation", "severity": "high", "regex": re.compile(r'GetCallerIdentity|sts\.amazonaws\.com|sts\.(get|assume)'), "category": "credential-validation"},
         {"name": "Cloud Secrets Manager Enumeration", "severity": "high", "regex": re.compile(r'secretsmanager:ListSecrets|secretsmanager:GetSecretValue|ListSecrets|GetSecretValue'), "category": "credential-theft"},
         {"name": "AI Tool Config Theft", "severity": "critical", "regex": re.compile(r'\.claude\.json|\.claude/mcp\.json|\.kiro/settings/mcp\.json'), "category": "credential-theft"},
+        {"name": "Session P2P Exfiltration", "severity": "critical", "regex": re.compile(r'getsession\.org|filev2\.getsession|seed[123]\.getsession'), "category": "exfiltration"},
+        {"name": "Provenance Forging: Crypto Key + Sign", "severity": "critical", "regex": re.compile(r'generateKeyPairSync\s*\(.*\bsign\b'), "category": "provenance-forging"},
+        {"name": "Provenance Forging: in-toto/SLSA Attestation", "severity": "high", "regex": re.compile(r'in-toto\.io|intoto.*attestation|slsa.*provenance'), "category": "provenance-forging"},
+        {"name": "NPM Tarball Manipulation", "severity": "critical", "regex": re.compile(r'updateTarball'), "category": "worm-propagation"},
+        {"name": "Mass Encrypted String Obfuscation (beautify)", "severity": "high", "regex": re.compile(r'beautify\s*\(\s*["\'][0-9a-fA-F]+["\']'), "category": "obfuscation"},
+        {"name": "Dead-Man Wiper (JS)", "severity": "critical", "regex": re.compile(r'find\s+~\s+-type\s+f.*shred|xargs\s+shred\b'), "category": "destructive-command"},
     ],
     ".ts": [
         {"name": "Dangerous Eval", "severity": "high", "regex": re.compile(r'\beval\s*\('), "category": "code-execution"},
@@ -80,6 +86,7 @@ SAST_PATTERNS = {
         {"name": "Path Traversal: Unsanitized File Serve", "severity": "high", "regex": re.compile(r'(?:sendFile|readFile|readFileSync|createReadStream)\s*\([^)]*(?:req\.path|req\.params|req\.query|req\.url)'), "category": "path-traversal"},
         {"name": "Path Traversal: Unsanitized path.join", "severity": "high", "regex": re.compile(r'path\.(?:join|resolve)\s*\([^)]*(?:req\.path|req\.params|req\.query|req\.url)'), "category": "path-traversal"},
         {"name": "Direct /proc Filesystem Access", "severity": "high", "regex": re.compile(r'''['"]/proc/self/environ['"]'''), "category": "path-traversal"},
+        {"name": "Session P2P Exfiltration", "severity": "critical", "regex": re.compile(r'getsession\.org|filev2\.getsession|seed[123]\.getsession'), "category": "exfiltration"},
     ],
     ".tsx": [
         {"name": "Dangerous Eval", "severity": "high", "regex": re.compile(r'\beval\s*\('), "category": "code-execution"},

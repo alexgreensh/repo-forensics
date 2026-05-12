@@ -94,6 +94,11 @@ HARDCODED_MALICIOUS_DOMAINS = [
     "npnjs.com",               # npm maintainer phishing (Chalk compromise, 2025)
     "npmjs.help",              # npm maintainer phishing (2025)
     "files.pypihosted.org",    # Fake PyPI mirror (top.gg attack, 2024)
+    "filev2.getsession.org",   # TanStack worm: Session P2P exfiltration (May 2026)
+    "seed1.getsession.org",    # TanStack worm: Session P2P seed node (May 2026)
+    "seed2.getsession.org",    # TanStack worm: Session P2P seed node (May 2026)
+    "seed3.getsession.org",    # TanStack worm: Session P2P seed node (May 2026)
+    "api.cloud-aws.adc-e.uk",  # Mini Shai-Hulud: TeamPCP C2 domain (May 2026)
 ]
 
 HARDCODED_MALICIOUS_NPM = {
@@ -101,6 +106,7 @@ HARDCODED_MALICIOUS_NPM = {
     "claud-code", "cloude-code", "cloude", "mcp-cliient", "mcp-serever",
     "anthropic-sdk-node", "claude-code-cli", "clawclient",
     "plain-crypto-js",  # Axios supply chain RAT dropper (March 2026)
+    "@tanstack/setup",  # TanStack worm: entirely malicious package (May 2026)
 }
 
 HARDCODED_MALICIOUS_PYPI = {

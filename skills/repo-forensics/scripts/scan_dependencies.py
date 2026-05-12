@@ -739,6 +739,28 @@ def scan_package_json(filepath, rel_path):
                     category="local-dependency"
                 ))
 
+        # Orphan commit references in any dependency field (TanStack worm vector).
+        # The worm injected @tanstack/setup as an optionalDependency pointing
+        # to a GitHub URL with a specific orphan commit hash. Scanning all
+        # dependency fields catches copycat variants.
+        _ORPHAN_RE = re.compile(r'(?:github\.com/|github:)[^/\s]+/[^/\s]+#[a-fA-F0-9]{40}')
+        for dep_key in ('dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'):
+            for pkg, ver in data.get(dep_key, {}).items():
+                if isinstance(ver, str) and _ORPHAN_RE.search(ver):
+                    findings.append(core.Finding(
+                        scanner=SCANNER_NAME, severity="critical",
+                        title=f"Orphan Commit Reference: {pkg}",
+                        description=(
+                            f"{dep_key} references a GitHub commit SHA. "
+                            "The TanStack worm used this to pull malicious code from "
+                            "orphan commits invisible to branch inspection "
+                            "(TeamPCP Wave 7, May 2026)"
+                        ),
+                        file=rel_path, line=0,
+                        snippet=f"{pkg}: {ver[:120]}",
+                        category="orphan-commit"
+                    ))
+
         # Known IOC check (critical, before typosquatting)
         findings.extend(check_known_ioc_packages(dep_names, rel_path))
 

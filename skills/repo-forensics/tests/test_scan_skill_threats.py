@@ -224,3 +224,74 @@ class TestProseImperative:
 def _walk(repo_path):
     import forensics_core as core
     return list(core.walk_repo(str(repo_path)))
+
+
+class TestEmojiFalsePositives:
+    """Colored emojis in markdown should NOT trigger critical unicode findings."""
+
+    def test_emoji_with_zwj_no_critical(self, tmp_path):
+        md = tmp_path / "README.md"
+        md.write_text("# Project \U0001F680\n\nTeam: \U0001F468‍\U0001F469‍\U0001F467\n", encoding='utf-8')
+        findings = scanner.scan_unicode_smuggling(md.read_text(encoding='utf-8'), "README.md")
+        critical = [f for f in findings if f.severity == "critical" and f.category == "unicode-smuggling"]
+        assert len(critical) == 0, f"Emojis should not trigger critical. Got: {[f.title for f in critical]}"
+
+    def test_emoji_vs16_no_variation_selector(self, tmp_path):
+        md = tmp_path / "notes.md"
+        md.write_text("I ❤️ this\n", encoding='utf-8')
+        findings = scanner.scan_unicode_smuggling(md.read_text(encoding='utf-8'), "notes.md")
+        vs = [f for f in findings if "Variation Selector" in f.title]
+        assert len(vs) == 0, f"VS16 in emoji context should not trigger. Got: {[f.title for f in vs]}"
+
+    def test_zwj_in_code_still_detected(self, tmp_path):
+        evil = tmp_path / "evil.py"
+        evil.write_text("x = 'he‍‍‍llo'\n", encoding='utf-8')
+        findings = scanner.scan_unicode_smuggling(evil.read_text(encoding='utf-8'), "evil.py")
+        assert any("Zero-Width" in f.title for f in findings), "ZWJ in code must still be detected"
+
+    def test_vs16_in_code_still_detected(self, tmp_path):
+        evil = tmp_path / "evil.js"
+        evil.write_text("const x = 'ab️cd';\n", encoding='utf-8')
+        findings = scanner.scan_unicode_smuggling(evil.read_text(encoding='utf-8'), "evil.js")
+        assert any("Variation Selector" in f.title for f in findings), "VS16 in code must still be detected"
+
+    def test_multiple_emojis_no_critical(self, tmp_path):
+        md = tmp_path / "README.md"
+        md.write_text(
+            "# Great \U0001F44D\U0001F3FD work \U0001F680\n"
+            "\U0001F468‍\U0001F4BB Developer\n"
+            "\U0001F469‍\U0001F52C Scientist\n"
+            "❤️ Love\n",
+            encoding='utf-8'
+        )
+        findings = scanner.scan_unicode_smuggling(md.read_text(encoding='utf-8'), "README.md")
+        critical = [f for f in findings if f.severity == "critical" and f.category == "unicode-smuggling"]
+        assert len(critical) == 0
+
+
+class TestTanStackIOCStrings:
+    """TanStack worm IOC string detection."""
+
+    def test_thebeautifulmarchoftime(self, tmp_path):
+        f = tmp_path / "evil.js"
+        f.write_text("const key = 'thebeautifulmarchoftime';\n")
+        findings = scanner.scan_file(str(f), "evil.js")
+        assert any("TanStack" in t.title or "beautify" in t.description for t in findings)
+
+    def test_router_init_js(self, tmp_path):
+        f = tmp_path / "worm.js"
+        f.write_text("require('./router_init.js');\n")
+        findings = scanner.scan_file(str(f), "worm.js")
+        assert any("TanStack" in t.title or "payload" in t.title.lower() for t in findings)
+
+    def test_getsession_org(self, tmp_path):
+        f = tmp_path / "exfil.js"
+        f.write_text("const url = 'https://filev2.getsession.org/upload';\n")
+        findings = scanner.scan_file(str(f), "exfil.js")
+        assert any("getsession" in t.title.lower() or "getsession" in t.description.lower() for t in findings)
+
+    def test_voicproducoes(self, tmp_path):
+        f = tmp_path / "evil.sh"
+        f.write_text("git config user.name voicproducoes\n")
+        findings = scanner.scan_file(str(f), "evil.sh")
+        assert any("voicproducoes" in t.title.lower() or "attacker" in t.title.lower() for t in findings)
