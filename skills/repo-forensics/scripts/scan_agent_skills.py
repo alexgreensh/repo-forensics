@@ -16,6 +16,10 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import forensics_core as core
+from _shared_patterns import (
+    AUTO_EXEC_PATHS_RE, GIT_UPDATABLE, REF_FILE_EXTS_RE,
+    REF_VERBS_RE, SEED_FILES, WRITE_VERBS_RE,
+)
 
 SCANNER_NAME = "agent_skills"
 _F = core.Finding  # shorthand
@@ -324,8 +328,8 @@ def scan_plugin_manifest(repo_path):
 # Skills that instruct agents to write to auto-executed config files.
 # Source: Terra Security OpenClaw vulnerability research (May 2026)
 # ============================================================
-_AUTO_EXEC_FILES = r'(?:HEARTBEAT\.md|CLAUDE\.md|AGENTS\.md|settings\.json|\.claude/|commands/|hooks\.json)'
-_WRITE_VERBS = r'(?:add|append|write|modify|update|edit|create|insert|put|place|include)'
+_AUTO_EXEC_FILES = AUTO_EXEC_PATHS_RE
+_WRITE_VERBS = WRITE_VERBS_RE
 
 CONFIG_WRITE_PATTERNS = [
     (re.compile(r'(?i)\b' + _WRITE_VERBS + r'\b[^\n]{0,60}\b(?:to|in|into)\s+' + _AUTO_EXEC_FILES), "Config write request: modify auto-executed file (Terra Security OpenClaw, May 2026)"),
@@ -340,7 +344,7 @@ def scan_config_write_requests(repo_path):
     for root, _dirs, files in os.walk(repo_path):
         for fname in files:
             ext = os.path.splitext(fname)[1].lower()
-            if ext not in ('.md', '.txt'):
+            if ext not in ('.md', '.txt', '.yml', '.yaml', '.toml', '.cfg', '.ini', '.json'):
                 continue
             fpath = os.path.join(root, fname)
             content = _read(fpath)
@@ -366,9 +370,9 @@ def scan_config_write_requests(repo_path):
 # Transitive reference chains that create trust-laundering pipelines.
 # Source: Terra Security OpenClaw vulnerability research (May 2026)
 # ============================================================
-_SEED_FILES = {'SKILL.md', 'SOUL.md', 'HEARTBEAT.md', 'ROUTINE.md', 'AGENTS.md', 'BOOT.md', 'BOOTSTRAP.md'}
-_GIT_UPDATABLE = {'changelog.md', 'readme.md', 'updates.md', 'release_notes.md', 'release-notes.md', 'news.md'}
-_REF_PATTERN = re.compile(r'(?i)\b(?:read|follow|run|execute|apply|check)\s+(\S+\.md)\b')
+_SEED_FILES = SEED_FILES
+_GIT_UPDATABLE = GIT_UPDATABLE
+_REF_PATTERN = re.compile(r'(?i)\b' + REF_VERBS_RE + r'\s+(\S+\.' + REF_FILE_EXTS_RE + r')\b')
 _MAX_CHAIN_DEPTH = 5
 
 
@@ -423,6 +427,62 @@ def _find_chains(current, graph, path, findings, repo_path):
             _find_chains(ref, graph, new_path, findings, repo_path)
 
 
+# ============================================================
+# Cat 9: Memory/RAG Poisoning Indicators (high/critical)
+# Content designed to persist in agent memory or RAG corpus as backdoors.
+# Source: DeepMind AI Agent Traps "Cognitive State Poisoning" (March 2026)
+# ============================================================
+MEMORY_POISONING_PATTERNS = [
+    (re.compile(r'(?i)(?:memory_store|memory_write|remember|store_memory|add_memory|save_to_memory)\s*\([^)]*(?:ignore|override|system|admin|always|never|must)'), "Memory write with injection keywords (DeepMind Agent Traps, March 2026)"),
+    (re.compile(r'(?i)(?:add|write|store|save|persist|remember)\s+(?:to|in|into)\s+(?:memory|knowledge.?base|rag|vector.?store|embedding|index|corpus).*(?:ignore|override|system|always|never|must|from\s+now\s+on)'), "Memory/RAG poisoning: injection payload in memory write (DeepMind Agent Traps, March 2026)"),
+    (re.compile(r'(?i)(?:when\s+(?:retrieved|queried|searched|asked|recalled))\s*[,:]\s*(?:always|never|must|ignore|override|instead)'), "RAG trigger: conditional instruction on retrieval (DeepMind Agent Traps, March 2026)"),
+    (re.compile(r'(?i)(?:if\s+(?:this|an)\s+(?:document|chunk|passage|entry)\s+is\s+(?:found|retrieved|returned))\s*[,:]\s*(?:always|ignore|execute|run|override)'), "RAG trigger: conditional execution on document retrieval (DeepMind Agent Traps, March 2026)"),
+]
+
+PROVENANCE_STRIP_PATTERNS = [
+    (re.compile(r'(?i)(?:do\s+not|never|don\'t)\s+(?:include|add|store|record|log)\s+(?:the\s+)?(?:source|origin|provenance|attribution|timestamp|author)'), "Provenance stripping: suppressing attribution (DeepMind Agent Traps, March 2026)"),
+    (re.compile(r'(?i)(?:strip|remove|clear|delete)\s+(?:the\s+)?(?:source|origin|provenance|metadata|attribution)[\w\s]{0,30}(?:from|before|when)'), "Provenance stripping: removing metadata (DeepMind Agent Traps, March 2026)"),
+]
+
+
+_MEMORY_SCAN_EXTS = {'.md', '.txt', '.py', '.js', '.ts', '.json', '.yml', '.yaml'}
+
+
+def scan_memory_poisoning(repo_path):
+    """Cat 9: Detect memory/RAG poisoning indicators."""
+    findings = []
+    for fpath, rel in core.walk_repo(repo_path, skip_binary=True):
+        ext = os.path.splitext(fpath)[1].lower()
+        if ext not in _MEMORY_SCAN_EXTS:
+            continue
+        content = _read(fpath)
+        if not content:
+            continue
+        in_code_fence = False
+        for i, line in enumerate(content.split('\n')):
+            stripped = line.strip()
+            if stripped.startswith('```'):
+                in_code_fence = not in_code_fence
+                continue
+            if in_code_fence and ext in ('.md', '.txt'):
+                continue
+            if len(line) > core.MAX_LINE_LENGTH:
+                continue
+            for pat, title in MEMORY_POISONING_PATTERNS:
+                if pat.search(line):
+                    findings.append(_F(SCANNER_NAME, "high", title,
+                        "Content designed to persist as backdoor in agent memory or RAG corpus (DeepMind Agent Traps, March 2026)",
+                        rel, i + 1, line.strip()[:120], "memory-poisoning"))
+                    break
+            for pat, title in PROVENANCE_STRIP_PATTERNS:
+                if pat.search(line):
+                    findings.append(_F(SCANNER_NAME, "high", title,
+                        "Provenance stripping enables untraceable memory poisoning (DeepMind Agent Traps, March 2026)",
+                        rel, i + 1, line.strip()[:120], "provenance-stripping"))
+                    break
+    return findings
+
+
 def main(args):
     """Run all agent skill checks. Returns list[Finding].
     Args can be a namespace with .repo_path or a string path (for testing).
@@ -442,6 +502,7 @@ def main(args):
     findings.extend(scan_plugin_manifest(repo_path))
     findings.extend(scan_config_write_requests(repo_path))
     findings.extend(scan_reference_chains(repo_path))
+    findings.extend(scan_memory_poisoning(repo_path))
     return findings
 
 

@@ -28,6 +28,7 @@ import unicodedata
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import forensics_core as core
+from _shared_patterns import EXFIL_VERBS
 
 
 def _normalize_for_keyword_match(text):
@@ -142,9 +143,9 @@ PROMPT_INJECTION_IMPERATIVE_REGEX = re.compile(
 # package to https://s3.amazonaws.com/..."). HIGH tells reviewers "investigate
 # this" without the CRITICAL "abort install" escalation. The anchored keyword
 # list remains the source of CRITICAL for known-bad patterns.
+_MCP_EXFIL_VERBS_CAPTURING = r'(' + '|'.join(EXFIL_VERBS) + ')'
 EXFIL_VERB_URL_PATTERN = re.compile(
-    r'\b(send|post|upload|transmit|forward|push|beacon|relay|report|notify|'
-    r'deliver|dispatch|submit|exfiltrate|leak|siphon|extract|ship|pipe|stream)\b'
+    r'\b' + _MCP_EXFIL_VERBS_CAPTURING + r'\b'
     r'[^\n]{0,40}?'
     r'\b(https?://|ftp://|webhook\.)',
     re.IGNORECASE
@@ -563,7 +564,7 @@ def scan_trustfall_mcp_json(file_path, rel_path):
                 if env_key.upper() in _DANGEROUS_ENV:
                     findings.append(core.Finding(
                         scanner=SCANNER_NAME, severity="critical",
-                        title=f"TrustFall: Dangerous Env Var in .mcp.json",
+                        title="TrustFall: Dangerous Env Var in .mcp.json",
                         description=(
                             f"Server '{server_name}' sets {env_key}={str(env_val)[:80]} — "
                             f"{_DANGEROUS_ENV[env_key.upper()]} enables code execution "

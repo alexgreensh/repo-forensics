@@ -348,3 +348,180 @@ class TestRepoWideCorrelation:
         ]
         correlated = core.correlate(findings)
         assert any("Staged Injection" in c.title for c in correlated)
+
+
+class TestDirsOverlap:
+    """Tests for the _dirs_overlap proximity function used by Rules 30-36."""
+
+    def test_same_directory_overlaps(self):
+        """Two findings in the same directory should correlate."""
+        findings = [
+            core.Finding("skill_threats", "high", "Deferred update channel",
+                "update-channel", "subdir/ROUTINE.md", 1, "", "update-channel"),
+            core.Finding("skill_threats", "medium", "Prose Imperative",
+                "prose-imperative", "subdir/CHANGELOG.md", 5, "", "prose-imperative"),
+        ]
+        correlated = core.correlate(findings)
+        assert any("Staged Injection" in c.title for c in correlated)
+
+    def test_nested_directory_overlaps(self):
+        """Two findings in nested directories (a/ and a/b/) should correlate."""
+        findings = [
+            core.Finding("skill_threats", "high", "Deferred update channel",
+                "update-channel", "skills/ROUTINE.md", 1, "", "update-channel"),
+            core.Finding("skill_threats", "medium", "Prose Imperative",
+                "prose-imperative", "skills/sub/CHANGELOG.md", 5, "", "prose-imperative"),
+        ]
+        correlated = core.correlate(findings)
+        assert any("Staged Injection" in c.title for c in correlated)
+
+    def test_different_directories_no_overlap(self):
+        """Two findings in completely different directory trees should NOT correlate."""
+        findings = [
+            core.Finding("skill_threats", "high", "Deferred update channel",
+                "update-channel", "alpha/ROUTINE.md", 1, "", "update-channel"),
+            core.Finding("skill_threats", "medium", "Prose Imperative",
+                "prose-imperative", "beta/CHANGELOG.md", 5, "", "prose-imperative"),
+        ]
+        correlated = core.correlate(findings)
+        assert not any("Staged Injection" in c.title for c in correlated)
+
+    def test_root_level_always_overlaps(self):
+        """A finding at root (empty dir) should always overlap with anything."""
+        findings = [
+            core.Finding("skill_threats", "high", "Deferred update channel",
+                "update-channel", "ROUTINE.md", 1, "", "update-channel"),
+            core.Finding("skill_threats", "medium", "Prose Imperative",
+                "prose-imperative", "deep/nested/CHANGELOG.md", 5, "", "prose-imperative"),
+        ]
+        correlated = core.correlate(findings)
+        assert any("Staged Injection" in c.title for c in correlated)
+
+
+class TestNewCorrelationRules:
+    """Tests for correlation Rules 32-36."""
+
+    def test_rule_32_sub_agent_hijack_exfiltration(self):
+        """Rule 32: sub-agent-spawn + credential-exfiltration -> Sub-Agent Hijack Exfiltration Chain."""
+        findings = [
+            core.Finding("skill_threats", "high", "Sub-agent spawn directive",
+                "sub-agent-spawn directive", "SKILL.md", 1, "", "sub-agent-spawn"),
+            core.Finding("skill_threats", "critical", "Credential exfiltration pattern",
+                "credential-exfiltration via webhook", "evil.py", 5, "", "credential-exfiltration"),
+        ]
+        correlated = core.correlate(findings)
+        titles = [c.title for c in correlated]
+        assert any("Sub-Agent Hijack" in t for t in titles)
+        hijack = [c for c in correlated if "Sub-Agent Hijack" in c.title]
+        assert hijack[0].severity == "critical"
+
+    def test_rule_32_no_fire_different_dirs(self):
+        """Rule 32 should NOT fire when findings are in different directory trees."""
+        findings = [
+            core.Finding("skill_threats", "high", "Sub-agent spawn directive",
+                "sub-agent-spawn directive", "alpha/SKILL.md", 1, "", "sub-agent-spawn"),
+            core.Finding("skill_threats", "critical", "Credential exfiltration pattern",
+                "credential-exfiltration via webhook", "beta/evil.py", 5, "", "credential-exfiltration"),
+        ]
+        correlated = core.correlate(findings)
+        assert not any("Sub-Agent Hijack" in c.title for c in correlated)
+
+    def test_rule_33_social_engineering_assisted(self):
+        """Rule 33: authority-framing + code-execution -> Social Engineering Assisted Attack."""
+        findings = [
+            core.Finding("skill_threats", "medium", "Authority claim: impersonating admin",
+                "authority-framing claim", "SKILL.md", 1, "", "authority-framing"),
+            core.Finding("sast", "high", "Dangerous Exec",
+                "code-execution vulnerability", "evil.py", 5, "", "code-execution"),
+        ]
+        correlated = core.correlate(findings)
+        titles = [c.title for c in correlated]
+        assert any("Social Engineering Assisted" in t for t in titles)
+        se = [c for c in correlated if "Social Engineering Assisted" in c.title]
+        assert se[0].severity == "high"
+
+    def test_rule_33_no_fire_different_dirs(self):
+        """Rule 33 should NOT fire when findings are in different directory trees."""
+        findings = [
+            core.Finding("skill_threats", "medium", "Authority claim: impersonating admin",
+                "authority-framing claim", "dir_a/SKILL.md", 1, "", "authority-framing"),
+            core.Finding("sast", "high", "Dangerous Exec",
+                "code-execution vulnerability", "dir_b/evil.py", 5, "", "code-execution"),
+        ]
+        correlated = core.correlate(findings)
+        assert not any("Social Engineering Assisted" in c.title for c in correlated)
+
+    def test_rule_34_persistent_memory_backdoor(self):
+        """Rule 34: memory-poisoning + prompt-injection -> Persistent Memory Backdoor."""
+        findings = [
+            core.Finding("agent_skills", "high", "Memory write with injection keywords",
+                "memory-poisoning indicator", "evil.md", 1, "", "memory-poisoning"),
+            core.Finding("skill_threats", "critical", "Instruction override directive",
+                "prompt injection directive", "evil.md", 3, "", "prompt-injection"),
+        ]
+        correlated = core.correlate(findings)
+        titles = [c.title for c in correlated]
+        assert any("Persistent Memory Backdoor" in t for t in titles)
+        mem = [c for c in correlated if "Persistent Memory Backdoor" in c.title]
+        assert mem[0].severity == "critical"
+
+    def test_rule_34_no_fire_different_dirs(self):
+        """Rule 34 should NOT fire when findings are in different directory trees."""
+        findings = [
+            core.Finding("agent_skills", "high", "Memory write with injection keywords",
+                "memory-poisoning indicator", "left/evil.md", 1, "", "memory-poisoning"),
+            core.Finding("skill_threats", "critical", "Instruction override directive",
+                "prompt injection directive", "right/evil.md", 3, "", "prompt-injection"),
+        ]
+        correlated = core.correlate(findings)
+        assert not any("Persistent Memory Backdoor" in c.title for c in correlated)
+
+    def test_rule_35_hidden_instruction_via_visual_steganography(self):
+        """Rule 35: css-steganography + prompt-injection -> Hidden Instruction via Visual Steganography."""
+        findings = [
+            core.Finding("sast", "medium", "CSS hiding: display:none",
+                "css-steganography visual hiding", "evil.html", 1, "", "css-steganography"),
+            core.Finding("skill_threats", "critical", "Instruction override directive",
+                "prompt injection directive", "evil.html", 3, "", "prompt-injection"),
+        ]
+        correlated = core.correlate(findings)
+        titles = [c.title for c in correlated]
+        assert any("Hidden Instruction via Visual Steganography" in t for t in titles)
+        steg = [c for c in correlated if "Hidden Instruction via Visual Steganography" in c.title]
+        assert steg[0].severity == "critical"
+
+    def test_rule_35_no_fire_different_dirs(self):
+        """Rule 35 should NOT fire when findings are in different directory trees."""
+        findings = [
+            core.Finding("sast", "medium", "CSS hiding: display:none",
+                "css-steganography visual hiding", "pages/evil.html", 1, "", "css-steganography"),
+            core.Finding("skill_threats", "critical", "Instruction override directive",
+                "prompt injection directive", "skills/evil.md", 3, "", "prompt-injection"),
+        ]
+        correlated = core.correlate(findings)
+        assert not any("Hidden Instruction via Visual Steganography" in c.title for c in correlated)
+
+    def test_rule_36_deferred_sub_agent_injection(self):
+        """Rule 36: update-channel + sub-agent-spawn -> Deferred Sub-Agent Injection."""
+        findings = [
+            core.Finding("skill_threats", "high", "Deferred update channel",
+                "update-channel pattern", "ROUTINE.md", 1, "", "update-channel"),
+            core.Finding("skill_threats", "high", "Sub-agent spawn directive",
+                "sub-agent-spawn directive", "SKILL.md", 3, "", "sub-agent-spawn"),
+        ]
+        correlated = core.correlate(findings)
+        titles = [c.title for c in correlated]
+        assert any("Deferred Sub-Agent Injection" in t for t in titles)
+        deferred = [c for c in correlated if "Deferred Sub-Agent Injection" in c.title]
+        assert deferred[0].severity == "critical"
+
+    def test_rule_36_no_fire_different_dirs(self):
+        """Rule 36 should NOT fire when findings are in different directory trees."""
+        findings = [
+            core.Finding("skill_threats", "high", "Deferred update channel",
+                "update-channel pattern", "foo/ROUTINE.md", 1, "", "update-channel"),
+            core.Finding("skill_threats", "high", "Sub-agent spawn directive",
+                "sub-agent-spawn directive", "bar/SKILL.md", 3, "", "sub-agent-spawn"),
+        ]
+        correlated = core.correlate(findings)
+        assert not any("Deferred Sub-Agent Injection" in c.title for c in correlated)

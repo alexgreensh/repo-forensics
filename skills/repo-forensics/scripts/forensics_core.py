@@ -1012,23 +1012,59 @@ def correlate(findings):
     # Repo-wide correlation rules (not per-file)
     # These rules check for compound threats across the entire repo,
     # not limited to co-occurrence within a single file.
+    # Proximity filtering: only correlate findings from files within
+    # the same directory tree to reduce false positives.
     # Source: Terra Security OpenClaw vulnerability research (May 2026)
+    # Source: DeepMind AI Agent Traps (March 2026)
     # ================================================================
     update_channel_keywords = {"update-channel", "deferred update channel", "update channel"}
     prose_imperative_keywords = {"prose-imperative", "prose imperative", "exfiltration instruction"}
     config_write_keywords = {"config-write-request", "config write request", "hook installation"}
+    sub_agent_keywords = {"sub-agent-spawn", "sub-agent spawn", "agent spawn", "child agent"}
+    authority_framing_kws = {"authority-framing", "authority claim", "safety theater", "trust escalation"}
+    memory_poisoning_kws = {"memory-poisoning", "memory write", "rag poisoning", "provenance-stripping", "provenance stripping"}
+    css_steg_keywords = {"css-steganography", "css hiding", "visual hiding"}
+    cred_exfil_keywords = {"credential-exfiltration", "credential exfil", "credential theft", "exfil-pattern"}
+    action_directive_keywords = {"code-execution", "shell-injection", "config-write-request", "code execution"}
 
-    has_update_channel = has_category(findings, update_channel_keywords)
-    has_prose_imperative = has_category(findings, prose_imperative_keywords)
-    has_config_write = has_category(findings, config_write_keywords)
+    def _findings_by_dir(flist, keywords):
+        """Return dict mapping directory -> list of findings matching keywords."""
+        result = {}
+        for f in flist:
+            desc_lower = (f.description + " " + f.title + " " + f.category).lower()
+            for kw in keywords:
+                if kw in desc_lower:
+                    d = os.path.dirname(f.file) if f.file else ""
+                    result.setdefault(d, []).append(f)
+                    break
+        return result
+
+    def _dirs_overlap(dirs_a, dirs_b):
+        """True if any directory from set A shares a prefix with any from set B."""
+        for da in dirs_a:
+            for db in dirs_b:
+                if da == db or da.startswith(db + "/") or db.startswith(da + "/") or da == "" or db == "":
+                    return True
+        return False
+
+    update_dirs = _findings_by_dir(findings, update_channel_keywords)
+    prose_dirs = _findings_by_dir(findings, prose_imperative_keywords)
+    config_write_dirs = _findings_by_dir(findings, config_write_keywords)
+    sub_agent_dirs = _findings_by_dir(findings, sub_agent_keywords)
+    memory_dirs = _findings_by_dir(findings, memory_poisoning_kws)
+    css_steg_dirs = _findings_by_dir(findings, css_steg_keywords)
+
+    has_update_channel = bool(update_dirs)
+    has_prose_imperative = bool(prose_dirs)
+    has_config_write = bool(config_write_dirs)
 
     # Rule 30: Staged Injection Kill Chain (Terra Security OpenClaw, May 2026)
-    if has_update_channel and has_prose_imperative:
+    if has_update_channel and has_prose_imperative and _dirs_overlap(update_dirs, prose_dirs):
         correlated.append(Finding(
             scanner="correlation",
             severity="critical",
             title="Staged Injection Kill Chain (update channel + prose exfiltration)",
-            description="Skill creates an update channel AND contains prose exfiltration instructions. Matches Terra Security staged injection pattern (May 2026): benign skill installs update mechanism, then delivers malicious prose via repo updates.",
+            description="Skill creates an update channel AND contains prose exfiltration instructions in co-located files. Matches Terra Security staged injection pattern (May 2026).",
             file="",
             line=0,
             snippet="[compound: update channel + prose imperative across repo]",
@@ -1036,16 +1072,85 @@ def correlate(findings):
         ))
 
     # Rule 31: Workspace Persistence Setup (Terra Security OpenClaw, May 2026)
-    if has_config_write and has_update_channel:
+    if has_config_write and has_update_channel and _dirs_overlap(config_write_dirs, update_dirs):
         correlated.append(Finding(
             scanner="correlation",
             severity="critical",
             title="Workspace Persistence Setup (config write + update channel)",
-            description="Skill requests writing to auto-executed config files AND creates an update channel. Combined: persistent remote control via workspace file modification (Terra Security OpenClaw, May 2026).",
+            description="Skill requests writing to auto-executed config files AND creates an update channel in co-located files. Combined: persistent remote control via workspace file modification (Terra Security OpenClaw, May 2026).",
             file="",
             line=0,
             snippet="[compound: config write request + update channel across repo]",
             category="workspace-persistence-chain"
+        ))
+
+    # Rule 32: Sub-Agent Hijack Exfiltration Chain (DeepMind Agent Traps, March 2026)
+    cred_exfil_dirs = _findings_by_dir(findings, cred_exfil_keywords)
+    if sub_agent_dirs and cred_exfil_dirs and _dirs_overlap(sub_agent_dirs, cred_exfil_dirs):
+        correlated.append(Finding(
+            scanner="correlation",
+            severity="critical",
+            title="Sub-Agent Hijack Exfiltration Chain",
+            description="Sub-agent spawn directive combined with credential access or exfiltration URL. DeepMind reports >80% success rate for file exfiltration via this vector (Agent Traps, March 2026).",
+            file="",
+            line=0,
+            snippet="[compound: sub-agent spawn + credential exfil across repo]",
+            category="sub-agent-hijack-chain"
+        ))
+
+    # Rule 33: Social Engineering Assisted Attack (DeepMind Agent Traps, March 2026)
+    authority_dirs = _findings_by_dir(findings, authority_framing_kws)
+    action_dirs = _findings_by_dir(findings, action_directive_keywords)
+    if authority_dirs and action_dirs and _dirs_overlap(authority_dirs, action_dirs):
+        correlated.append(Finding(
+            scanner="correlation",
+            severity="high",
+            title="Social Engineering Assisted Attack",
+            description="Authority framing or safety theater combined with action directives (code execution, file write, network call). Semantic manipulation lowers agent refusal threshold (DeepMind Agent Traps, March 2026).",
+            file="",
+            line=0,
+            snippet="[compound: authority framing + action directive across repo]",
+            category="social-engineering-chain"
+        ))
+
+    # Rule 34: Persistent Memory Backdoor (DeepMind Agent Traps, March 2026)
+    pi_dirs = _findings_by_dir(findings, prompt_injection_keywords)
+    if memory_dirs and pi_dirs and _dirs_overlap(memory_dirs, pi_dirs):
+        correlated.append(Finding(
+            scanner="correlation",
+            severity="critical",
+            title="Persistent Memory Backdoor",
+            description="Memory/RAG poisoning indicator combined with prompt injection directive. Creates persistent backdoor that activates in future sessions (DeepMind Agent Traps, March 2026).",
+            file="",
+            line=0,
+            snippet="[compound: memory poisoning + prompt injection across repo]",
+            category="memory-backdoor-chain"
+        ))
+
+    # Rule 35: Hidden Instruction via Visual Steganography (DeepMind Agent Traps, March 2026)
+    if css_steg_dirs and pi_dirs and _dirs_overlap(css_steg_dirs, pi_dirs):
+        correlated.append(Finding(
+            scanner="correlation",
+            severity="critical",
+            title="Hidden Instruction via Visual Steganography",
+            description="CSS/HTML visual hiding combined with prompt injection keywords. Hidden instructions invisible to human reviewers but parseable by agents. 92.7% success rate (DeepMind Agent Traps, March 2026).",
+            file="",
+            line=0,
+            snippet="[compound: CSS steganography + prompt injection across repo]",
+            category="visual-steganography-chain"
+        ))
+
+    # Rule 36: Deferred Sub-Agent Injection (Terra + DeepMind combined)
+    if update_dirs and sub_agent_dirs and _dirs_overlap(update_dirs, sub_agent_dirs):
+        correlated.append(Finding(
+            scanner="correlation",
+            severity="critical",
+            title="Deferred Sub-Agent Injection",
+            description="Update channel combined with sub-agent spawn directive. The exact Terra Security attack pattern elevated with agent spawning: benign install creates update mechanism, future update spawns rogue sub-agent.",
+            file="",
+            line=0,
+            snippet="[compound: update channel + sub-agent spawn across repo]",
+            category="deferred-sub-agent-chain"
         ))
 
     return correlated

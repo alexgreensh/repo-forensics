@@ -23,6 +23,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import forensics_core as core
+from _shared_patterns import EXFIL_VERBS_RE, SKILL_CONFIG_FILES
 
 SCANNER_NAME = "skill_threats"
 
@@ -418,15 +419,50 @@ MCP_TOOL_INJECTION_PATTERNS = [
 
 
 # ============================================================
+# Category 14: Sub-Agent Spawn Detection (high)
+# Instructions to spawn rogue child agents with attacker-controlled prompts.
+# Source: DeepMind AI Agent Traps (March 2026), 58-90% success rate
+# ============================================================
+SUB_AGENT_SPAWN_PATTERNS = [
+    (re.compile(r'(?i)(?:create|spawn|launch|start|initialize|instantiate|fork|dispatch)\s+(?:a\s+)?(?:new\s+)?(?:agent|sub-?agent|child\s+agent|assistant|worker|instance|clone|replica)'), "Sub-agent spawn directive (DeepMind Agent Traps, March 2026)"),
+    (re.compile(r'(?i)(?:delegate|hand\s+off|pass)\s+(?:to|this\s+to)\s+(?:a\s+)?(?:new\s+)?(?:agent|sub-?agent|assistant)'), "Sub-agent delegation directive (DeepMind Agent Traps, March 2026)"),
+    (re.compile(r'(?i)(?:run|execute)\s+(?:this|the\s+following)\s+(?:in|as|with)\s+(?:a\s+)?(?:new|separate|independent|background)\s+(?:agent|session|context|instance)'), "Sub-agent execution isolation directive (DeepMind Agent Traps, March 2026)"),
+    (re.compile(r'(?:Agent|SubAgent|ChildAgent|Worker)\s*\(\s*["\{]'), "Code-level agent instantiation with inline config (DeepMind Agent Traps, March 2026)"),
+]
+
+# ============================================================
+# Category 15: Authority Framing / Social Engineering (medium/high)
+# Persuasion-based attacks that bypass injection detection by social engineering.
+# Source: DeepMind AI Agent Traps "Semantic Manipulation" (March 2026)
+# ============================================================
+AUTHORITY_FRAMING_PATTERNS = [
+    (re.compile(r'(?i)(?:as\s+the|acting\s+as|I\s+am\s+the)\s+(?:system\s+)?(?:administrator|admin|root|owner|operator|maintainer|developer)'), "Authority claim: impersonating admin/root (DeepMind Semantic Manipulation, March 2026)"),
+    (re.compile(r'(?i)(?:you\s+(?:have\s+been|are)\s+(?:granted|authorized|permitted|given))\s+(?:access|permission|elevated|full|admin)'), "Authority claim: granting elevated permissions (DeepMind Semantic Manipulation, March 2026)"),
+    (re.compile(r'(?i)(?:with\s+(?:elevated|admin|root|full|special|override))\s+(?:permissions?|privileges?|access|authority)'), "Authority claim: elevated privilege assertion (DeepMind Semantic Manipulation, March 2026)"),
+    (re.compile(r'(?i)(?:this\s+(?:is|has\s+been)\s+(?:approved|authorized|sanctioned|cleared))\s+by\s+(?:the\s+)?(?:admin|owner|team|security)'), "Authority claim: fake approval assertion (DeepMind Semantic Manipulation, March 2026)"),
+]
+
+SAFETY_THEATER_PATTERNS = [
+    (re.compile(r'(?i)(?:this\s+is\s+(?:a|an|just\s+a))\s+(?:red.?team|pentest|security\s+(?:test|audit|exercise|drill)|educational|training|simulation|demo|test\s+environment)'), "Safety theater: fake testing context (DeepMind Semantic Manipulation, March 2026)"),
+    (re.compile(r'(?i)(?:for\s+(?:educational|research|testing|debugging|diagnostic|demonstration)\s+purposes?\s+only)'), "Safety theater: educational/research pretext (DeepMind Semantic Manipulation, March 2026)"),
+    (re.compile(r'(?i)(?:in\s+(?:a\s+)?(?:sandbox|test|staging|development|safe|isolated)\s+environment)'), "Safety theater: fake sandbox claim (DeepMind Semantic Manipulation, March 2026)"),
+]
+
+TRUST_ESCALATION_PATTERNS = [
+    (re.compile(r'(?i)(?:you\s+can\s+(?:safely|freely|trust|skip)\s+(?:ignore|bypass|disable|skip))\s+(?:safety|security|verification|validation|checks?)'), "Trust escalation: bypass safety checks (DeepMind Semantic Manipulation, March 2026)"),
+    (re.compile(r'(?i)(?:no\s+(?:need|reason)\s+to\s+(?:verify|check|validate|confirm|worry))'), "Trust escalation: skip verification (DeepMind Semantic Manipulation, March 2026)"),
+]
+
+_ALL_AUTHORITY_PATTERNS = AUTHORITY_FRAMING_PATTERNS + SAFETY_THEATER_PATTERNS + TRUST_ESCALATION_PATTERNS
+_AUTHORITY_FP_PATH_RE = re.compile(r'(?i)(?:test|spec|example|sample|documentation|tutorial|how.?to)')
+
+# ============================================================
 # Category 12: Deferred Update Channel (high)
 # Skills that create persistent remote-control channels by instructing agents
 # to check for updates, read changelogs, or apply patches from files.
 # Source: Terra Security OpenClaw vulnerability research (May 2026)
 # ============================================================
-_SKILL_CONFIG_FILES = {
-    'skill.md', 'soul.md', 'routine.md', 'heartbeat.md', 'agents.md',
-    'claude.md', 'boot.md', 'bootstrap.md', 'identity.md', 'user.md',
-}
+_SKILL_CONFIG_FILES = SKILL_CONFIG_FILES
 
 UPDATE_CHANNEL_PATTERNS = [
     (re.compile(r'(?i)\b(?:check|read|review)\s+(?:\S+\.)?(changelog|updates?|release.?notes?)\b.*\b(?:for|about)\s+(?:updates?|changes?|new\s+instructions?|procedures?|patches?)'), "Deferred update channel: check file for updates (Terra Security OpenClaw, May 2026)"),
@@ -441,7 +477,7 @@ UPDATE_CHANNEL_PATTERNS = [
 # Natural language instructions an AI agent would follow as commands.
 # Source: Terra Security OpenClaw vulnerability research (May 2026)
 # ============================================================
-_PROSE_VERBS = r'(?:send|post|upload|forward|transmit|exfiltrate|share|submit|deliver|write|pipe)'
+_PROSE_VERBS = EXFIL_VERBS_RE
 _PROSE_URL = r'https?://\S+'
 _SENSITIVE_FILE_REF = r'(?:\.json|\.env|\.ssh|\.aws|config|credentials?|tokens?|secrets?|keys?|openclaw|\.gnupg|password)'
 _SAFE_DOMAINS = {'github.com', 'gitlab.com', 'bitbucket.org', 'stackoverflow.com', 'docs.google.com', 'npmjs.com', 'pypi.org'}
@@ -742,10 +778,47 @@ def scan_file(file_path, rel_path):
         if basename_lower in _SKILL_CONFIG_FILES:
             findings.extend(scan_patterns(content, rel_path, UPDATE_CHANNEL_PATTERNS, "update-channel", "high"))
 
+    # Cat 14: Sub-agent spawn detection (DeepMind Agent Traps, March 2026)
+    if ext in text_exts or ext in code_exts:
+        findings.extend(scan_patterns(content, rel_path, SUB_AGENT_SPAWN_PATTERNS, "sub-agent-spawn", "high"))
+
+    # Cat 15: Authority framing / social engineering (DeepMind Agent Traps, March 2026)
+    if ext in text_exts:
+        if not _AUTHORITY_FP_PATH_RE.search(rel_path):
+            findings.extend(_scan_authority_framing(content, rel_path))
+
     # Cat 13: Prose imperative exfiltration (Terra Security OpenClaw, May 2026)
     if ext in text_exts:
         findings.extend(_scan_prose_imperatives(content, rel_path))
 
+    return findings
+
+
+def _scan_authority_framing(content, rel_path):
+    """Category 15: Detect authority framing and social engineering.
+    Skips lines inside code fences."""
+    findings = []
+    in_code_fence = False
+    for i, line in enumerate(content.split('\n')):
+        stripped = line.strip()
+        if stripped.startswith('```'):
+            in_code_fence = not in_code_fence
+            continue
+        if in_code_fence:
+            continue
+        if len(line) > core.MAX_LINE_LENGTH:
+            continue
+        for pat, title in _ALL_AUTHORITY_PATTERNS:
+            if pat.search(line):
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="medium",
+                    title=title,
+                    description="Social engineering technique that bypasses injection detection by persuading rather than commanding (DeepMind Agent Traps, March 2026).",
+                    file=rel_path, line=i + 1,
+                    snippet=line.strip()[:120],
+                    category="authority-framing"
+                ))
+                break
     return findings
 
 
@@ -769,8 +842,7 @@ def _scan_prose_imperatives(content, rel_path):
         if not url_match:
             continue
         domain = url_match.group(1).split('/')[0].lower()
-        if domain in _SAFE_DOMAINS:
-            continue
+        is_safe_domain = domain in _SAFE_DOMAINS
         if '@' in line[:url_match.start()] and 'http' not in line[:url_match.start()]:
             continue
 
@@ -783,7 +855,7 @@ def _scan_prose_imperatives(content, rel_path):
                 snippet=line.strip()[:120],
                 category="prose-imperative"
             ))
-        elif PROSE_IMPERATIVE_VERB_URL.search(line):
+        elif not is_safe_domain and PROSE_IMPERATIVE_VERB_URL.search(line):
             findings.append(core.Finding(
                 scanner=SCANNER_NAME, severity="medium",
                 title="Prose Imperative: Action directive with URL",
