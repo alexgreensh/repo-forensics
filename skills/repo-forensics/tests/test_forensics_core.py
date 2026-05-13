@@ -525,3 +525,110 @@ class TestNewCorrelationRules:
         ]
         correlated = core.correlate(findings)
         assert not any("Deferred Sub-Agent Injection" in c.title for c in correlated)
+
+
+class TestRule37GeofencedDestructive:
+    """Tests for Rule 37: locale-gating + destructive-command = Geofenced Destructive Command."""
+
+    def test_python_locale_plus_rmtree(self):
+        """locale.getdefaultlocale() + shutil.rmtree() -> CRITICAL correlation."""
+        findings = [
+            core.Finding("runtime_dynamism", "medium", "Locale gating: locale.getdefaultlocale()",
+                "Matched in locale-gating scan", "evil.py", 3, "", "locale-gating"),
+            core.Finding("sast", "critical", "Destructive: shutil.rmtree on Home",
+                "shutil.rmtree on home directory", "evil.py", 10, "", "destructive-command"),
+        ]
+        correlated = core.correlate(findings)
+        titles = [c.title for c in correlated]
+        assert "Geofenced Destructive Command" in titles
+        geo = [c for c in correlated if c.title == "Geofenced Destructive Command"]
+        assert geo[0].severity == "critical"
+
+    def test_shell_lang_plus_rm_rf(self):
+        """$LANG conditional + rm -rf -> CRITICAL correlation."""
+        findings = [
+            core.Finding("runtime_dynamism", "medium", "Locale gating: $LANG/$LC shell variable",
+                "Matched in locale-gating scan", "evil.sh", 2, "", "locale-gating"),
+            core.Finding("sast", "critical", "Destructive: Home Directory Wipe",
+                "rm -rf on home directory", "evil.sh", 8, "", "destructive-command"),
+        ]
+        correlated = core.correlate(findings)
+        assert any("Geofenced Destructive" in c.title for c in correlated)
+
+    def test_locale_only_no_correlation(self):
+        """Locale check without destructive command -> no geofenced finding."""
+        findings = [
+            core.Finding("runtime_dynamism", "medium", "Locale gating: locale.getdefaultlocale()",
+                "Matched in locale-gating scan", "i18n.py", 3, "", "locale-gating"),
+        ]
+        correlated = core.correlate(findings)
+        assert not any("Geofenced" in c.title for c in correlated)
+
+    def test_destructive_only_no_correlation(self):
+        """Destructive command without locale check -> no geofenced finding."""
+        findings = [
+            core.Finding("sast", "critical", "Destructive: shutil.rmtree on Home",
+                "shutil.rmtree on home directory", "cleanup.py", 5, "", "destructive-command"),
+        ]
+        correlated = core.correlate(findings)
+        assert not any("Geofenced" in c.title for c in correlated)
+
+    def test_different_files_no_correlation(self):
+        """Locale in one file, destructive in another -> no correlation (per-file rule)."""
+        findings = [
+            core.Finding("runtime_dynamism", "medium", "Locale gating: locale.getdefaultlocale()",
+                "Matched in locale-gating scan", "utils.py", 3, "", "locale-gating"),
+            core.Finding("sast", "critical", "Destructive: shutil.rmtree on Home",
+                "shutil.rmtree on home directory", "cleanup.py", 5, "", "destructive-command"),
+        ]
+        correlated = core.correlate(findings)
+        assert not any("Geofenced" in c.title for c in correlated)
+
+
+class TestRule38CIRunnerMemoryExtraction:
+    """Tests for Rule 38: proc-mem-read + process-enumeration = CI Runner Memory Extraction."""
+
+    def test_python_proc_mem_plus_listdir(self):
+        """open('/proc/1234/mem') + os.listdir('/proc') -> CRITICAL correlation."""
+        findings = [
+            core.Finding("sast", "critical", "Process Memory Read (/proc)",
+                "memory-forensics /proc/1234/mem", "evil.py", 5, "", "memory-forensics"),
+            core.Finding("sast", "high", "Process Enumeration (/proc)",
+                "process-enumeration /proc/ listing", "evil.py", 3, "", "process-enumeration"),
+        ]
+        correlated = core.correlate(findings)
+        titles = [c.title for c in correlated]
+        assert "CI Runner Memory Extraction" in titles
+        ci = [c for c in correlated if c.title == "CI Runner Memory Extraction"]
+        assert ci[0].severity == "critical"
+
+    def test_shell_dd_proc_mem_plus_runner_worker(self):
+        """dd if=/proc/1234/mem + Runner.Worker grep -> CRITICAL correlation."""
+        findings = [
+            core.Finding("sast", "critical", "Process Memory Read (/proc)",
+                "memory-forensics /proc/1234/mem dd", "evil.sh", 10, "", "memory-forensics"),
+            core.Finding("sast", "critical", "Runner.Worker Process Hunt",
+                "process-enumeration Runner.Worker grep", "evil.sh", 5, "", "process-enumeration"),
+        ]
+        correlated = core.correlate(findings)
+        assert any("CI Runner Memory Extraction" in c.title for c in correlated)
+
+    def test_proc_self_mem_no_enumeration(self):
+        """/proc/self/mem alone without process enumeration -> no correlation."""
+        findings = [
+            core.Finding("sast", "critical", "Process Memory Read (/proc)",
+                "memory-forensics /proc/self/mem", "debug.go", 5, "", "memory-forensics"),
+        ]
+        correlated = core.correlate(findings)
+        assert not any("CI Runner Memory" in c.title for c in correlated)
+
+    def test_different_files_no_correlation(self):
+        """proc/mem in one file, enumeration in another -> no correlation (per-file rule)."""
+        findings = [
+            core.Finding("sast", "critical", "Process Memory Read (/proc)",
+                "memory-forensics /proc/1234/mem", "reader.py", 5, "", "memory-forensics"),
+            core.Finding("sast", "high", "Process Enumeration (/proc)",
+                "process-enumeration listing", "scanner.py", 3, "", "process-enumeration"),
+        ]
+        correlated = core.correlate(findings)
+        assert not any("CI Runner Memory" in c.title for c in correlated)

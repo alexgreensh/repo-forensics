@@ -718,3 +718,99 @@ class TestCSSHTMLSteganography:
         findings = scanner.scan_css_steganography(str(vue), "component.vue")
         steg = [f for f in findings if f.category == "css-steganography"]
         assert len(steg) >= 1
+
+
+class TestProcMemPatterns:
+    """Tests for /proc/mem, OIDC, Runner.Worker, and process enumeration patterns across languages."""
+
+    def test_python_proc_mem_read(self, tmp_path):
+        f = tmp_path / "evil.py"
+        f.write_text("data = open('/proc/1234/mem', 'rb').read()\n")
+        findings = scanner.scan_file(str(f), "evil.py")
+        cats = [fi.category for fi in findings]
+        assert "memory-forensics" in cats
+
+    def test_python_proc_self_mem(self, tmp_path):
+        f = tmp_path / "evil.py"
+        f.write_text("with open('/proc/self/mem') as f: pass\n")
+        findings = scanner.scan_file(str(f), "evil.py")
+        cats = [fi.category for fi in findings]
+        assert "memory-forensics" in cats
+
+    def test_python_proc_enumeration(self, tmp_path):
+        f = tmp_path / "evil.py"
+        f.write_text("procs = os.listdir('/proc')\n")
+        findings = scanner.scan_file(str(f), "evil.py")
+        cats = [fi.category for fi in findings]
+        assert "process-enumeration" in cats
+
+    def test_python_runner_worker(self, tmp_path):
+        f = tmp_path / "evil.py"
+        f.write_text("if 'Runner.Worker' in cmdline:\n")
+        findings = scanner.scan_file(str(f), "evil.py")
+        cats = [fi.category for fi in findings]
+        assert "process-enumeration" in cats
+
+    def test_python_oidc_token(self, tmp_path):
+        f = tmp_path / "evil.py"
+        f.write_text("token_url = os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']\n")
+        findings = scanner.scan_file(str(f), "evil.py")
+        cats = [fi.category for fi in findings]
+        assert "ci-token-abuse" in cats
+
+    def test_shell_dd_proc_mem(self, tmp_path):
+        f = tmp_path / "evil.sh"
+        f.write_text("dd if=/proc/1234/mem of=dump.bin bs=1\n")
+        findings = scanner.scan_file(str(f), "evil.sh")
+        cats = [fi.category for fi in findings]
+        assert "memory-forensics" in cats
+
+    def test_shell_proc_enumeration(self, tmp_path):
+        f = tmp_path / "evil.sh"
+        f.write_text("for pid in /proc/*/cmdline; do\n")
+        findings = scanner.scan_file(str(f), "evil.sh")
+        cats = [fi.category for fi in findings]
+        assert "process-enumeration" in cats
+
+    def test_shell_runner_worker(self, tmp_path):
+        f = tmp_path / "evil.sh"
+        f.write_text('grep Runner.Worker /proc/*/cmdline\n')
+        findings = scanner.scan_file(str(f), "evil.sh")
+        cats = [fi.category for fi in findings]
+        assert "process-enumeration" in cats
+
+    def test_shell_oidc_token(self, tmp_path):
+        f = tmp_path / "evil.sh"
+        f.write_text('curl "$ACTIONS_ID_TOKEN_REQUEST_URL"\n')
+        findings = scanner.scan_file(str(f), "evil.sh")
+        cats = [fi.category for fi in findings]
+        assert "ci-token-abuse" in cats
+
+    def test_go_proc_mem(self, tmp_path):
+        f = tmp_path / "evil.go"
+        f.write_text('f, _ := os.Open("/proc/self/mem")\n')
+        findings = scanner.scan_file(str(f), "evil.go")
+        cats = [fi.category for fi in findings]
+        assert "memory-forensics" in cats
+
+    def test_go_runner_worker(self, tmp_path):
+        f = tmp_path / "evil.go"
+        f.write_text('if strings.Contains(line, "Runner.Worker") {\n')
+        findings = scanner.scan_file(str(f), "evil.go")
+        cats = [fi.category for fi in findings]
+        assert "process-enumeration" in cats
+
+    def test_go_oidc_token(self, tmp_path):
+        f = tmp_path / "evil.go"
+        f.write_text('url := os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL")\n')
+        findings = scanner.scan_file(str(f), "evil.go")
+        cats = [fi.category for fi in findings]
+        assert "ci-token-abuse" in cats
+
+    def test_proc_status_no_false_positive(self, tmp_path):
+        """/proc/self/status (not /mem) should NOT trigger memory-forensics."""
+        f = tmp_path / "debug.py"
+        f.write_text("with open('/proc/self/status') as f: print(f.read())\n")
+        findings = scanner.scan_file(str(f), "debug.py")
+        mem = [fi for fi in findings if fi.category == "memory-forensics"]
+        assert len(mem) == 0

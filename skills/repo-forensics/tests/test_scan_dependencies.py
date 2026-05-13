@@ -796,3 +796,52 @@ class TestFreshnessDetection:
 
         mock_fetch.assert_not_called()
         assert len(findings) == 0
+
+
+class TestSlopsquatting:
+    """Tests for slopsquatting detection (AI-hallucinated package names)."""
+
+    def test_npm_hallucinated_package(self, tmp_path):
+        """package.json with corpus entry -> CRITICAL finding."""
+        pkg = tmp_path / "package.json"
+        pkg.write_text(json.dumps({
+            "name": "my-app",
+            "dependencies": {"llm-cache-proxy": "^1.0.0", "express": "^4.0.0"}
+        }))
+        findings = scanner.scan_package_json(str(pkg), "package.json")
+        slop = [f for f in findings if f.category == "slopsquatting"]
+        assert len(slop) >= 1
+        assert slop[0].severity == "high"
+
+    def test_npm_legit_package_no_slop(self, tmp_path):
+        """Legitimate package -> no slopsquatting finding."""
+        pkg = tmp_path / "package.json"
+        pkg.write_text(json.dumps({
+            "name": "my-app",
+            "dependencies": {"express": "^4.0.0", "lodash": "^4.17.0"}
+        }))
+        findings = scanner.scan_package_json(str(pkg), "package.json")
+        slop = [f for f in findings if f.category == "slopsquatting"]
+        assert len(slop) == 0
+
+    def test_pypi_hallucinated_package(self, tmp_path):
+        """requirements.txt with PyPI corpus entry -> CRITICAL finding."""
+        req = tmp_path / "requirements.txt"
+        req.write_text("gpt4-python==1.0.0\nrequests==2.28.0\n")
+        findings = scanner.scan_python_deps(str(req), "requirements.txt")
+        slop = [f for f in findings if f.category == "slopsquatting"]
+        assert len(slop) >= 1
+        assert slop[0].severity == "high"
+
+    def test_pypi_legit_no_slop(self, tmp_path):
+        """Legitimate PyPI packages -> no slopsquatting finding."""
+        req = tmp_path / "requirements.txt"
+        req.write_text("requests==2.28.0\nflask==2.0.0\n")
+        findings = scanner.scan_python_deps(str(req), "requirements.txt")
+        slop = [f for f in findings if f.category == "slopsquatting"]
+        assert len(slop) == 0
+
+    def test_empty_corpus_graceful(self):
+        """check_slopsquatting with empty input returns empty."""
+        result = scanner.check_slopsquatting([], "npm")
+        assert result == []

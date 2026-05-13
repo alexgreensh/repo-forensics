@@ -503,6 +503,11 @@ def correlate(findings):
     worm_keywords = {"worm-propagation", "npm publish", "package enumeration"}
     npm_token_keywords = {"npmrc", "npm_token", "npm-token", "credential-theft"}
     destructive_keywords = {"destructive-command", "shred", "cipher /w", "disk overwrite", "home directory"}
+    locale_gating_keywords = {"locale-gating", "locale gating", "geoip", "country_code", "navigator.language"}
+    proc_mem_keywords = {"memory-forensics", "process memory read"}
+    process_enum_keywords = {"process-enumeration", "runner.worker", "process hunt"}
+    llmo_keywords = {"llmo-suspicious", "llmo suspicious"}
+    brand_new_keywords = {"freshness-brand-new-package", "brand new package", "single version"}
 
     def has_category(file_findings, keywords, exclude_scanner=None):
         for f in file_findings:
@@ -1006,6 +1011,45 @@ def correlate(findings):
                 line=0,
                 snippet="[compound: git API exfil + credential access]",
                 category="git-exfiltration-chain"
+            ))
+
+        # Rule 37: Geofenced Destructive Command (mistralai v2.4.6 backdoor, May 2026)
+        if has_category(file_findings, locale_gating_keywords) and has_category(file_findings, destructive_keywords):
+            correlated.append(Finding(
+                scanner="correlation",
+                severity="critical",
+                title="Geofenced Destructive Command",
+                description="Locale/country check combined with destructive command. Exact pattern from mistralai v2.4.6 backdoor (May 2026): code checks user locale then conditionally wipes files or exfiltrates data for targeted regions.",
+                file=filepath,
+                line=0,
+                snippet="[compound: locale gating + destructive command]",
+                category="geofenced-destructive"
+            ))
+
+        # Rule 38: CI Runner Memory Extraction (Mini Shai-Hulud SAP, TanStack CVE-2026-45321)
+        if has_category(file_findings, proc_mem_keywords) and has_category(file_findings, process_enum_keywords):
+            correlated.append(Finding(
+                scanner="correlation",
+                severity="critical",
+                title="CI Runner Memory Extraction",
+                description="Process memory read combined with process enumeration. Exact pattern from Mini Shai-Hulud (SAP April 2026): enumerates Runner.Worker processes via /proc, reads their memory to extract OIDC tokens.",
+                file=filepath,
+                line=0,
+                snippet="[compound: /proc/mem read + process enumeration]",
+                category="ci-runner-memory-extraction"
+            ))
+
+        # Rule 39: LLMO Attack (ReversingLabs PromptMink, April 2026)
+        if has_category(file_findings, llmo_keywords) and has_category(file_findings, brand_new_keywords):
+            correlated.append(Finding(
+                scanner="correlation",
+                severity="high",
+                title="LLMO Attack: AI-Named Brand-New Package",
+                description="Brand-new single-version package with AI/crypto buzzword name. High probability of LLMO attack: attacker registers package names that LLMs hallucinate, waits for developers to install them (ReversingLabs PromptMink, April 2026).",
+                file=filepath,
+                line=0,
+                snippet="[compound: brand-new package + AI/crypto naming pattern]",
+                category="llmo-attack"
             ))
 
     # ================================================================

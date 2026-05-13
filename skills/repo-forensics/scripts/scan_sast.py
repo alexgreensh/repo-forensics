@@ -41,6 +41,10 @@ SAST_PATTERNS = {
         {"name": "Kernel Exploit: authencesn Reference", "severity": "high", "regex": re.compile(r'\bauthencesn\b'), "category": "kernel-exploit"},
         # Reflection-based RCE: getattr + __import__ combo (dynamic attribute dispatch)
         {"name": "Reflection RCE: getattr + __import__ combo", "severity": "high", "regex": re.compile(r'getattr\s*\(\s*__import__\s*\('), "category": "reflection-rce"},
+        {"name": "Process Memory Read (/proc)", "severity": "critical", "regex": re.compile(r'/proc/\d+/mem|/proc/self/mem'), "category": "memory-forensics"},
+        {"name": "Process Enumeration (/proc)", "severity": "high", "regex": re.compile(r'os\.listdir\s*\(\s*["\']/?proc["\']|glob\.glob\s*\(\s*["\']/?proc/\d|/proc/\*/cmdline'), "category": "process-enumeration"},
+        {"name": "Runner.Worker Process Hunt", "severity": "critical", "regex": re.compile(r'\bRunner\.Worker\b|\bRunner\.Listener\b', re.IGNORECASE), "category": "process-enumeration"},
+        {"name": "OIDC Token Exchange", "severity": "critical", "regex": re.compile(r'ACTIONS_ID_TOKEN_REQUEST_TOKEN|ACTIONS_ID_TOKEN_REQUEST_URL|oidc/token/exchange'), "category": "ci-token-abuse"},
     ],
     ".js": [
         {"name": "Dangerous Eval", "severity": "high", "regex": re.compile(r'\beval\s*\('), "category": "code-execution"},
@@ -64,7 +68,9 @@ SAST_PATTERNS = {
         {"name": "Git-Based Exfiltration: Content Push", "severity": "high", "regex": re.compile(r'PUT\s+/repos/.*/contents/|repos\.createOrUpdateFileContents|createOrUpdateFile'), "category": "git-exfiltration"},
         {"name": "Git-Based Exfiltration: Commit Search C2", "severity": "critical", "regex": re.compile(r'/search/commits\?q=|search\.commits|commits\?q='), "category": "git-exfiltration"},
         {"name": "OIDC Token Exchange", "severity": "critical", "regex": re.compile(r'ACTIONS_ID_TOKEN_REQUEST_TOKEN|ACTIONS_ID_TOKEN_REQUEST_URL|oidc/token/exchange'), "category": "ci-token-abuse"},
-        {"name": "Process Memory Read (/proc)", "severity": "critical", "regex": re.compile(r'/proc/\d+/mem|/proc/self/mem|/proc/\*/mem'), "category": "memory-forensics"},
+        {"name": "Process Memory Read (/proc)", "severity": "critical", "regex": re.compile(r'/proc/\d+/mem|/proc/self/mem'), "category": "memory-forensics"},
+        {"name": "Process Enumeration (/proc)", "severity": "high", "regex": re.compile(r'readdir\w*\s*\(\s*["\']/?proc["\']|/proc/\*/cmdline'), "category": "process-enumeration"},
+        {"name": "Runner.Worker Process Hunt", "severity": "critical", "regex": re.compile(r'\bRunner\.Worker\b|\bRunner\.Listener\b', re.IGNORECASE), "category": "process-enumeration"},
         {"name": "Double Base64 Encoding", "severity": "high", "regex": re.compile(r'base64\s+-w\s*0\s*\|\s*base64|btoa\(btoa\(|b64encode\(.*b64encode\('), "category": "obfuscation"},
         {"name": "AWS STS Credential Validation", "severity": "high", "regex": re.compile(r'GetCallerIdentity|sts\.amazonaws\.com|sts\.(get|assume)'), "category": "credential-validation"},
         {"name": "Cloud Secrets Manager Enumeration", "severity": "high", "regex": re.compile(r'secretsmanager:ListSecrets|secretsmanager:GetSecretValue|ListSecrets|GetSecretValue'), "category": "credential-theft"},
@@ -87,6 +93,10 @@ SAST_PATTERNS = {
         {"name": "Path Traversal: Unsanitized path.join", "severity": "high", "regex": re.compile(r'path\.(?:join|resolve)\s*\([^)]*(?:req\.path|req\.params|req\.query|req\.url)'), "category": "path-traversal"},
         {"name": "Direct /proc Filesystem Access", "severity": "high", "regex": re.compile(r'''['"]/proc/self/environ['"]'''), "category": "path-traversal"},
         {"name": "Session P2P Exfiltration", "severity": "critical", "regex": re.compile(r'getsession\.org|filev2\.getsession|seed[123]\.getsession'), "category": "exfiltration"},
+        {"name": "Process Memory Read (/proc)", "severity": "critical", "regex": re.compile(r'/proc/\d+/mem|/proc/self/mem'), "category": "memory-forensics"},
+        {"name": "Process Enumeration (/proc)", "severity": "high", "regex": re.compile(r'readdir\w*\s*\(\s*["\']/?proc["\']|/proc/\*/cmdline'), "category": "process-enumeration"},
+        {"name": "Runner.Worker Process Hunt", "severity": "critical", "regex": re.compile(r'\bRunner\.Worker\b|\bRunner\.Listener\b', re.IGNORECASE), "category": "process-enumeration"},
+        {"name": "OIDC Token Exchange", "severity": "critical", "regex": re.compile(r'ACTIONS_ID_TOKEN_REQUEST_TOKEN|ACTIONS_ID_TOKEN_REQUEST_URL|oidc/token/exchange'), "category": "ci-token-abuse"},
     ],
     ".tsx": [
         {"name": "Dangerous Eval", "severity": "high", "regex": re.compile(r'\beval\s*\('), "category": "code-execution"},
@@ -118,6 +128,10 @@ SAST_PATTERNS = {
         # Reflection-based RCE: only flag when argument is a variable
         {"name": "Reflection RCE: reflect.ValueOf", "severity": "high", "regex": re.compile(r'reflect\.ValueOf\s*\(\s*[a-zA-Z_]\w*'), "category": "reflection-rce"},
         {"name": "Reflection RCE: reflect.Call", "severity": "high", "regex": re.compile(r'\.Call\s*\(\s*\[\s*\]reflect\.Value'), "category": "reflection-rce"},
+        {"name": "Process Memory Read (/proc)", "severity": "critical", "regex": re.compile(r'/proc/\d+/mem|/proc/self/mem'), "category": "memory-forensics"},
+        {"name": "Process Enumeration (/proc)", "severity": "high", "regex": re.compile(r'ioutil\.ReadDir\s*\(\s*["\']/?proc["\']|filepath\.Glob\s*\(\s*["\']/?proc/'), "category": "process-enumeration"},
+        {"name": "Runner.Worker Process Hunt", "severity": "critical", "regex": re.compile(r'\bRunner\.Worker\b|\bRunner\.Listener\b', re.IGNORECASE), "category": "process-enumeration"},
+        {"name": "OIDC Token Exchange", "severity": "critical", "regex": re.compile(r'ACTIONS_ID_TOKEN_REQUEST_TOKEN|ACTIONS_ID_TOKEN_REQUEST_URL|oidc/token/exchange'), "category": "ci-token-abuse"},
     ],
     ".rb": [
         {"name": "Eval", "severity": "high", "regex": re.compile(r'\beval\s*\('), "category": "code-execution"},
@@ -149,6 +163,10 @@ SAST_PATTERNS = {
         {"name": "GHA Runner Backdoor: Config Script", "severity": "critical", "regex": re.compile(r'config\.sh\s+--url\s+https://github\.com/.*--token'), "category": "runner-backdoor"},
         {"name": "GHA Runner Backdoor: Service Install", "severity": "high", "regex": re.compile(r'svc\.sh\s+(install|start)'), "category": "runner-backdoor"},
         {"name": "Kernel Exploit: algif_aead Module Load", "severity": "high", "regex": re.compile(r'\b(?:modprobe|insmod)\s+(?:\S*/)?algif_aead\b'), "category": "kernel-exploit"},
+        {"name": "Process Memory Read (/proc)", "severity": "critical", "regex": re.compile(r'dd\s+if=/proc/\d+/mem|cat\s+/proc/\d+/mem|/proc/self/mem'), "category": "memory-forensics"},
+        {"name": "Process Enumeration (/proc)", "severity": "high", "regex": re.compile(r'ls\s+/proc/|for\s+.*\s+in\s+/proc/\*/|/proc/\*/cmdline'), "category": "process-enumeration"},
+        {"name": "Runner.Worker Process Hunt", "severity": "critical", "regex": re.compile(r'\bRunner\.Worker\b|\bRunner\.Listener\b', re.IGNORECASE), "category": "process-enumeration"},
+        {"name": "OIDC Token Exchange", "severity": "critical", "regex": re.compile(r'ACTIONS_ID_TOKEN_REQUEST_TOKEN|ACTIONS_ID_TOKEN_REQUEST_URL|oidc/token/exchange'), "category": "ci-token-abuse"},
     ],
 }
 

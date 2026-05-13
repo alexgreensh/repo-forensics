@@ -693,6 +693,92 @@ def scan_known_iocs(content, rel_path):
     return findings
 
 
+MORSE_ALPHABET = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+MORSE_MAP = {
+    '.-': 'A', '-...': 'B', '-.-.': 'C', '-..': 'D', '.': 'E',
+    '..-.': 'F', '--.': 'G', '....': 'H', '..': 'I', '.---': 'J',
+    '-.-': 'K', '.-..': 'L', '--': 'M', '-.': 'N', '---': 'O',
+    '.--.': 'P', '--.-': 'Q', '.-.': 'R', '...': 'S', '-': 'T',
+    '..-': 'U', '...-': 'V', '.--': 'W', '-..-': 'X', '-.--': 'Y',
+    '--..': 'Z', '-----': '0', '.----': '1', '..---': '2',
+    '...--': '3', '....-': '4', '.....': '5', '-....': '6',
+    '--...': '7', '---..': '8', '----.': '9',
+}
+MORSE_TOKEN_RE = re.compile(r'[.\-]{1,6}')
+MORSE_SEQUENCE_RE = re.compile(r'(?:[.\-]{1,6}[\s/]{1,3}){7,}[.\-]{1,6}')
+HEX_PAIR_RE = re.compile(r'(?:\\x[0-9a-fA-F]{2}\s*){8,}')
+HEX_SPACED_RE = re.compile(r'(?:[0-9a-fA-F]{2}\s){7,}[0-9a-fA-F]{2}')
+
+
+def scan_morse_encoding(content, rel_path):
+    """Category 16: Detect Morse code sequences in documentation files."""
+    ext = os.path.splitext(rel_path)[1].lower()
+    if ext not in {'.md', '.txt', '.rst', '.adoc'}:
+        return []
+    findings = []
+    for i, line in enumerate(content.split('\n')):
+        if len(line) > core.MAX_LINE_LENGTH:
+            continue
+        m = MORSE_SEQUENCE_RE.search(line)
+        if not m:
+            continue
+        tokens = MORSE_TOKEN_RE.findall(m.group()[:500])
+        valid = sum(1 for t in tokens if t in MORSE_MAP)
+        if len(tokens) >= 8 and valid / len(tokens) >= 0.5:
+            decoded_chars = [MORSE_MAP.get(t, '?') for t in tokens[:20]]
+            decoded_preview = ''.join(decoded_chars)
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="high",
+                title="Morse Code Encoding in Documentation",
+                description=f"Line contains {len(tokens)} Morse tokens ({valid}/{len(tokens)} valid). "
+                    f"Decoded preview: '{decoded_preview}'. May hide executable instructions "
+                    f"(Grok/Bankrbot incident, May 2026).",
+                file=rel_path, line=i + 1,
+                snippet=line.strip()[:120],
+                category="morse-encoding"
+            ))
+    return findings
+
+
+def scan_hex_encoding(content, rel_path):
+    """Category 17: Detect hex-encoded strings in documentation files."""
+    ext = os.path.splitext(rel_path)[1].lower()
+    if ext not in {'.md', '.txt', '.rst', '.adoc'}:
+        return []
+    findings = []
+    for i, line in enumerate(content.split('\n')):
+        if len(line) > core.MAX_LINE_LENGTH:
+            continue
+        for pattern in (HEX_PAIR_RE, HEX_SPACED_RE):
+            m = pattern.search(line)
+            if not m:
+                continue
+            hex_str = m.group()
+            raw_bytes = re.findall(r'[0-9a-fA-F]{2}', hex_str)
+            if len(raw_bytes) < 8:
+                continue
+            try:
+                sample = raw_bytes[:30]
+                decoded = bytes(int(b, 16) for b in sample)
+                printable = sum(1 for c in decoded if 32 <= c <= 126)
+                if printable / len(decoded) >= 0.6:
+                    preview = decoded.decode('ascii', errors='replace')[:40]
+                    findings.append(core.Finding(
+                        scanner=SCANNER_NAME, severity="high",
+                        title="Hex-Encoded String in Documentation",
+                        description=f"Line contains {len(raw_bytes)} hex-encoded bytes "
+                            f"({printable}/{len(sample)} sampled are printable). Preview: '{preview}'. "
+                            f"May hide executable instructions.",
+                        file=rel_path, line=i + 1,
+                        snippet=line.strip()[:120],
+                        category="hex-encoding"
+                    ))
+                    break
+            except (ValueError, OverflowError):
+                continue
+    return findings
+
+
 def scan_file(file_path, rel_path):
     """Run all 10 categories on a single file."""
     try:
@@ -790,6 +876,12 @@ def scan_file(file_path, rel_path):
     # Cat 13: Prose imperative exfiltration (Terra Security OpenClaw, May 2026)
     if ext in text_exts:
         findings.extend(_scan_prose_imperatives(content, rel_path))
+
+    # Cat 16: Morse code encoding (Grok/Bankrbot, May 2026)
+    findings.extend(scan_morse_encoding(content, rel_path))
+
+    # Cat 17: Hex-encoded strings in documentation
+    findings.extend(scan_hex_encoding(content, rel_path))
 
     return findings
 

@@ -361,3 +361,77 @@ class TestCounterProbabilisticActivation:
         findings = scanner.scan_file(str(f), "safe.py")
         prob = [fi for fi in findings if fi.category in ("probabilistic-activation", "environment-detection")]
         assert len(prob) == 0
+
+
+class TestLocaleGating:
+    """Tests for Category 8: Locale/geofence gating (mistralai v2.4.6 pattern)."""
+
+    def test_python_locale_getdefaultlocale(self, tmp_path):
+        f = tmp_path / "geo.py"
+        f.write_text("lang, _ = locale.getdefaultlocale()\n")
+        findings = scanner.scan_file(str(f), "geo.py")
+        cats = [fi.category for fi in findings]
+        assert "locale-gating" in cats
+
+    def test_python_os_environ_lang(self, tmp_path):
+        f = tmp_path / "geo.py"
+        f.write_text("lang = os.environ['LANG']\n")
+        findings = scanner.scan_file(str(f), "geo.py")
+        cats = [fi.category for fi in findings]
+        assert "locale-gating" in cats
+
+    def test_python_os_getenv_lc_all(self, tmp_path):
+        f = tmp_path / "geo.py"
+        f.write_text("lc = os.getenv('LC_ALL')\n")
+        findings = scanner.scan_file(str(f), "geo.py")
+        cats = [fi.category for fi in findings]
+        assert "locale-gating" in cats
+
+    def test_js_navigator_language(self, tmp_path):
+        f = tmp_path / "geo.js"
+        f.write_text("const lang = navigator.language;\n")
+        findings = scanner.scan_file(str(f), "geo.js")
+        cats = [fi.category for fi in findings]
+        assert "locale-gating" in cats
+
+    def test_shell_lang_variable(self, tmp_path):
+        f = tmp_path / "geo.sh"
+        f.write_text('if [ "$LANG" = "ru_RU" ]; then\n  do_something\nfi\n')
+        findings = scanner.scan_file(str(f), "geo.sh")
+        cats = [fi.category for fi in findings]
+        assert "locale-gating" in cats
+
+    def test_geoip_lookup(self, tmp_path):
+        f = tmp_path / "geo.py"
+        f.write_text("import geoip\nresult = geoip.lookup(ip)\n")
+        findings = scanner.scan_file(str(f), "geo.py")
+        cats = [fi.category for fi in findings]
+        assert "locale-gating" in cats
+
+    def test_locale_gating_is_medium_severity(self, tmp_path):
+        f = tmp_path / "geo.py"
+        f.write_text("lang, _ = locale.getdefaultlocale()\n")
+        findings = scanner.scan_file(str(f), "geo.py")
+        locale_findings = [fi for fi in findings if fi.category == "locale-gating"]
+        assert all(fi.severity == "medium" for fi in locale_findings)
+
+    def test_i18n_without_destruction_no_correlation(self, tmp_path):
+        """Locale check alone (i18n) should be medium, not critical."""
+        f = tmp_path / "i18n.py"
+        f.write_text(
+            "import locale\n"
+            "lang = locale.getdefaultlocale()\n"
+            "print(f'Language: {lang}')\n"
+        )
+        findings = scanner.scan_file(str(f), "i18n.py")
+        locale_findings = [fi for fi in findings if fi.category == "locale-gating"]
+        assert len(locale_findings) > 0
+        assert all(fi.severity == "medium" for fi in locale_findings)
+
+    def test_clean_code_no_locale_flag(self, tmp_path):
+        """Normal code without locale patterns stays clean."""
+        f = tmp_path / "safe.py"
+        f.write_text("import os\nprint(os.environ.get('HOME'))\n")
+        findings = scanner.scan_file(str(f), "safe.py")
+        locale_findings = [fi for fi in findings if fi.category == "locale-gating"]
+        assert len(locale_findings) == 0

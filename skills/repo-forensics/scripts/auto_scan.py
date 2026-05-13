@@ -231,7 +231,7 @@ def run_scanner(scanner_script, repo_path):
 
 
 def run_targeted_scan(repo_path):
-    """Run 9 targeted scanners in parallel on a cloned/installed repo."""
+    """Run 10 targeted scanners in parallel on a cloned/installed repo."""
     if not os.path.isdir(repo_path):
         return []
 
@@ -245,12 +245,13 @@ def run_targeted_scan(repo_path):
         'scan_agent_skills.py',
         'scan_sast.py',
         'scan_mcp_security.py',
+        'scan_infra.py',
     ]
 
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     all_findings = []
-    with ThreadPoolExecutor(max_workers=9) as executor:
+    with ThreadPoolExecutor(max_workers=10) as executor:
         futures = {
             executor.submit(run_scanner, s, repo_path): s
             for s in targeted_scanners

@@ -147,6 +147,29 @@ COUNTER_PROBABILISTIC_PATTERNS = [
     (re.compile(r'os\.getenv\s*\(\s*["\']GITHUB_ACTIONS["\']'), "Environment-aware activation: os.getenv('GITHUB_ACTIONS')"),
 ]
 
+# ============================================================
+# Category 8: Locale/Geofence Gating (medium)
+# Checks locale, language, or country before choosing a code path.
+# Benign alone (i18n). CRITICAL when correlated with destructive
+# commands (Rule 37) -- exact pattern from mistralai v2.4.6 backdoor.
+# ============================================================
+LOCALE_GATING_PATTERNS = [
+    # Python locale checks
+    (re.compile(r'locale\.getdefaultlocale\s*\('), "Locale gating: locale.getdefaultlocale()"),
+    (re.compile(r'locale\.getlocale\s*\('), "Locale gating: locale.getlocale()"),
+    (re.compile(r'os\.environ\s*\[\s*["\'](?:LANG|LC_ALL|LC_CTYPE|LANGUAGE)["\']'), "Locale gating: os.environ LANG/LC variable"),
+    (re.compile(r'os\.(?:getenv|environ\.get)\s*\(\s*["\'](?:LANG|LC_ALL|LC_CTYPE|LANGUAGE)["\']'), "Locale gating: os.getenv LANG/LC variable"),
+    # JavaScript/browser locale checks
+    (re.compile(r'navigator\.language\b'), "Locale gating: navigator.language"),
+    (re.compile(r'navigator\.languages\b'), "Locale gating: navigator.languages"),
+    (re.compile(r'Intl\.DateTimeFormat\(\)\.resolvedOptions\(\)\.locale'), "Locale gating: Intl locale resolution"),
+    # Shell locale checks
+    (re.compile(r'\$(?:LANG|LC_ALL|LC_CTYPE|LANGUAGE)\b'), "Locale gating: $LANG/$LC shell variable"),
+    # GeoIP / country detection
+    (re.compile(r'geoip|geo_ip|maxmind|GeoLite|geolocation\.country', re.IGNORECASE), "Locale gating: GeoIP lookup"),
+    (re.compile(r'country_code|countryCode|country_name', re.IGNORECASE), "Locale gating: country code reference"),
+]
+
 
 class RuntimeDynamismASTVisitor(ast.NodeVisitor):
     """AST visitor for patterns that regex alone can't reliably catch."""
@@ -257,7 +280,7 @@ class RuntimeDynamismASTVisitor(ast.NodeVisitor):
 def scan_file_regex(file_path, rel_path):
     """Run regex-based detection on a single file."""
     ext = os.path.splitext(file_path)[1].lower()
-    target_exts = {'.py', '.js', '.ts', '.mjs', '.cjs', '.jsx', '.tsx', '.mts'}
+    target_exts = {'.py', '.js', '.ts', '.mjs', '.cjs', '.jsx', '.tsx', '.mts', '.sh', '.bash'}
     if ext not in target_exts:
         return []
 
@@ -320,6 +343,12 @@ def scan_file_regex(file_path, rel_path):
     findings.extend(core.scan_patterns(
         content, rel_path, COUNTER_PROBABILISTIC_PATTERNS[3:],
         "environment-detection", "medium", SCANNER_NAME
+    ))
+
+    # Category 8: Locale/geofence gating (medium alone; CRITICAL via Rule 37)
+    findings.extend(core.scan_patterns(
+        content, rel_path, LOCALE_GATING_PATTERNS,
+        "locale-gating", "medium", SCANNER_NAME
     ))
 
     return findings

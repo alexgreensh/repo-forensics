@@ -448,3 +448,82 @@ class TestSafeDomainAllowlistFix:
         findings = scanner.scan_file(str(f), "CHANGELOG.md")
         prose = [t for t in findings if "Prose Imperative" in t.title]
         assert len(prose) == 0
+
+
+class TestMorseEncoding:
+    """Tests for Category 16: Morse code encoding detection."""
+
+    def test_morse_exec_curl(self, tmp_path):
+        """.md with Morse-encoded tokens -> HIGH finding."""
+        morse = ". -..- . -.-. / -.-. ..- .-. .-.."  # EXEC CURL
+        f = tmp_path / "README.md"
+        f.write_text(f"Instructions: {morse}\n")
+        findings = scanner.scan_file(str(f), "README.md")
+        morse_findings = [fi for fi in findings if fi.category == "morse-encoding"]
+        assert len(morse_findings) >= 1
+        assert morse_findings[0].severity == "high"
+
+    def test_morse_in_py_no_fire(self, tmp_path):
+        """.py with Morse tokens -> no finding (code file)."""
+        morse = ". -..- . -.-. / -.-. ..- .-. .-.."
+        f = tmp_path / "script.py"
+        f.write_text(f"# {morse}\n")
+        findings = scanner.scan_file(str(f), "script.py")
+        morse_findings = [fi for fi in findings if fi.category == "morse-encoding"]
+        assert len(morse_findings) == 0
+
+    def test_ellipsis_no_fire(self, tmp_path):
+        """Ellipsis '...' should NOT trigger Morse detection."""
+        f = tmp_path / "README.md"
+        f.write_text("This is a normal sentence... nothing to see here.\n")
+        findings = scanner.scan_file(str(f), "README.md")
+        morse_findings = [fi for fi in findings if fi.category == "morse-encoding"]
+        assert len(morse_findings) == 0
+
+    def test_bullet_dots_no_fire(self, tmp_path):
+        """Markdown bullet dots should NOT trigger Morse detection."""
+        f = tmp_path / "notes.md"
+        f.write_text("- item one\n- item two\n- item three\n")
+        findings = scanner.scan_file(str(f), "notes.md")
+        morse_findings = [fi for fi in findings if fi.category == "morse-encoding"]
+        assert len(morse_findings) == 0
+
+
+class TestHexEncoding:
+    """Tests for Category 17: Hex-encoded string detection."""
+
+    def test_hex_import_os(self, tmp_path):
+        """.md with hex-encoded printable text -> HIGH finding."""
+        hex_str = "\\x69\\x6d\\x70\\x6f\\x72\\x74\\x20\\x6f\\x73"  # import os
+        f = tmp_path / "README.md"
+        f.write_text(f"Data: {hex_str}\n")
+        findings = scanner.scan_file(str(f), "README.md")
+        hex_findings = [fi for fi in findings if fi.category == "hex-encoding"]
+        assert len(hex_findings) >= 1
+        assert hex_findings[0].severity == "high"
+
+    def test_hex_in_py_no_fire(self, tmp_path):
+        """.py with hex strings -> no finding (code file, hex is normal)."""
+        hex_str = "\\x69\\x6d\\x70\\x6f\\x72\\x74\\x20\\x6f\\x73"
+        f = tmp_path / "script.py"
+        f.write_text(f'data = b"{hex_str}"\n')
+        findings = scanner.scan_file(str(f), "script.py")
+        hex_findings = [fi for fi in findings if fi.category == "hex-encoding"]
+        assert len(hex_findings) == 0
+
+    def test_hex_color_no_fire(self, tmp_path):
+        """Hex color #FF5733 should NOT trigger hex encoding."""
+        f = tmp_path / "style.md"
+        f.write_text("Use color #FF5733 for highlights\n")
+        findings = scanner.scan_file(str(f), "style.md")
+        hex_findings = [fi for fi in findings if fi.category == "hex-encoding"]
+        assert len(hex_findings) == 0
+
+    def test_spaced_hex_printable(self, tmp_path):
+        """Space-separated hex pairs that decode to printable text."""
+        hex_str = "68 65 6c 6c 6f 20 77 6f 72 6c 64"  # hello world
+        f = tmp_path / "notes.txt"
+        f.write_text(f"Encoded: {hex_str}\n")
+        findings = scanner.scan_file(str(f), "notes.txt")
+        hex_findings = [fi for fi in findings if fi.category == "hex-encoding"]
+        assert len(hex_findings) >= 1

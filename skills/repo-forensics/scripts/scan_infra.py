@@ -432,10 +432,35 @@ def scan_github_actions(file_path, rel_path):
                         ))
                         break  # One finding per workflow is sufficient
 
+        # pull_request_target + actions/cache save = cache poisoning via forked PR
+        non_comment = [ln for ln in lines if not ln.lstrip().startswith('#')]
+        has_prt = any("pull_request_target" in line for line in non_comment)
+        has_cache_save = any(
+            re.search(r'uses:\s*actions/cache(?:/save)?@', line) for line in non_comment
+        )
+        if has_prt and has_cache_save:
+            cache_key_info = ""
+            for line in non_comment:
+                key_match = re.search(r'key\s*:\s*(.+)', line)
+                if key_match:
+                    cache_key_info = key_match.group(1).strip()[:80]
+                    break
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="critical",
+                title="GHA: pull_request_target + Cache Write (Cache Poisoning)",
+                description=(
+                    "Workflow uses pull_request_target trigger with actions/cache. "
+                    "Forked PRs run with repo write permissions and can poison the cache "
+                    "with malicious content. Subsequent builds on the default branch consume "
+                    "the poisoned cache (TanStack postmortem, May 2026)."
+                ),
+                file=rel_path, line=0,
+                snippet=f"pull_request_target + actions/cache (key: {cache_key_info})" if cache_key_info else "pull_request_target + actions/cache",
+                category="cache-poisoning"
+            ))
+
         # TanStack attack vector: pull_request_target + id-token: write.
         # Forked PRs get write permissions AND can mint OIDC tokens for npm publish.
-        non_comment = [l for l in lines if not l.lstrip().startswith('#')]
-        has_prt = any("pull_request_target" in line for line in non_comment)
         has_id_token_write = any(
             re.search(r'id-token\s*:\s*write', line) for line in non_comment
         )

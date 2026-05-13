@@ -21,6 +21,12 @@ import forensics_core as core
 
 SCANNER_NAME = "dependencies"
 
+_LLMO_SUSPICIOUS_RE = re.compile(
+    r'(?i)(?:^|[-_])(?:ai|llm|gpt|chatgpt|openai|claude|langchain|vector|embedding|'
+    r'neural|transformer|prompt|blockchain|web3|nft|defi|crypto|dao|'
+    r'smart.?contract|token.?bridge)(?:[-_]|$)'
+)
+
 # Top 200 NPM packages
 POPULAR_NPM = [
     "react", "react-dom", "lodash", "underscore", "express", "moment", "axios", "chalk", "commander",
@@ -318,6 +324,41 @@ def check_typosquatting(dependencies, popular_list):
     return suspicious
 
 
+HALLUCINATION_NPM = frozenset({
+    "llm-cache-proxy", "ai-response-validator", "gpt4-api-wrapper",
+    "claude-sdk-node", "llm-stream-parser", "ai-prompt-builder",
+    "ai-chain-runner", "prompt-template-engine", "llm-output-parser",
+    "ai-context-window", "model-inference-client", "ai-safety-filter",
+    "blockchain-token-validator", "nft-metadata-parser",
+    "defi-swap-router", "crypto-price-oracle",
+})
+
+HALLUCINATION_PYPI = frozenset({
+    "gpt4-python", "ai-response-parser", "claude-python-sdk",
+    "prompt-engineering-toolkit", "neural-text-splitter",
+    "llm-chain-runner", "model-serving-client",
+    "ai-guardrails", "chatbot-context-manager",
+    "defi-protocol-sdk", "crypto-wallet-sdk",
+    "nft-generator-toolkit", "token-bridge-client",
+    "smart-contract-auditor",
+})
+
+
+def check_slopsquatting(dependencies, ecosystem):
+    """Flag packages matching AI-hallucinated package names (Aikido Security, March 2026)."""
+    if ecosystem == "npm":
+        corpus = HALLUCINATION_NPM
+    elif ecosystem == "PyPI":
+        corpus = HALLUCINATION_PYPI
+    else:
+        return []
+    findings = []
+    for dep in dependencies:
+        if dep.lower() in corpus:
+            findings.append(dep)
+    return findings
+
+
 def check_version_anomaly(version_str):
     """Detect dependency confusion signatures like v99.x.x"""
     m = re.match(r'[~^>=<]*(\d+)', version_str)
@@ -593,6 +634,21 @@ def _check_freshness(ecosystem, pkg_versions, rel_path):
                 snippet=f"{pkg}@{version} (1 version, published {result['published']})",
                 category="freshness-brand-new-package",
             ))
+
+            # Signal 3b: LLMO suspicious naming (brand-new + AI/crypto name)
+            if _LLMO_SUSPICIOUS_RE.search(canonical):
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="medium",
+                    title=f"LLMO Suspicious Name: {pkg}@{version}",
+                    description=(
+                        "Brand-new single-version package with AI/crypto buzzword name. "
+                        "LLMs frequently hallucinate package names matching this pattern, "
+                        "which attackers register (PromptMink/ReversingLabs, April 2026)."
+                    ),
+                    file=rel_path, line=0,
+                    snippet=f"{pkg}@{version} (AI/crypto name + brand new)",
+                    category="llmo-suspicious",
+                ))
 
         # Signal 4: Maintainer changed
         prev = result.get("prev_maintainer")
@@ -956,6 +1012,19 @@ def scan_package_json(filepath, rel_path):
                 category="typosquatting"
             ))
 
+        # Slopsquatting (AI-hallucinated package names)
+        slops = check_slopsquatting(dep_names, "npm")
+        for pkg in slops:
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="high",
+                title=f"Slopsquatting: '{pkg}'",
+                description="Package name matches known AI-hallucinated package corpus. "
+                    "These names were never legitimate but are frequently suggested by LLMs, "
+                    "then registered by attackers (Aikido Security, March 2026).",
+                file=rel_path, line=0, snippet=f"'{pkg}' is a known AI-hallucinated package name",
+                category="slopsquatting"
+            ))
+
         # Version anomaly
         for pkg, ver in all_deps.items():
             if isinstance(ver, str) and check_version_anomaly(ver):
@@ -1102,6 +1171,19 @@ def scan_python_deps(filepath, rel_path):
                 description=f"Package name similarity {score:.0%} to popular PyPI package",
                 file=rel_path, line=0, snippet=f"'{suspect}' might be typosquatting '{target}'",
                 category="typosquatting"
+            ))
+
+        # Slopsquatting (AI-hallucinated package names)
+        slops = check_slopsquatting(deps, "PyPI")
+        for pkg in slops:
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="high",
+                title=f"Slopsquatting: '{pkg}'",
+                description="Package name matches known AI-hallucinated package corpus. "
+                    "These names were never legitimate but are frequently suggested by LLMs, "
+                    "then registered by attackers (Aikido Security, March 2026).",
+                file=rel_path, line=0, snippet=f"'{pkg}' is a known AI-hallucinated package name",
+                category="slopsquatting"
             ))
 
     except (UnicodeDecodeError, OSError) as e:

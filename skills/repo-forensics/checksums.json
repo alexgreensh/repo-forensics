@@ -12,9 +12,9 @@
     "references/threat_patterns.md": "ae24833171b787a7aedca7e1d1baee278ac58c84a6446c89c6cbf70bd1f5152e",
     "scripts/_shared_patterns.py": "8c61da2345bf57bd59bf6e4fe4424530db8f280238f0cc65fd82b897afedf57b",
     "scripts/aggregate_json.py": "3fe4871e7845c400f374df2e04141c532398256574817d76d5c7cd639882fba0",
-    "scripts/auto_scan.py": "46650a1822bf9f084e613908513ab6a1f5bd51eed55679baf7af77611c8ce7c6",
+    "scripts/auto_scan.py": "faa65b324a2152f6ef952b9cfa24e50f04de2fd3cd651537e17508f37ed38c64",
     "scripts/dast_sandbox.sb": "6f6e9571a73aa8a9d07e7e4c5c0e6ae49fb6447c5f34a446154d301c6c4e8875",
-    "scripts/forensics_core.py": "d0079ae9999d2118c53c3a60a707d5278d2f4fe21bc2079a4230f06d05ebf0a9",
+    "scripts/forensics_core.py": "73b7f364e14c7726e11d41acf1b478369d983f6068c15a2bd0fdea3e6fc74628",
     "scripts/ioc_manager.py": "5ec63fe011833ade31070b3fd27b9a13490de121daf16333c56cd282f5b58373",
     "scripts/parse_pnpm_lock.py": "720f084e11cd759ab453bdfa161950111a49455ff2c6ba55ef5a9c3e32161f0c",
     "scripts/pre_scan.py": "791515a2f6a1d096a056beabec7f252693c0e82d27d7c1fc207924a071e5b974",
@@ -25,20 +25,20 @@
     "scripts/scan_binary.py": "3ccd2dd03f6057f441e00577e00faf598dafc12d349ad9c1aff998fbce120e81",
     "scripts/scan_dast.py": "9778416626ff9d7de494bcda9c3ed5f1d53eb0f31954d8fd71fe066e54ab0c79",
     "scripts/scan_dataflow.py": "5452327c816d6ce3b20a0825702dd784f17ac16db2eec545a46dcbb41499c98f",
-    "scripts/scan_dependencies.py": "b9449c5ca3e7b4ed16fbfd71a1ee88987bca34c9ef3fe54347303593fecc41c5",
+    "scripts/scan_dependencies.py": "bcfa1c10f0a2741024a5176b53dc501055a74c832a3ca6f4f59355df5b4d6e30",
     "scripts/scan_devcontainer.py": "066c27d4e4273a2d37ef3b989cd92735beba25fed1bd618111f3558e6d16ef7a",
     "scripts/scan_entropy.py": "c27a83523d4b9b63b880d948aa60ab269b6ab340fb2a5cd325c705495b4e5712",
     "scripts/scan_git_forensics.py": "5f93c363e3a390968cea0301d00ad8b1524d5402d1401af22e0037f18151543f",
-    "scripts/scan_infra.py": "b8e654a847bd0df7b68ebfb4bf73bd6993ea59a489778757addd2542f1ae6fd7",
+    "scripts/scan_infra.py": "e04550c219ccbbdab30b0578003707e84bc8ff6adee5882269f8a3549f7806b7",
     "scripts/scan_integrity.py": "1559ad5e756984973dac358bb3706c30de64f477243ac0a6fd2ad57e0e4bd038",
     "scripts/scan_lifecycle.py": "926f2f7cb2557eb816055c9f171224e486aa723ed51dc47712e6e174b8a2c0a5",
     "scripts/scan_manifest_drift.py": "105de3be2564e8d2f7671b4e473bf59118c4eacb1f00683a2827cd80e1d2e854",
     "scripts/scan_mcp_security.py": "1cb745c9f14f761a4326db97c1adb72ed4c379b3f2152374b272ff985d567c24",
     "scripts/scan_post_incident.py": "31094491af8a2e89260cba4cf6427501d5657b55b4e8430f019db1d844f49cfe",
-    "scripts/scan_runtime_dynamism.py": "5c48582b6f2a6c85c65c757730348a2033987c15a2cc1f1c53eb74a6021d3fc4",
-    "scripts/scan_sast.py": "e884dcb4d10e03c043d86e712fe3da2af1fd0a120e4520592b1e404d4601d4e0",
+    "scripts/scan_runtime_dynamism.py": "c186ddba3ce7fc232730162e7d0e3d79de033630a6dd3f0c057ffc01719fcf86",
+    "scripts/scan_sast.py": "c3eb81e4cb667e900bc550898fc33242a2b1eee678404a71c191d250b31aa10c",
     "scripts/scan_secrets.py": "b7dd163ca400579ebcd962499a7b58826dabd7d005c0b83f804d7d78052066a5",
-    "scripts/scan_skill_threats.py": "1eb476aaa1f8581c5f11753cd230d46c41c05209be04a0ebb195034877ada8d2",
+    "scripts/scan_skill_threats.py": "1068710aebe33792881ec047195bdb6cd66c795b111a08625785198e923a3d23",
     "scripts/session_scan.py": "676e3a6b33c08152d3f3447cbc696cc8700168417b06114f1daa03e18e6e190c",
     "scripts/verify_install.py": "9ebc2e18fc638599d56d00cbecce5da759b7be2f834995668c69262eaba14c69",
     "scripts/vuln_feed.py": "0c0d756556d5c9a089a23b358a123113f8e2fdec4de6503a2d9b771d52d0d907"
@@ -58,8 +58,8 @@
   },
   "hook_count": 7,
   "repo_manifests": {
-    ".claude-plugin/marketplace.json": "4e4422b1dd2db3f6774a1edaf51ba3e364e6909b3feab9eae56cc93d78a968af",
-    ".claude-plugin/plugin.json": "7dbd9a2102caf7643137eabb4b6c898820c631af10cea88ff2c29a64a6bb8371"
+    ".claude-plugin/marketplace.json": "9787f41fef960cfe13555b6757d0669fc32e1d87a2f1d0598771264b644e6d55",
+    ".claude-plugin/plugin.json": "c8701d4654e7a55122c2a8f7ad1612a9e3f476a5c49defe919a241cb82df5a5e"
   },
   "manifest_count": 2
 }

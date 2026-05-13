@@ -353,3 +353,69 @@ class TestTanStackCIVector:
         findings = scanner.scan_github_actions(str(ci), ".github/workflows/ci.yml")
         combo = [f for f in findings if "TanStack" in f.title]
         assert len(combo) == 0
+
+
+class TestCachePoisoningPRT:
+    """pull_request_target + actions/cache = cache poisoning via forked PR."""
+
+    def test_prt_plus_cache_critical(self, tmp_path):
+        workflow = tmp_path / ".github" / "workflows"
+        workflow.mkdir(parents=True)
+        ci = workflow / "ci.yml"
+        ci.write_text(
+            "name: CI\non:\n  pull_request_target:\n"
+            "jobs:\n  build:\n    runs-on: ubuntu-latest\n"
+            "    steps:\n"
+            "      - uses: actions/cache@v3\n"
+            "        with:\n"
+            "          key: npm-${{ hashFiles('package-lock.json') }}\n"
+        )
+        findings = scanner.scan_github_actions(str(ci), ".github/workflows/ci.yml")
+        cache = [f for f in findings if "Cache Poisoning" in f.title]
+        assert len(cache) >= 1
+        assert cache[0].severity == "critical"
+
+    def test_pull_request_no_target_no_cache_poison(self, tmp_path):
+        """pull_request (not _target) + cache -> no cache poisoning finding."""
+        workflow = tmp_path / ".github" / "workflows"
+        workflow.mkdir(parents=True)
+        ci = workflow / "ci.yml"
+        ci.write_text(
+            "name: CI\non:\n  pull_request:\n"
+            "jobs:\n  build:\n    runs-on: ubuntu-latest\n"
+            "    steps:\n"
+            "      - uses: actions/cache@v3\n"
+        )
+        findings = scanner.scan_github_actions(str(ci), ".github/workflows/ci.yml")
+        cache = [f for f in findings if "Cache Poisoning" in f.title]
+        assert len(cache) == 0
+
+    def test_prt_no_cache_no_poison(self, tmp_path):
+        """pull_request_target without cache -> no cache poisoning finding."""
+        workflow = tmp_path / ".github" / "workflows"
+        workflow.mkdir(parents=True)
+        ci = workflow / "ci.yml"
+        ci.write_text(
+            "name: CI\non:\n  pull_request_target:\n"
+            "jobs:\n  build:\n    runs-on: ubuntu-latest\n"
+            "    steps:\n"
+            "      - uses: actions/checkout@v3\n"
+        )
+        findings = scanner.scan_github_actions(str(ci), ".github/workflows/ci.yml")
+        cache = [f for f in findings if "Cache Poisoning" in f.title]
+        assert len(cache) == 0
+
+    def test_push_plus_cache_no_poison(self, tmp_path):
+        """push trigger + cache -> no cache poisoning finding."""
+        workflow = tmp_path / ".github" / "workflows"
+        workflow.mkdir(parents=True)
+        ci = workflow / "ci.yml"
+        ci.write_text(
+            "name: CI\non:\n  push:\n"
+            "jobs:\n  build:\n    runs-on: ubuntu-latest\n"
+            "    steps:\n"
+            "      - uses: actions/cache@v3\n"
+        )
+        findings = scanner.scan_github_actions(str(ci), ".github/workflows/ci.yml")
+        cache = [f for f in findings if "Cache Poisoning" in f.title]
+        assert len(cache) == 0

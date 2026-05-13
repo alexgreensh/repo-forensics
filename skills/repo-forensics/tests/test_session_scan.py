@@ -507,18 +507,15 @@ class TestOutputSessionContext:
             session_scan.output_session_context([])
         assert exc.value.code == 0
         out = capsys.readouterr().out
-        assert json.loads(out) == {"hookSpecificOutput": {"hookEventName": "SessionStart"}}
+        assert out.strip() == ""
 
     def test_with_context(self, capsys):
         with pytest.raises(SystemExit) as exc:
             session_scan.output_session_context(["Updates detected: my-plugin"])
         assert exc.value.code == 0
         out = capsys.readouterr().out
-        data = json.loads(out)
-        assert "hookSpecificOutput" in data
-        assert data["hookSpecificOutput"]["hookEventName"] == "SessionStart"
-        assert "additionalContext" in data["hookSpecificOutput"]
-        assert "repo-forensics" in data["hookSpecificOutput"]["additionalContext"]
+        assert "[repo-forensics]" in out
+        assert "Updates detected: my-plugin" in out
 
     def test_always_exit_0(self, capsys):
         """SessionStart hooks should NEVER block session."""
@@ -538,7 +535,7 @@ class TestKillSwitch:
             session_scan.main()
         assert exc.value.code == 0
         out = capsys.readouterr().out
-        assert json.loads(out) == {"hookSpecificOutput": {"hookEventName": "SessionStart"}}
+        assert out.strip() == ""
 
     def test_disabled_false(self, monkeypatch, capsys):
         monkeypatch.setenv("REPO_FORENSICS_SESSION_SCAN", "false")
@@ -591,9 +588,7 @@ class TestMainIntegration:
             session_scan.main()
         assert exc.value.code == 0
         out = capsys.readouterr().out
-        # Should have non-empty output (updates detected)
-        data = json.loads(out)
-        assert "hookSpecificOutput" in data
+        assert "[repo-forensics]" in out
 
     def test_threat_detected_end_to_end(self, mock_home, monkeypatch, capsys):
         monkeypatch.setattr(session_scan, 'refresh_threat_databases', lambda: [])
@@ -616,9 +611,8 @@ class TestMainIntegration:
             session_scan.main()
         assert exc.value.code == 0  # Always 0 for SessionStart
         out = capsys.readouterr().out
-        data = json.loads(out)
-        ctx = data.get("hookSpecificOutput", {}).get("additionalContext", "")
-        assert "malicious" in ctx.lower() or "⚠" in ctx
+        assert "[repo-forensics]" in out
+        assert "malicious" in out.lower() or "claud-code" in out.lower()
 
 
 # ========================================================================
