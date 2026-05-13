@@ -12,7 +12,7 @@
     "references/threat_patterns.md": "ae24833171b787a7aedca7e1d1baee278ac58c84a6446c89c6cbf70bd1f5152e",
     "scripts/_shared_patterns.py": "8c61da2345bf57bd59bf6e4fe4424530db8f280238f0cc65fd82b897afedf57b",
     "scripts/aggregate_json.py": "3fe4871e7845c400f374df2e04141c532398256574817d76d5c7cd639882fba0",
-    "scripts/auto_scan.py": "40569b302ed4d407bfc99a860e87cb924077719c938c6d90eeb5043e80ffe869",
+    "scripts/auto_scan.py": "46650a1822bf9f084e613908513ab6a1f5bd51eed55679baf7af77611c8ce7c6",
     "scripts/dast_sandbox.sb": "6f6e9571a73aa8a9d07e7e4c5c0e6ae49fb6447c5f34a446154d301c6c4e8875",
     "scripts/forensics_core.py": "d0079ae9999d2118c53c3a60a707d5278d2f4fe21bc2079a4230f06d05ebf0a9",
     "scripts/ioc_manager.py": "5ec63fe011833ade31070b3fd27b9a13490de121daf16333c56cd282f5b58373",
@@ -58,8 +58,8 @@
   },
   "hook_count": 7,
   "repo_manifests": {
-    ".claude-plugin/marketplace.json": "e1f662f368b64840ae743ddcc8adf905ef03a0f0cc86cf9d4a030fbbf06007f6",
-    ".claude-plugin/plugin.json": "b08ef585cbb92216e0011544af5f903d474dc33a9919162d24f824860a70e27d"
+    ".claude-plugin/marketplace.json": "4e4422b1dd2db3f6774a1edaf51ba3e364e6909b3feab9eae56cc93d78a968af",
+    ".claude-plugin/plugin.json": "7dbd9a2102caf7643137eabb4b6c898820c631af10cea88ff2c29a64a6bb8371"
   },
   "manifest_count": 2
 }
