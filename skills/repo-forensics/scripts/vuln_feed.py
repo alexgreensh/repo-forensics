@@ -701,9 +701,10 @@ def fetch_pypi_freshness(name, version, cache_dir=None, offline=False):
         if version in ver_list:
             idx = ver_list.index(version)
             if idx > 0:
-                # PyPI doesn't provide per-release author; use same info.author
-                # as a reasonable proxy (maintainer continuity check)
-                prev_maintainer = maintainer
+                # PyPI API doesn't expose per-release uploader identity,
+                # so maintainer takeover detection is not possible here.
+                # Leave prev_maintainer as None to avoid false signals.
+                pass
 
         result = {
             "published": published,

@@ -25,7 +25,7 @@
     "scripts/scan_binary.py": "3ccd2dd03f6057f441e00577e00faf598dafc12d349ad9c1aff998fbce120e81",
     "scripts/scan_dast.py": "9778416626ff9d7de494bcda9c3ed5f1d53eb0f31954d8fd71fe066e54ab0c79",
     "scripts/scan_dataflow.py": "5452327c816d6ce3b20a0825702dd784f17ac16db2eec545a46dcbb41499c98f",
-    "scripts/scan_dependencies.py": "a5dc48d438e6f17a09ac51ea2ba0873a21d22ae41b70a440887eb0fac85770cf",
+    "scripts/scan_dependencies.py": "b9449c5ca3e7b4ed16fbfd71a1ee88987bca34c9ef3fe54347303593fecc41c5",
     "scripts/scan_devcontainer.py": "066c27d4e4273a2d37ef3b989cd92735beba25fed1bd618111f3558e6d16ef7a",
     "scripts/scan_entropy.py": "c27a83523d4b9b63b880d948aa60ab269b6ab340fb2a5cd325c705495b4e5712",
     "scripts/scan_git_forensics.py": "5f93c363e3a390968cea0301d00ad8b1524d5402d1401af22e0037f18151543f",
@@ -41,7 +41,7 @@
     "scripts/scan_skill_threats.py": "1eb476aaa1f8581c5f11753cd230d46c41c05209be04a0ebb195034877ada8d2",
     "scripts/session_scan.py": "676e3a6b33c08152d3f3447cbc696cc8700168417b06114f1daa03e18e6e190c",
     "scripts/verify_install.py": "9ebc2e18fc638599d56d00cbecce5da759b7be2f834995668c69262eaba14c69",
-    "scripts/vuln_feed.py": "72e544af912f763c18a6725c8e80c13cddbac717ba1211de90533d32c42683d9"
+    "scripts/vuln_feed.py": "0c0d756556d5c9a089a23b358a123113f8e2fdec4de6503a2d9b771d52d0d907"
   },
   "repo_symlinks": {
     "skill": "skills/repo-forensics"

@@ -484,7 +484,7 @@ def _check_freshness(ecosystem, pkg_versions, rel_path):
       - Popular packages skipped (POPULAR_NPM / POPULAR_PYPI).
       - Hard query cap prevents runaway network usage on huge monorepos.
     """
-    if not _FRESHNESS_STATE["enabled"] or _FRESHNESS_STATE["offline"]:
+    if not _FRESHNESS_STATE["enabled"]:
         return []
     try:
         import vuln_feed
@@ -502,6 +502,7 @@ def _check_freshness(ecosystem, pkg_versions, rel_path):
 
     # Pick the popular-package skip list for this ecosystem
     popular = POPULAR_NPM if ecosystem == "npm" else POPULAR_PYPI
+    popular_lower = {p.lower() for p in popular}
 
     findings = []
     skipped_count = 0
@@ -518,8 +519,7 @@ def _check_freshness(ecosystem, pkg_versions, rel_path):
             continue
         _FRESHNESS_STATE["queried"].add(key)
 
-        # Skip well-known popular packages (low signal, high network cost)
-        if canonical.lower() in {p.lower() for p in popular}:
+        if canonical.lower() in popular_lower:
             continue
 
         # Enforce hard query cap
