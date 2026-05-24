@@ -74,7 +74,7 @@
     <rect width="400" height="36" rx="10" fill="#1c2940"/>
     <rect y="24" width="400" height="12" fill="#1c2940"/>
     <text x="200" y="24" font-family="'SF Mono',Consolas,monospace" font-size="12" fill="#58a6ff"
-          text-anchor="middle" font-weight="700">19 PARALLEL SCANNERS</text>
+          text-anchor="middle" font-weight="700">20 PARALLEL SCANNERS</text>
     <!-- Spinning indicator -->
     <g transform="translate(352, 18)">
       <circle r="5" fill="none" stroke="#00f0ff" stroke-width="1.5" stroke-dasharray="20,12" opacity="0.6">
@@ -234,6 +234,25 @@
           <text x="26" y="232" font-family="'SF Mono',Consolas,monospace" font-size="10" fill="#d29922" font-weight="600">post_incident</text>
           <text x="174" y="232" font-family="'SF Mono',Consolas,monospace" font-size="9" fill="#8b949e" text-anchor="end">artifacts</text>
         </g>
+        <!-- Row 9: devcontainer (grey) -->
+        <g opacity="1">
+          <rect y="243" width="184" height="24" rx="5" fill="#0d1117" stroke="#8b949e30" stroke-width="1"/>
+          <rect y="243" width="184" height="24" rx="5" fill="#8b949e06"/>
+          <circle cx="14" cy="255" r="4" fill="#8b949e"><animate attributeName="opacity" values="0.4;1;0.4" dur="1.5s" repeatCount="indefinite"/></circle>
+          <text x="26" y="259" font-family="'SF Mono',Consolas,monospace" font-size="10" fill="#c9d1d9" font-weight="600">devcontainer</text>
+          <text x="174" y="259" font-family="'SF Mono',Consolas,monospace" font-size="9" fill="#8b949e" text-anchor="end">escape</text>
+        </g>
+      </g>
+    </g>
+
+    <!-- Row for entrypoint scanner (NEW - spans full width below both columns) -->
+    <g transform="translate(10, 296)">
+      <g opacity="1">
+        <rect y="0" width="380" height="24" rx="5" fill="#0d1117" stroke="#f8514930" stroke-width="1"/>
+        <rect y="0" width="380" height="24" rx="5" fill="#f8514908"/>
+        <circle cx="14" cy="12" r="4" fill="#00f0ff"><animate attributeName="opacity" values="0.4;1;0.4" dur="1.5s" repeatCount="indefinite"/></circle>
+        <text x="26" y="16" font-family="'SF Mono',Consolas,monospace" font-size="10" fill="#00f0ff" font-weight="600">entrypoint</text>
+        <text x="370" y="16" font-family="'SF Mono',Consolas,monospace" font-size="9" fill="#8b949e" text-anchor="end">IIFE + import-time (NEW)</text>
       </g>
     </g>
 
