@@ -68,6 +68,7 @@ HARDCODED_C2_IPS = [
     "94.154.172.43",   # TeamPCP Wave 3 audit endpoint (April 2026)
     "45.148.10.212",   # Trivy compromise exfil (March 2026)
     "83.142.209.203",  # Telnyx WAV steganography exfil (March 2026)
+    "216.126.225.129",  # Megalodon CI campaign, May 2026
 ]
 
 HARDCODED_MALICIOUS_DOMAINS = [
@@ -99,6 +100,9 @@ HARDCODED_MALICIOUS_DOMAINS = [
     "seed2.getsession.org",    # TanStack worm: Session P2P seed node (May 2026)
     "seed3.getsession.org",    # TanStack worm: Session P2P seed node (May 2026)
     "api.cloud-aws.adc-e.uk",  # Mini Shai-Hulud: TeamPCP C2 domain (May 2026)
+    "cjn37-uyaaa-aaaac-qgnva-cai.raw.icp0.io",  # CanisterWorm ICP blockchain C2, Apr 2026
+    "check.git-service.com",    # durabletask PyPI C2, May 2026
+    "t.m-kosche.com",           # Shared @antv/actions-cool C2, May 2026
 ]
 
 HARDCODED_MALICIOUS_NPM = {
@@ -107,6 +111,10 @@ HARDCODED_MALICIOUS_NPM = {
     "anthropic-sdk-node", "claude-code-cli", "clawclient",
     "plain-crypto-js",  # Axios supply chain RAT dropper (March 2026)
     "@tanstack/setup",  # TanStack worm: entirely malicious package (May 2026)
+    "chalk-tempalte",   # Shai-Hulud copycat (May 2026)
+    "@deadcode09284814/axios-util",  # Shai-Hulud copycat (May 2026)
+    "axois-utils",      # Shai-Hulud copycat (May 2026)
+    "color-style-utils",  # Shai-Hulud copycat (May 2026)
 }
 
 HARDCODED_MALICIOUS_PYPI = {

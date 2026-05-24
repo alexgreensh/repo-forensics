@@ -335,3 +335,44 @@ class TestFeedURLHardening:
         import urllib.request
         monkeypatch.setattr(urllib.request, "urlopen", panic)
         assert ioc_manager.fetch_remote_iocs("http://evil.com/iocs.json") is None
+
+
+# ---------------------------------------------------------------------------
+# May 2026 IOC additions (U4 update)
+# ---------------------------------------------------------------------------
+
+
+class TestMay2026IocAdditions:
+    """Verify that all IOCs added in the U4 May 2026 update are present."""
+
+    def test_megalodon_c2_ip_in_hardcoded_list(self):
+        """216.126.225.129 (Megalodon CI campaign, May 2026) must be present."""
+        assert "216.126.225.129" in ioc_manager.HARDCODED_C2_IPS
+
+    def test_canisterworm_icp_domain_in_hardcoded_list(self):
+        """ICP blockchain C2 domain (CanisterWorm, Apr 2026) must be present."""
+        assert "cjn37-uyaaa-aaaac-qgnva-cai.raw.icp0.io" in ioc_manager.HARDCODED_MALICIOUS_DOMAINS
+
+    def test_chalk_tempalte_in_hardcoded_malicious_npm(self):
+        """chalk-tempalte typosquat (Shai-Hulud copycat) must be flagged by name."""
+        assert "chalk-tempalte" in ioc_manager.HARDCODED_MALICIOUS_NPM
+
+    def test_legitimate_chalk_not_in_malicious_npm(self):
+        """chalk (the real package) must NOT be in the malicious npm set — only
+        specific compromised versions are tracked via compromised_versions.json."""
+        assert "chalk" not in ioc_manager.HARDCODED_MALICIOUS_NPM
+
+    def test_megalodon_c2_ip_in_get_iocs(self, tmp_path):
+        """get_iocs() must surface the Megalodon C2 IP in the merged result."""
+        iocs = ioc_manager.get_iocs(cache_dir=str(tmp_path))
+        assert "216.126.225.129" in iocs["c2_ips"]
+
+    def test_canisterworm_domain_in_get_iocs(self, tmp_path):
+        """get_iocs() must surface the ICP C2 domain in the merged result."""
+        iocs = ioc_manager.get_iocs(cache_dir=str(tmp_path))
+        assert "cjn37-uyaaa-aaaac-qgnva-cai.raw.icp0.io" in iocs["malicious_domains"]
+
+    def test_chalk_tempalte_in_get_iocs_malicious_npm(self, tmp_path):
+        """get_iocs() malicious_npm set must include the chalk-tempalte typosquat."""
+        iocs = ioc_manager.get_iocs(cache_dir=str(tmp_path))
+        assert "chalk-tempalte" in iocs["malicious_npm"]

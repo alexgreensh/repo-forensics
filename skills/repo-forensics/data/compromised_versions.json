@@ -322,6 +322,65 @@
       "reference": "https://socket.dev/blog/tanstack-npm-packages-compromised-mini-shai-hulud-supply-chain-attack",
       "notes": "Packages compromised via worm propagation from TanStack. 373+ malicious versions across 169+ packages including @mistralai/mistralai, @opensearch-project/opensearch, 65+ @uipath/* packages. Specific affected versions not yet enumerated here; use --update-vulns for live OSV data. IOC detection via router_init.js payload filename and getsession.org exfil domain provides coverage independent of version pinning.",
       "packages": {}
+    },
+    "node_ipc_credential_stealer_may_2026": {
+      "title": "node-ipc credential stealer (May 2026)",
+      "ecosystem": "npm",
+      "disclosed": "2026-05-14",
+      "family": "credential harvester",
+      "reference": "https://socket.dev/blog/node-ipc-credential-stealer-may-2026",
+      "notes": "IIFE appended to CJS entrypoint, no install hooks, credential harvester, DNS exfil. Dormant maintainer account takeover via expired domain re-registration (Jan 2025 expiry, May 7 2026 re-registration). Socket Research disclosure May 14 2026.",
+      "packages": {
+        "node-ipc": ["9.1.6", "9.2.3", "12.0.1"]
+      }
+    },
+    "canisterworm_icp_apr_2026": {
+      "title": "CanisterWorm ICP blockchain C2 (Apr 2026)",
+      "ecosystem": "npm",
+      "disclosed": "2026-04-22",
+      "family": "self-propagating worm + blockchain C2",
+      "reference": "https://keepsecurelabs.com/canisterworm-icp-c2",
+      "notes": "ICP blockchain C2 at canister cjn37-uyaaa-aaaac-qgnva-cai.raw.icp0.io. No domain seizure possible, no hosting provider takedown. Keepsecure Labs disclosure April 22 2026.",
+      "packages": {}
+    },
+    "shai_hulud_copycats_may_2026": {
+      "title": "Shai-Hulud open-source copycat packages (May 2026)",
+      "ecosystem": "npm",
+      "disclosed": "2026-05-12",
+      "family": "self-propagating worm (copycat)",
+      "reference": "https://github.com/TeamPCP/shai-hulud",
+      "notes": "Copycat packages using modified C2, based on open-sourced Shai-Hulud worm code published by TeamPCP on GitHub (MIT license) with $1K bounty contest. May 12 2026.",
+      "packages": {
+        "chalk-tempalte": ["*"],
+        "@deadcode09284814/axios-util": ["*"],
+        "axois-utils": ["*"],
+        "color-style-utils": ["*"]
+      }
+    },
+    "nx_console_vscode_may_2026": {
+      "title": "VS Code nrwl.angular-console extension compromise (May 2026)",
+      "ecosystem": "npm",
+      "disclosed": "2026-05-18",
+      "family": "credential stealer + VS Code extension compromise",
+      "reference": "https://step.security/blog/nrwl-angular-console-vscode-compromise-may-2026",
+      "notes": "VS Code extension compromise. Stolen credentials from TanStack @tanstack/zod-adapter infection (7-day dwell time). Targets ~/.claude/settings.json. Led to exfiltration of ~3800 GitHub internal repos. 11-minute window, ~6000 activations via auto-update. StepSecurity disclosure May 18 2026.",
+      "packages": {
+        "nrwl.angular-console": ["18.95.0"]
+      }
+    },
+    "antv_worm_propagation_may_2026": {
+      "title": "Mini Shai-Hulud: AntV/ECharts Worm Propagation (May 2026)",
+      "ecosystem": "npm",
+      "disclosed": "2026-05-19",
+      "family": "self-propagating worm + credential stealer + provenance forging",
+      "reference": "https://socket.dev/blog/antv-echarts-worm-propagation-may-2026",
+      "notes": "Worm propagation from TanStack compromise. 320+ packages, 639 malicious versions, 59M monthly downloads affected. Preinstall hook installs Bun runtime, writes persistence to .claude/ directories, forges SLSA provenance. May 19 2026.",
+      "packages": {
+        "echarts-for-react": ["1.3.7"],
+        "@antv/g2": ["5.2.8"],
+        "@antv/g6": ["5.0.28"],
+        "timeago.js": ["4.0.3"]
+      }
     }
   }
 }

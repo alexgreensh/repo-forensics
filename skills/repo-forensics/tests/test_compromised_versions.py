@@ -1083,3 +1083,39 @@ class TestOverridesRecursionGuard:
         result = scanner._flatten_overrides({"top": a})
         assert isinstance(result, dict)
         # No specific assertion on content — the win is not crashing
+
+
+class TestMay2026Campaigns:
+    """Spot checks for the May 2026 campaign additions (U4 IOC update)."""
+
+    def test_node_ipc_9_1_6_flagged(self):
+        """node-ipc 9.1.6 is a compromised version (credential stealer, May 2026)."""
+        findings = scanner.check_compromised_versions(
+            {"node-ipc": "9.1.6"}, "package.json"
+        )
+        assert len(findings) == 1
+        assert findings[0].severity == "critical"
+        assert "node-ipc" in findings[0].title
+
+    def test_node_ipc_9_1_5_not_flagged(self):
+        """Precision test: node-ipc 9.1.5 is clean — must not be flagged."""
+        findings = scanner.check_compromised_versions(
+            {"node-ipc": "9.1.5"}, "package.json"
+        )
+        assert len(findings) == 0
+
+    def test_chalk_tempalte_entirely_malicious(self):
+        """chalk-tempalte (typo) is a Shai-Hulud copycat — all versions malicious."""
+        findings = scanner.check_known_ioc_packages(
+            ["chalk-tempalte"], "package.json"
+        )
+        assert len(findings) == 1
+        assert findings[0].severity == "critical"
+
+    def test_nrwl_angular_console_18_95_0_flagged(self):
+        """nrwl.angular-console 18.95.0 is the compromised VS Code extension version."""
+        findings = scanner.check_compromised_versions(
+            {"nrwl.angular-console": "18.95.0"}, "package.json"
+        )
+        assert len(findings) == 1
+        assert findings[0].severity == "critical"
