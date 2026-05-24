@@ -25,6 +25,13 @@ Audit untrusted repos before they touch your agent. Fully local, zero dependenci
   <img src="https://img.shields.io/badge/package%20IOCs-140%2B-red.svg" alt="140+ Package IOCs">
 </p>
 <p align="center">
+  <img src="https://img.shields.io/badge/Claude%20Code-auto--scan-5436DA.svg?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZD0iTTEyIDJDNi40OCAyIDIgNi40OCAyIDEyczQuNDggMTAgMTAgMTAgMTAtNC40OCAxMC0xMFMxNy41MiAyIDEyIDJ6IiBmaWxsPSIjZmZmIi8+PC9zdmc+" alt="Claude Code">
+  <img src="https://img.shields.io/badge/Codex%20CLI-auto--scan-10A37F.svg" alt="Codex CLI">
+  <img src="https://img.shields.io/badge/OpenClaw-supported-FF6B35.svg" alt="OpenClaw">
+  <img src="https://img.shields.io/badge/Cursor-supported-00D1FF.svg" alt="Cursor">
+  <img src="https://img.shields.io/badge/NanoClaw-supported-8B5CF6.svg" alt="NanoClaw">
+</p>
+<p align="center">
   <img src="https://img.shields.io/badge/dependencies-zero-brightgreen.svg" alt="Zero Dependencies">
   <img src="https://img.shields.io/badge/telemetry-none-brightgreen.svg" alt="Zero Telemetry">
   <img src="https://img.shields.io/badge/works-offline-blue.svg" alt="Works Offline">
@@ -37,22 +44,52 @@ Audit untrusted repos before they touch your agent. Fully local, zero dependenci
 
 ## Install
 
-**Claude Code plugin, installed directly from this GitHub repo:**
+<details open>
+<summary><b>Claude Code</b> (auto-scan on install)</summary>
 
 ```bash
 /plugin marketplace add alexgreensh/repo-forensics
 /plugin install repo-forensics@alexgreensh-repo-forensics
 ```
 
-Then run `/repo-forensics /path/to/repo` before installing a new skill, plugin, MCP server, or dependency.
+Hooks auto-wire on install. Every `git clone`, `npm install`, `pip install` is scanned automatically. Known-malicious packages are blocked before execution.
 
-**CLI scan, no plugin required:**
+</details>
+
+<details>
+<summary><b>Codex CLI</b> (auto-scan on install)</summary>
+
+Install the plugin via the Codex marketplace. Hooks auto-wire from `plugin.json`. Same three hooks as Claude Code: PreToolUse (IOC gate), PostToolUse (auto-scan), SessionStart (security scan).
+
+</details>
+
+<details>
+<summary><b>OpenClaw</b> (one-time setup)</summary>
+
+Install the plugin, then wire hooks:
+
+```bash
+python3 scripts/openclaw_install.py
+```
+
+This adds PreToolUse, PostToolUse, and SessionStart hooks to `~/.openclaw/openclaw.json`. Uninstall with `--uninstall`.
+
+</details>
+
+<details>
+<summary><b>CLI scan</b> (no plugin required, any platform)</summary>
 
 ```bash
 git clone https://github.com/alexgreensh/repo-forensics.git
 cd repo-forensics
 ./skills/repo-forensics/scripts/run_forensics.sh /path/to/repo
 ```
+
+Works standalone on any machine with Python 3.8+. No pip install, no API keys, no Docker, no dependencies.
+
+</details>
+
+Then run `/repo-forensics /path/to/repo` before installing a new skill, plugin, MCP server, or dependency.
 
 For directory maintainers, awesome-list PRs, launch posts, and social assets, see the [distribution kit](docs/DISTRIBUTION.md).
 
@@ -105,6 +142,27 @@ No pip install. No API keys. No Docker. No dependencies.
 > **Installed via Claude Code plugin marketplace?** Enable auto-update: `/plugin` > **Marketplaces** tab > select repo-forensics > **Enable auto-update**. Otherwise you won't get new scanners, IOCs, or detection fixes automatically.
 
 </details>
+
+---
+
+## Auto-Protection (Hooks)
+
+Once installed as a plugin, repo-forensics runs automatically in the background. No manual scanning needed.
+
+| Hook | Trigger | What It Does |
+|------|---------|-------------|
+| **PreToolUse** | Before any `npm install`, `pip install`, shell command | Blocks known-malicious packages before execution. IOC-only, <10ms. |
+| **PostToolUse** | After `git clone`, `git pull`, `npm install`, `brew upgrade`, etc. | Full 20-scanner audit on the cloned/installed code. |
+| **SessionStart** | Every new session | Detects changed plugins, skills, and MCP servers since last session. Refreshes threat databases daily. |
+
+**Platform support:**
+
+| Platform | Auto-Wire | Manual Setup |
+|----------|-----------|-------------|
+| Claude Code | Plugin install auto-registers all 3 hooks | None needed |
+| Codex CLI | Plugin install auto-registers all 3 hooks | None needed |
+| OpenClaw | Not auto-wired by plugin system | One-time: `python3 scripts/openclaw_install.py` |
+| Cursor / NanoClaw / CLI | N/A (no plugin hook system) | Use manual `/repo-forensics` invocation |
 
 ---
 
