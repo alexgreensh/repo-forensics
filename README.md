@@ -18,7 +18,7 @@ Audit untrusted repos before they touch your agent. Fully local, zero dependenci
 </p>
 <p align="center">
   <img src="https://img.shields.io/badge/scanners-20-blue.svg" alt="20 Scanners">
-  <img src="https://img.shields.io/badge/patterns-750%2B-orange.svg" alt="750+ Patterns">
+  <img src="https://img.shields.io/badge/patterns-800%2B-orange.svg" alt="800+ Patterns">
   <img src="https://img.shields.io/badge/tests-1%2C306-brightgreen.svg" alt="1,306 Tests">
   <img src="https://img.shields.io/badge/CVE%20%2B%20CISA%20KEV-live%20scanning-critical.svg" alt="Live CVE + CISA KEV scanning">
   <img src="https://img.shields.io/badge/correlation%20rules-41-purple.svg" alt="41 Correlation Rules">

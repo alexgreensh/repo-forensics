@@ -263,6 +263,6 @@
   <text x="681" y="520" fill="#80deea" font-size="8" font-weight="600">Repository Integrity</text>
 
   <!-- Title -->
-  <text x="450" y="35" text-anchor="middle" fill="#e3f2fd" font-size="13" font-weight="700" letter-spacing="2" filter="url(#textglow)">repo-forensics — 19-scanner attack surface map</text>
+  <text x="450" y="35" text-anchor="middle" fill="#e3f2fd" font-size="13" font-weight="700" letter-spacing="2" filter="url(#textglow)">repo-forensics — 20-scanner attack surface map</text>
   <text x="450" y="52" text-anchor="middle" fill="#546e7a" font-size="9" letter-spacing="1">every node is a scanner | every line is a path to detection</text>
 </svg>
