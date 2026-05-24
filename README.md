@@ -198,7 +198,7 @@ $ ./run_forensics.sh ./trusted-library
   <img src="diagrams/pipeline.svg" alt="Scanning pipeline: input to 20 scanners to correlation to verdict" width="900"/>
 </p>
 
-Point it at any repository. 20 scanners run in parallel, each checking a different attack surface: prompt injection, supply chain, credential theft, runtime behavior, infrastructure misconfiguration, and more. The correlation engine then cross-references findings across 31 rules to detect compound threats that no single scanner would catch. A dynamic import paired with a network fetch becomes a deferred payload loading finding. An environment variable read combined with an outbound POST becomes a data exfiltration finding.
+Point it at any repository. 20 scanners run in parallel, each checking a different attack surface: prompt injection, supply chain, credential theft, runtime behavior, infrastructure misconfiguration, and more. The correlation engine then cross-references findings across 41 rules to detect compound threats that no single scanner would catch. A dynamic import paired with a network fetch becomes a deferred payload loading finding. An environment variable read combined with an outbound POST becomes a data exfiltration finding.
 
 The result is a severity-ranked verdict with exit codes designed for CI/CD gating.
 
@@ -307,7 +307,7 @@ Individual findings are useful. Compound findings are devastating. The correlati
   <img src="diagrams/attack-flow.svg" alt="Attack flow diagram showing how attack vectors map through scanners to verdicts via the correlation engine" width="900"/>
 </p>
 
-31 rules total:
+41 rules total:
 
 | Pattern | Finding | Severity |
 |---------|---------|----------|
@@ -319,7 +319,7 @@ Individual findings are useful. Compound findings are devastating. The correlati
 | tool metadata poisoning + exec | **Tool Poisoning Chain** | critical |
 
 <details>
-<summary>Show all 31 correlation rules</summary>
+<summary>Show all 41 correlation rules</summary>
 
 | Pattern | Finding | Severity |
 |---------|---------|----------|
