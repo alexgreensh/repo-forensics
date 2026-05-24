@@ -56,7 +56,7 @@ _BUILD_TOOL_BANNERS = re.compile(
 _IIFE_PATTERN = re.compile(
     r'(?:'
     r'\(\s*function\s*\([^)]*\)\s*\{' r'|'  # (function(){
-    r'\(\s*\(\s*\)\s*=>\s*\{'                # (()=>{
+    r'\(\s*\(\s*\)\s*=>\s*\n?\s*\{'          # (()=>{ or (()=>\n{
     r')',
 )
 
@@ -106,8 +106,7 @@ def _shannon_entropy(s):
 
 def _is_build_artifact(content):
     """Check if file content has build tool banner comments."""
-    # Check first 5 lines for build tool banners
-    first_lines = '\n'.join(content.split('\n')[:5])
+    first_lines = '\n'.join(content.split('\n', 5)[:5])
     return bool(_BUILD_TOOL_BANNERS.search(first_lines))
 
 
@@ -133,7 +132,6 @@ def scan_js_entrypoint(file_path, rel_path, content):
     findings = []
     lines = content.split('\n')
 
-    # Skip build artifacts (webpack/rollup/esbuild output)
     if _is_build_artifact(content):
         return findings
 
@@ -155,7 +153,7 @@ def scan_js_entrypoint(file_path, rel_path, content):
 
         # Check if the IIFE contains dangerous patterns
         # Extract content from match to end of file for pattern checking
-        iife_region = tail_content[match.start():]
+        iife_region = tail_content[match.start():match.start() + 10240]
         dangerous_found = []
         for pattern, desc in _IIFE_DANGEROUS_PATTERNS:
             if pattern.search(iife_region):
@@ -361,6 +359,10 @@ def _is_obfuscated_arg(node):
     # JoinedStr (f-string with variables)
     if isinstance(arg, ast.JoinedStr):
         return True
+    # Subscript (e.g. exec(d["p"])), IfExp (e.g. exec(a if x else b)),
+    # Attribute (e.g. exec(obj.payload))
+    if isinstance(arg, (ast.Subscript, ast.IfExp, ast.Attribute)):
+        return True
     return False
 
 
@@ -387,7 +389,7 @@ def scan_python_entrypoint(file_path, rel_path):
 
     try:
         tree = ast.parse(source, filename=file_path)
-    except (SyntaxError, ValueError, RecursionError):
+    except (SyntaxError, ValueError, RecursionError, MemoryError):
         return findings
 
     source_lines = source.split('\n')

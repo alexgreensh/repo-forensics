@@ -2,15 +2,59 @@
   <img src="diagrams/hero.svg" alt="Repo Forensics v2" width="900"/>
 </p>
 
+<h1 align="center">Repo Forensics</h1>
+
+<h3 align="center">npm audit for AI-agent plugins, skills, and MCP servers.</h3>
+
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-blue.svg" alt="License: PolyForm Noncommercial"></a>
-  <img src="https://img.shields.io/badge/python-3.8%2B-blue.svg" alt="Python 3.8+">
-  <img src="https://img.shields.io/badge/dependencies-zero-brightgreen.svg" alt="Zero Dependencies">
-  <img src="https://img.shields.io/badge/scanners-19-orange.svg" alt="19 Scanners">
-  <img src="https://img.shields.io/badge/patterns-750%2B-red.svg" alt="750+ Patterns">
-  <img src="https://img.shields.io/badge/CVE%20%2B%20CISA%20KEV-live%20scanning-critical.svg" alt="Live CVE + CISA KEV scanning">
-  <a href="https://github.com/sponsors/alexgreensh"><img src="https://img.shields.io/badge/Sponsor-%E2%9D%A4-ff69b4.svg?labelColor=262626" alt="Sponsor"></a>
+Audit untrusted repos before they touch your agent. Fully local, zero dependencies, zero telemetry.
 </p>
+
+<p align="center">
+  <a href="https://github.com/alexgreensh/repo-forensics/releases"><img src="https://img.shields.io/badge/version-2.8.0-green.svg" alt="Version 2.8.0"></a>
+  <a href="https://github.com/alexgreensh/repo-forensics/releases"><img src="https://img.shields.io/github/release-date/alexgreensh/repo-forensics?label=last%20release&color=blue" alt="Last Release"></a>
+  <a href="https://github.com/alexgreensh/repo-forensics/stargazers"><img src="https://img.shields.io/github/stars/alexgreensh/repo-forensics" alt="GitHub Stars"></a>
+  <a href="https://github.com/alexgreensh/repo-forensics/commits/main"><img src="https://img.shields.io/github/commit-activity/m/alexgreensh/repo-forensics" alt="Commit Activity"></a>
+</p>
+<p align="center">
+  <img src="https://img.shields.io/badge/scanners-20-blue.svg" alt="20 Scanners">
+  <img src="https://img.shields.io/badge/patterns-750%2B-orange.svg" alt="750+ Patterns">
+  <img src="https://img.shields.io/badge/tests-1%2C306-brightgreen.svg" alt="1,306 Tests">
+  <img src="https://img.shields.io/badge/CVE%20%2B%20CISA%20KEV-live%20scanning-critical.svg" alt="Live CVE + CISA KEV scanning">
+  <img src="https://img.shields.io/badge/correlation%20rules-41-purple.svg" alt="41 Correlation Rules">
+  <img src="https://img.shields.io/badge/package%20IOCs-140%2B-red.svg" alt="140+ Package IOCs">
+</p>
+<p align="center">
+  <img src="https://img.shields.io/badge/dependencies-zero-brightgreen.svg" alt="Zero Dependencies">
+  <img src="https://img.shields.io/badge/telemetry-none-brightgreen.svg" alt="Zero Telemetry">
+  <img src="https://img.shields.io/badge/works-offline-blue.svg" alt="Works Offline">
+  <img src="https://img.shields.io/badge/python-3.8%2B-blue.svg" alt="Python 3.8+">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-blue.svg" alt="License: PolyForm Noncommercial"></a>
+  <a href="https://github.com/sponsors/alexgreensh"><img src="https://img.shields.io/badge/sponsor-keep%20it%20free-%23ea4aaa?logo=githubsponsors" alt="Sponsor - Keep It Free"></a>
+</p>
+
+---
+
+## Install
+
+**Claude Code plugin, installed directly from this GitHub repo:**
+
+```bash
+/plugin marketplace add alexgreensh/repo-forensics
+/plugin install repo-forensics@alexgreensh-repo-forensics
+```
+
+Then run `/repo-forensics /path/to/repo` before installing a new skill, plugin, MCP server, or dependency.
+
+**CLI scan, no plugin required:**
+
+```bash
+git clone https://github.com/alexgreensh/repo-forensics.git
+cd repo-forensics
+./skills/repo-forensics/scripts/run_forensics.sh /path/to/repo
+```
+
+For directory maintainers, awesome-list PRs, launch posts, and social assets, see the [distribution kit](docs/DISTRIBUTION.md).
 
 ---
 
@@ -22,7 +66,7 @@ Nobody does. The vetting step doesn't exist. [1,184 malicious skills](https://ww
 
 You won't feel it. There are no symptoms.
 
-**Repo Forensics is the vetting step.** Audit any repo, skill, MCP server, or plugin before it touches your machine. Works across the AI agent ecosystem: Claude Code, OpenClaw, Codex, Cursor, NanoClaw, or anything that installs third-party code. 19 scanners, runtime behavior prediction, ClawHavoc campaign detection. Runs in seconds.
+**Repo Forensics is the vetting step.** Audit any repo, skill, MCP server, or plugin before it touches your machine. Works across the AI agent ecosystem: Claude Code, OpenClaw, Codex, Cursor, NanoClaw, or anything that installs third-party code. 20 scanners, runtime behavior prediction, ClawHavoc campaign detection. Runs in seconds.
 
 **Your code never leaves your machine.** Zero dependencies. No cloud API. No telemetry. Unlike mcp-scan, nothing is uploaded anywhere.
 
@@ -93,12 +137,42 @@ $ ./run_forensics.sh ./trusted-library
 ## How It Works
 
 <p align="center">
-  <img src="diagrams/pipeline.svg" alt="Scanning pipeline: input to 19 scanners to correlation to verdict" width="900"/>
+  <img src="diagrams/pipeline.svg" alt="Scanning pipeline: input to 20 scanners to correlation to verdict" width="900"/>
 </p>
 
-Point it at any repository. 19 scanners run in parallel, each checking a different attack surface: prompt injection, supply chain, credential theft, runtime behavior, infrastructure misconfiguration, and more. The correlation engine then cross-references findings across 31 rules to detect compound threats that no single scanner would catch. A dynamic import paired with a network fetch becomes a deferred payload loading finding. An environment variable read combined with an outbound POST becomes a data exfiltration finding.
+Point it at any repository. 20 scanners run in parallel, each checking a different attack surface: prompt injection, supply chain, credential theft, runtime behavior, infrastructure misconfiguration, and more. The correlation engine then cross-references findings across 31 rules to detect compound threats that no single scanner would catch. A dynamic import paired with a network fetch becomes a deferred payload loading finding. An environment variable read combined with an outbound POST becomes a data exfiltration finding.
 
 The result is a severity-ranked verdict with exit codes designed for CI/CD gating.
+
+---
+
+## Battle-Tested Against Real Attacks
+
+1,306 tests across 34 test files. Not synthetic toy examples: detection patterns built from real supply chain campaigns that hit production systems.
+
+**Named attack campaigns in the IOC database:**
+
+| Campaign | Date | What Happened |
+|----------|------|---------------|
+| Shai-Hulud v1 | Sept 2025 | Self-propagating npm worm, 500+ packages, `postinstall` credential theft |
+| Chalk/Debug maintainer phish | Sept 2025 | 20+ popular packages, crypto wallet drainer via install hooks |
+| DuckDB compromise | Sept 2025 | Same actor as Chalk, targeted data tooling |
+| ESLint/Prettier phishing | Jul 2025 | `postinstall` script exfiltrated npm tokens |
+| Nx S1ngularity | Aug 2025 | GitHub/npm/AWS token harvester across 8 Nx packages |
+| Shai-Hulud v2 | Nov 2025 | 800+ packages, `preinstall` with Bun runtime stager, destructive wipe fallback |
+| Ghost Campaign | Feb 2026 | Entirely malicious packages, no legitimate prior versions |
+| NK Contagious Interview | Mar 2026 | North Korean state-sponsored RAT via npm |
+| React Native compromise | Mar 2026 | Mobile credential stealer |
+| LiteLLM .pth injection | Mar 2026 | Python site-packages startup injection |
+| Lazarus GraphAlgo | May 2025-Feb 2026 | Lazarus Group campaign targeting graph/algo devs |
+| TeamPCP Wave 3 / Bitwarden | Apr 2026 | Bitwarden CLI worm targeting `~/.claude.json` |
+| Mini Shai-Hulud | Apr 2026 | SAP npm packages, `preinstall` + Bun, 39+ credential paths |
+| TanStack Shai-Hulud | May 2026 | 42 TanStack packages, forged SLSA provenance, dead-man wiper |
+| @antv ecosystem | May 2026 | 320+ packages, 59M monthly downloads affected |
+
+Every campaign above has version-pinned IOCs in `compromised_versions.json`, detection rules in the lifecycle and dependency scanners, and correlation rules for compound attack patterns.
+
+**The tests are safe to run.** All 1,306 tests use synthetic fixtures in temporary directories. No real malware is downloaded or executed. Pattern matching runs against fake package.json files containing attack signatures, the same way antivirus software tests against EICAR strings.
 
 ---
 
@@ -114,7 +188,7 @@ The result is a severity-ranked verdict with exit codes designed for CI/CD gatin
 | VirusTotal + ClawHub | ClawHub signature scanning | Surface-level. Signature-based, not structural. No prompt injection detection, no taint tracking. |
 | Manual review | Reading code | Misses zero-width unicode, cross-file taint flows, tool description injection. |
 
-**repo-forensics:** 19 scanners. Zero dependencies. Fully offline. Runtime behavior prediction. Post-incident forensics. Built for the AI agent ecosystem.
+**repo-forensics:** 20 scanners. Zero dependencies. Fully offline. Runtime behavior prediction. Post-incident forensics. Built for the AI agent ecosystem.
 
 ---
 
@@ -126,12 +200,12 @@ The result is a severity-ranked verdict with exit codes designed for CI/CD gatin
 
 ---
 
-## The 19 Scanners
+## The 20 Scanners
 
 Each scanner targets a distinct attack surface. Together they cover the full threat landscape for AI agent code.
 
 <p align="center">
-  <img src="diagrams/scanner-map.svg" alt="19-scanner attack surface map showing all scanners organized by threat category" width="900"/>
+  <img src="diagrams/scanner-map.svg" alt="20-scanner attack surface map showing all scanners organized by threat category" width="900"/>
 </p>
 
 | Scanner | What It Detects | Approach |
@@ -144,7 +218,7 @@ Each scanner targets a distinct attack surface. Together they cover the full thr
 | **binary** | Executables disguised as images/text/docs, **audio steganography** (executable payloads in WAV/MP3/FLAC), **embedded PE detection** (polyglot files with MZ+PE at non-zero offset) | Magic number detection, audio data section analysis, PE signature validation |
 
 <details>
-<summary>Show all 19 scanners</summary>
+<summary>Show all 20 scanners</summary>
 
 | Scanner | What It Detects | Approach |
 |---------|----------------|----------|
@@ -161,6 +235,7 @@ Each scanner targets a distinct attack surface. Together they cover the full thr
 | **infra** | Docker misconfig (ENV/ARG secrets, .env COPY), K8s breakouts, GHA expression injection, **known compromised GitHub Actions** (tj-actions, reviewdog, TeamPCP), Claude config CVEs | Dockerfile, YAML, workflow, and settings.json analysis |
 | **devcontainer** | Host secret mounts, privileged mode, docker.sock escape, remoteEnv localEnv interpolation, lifecycle command risks, untrusted features | JSON structure analysis of devcontainer.json |
 | **post_incident** | npm cache artifacts, RAT binaries, C2 persistence, install log traces, compromised node_modules | File existence checks, npm cache/log scanning, LaunchAgent grep |
+| **entrypoint** | IIFE injection at end of CJS entrypoints (node-ipc pattern), import-time execution in Python `__init__.py`/`setup.py` (durabletask pattern), high-entropy appended content | CJS structural analysis, Python AST top-level scope walking |
 
 </details>
 
@@ -387,7 +462,7 @@ Exit codes: `0` = clean, `1` = warn, `2` = block merge.
 | **IOC auto-update** | `--update-iocs` pulls latest C2 IPs, malicious domains, known-bad packages |
 | **Installation verification** | `--verify-install` checks repo-forensics itself for tampering |
 | **Manifest drift** | Declared vs actual imports, phantom deps, runtime installs |
-| **983 pytest tests** | Full coverage across 20+ test files |
+| **1,306 pytest tests** | Full coverage across 34 test files |
 
 </details>
 

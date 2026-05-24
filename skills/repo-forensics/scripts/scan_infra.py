@@ -33,8 +33,9 @@ MIN_RELEASE_AGE_DAYS = 3
 #   DECODED=$(echo $KEY | base64 --decode)  (captured in variable, not exec'd)
 #   base64 -w0 < file.json > out.b64        (encode-only, no decode pipe)
 _B64_EXEC_RE = re.compile(
-    r'base64\s+(?:-d|--decode)\s*\|'   # base64 -d | ... (output piped to shell)
-    r'|base64\s+-d\s*<<<'               # base64 -d <<< "..." heredoc variant
+    r'base64\s+(?:-d|--decode)\s*\|'    # base64 -d | ... (output piped to shell)
+    r'|base64\s+(?:-d|--decode)\s*<<<'  # base64 -d <<< "..." heredoc variant
+    r'|base64\s+(?:-d|--decode)\s*>'    # base64 -d > /tmp/x (redirect-then-exec)
 )
 
 # Known compromised GitHub Actions (2025-2026 supply chain attacks)
@@ -393,7 +394,9 @@ def scan_github_actions(file_path, rel_path):
                     ))
                     break
             # Megalodon: base64 decode-and-execute in multi-line run blocks
-            if _B64_EXEC_RE.search(block):
+            # Skip if the per-line loop already caught this (avoid double-firing)
+            b64_already = any(f.line == line_no and "Megalodon" in f.title for f in findings)
+            if not b64_already and _B64_EXEC_RE.search(block):
                 findings.append(core.Finding(
                     scanner=SCANNER_NAME, severity="critical",
                     title="GHA: Base64 Decode-and-Execute in Workflow (Megalodon pattern)",

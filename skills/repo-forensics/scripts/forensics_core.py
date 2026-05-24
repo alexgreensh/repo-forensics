@@ -1052,6 +1052,37 @@ def correlate(findings):
                 category="llmo-attack"
             ))
 
+        # Rule 40: Entrypoint payload + credential theft
+        # Matches entrypoint scanner categories: entrypoint-iife, entrypoint-import-exec
+        entrypoint_keywords = {"entrypoint", "entrypoint-iife", "entrypoint-import-exec"}
+        entrypoint_credential_keywords = {"credential", "env", "process.env", "os.environ"}
+        if has_category(file_findings, entrypoint_keywords) and has_category(file_findings, entrypoint_credential_keywords):
+            correlated.append(Finding(
+                scanner="correlation",
+                severity="critical",
+                title="Supply Chain Entrypoint: Credential Theft via require()/import",
+                description="Entrypoint manipulation combined with credential access in the same file. This co-occurrence indicates a supply chain compromise: malicious code injected at the module entrypoint harvests environment variables or credentials on every require()/import.",
+                file=filepath,
+                line=0,
+                snippet="[compound: entrypoint manipulation + credential access]",
+                category="entrypoint-credential-chain"
+            ))
+
+        # Rule 41: Entrypoint payload + network exfiltration
+        # Matches entrypoint scanner categories: entrypoint-iife, entrypoint-import-exec
+        entrypoint_network_keywords = {"network", "fetch", "request", "http", "exfil", "socket"}
+        if has_category(file_findings, entrypoint_keywords) and has_category(file_findings, entrypoint_network_keywords):
+            correlated.append(Finding(
+                scanner="correlation",
+                severity="critical",
+                title="Supply Chain Entrypoint: Data Exfiltration via require()/import",
+                description="Entrypoint manipulation combined with network access in the same file. Code injected at the module entrypoint can silently exfiltrate data on every require()/import without triggering normal execution-path analysis.",
+                file=filepath,
+                line=0,
+                snippet="[compound: entrypoint manipulation + network exfiltration]",
+                category="entrypoint-exfiltration-chain"
+            ))
+
     # ================================================================
     # Repo-wide correlation rules (not per-file)
     # These rules check for compound threats across the entire repo,

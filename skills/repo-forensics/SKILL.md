@@ -18,7 +18,7 @@ Deep security auditing for repositories, AI agent skills, and MCP servers.
 
 - **Auto-scan hook** (v2): PostToolUse hook auto-triggers on `git clone`, `git pull`, `pip install`, `npm install/update`, `gem install/update`, `brew install/upgrade`, etc. Zero-overhead for non-matching commands.
 - **Pre-execution gate** (v2.6): PreToolUse hook blocks known-malicious packages and pipe-to-shell commands BEFORE execution. IOC-only, <10ms latency, no subprocess calls.
-- **Session security scanner** (v2.6.3): SessionStart hook detects updated plugins/skills/MCP servers, refreshes threat databases daily, runs fast IOC check + full 19-scanner deep scan on changed items. Sub-1ms when nothing changed.
+- **Session security scanner** (v2.6.3): SessionStart hook detects updated plugins/skills/MCP servers, refreshes threat databases daily, runs fast IOC check + full 20-scanner deep scan on changed items. Sub-1ms when nothing changed.
 - **.pth file injection detection** (v2): Detects liteLLM-style Python startup injection attacks (exec/eval/base64/known IOC filenames)
 - **Transitive dependency scanning** (v2): Deep-parses `package-lock.json`, `yarn.lock`, `poetry.lock`, `Pipfile.lock` for supply chain IOCs
 - **DAST scanner** (`scan_dast.py`): Dynamic analysis of Claude Code hooks with 8 malicious payload types, sandboxed execution
@@ -30,7 +30,7 @@ Deep security auditing for repositories, AI agent skills, and MCP servers.
 - **Manifest drift detection** (`scan_manifest_drift.py`): Compares declared vs actual dependencies, catches phantom deps, runtime installs, conditional import+install fallbacks
 - **MCP rug pull detection**: Tool descriptions sourced from database, network, env vars, or conditional logic
 - **Enhanced AST analysis**: 12 patterns including marshal.loads, types.CodeType, sys.addaudithook, bytes decode obfuscation, self-modification
-- **Test suite**: 773 pytest tests covering all scanners
+- **Test suite**: 1,280+ pytest tests covering all scanners
 - **OpenClaw/ClawHub scanning**: Auto-detects OpenClaw skills, validates frontmatter, tools.json, SOUL.md, .clawhubignore
 - **Anti-forensics detection** (v2): Self-deleting installers, package.json overwrite, version mismatch (Axios supply chain pattern)
 - **Compromised version detection** (v2): Flags known-bad versions of legitimate packages (Axios 1.14.1/0.30.4, liteLLM 1.82.8)
@@ -44,7 +44,7 @@ Deep security auditing for repositories, AI agent skills, and MCP servers.
 - **process.env exposure detection** (v2.6.5): Flags console.log(process.env), JSON.stringify(process.env), and crash report env dumps
 - **Docker ARG secret detection** (v2.6.5): Catches secrets passed via ARG directives (permanently visible in docker history)
 - **1Password/Vault token detection** (v2.6.5): OP_CONNECT_TOKEN, ops_ service account tokens, hvs. Vault tokens
-- **19 scanners** with 21 correlation rules
+- **20 scanners** with 41 correlation rules
 
 ## When to Use
 
@@ -58,7 +58,7 @@ Deep security auditing for repositories, AI agent skills, and MCP servers.
 
 ## Quick Start
 
-Full audit (all 19 scanners):
+Full audit (all 20 scanners):
 ```bash
 ./scripts/run_forensics.sh /path/to/repo
 ```

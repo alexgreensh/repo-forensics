@@ -1,9 +1,24 @@
 {
   "name": "repo-forensics",
   "version": "2.8.0",
-  "description": "Auto-scan repositories and packages for security threats on install/clone",
+  "description": "Offline security scanner for AI-agent repos, skills, plugins, and MCP servers",
   "author": {
     "name": "Alex Greenshpun",
     "url": "https://linkedin.com/in/alexgreensh"
-  }
+  },
+  "homepage": "https://github.com/alexgreensh/repo-forensics",
+  "repository": "https://github.com/alexgreensh/repo-forensics",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "keywords": [
+    "security",
+    "agent-security",
+    "supply-chain",
+    "mcp",
+    "claude-code",
+    "codex",
+    "skills",
+    "plugins",
+    "forensics",
+    "scanner"
+  ]
 }

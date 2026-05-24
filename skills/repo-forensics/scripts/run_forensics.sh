@@ -10,7 +10,7 @@ if [ -z "${1:-}" ]; then
     echo "Usage: $0 <repo_path> [options]"
     echo ""
     echo "Modes:"
-    echo "  (default)              Full audit - all 19 scanners"
+    echo "  (default)              Full audit - all 20 scanners"
     echo "  --skill-scan           Focused on AI skill threats (10 scanners, faster)"
     echo "  --inventory            Enumerate installed AI-agent stacks (zero-LLM, JSON output)"
     echo ""
@@ -157,7 +157,7 @@ if [ "$MAX_JOBS" -le 0 ] 2>/dev/null; then
     [ "$MAX_JOBS" -gt 8 ] && MAX_JOBS=8
     [ "$MAX_JOBS" -lt 4 ] && MAX_JOBS=4
 fi
-[ "$MAX_JOBS" -gt 19 ] && MAX_JOBS=19
+[ "$MAX_JOBS" -gt 20 ] && MAX_JOBS=20
 
 # FIFO semaphore: N tokens pre-fill the pipe. throttled_run blocks on
 # read until a token is available, returns it after the job completes.
@@ -275,7 +275,7 @@ else
     # Full audit: all scanners in parallel
     if [ "$FORMAT" != "json" ]; then
         echo ""
-        echo "[*] Running all 19 scanners in parallel..."
+        echo "[*] Running all 20 scanners in parallel..."
     fi
     throttled_run run_scanner "entropy" "scan_entropy.py" &
     throttled_run run_scanner "binary" "scan_binary.py" &
@@ -300,6 +300,7 @@ else
     throttled_run run_scanner "dast" "scan_dast.py" &
     throttled_run run_scanner "post_incident" "scan_post_incident.py" &
     throttled_run run_scanner "devcontainer" "scan_devcontainer.py" &
+    throttled_run run_scanner "entrypoint" "scan_entrypoint.py" &
     wait
 fi
 

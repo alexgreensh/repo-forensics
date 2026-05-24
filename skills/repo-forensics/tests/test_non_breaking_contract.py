@@ -64,6 +64,7 @@ EXPECTED_BASE_SCANNER_NAMES = {
     "sast",
     "secrets",
     "skill_threats",
+    "entrypoint",
 }
 
 # Synthetic scanner entries injected by aggregate_json.py AFTER the real
