@@ -1,0 +1,27 @@
+{
+  "name": "repo-forensics",
+  "version": "2.8.0",
+  "description": "Audit untrusted repos before they touch your agent. Fully local, zero dependencies, zero telemetry.",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Repo Forensics",
+    "shortDescription": "Security scanner for AI agent plugins, skills, and MCP servers.",
+    "longDescription": "Audit any repo, skill, MCP server, or plugin before installation. 20 scanners detect supply chain attacks, prompt injection, credential theft, and runtime exploitation. Zero dependencies, fully offline, nothing uploaded.",
+    "developerName": "Alex Greenshpun",
+    "category": "Security",
+    "capabilities": [
+      "Supply chain attack detection",
+      "Prompt injection scanning",
+      "Credential theft detection",
+      "Runtime behavior prediction",
+      "CVE + CISA KEV live scanning"
+    ],
+    "websiteURL": "https://github.com/alexgreensh/repo-forensics",
+    "defaultPrompt": [
+      "Run repo-forensics on this project and show me the security findings.",
+      "Scan this repo for supply chain attacks and prompt injection.",
+      "Audit this MCP server before I install it."
+    ],
+    "brandColor": "#DC2626"
+  }
+}
