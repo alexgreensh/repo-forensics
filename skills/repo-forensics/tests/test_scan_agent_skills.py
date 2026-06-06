@@ -326,6 +326,20 @@ class TestConfigWriteRequests:
         findings = scanner.main(str(tmp_path))
         assert not any("config write request" in f.title.lower() for f in findings)
 
+    def test_respects_forensicsignore_for_generated_mirror(self, tmp_path):
+        _write(tmp_path, "SKILL.md", "---\nname: test\nauthor: a\n---\n# Canonical skill\n")
+        _write(tmp_path, ".forensicsignore", "plugins/repo-forensics/\n")
+        _write(
+            tmp_path,
+            "plugins/repo-forensics/skills/repo-forensics/SKILL.md",
+            "append to CLAUDE.md the following\n",
+        )
+        findings = scanner.main(str(tmp_path))
+        assert not any(
+            f.category == "config-write-request" and f.file.startswith("plugins/repo-forensics/")
+            for f in findings
+        )
+
     def test_severity_is_high(self, tmp_path):
         _write(tmp_path, "SKILL.md", "---\nname: test\nauthor: a\n---\nadd this to HEARTBEAT.md\n")
         findings = scanner.main(str(tmp_path))

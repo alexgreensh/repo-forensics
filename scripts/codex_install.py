@@ -12,26 +12,32 @@ Usage:
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
 MARKER = "repo-forensics"
+HOOK_EVENTS = ("PreToolUse", "PostToolUse", "SessionStart")
+CODEX_STATE_EVENTS = {
+    "PreToolUse": "pre_tool_use",
+    "PostToolUse": "post_tool_use",
+    "SessionStart": "session_start",
+}
 
 
 def _repo_root():
     return Path(__file__).resolve().parents[1]
 
 
-def _hook_command(script_rel_path):
+def _hook_command(script_name):
     root = _repo_root()
-    script = root / script_rel_path
+    script = root / "hooks" / script_name
     if not script.exists():
         print(f"[repo-forensics] WARNING: {script} not found", file=sys.stderr)
-    return f'CLAUDE_PLUGIN_ROOT="{root}" bash "{root / "hooks" / script_rel_path.split("/")[-1]}"'
+    return f'CLAUDE_PLUGIN_ROOT="{root}" bash "{script}"'
 
 
 def _managed_hooks():
-    root = _repo_root()
     return {
         "PreToolUse": [
             {
@@ -39,7 +45,7 @@ def _managed_hooks():
                 "hooks": [
                     {
                         "type": "command",
-                        "command": f'CLAUDE_PLUGIN_ROOT="{root}" bash "{root}/hooks/run_pre_scan.sh"',
+                        "command": _hook_command("run_pre_scan.sh"),
                         "timeout": 10,
                     }
                 ],
@@ -51,7 +57,7 @@ def _managed_hooks():
                 "hooks": [
                     {
                         "type": "command",
-                        "command": f'CLAUDE_PLUGIN_ROOT="{root}" bash "{root}/hooks/run_auto_scan.sh"',
+                        "command": _hook_command("run_auto_scan.sh"),
                         "timeout": 30,
                     }
                 ],
@@ -62,8 +68,12 @@ def _managed_hooks():
                 "hooks": [
                     {
                         "type": "command",
-                        "command": f'CLAUDE_PLUGIN_ROOT="{root}" bash "{root}/hooks/run_session_scan.sh"',
+                        "command": _hook_command("run_session_scan.sh"),
                         "timeout": 25,
+                    },
+                    {
+                        "type": "command",
+                        "command": _hook_command("first-run-nudge.sh"),
                     }
                 ],
             }
@@ -77,6 +87,11 @@ def _codex_hooks_path():
     return codex_home / "hooks.json"
 
 
+def _codex_config_path():
+    codex_home = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex"))
+    return codex_home / "config.toml"
+
+
 def _load_existing(path):
     if not path.exists():
         return {}
@@ -88,22 +103,144 @@ def _load_existing(path):
 
 
 def _is_ours(hook_entry):
+    if not isinstance(hook_entry, dict):
+        return False
+
+    cmd = hook_entry.get("command", "")
+    if isinstance(cmd, str) and MARKER in cmd:
+        return True
+
     for h in hook_entry.get("hooks", []):
-        cmd = h.get("command", "")
-        if MARKER in cmd:
+        if _is_ours(h):
             return True
     return False
 
 
-def _remove_ours(existing):
+def _remove_ours_from_event_map(event_map):
     cleaned = {}
-    for event, entries in existing.items():
-        if event == "hooks":
+    if not isinstance(event_map, dict):
+        return cleaned
+
+    for event, entries in event_map.items():
+        if not isinstance(entries, list):
+            cleaned[event] = entries
             continue
-        kept = [e for e in entries if not _is_ours(e)]
+
+        kept = [entry for entry in entries if not _is_ours(entry)]
         if kept:
             cleaned[event] = kept
     return cleaned
+
+
+def _remove_ours(existing):
+    """Remove repo-forensics hooks from both current and legacy Codex layouts.
+
+    Codex reads hooks from the nested {"hooks": {...}} schema. Early versions of
+    this installer wrote Claude-style top-level event keys, which Codex ignores.
+    Reinstall/uninstall must clean up those dead repo-forensics entries without
+    promoting unrelated third-party top-level commands into live hooks.
+    """
+    if not isinstance(existing, dict):
+        return {}
+
+    cleaned = {}
+    for key, value in existing.items():
+        if key == "hooks":
+            nested_hooks = _remove_ours_from_event_map(value)
+            if nested_hooks:
+                cleaned["hooks"] = nested_hooks
+            continue
+
+        if key in HOOK_EVENTS and isinstance(value, list):
+            legacy_kept = [entry for entry in value if not _is_ours(entry)]
+            if legacy_kept:
+                cleaned[key] = legacy_kept
+            continue
+
+        cleaned[key] = value
+
+    return cleaned
+
+
+def _write_config(path, data):
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
+        f.write("\n")
+
+
+def _schema_errors(data):
+    errors = []
+    if not isinstance(data, dict):
+        return ["hooks file is not a JSON object"]
+
+    hooks = data.get("hooks")
+    if not isinstance(hooks, dict):
+        return ['hooks file must use Codex nested schema: {"hooks": {...}}']
+
+    for event in HOOK_EVENTS:
+        entries = hooks.get(event)
+        if not isinstance(entries, list):
+            errors.append(f"missing Codex hook list: hooks.{event}")
+            continue
+        if not any(_is_ours(entry) for entry in entries):
+            errors.append(f"missing repo-forensics command in hooks.{event}")
+
+        legacy_entries = data.get(event, [])
+        if isinstance(legacy_entries, list) and any(_is_ours(entry) for entry in legacy_entries):
+            errors.append(f"repo-forensics command still present in legacy top-level {event}")
+
+    return errors
+
+
+def _registered_events(path=None, config_path=None):
+    path = Path(path or _codex_hooks_path())
+    config_path = Path(config_path or _codex_config_path())
+    if not config_path.exists():
+        return set()
+
+    try:
+        text = config_path.read_text()
+    except OSError:
+        return set()
+
+    registered = set()
+    prefix = f"{path}:"
+    for match in re.finditer(r'^\[hooks\.state\."([^"]+)"\]\s*$', text, re.MULTILINE):
+        key = match.group(1)
+        if key.startswith(prefix):
+            registered.add(key[len(prefix):].split(":", 1)[0])
+    return registered
+
+
+def verify(require_registered=False):
+    path = _codex_hooks_path()
+    if not path.exists():
+        print(f"[repo-forensics] Codex hooks file not found: {path}", file=sys.stderr)
+        return 1
+
+    data = _load_existing(path)
+    errors = _schema_errors(data)
+
+    expected_state_events = set(CODEX_STATE_EVENTS.values())
+    registered = _registered_events(path)
+    missing_registered = expected_state_events - registered
+    if require_registered and missing_registered:
+        missing = ", ".join(sorted(missing_registered))
+        errors.append(f"Codex has not registered these hook events yet: {missing}")
+
+    if errors:
+        print("[repo-forensics] Codex hook verification failed:", file=sys.stderr)
+        for error in errors:
+            print(f"  - {error}", file=sys.stderr)
+        return 1
+
+    print(f"[repo-forensics] Codex hook schema verified: {path}")
+    if registered:
+        seen = ", ".join(sorted(registered & expected_state_events))
+        print(f"[repo-forensics] Codex registration state seen: {seen}")
+    else:
+        print("[repo-forensics] Codex registration state not seen yet; restart Codex, then run --verify --require-registered")
+    return 0
 
 
 def install():
@@ -111,20 +248,22 @@ def install():
     existing = _load_existing(path)
 
     cleaned = _remove_ours(existing)
+    hooks = cleaned.setdefault("hooks", {})
+    if not isinstance(hooks, dict):
+        hooks = {}
+        cleaned["hooks"] = hooks
 
     managed = _managed_hooks()
     for event, entries in managed.items():
-        if event not in cleaned:
-            cleaned[event] = []
-        cleaned[event].extend(entries)
+        if not isinstance(hooks.get(event), list):
+            hooks[event] = []
+        hooks[event].extend(entries)
 
-    with open(path, "w") as f:
-        json.dump(cleaned, f, indent=2)
-        f.write("\n")
+    _write_config(path, cleaned)
 
     print(f"[repo-forensics] Hooks installed to {path}")
-    print("[repo-forensics] 3 hooks active: PreToolUse (IOC gate), PostToolUse (auto-scan), SessionStart (security scan)")
-    return 0
+    print("[repo-forensics] 3 hook events active: PreToolUse (IOC gate), PostToolUse (auto-scan), SessionStart (security scan + first-run nudge)")
+    return verify(require_registered=False)
 
 
 def uninstall():
@@ -136,9 +275,7 @@ def uninstall():
     existing = _load_existing(path)
     cleaned = _remove_ours(existing)
 
-    with open(path, "w") as f:
-        json.dump(cleaned, f, indent=2)
-        f.write("\n")
+    _write_config(path, cleaned)
 
     print(f"[repo-forensics] Hooks removed from {path}")
     return 0
@@ -147,8 +284,16 @@ def uninstall():
 def main():
     parser = argparse.ArgumentParser(description="Install repo-forensics hooks for Codex CLI")
     parser.add_argument("--uninstall", action="store_true", help="Remove repo-forensics hooks")
+    parser.add_argument("--verify", action="store_true", help="Verify Codex hook schema and registration state")
+    parser.add_argument(
+        "--require-registered",
+        action="store_true",
+        help="With --verify, fail until Codex config.toml shows the hooks were registered",
+    )
     args = parser.parse_args()
 
+    if args.verify:
+        return verify(require_registered=args.require_registered)
     if args.uninstall:
         return uninstall()
     return install()

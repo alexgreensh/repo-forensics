@@ -16,6 +16,7 @@ checksums, tamper the symlink, and assert verification fails.
 
 import json
 import os
+import shutil
 import sys
 
 import pytest
@@ -79,6 +80,16 @@ class TestSymlinkTracking:
             "Symlinks whose targets resolve outside skill_root must NOT be "
             "tracked. They are outside our security domain."
         )
+
+    def test_get_tracked_symlinks_ignores_sibling_prefix_collision(self, tmp_path):
+        """A sibling path named repo-forensics-evil is not inside repo-forensics."""
+        skill_root = _build_fake_repo(tmp_path, include_symlink=False)
+        sibling = tmp_path / "skills" / "repo-forensics-evil"
+        sibling.mkdir()
+        os.symlink("skills/repo-forensics-evil", tmp_path / "skill")
+
+        symlinks = verify_install.get_tracked_symlinks(str(tmp_path), skill_root)
+        assert "skill" not in symlinks
 
     def test_get_tracked_symlinks_handles_missing_repo_root(self, tmp_path):
         skill_root = _build_fake_repo(tmp_path, include_symlink=False)
@@ -258,3 +269,108 @@ class TestHookFileTracking:
         assert not passed
         report_text = "\n".join(report)
         assert "HOOK MISSING" in report_text or "MISSING" in report_text
+
+
+class TestPluginManifestTracking:
+    """Repo-root plugin manifest integrity tracking."""
+
+    def _build_repo_with_manifests(self, tmp_path):
+        skill_root = tmp_path / "skills" / "repo-forensics"
+        skill_root.mkdir(parents=True)
+        (skill_root / "SKILL.md").write_text("# Test\n")
+        (skill_root / "scripts").mkdir()
+        (skill_root / "scripts" / "noop.py").write_text("pass\n")
+
+        claude_dir = tmp_path / ".claude-plugin"
+        claude_dir.mkdir()
+        (claude_dir / "plugin.json").write_text('{"name":"repo-forensics"}')
+
+        codex_dir = tmp_path / ".codex-plugin"
+        codex_dir.mkdir()
+        (codex_dir / "plugin.json").write_text('{"name":"repo-forensics","hooks":"./hooks/hooks.json"}')
+
+        agents_dir = tmp_path / ".agents" / "plugins"
+        agents_dir.mkdir(parents=True)
+        (agents_dir / "marketplace.json").write_text('{"name":"repo-forensics","plugins":[]}')
+
+        return str(skill_root)
+
+    def test_get_tracked_manifest_files_includes_codex_plugin(self, tmp_path):
+        skill_root = self._build_repo_with_manifests(tmp_path)
+        repo_root = verify_install.get_repo_root(skill_root)
+
+        tracked = verify_install.get_tracked_manifest_files(repo_root)
+
+        assert ".claude-plugin/plugin.json" in tracked
+        assert ".codex-plugin/plugin.json" in tracked
+        assert ".agents/plugins/marketplace.json" in tracked
+
+    def test_generate_checksums_includes_codex_manifest(self, tmp_path):
+        skill_root = self._build_repo_with_manifests(tmp_path)
+        verify_install.generate_checksums(skill_root)
+
+        checksums_path = os.path.join(skill_root, "checksums.json")
+        with open(checksums_path) as f:
+            data = json.load(f)
+
+        assert ".codex-plugin/plugin.json" in data["repo_manifests"]
+        assert ".agents/plugins/marketplace.json" in data["repo_source_manifests"]
+        assert data["manifest_count"] == 2
+        assert data["source_manifest_count"] == 1
+
+    def test_verify_fails_when_codex_manifest_tampered(self, tmp_path):
+        skill_root = self._build_repo_with_manifests(tmp_path)
+        verify_install.generate_checksums(skill_root)
+
+        manifest = tmp_path / ".codex-plugin" / "plugin.json"
+        manifest.write_text('{"name":"repo-forensics","hooks":"./dead-hooks.json"}')
+
+        passed, report = verify_install.verify_checksums(skill_root)
+        assert not passed
+        report_text = "\n".join(report)
+        assert "MANIFEST TAMPERED" in report_text
+        assert ".codex-plugin/plugin.json" in report_text
+
+    def test_verify_fails_when_source_marketplace_manifest_missing_in_source_checkout(self, tmp_path):
+        skill_root = self._build_repo_with_manifests(tmp_path)
+        verify_install.generate_checksums(skill_root)
+
+        (tmp_path / ".agents" / "plugins" / "marketplace.json").unlink()
+
+        passed, report = verify_install.verify_checksums(skill_root)
+        assert not passed
+        report_text = "\n".join(report)
+        assert "SOURCE MANIFEST MISSING" in report_text
+        assert ".agents/plugins/marketplace.json" in report_text
+
+    def test_verify_passes_in_plugin_cache_without_source_catalog_or_root_symlink(self, tmp_path):
+        source_root = tmp_path / "source"
+        source_root.mkdir()
+        skill_root = _build_fake_repo(source_root)
+
+        claude_dir = source_root / ".claude-plugin"
+        claude_dir.mkdir()
+        (claude_dir / "plugin.json").write_text('{"name":"repo-forensics"}')
+
+        codex_dir = source_root / ".codex-plugin"
+        codex_dir.mkdir()
+        (codex_dir / "plugin.json").write_text('{"name":"repo-forensics","hooks":"./hooks/hooks.json"}')
+
+        agents_dir = source_root / ".agents" / "plugins"
+        agents_dir.mkdir(parents=True)
+        (agents_dir / "marketplace.json").write_text('{"name":"repo-forensics","plugins":[]}')
+
+        verify_install.generate_checksums(skill_root)
+
+        cache_root = tmp_path / "codex-home" / "plugins" / "cache" / "market" / "repo-forensics" / "2.9.0"
+        cache_root.mkdir(parents=True)
+        shutil.copytree(source_root / "skills", cache_root / "skills")
+        shutil.copytree(source_root / ".claude-plugin", cache_root / ".claude-plugin")
+        shutil.copytree(source_root / ".codex-plugin", cache_root / ".codex-plugin")
+
+        cache_skill_root = cache_root / "skills" / "repo-forensics"
+        passed, report = verify_install.verify_checksums(str(cache_skill_root))
+        assert passed, "\n".join(report)
+        report_text = "\n".join(report)
+        assert "SYMLINK SKIPPED" in report_text
+        assert "SOURCE MANIFEST SKIPPED" in report_text

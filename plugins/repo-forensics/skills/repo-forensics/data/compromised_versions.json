@@ -1,0 +1,386 @@
+{
+  "schema_version": "1.0",
+  "generated": "2026-04-05",
+  "description": "Version-pinned and entirely-malicious package IOCs. Shipped with repo-forensics as baseline detection. Optional OSV feed adds live updates (see --osv flag). Use '*' in the version list to mean 'any version of this package is malicious'.",
+  "contributors": [
+    {
+      "name": "Marc Gadsdon",
+      "github": "marcgadsdon",
+      "issue": "https://github.com/alexgreensh/repo-forensics/issues/5",
+      "date": "2026-04-04"
+    }
+  ],
+  "campaigns": {
+    "chalk_debug_sep_2025": {
+      "title": "Chalk/Debug supply chain compromise",
+      "ecosystem": "npm",
+      "disclosed": "2025-09",
+      "family": "crypto wallet drainer",
+      "reference": "https://socket.dev/blog/npm-author-qix-compromised-in-major-supply-chain-attack",
+      "notes": "Maintainer credentials phished. Malicious versions published for several hours before takedown. Payload hooked crypto wallet provider APIs to redirect transactions.",
+      "packages": {
+        "ansi-regex": ["6.2.1"],
+        "ansi-styles": ["6.2.2"],
+        "backslash": ["0.2.1"],
+        "chalk": ["5.6.1"],
+        "chalk-template": ["1.1.1"],
+        "color": ["5.0.1"],
+        "color-convert": ["3.1.1"],
+        "color-name": ["2.0.1"],
+        "color-string": ["2.1.1"],
+        "debug": ["4.4.2"],
+        "error-ex": ["1.3.3"],
+        "has-ansi": ["6.0.1"],
+        "is-arrayish": ["0.3.3"],
+        "simple-swizzle": ["0.2.3"],
+        "slice-ansi": ["7.1.1"],
+        "strip-ansi": ["7.1.1"],
+        "supports-color": ["10.2.1"],
+        "supports-hyperlinks": ["4.1.1"],
+        "wrap-ansi": ["9.0.1"]
+      }
+    },
+    "duckdb_sep_2025": {
+      "title": "DuckDB supply chain compromise",
+      "ecosystem": "npm",
+      "disclosed": "2025-09",
+      "family": "crypto wallet drainer",
+      "reference": "https://socket.dev/blog/duckdb-supply-chain-attack",
+      "notes": "Same actor as chalk/debug Sep 2025 campaign. DuckDB npm packages compromised in parallel.",
+      "packages": {
+        "@duckdb/duckdb-wasm": ["1.29.2"],
+        "@duckdb/node-api": ["1.3.3"],
+        "@duckdb/node-bindings": ["1.3.3"],
+        "duckdb": ["1.3.3"],
+        "proto-tinker-wc": ["0.1.87"]
+      }
+    },
+    "eslint_prettier_phishing_jul_2025": {
+      "title": "ESLint/Prettier phishing compromise",
+      "ecosystem": "npm",
+      "disclosed": "2025-07",
+      "family": "credential stealer + post-install RCE",
+      "reference": "https://socket.dev/blog/eslint-config-prettier-malware",
+      "notes": "Maintainer phished. Malicious versions published for eslint-config-prettier and related packages. postinstall script exfiltrated npm tokens.",
+      "packages": {
+        "@pkgr/core": ["0.2.8", "0.2.9"],
+        "eslint-config-prettier": ["8.10.1", "9.1.1", "10.1.6", "10.1.7"],
+        "eslint-plugin-prettier": ["4.2.2", "4.2.3"],
+        "got-fetch": ["5.1.11", "5.1.12"],
+        "napi-postinstall": ["0.3.1"],
+        "synckit": ["0.11.9", "0.11.10"]
+      }
+    },
+    "nx_s1ngularity_aug_2025": {
+      "title": "Nx / S1ngularity supply chain",
+      "ecosystem": "npm",
+      "disclosed": "2025-08",
+      "family": "credential stealer + GitHub token exfil",
+      "reference": "https://socket.dev/blog/nx-s1ngularity-supply-chain-attack",
+      "notes": "Multiple @nx/* scoped packages and the nx meta-package compromised across a range of versions. Payload scanned for GITHUB_TOKEN, NPM_TOKEN, AWS credentials and posted to attacker webhook.",
+      "packages": {
+        "@nx/devkit": ["20.9.0", "21.5.0"],
+        "@nx/enterprise-cloud": ["3.2.0"],
+        "@nx/eslint": ["21.5.0"],
+        "@nx/js": ["20.9.0", "21.5.0"],
+        "@nx/key": ["3.2.0"],
+        "@nx/node": ["20.9.0", "21.5.0"],
+        "@nx/workspace": ["20.9.0", "21.5.0"],
+        "nx": ["20.9.0", "20.10.0", "20.11.0", "20.12.0", "21.5.0", "21.6.0", "21.7.0", "21.8.0"]
+      }
+    },
+    "shai_hulud_worm_v1_sep_2025": {
+      "title": "Shai-Hulud self-propagating npm worm (v1)",
+      "ecosystem": "npm",
+      "disclosed": "2025-09",
+      "family": "self-propagating worm",
+      "reference": "https://socket.dev/blog/shai-hulud-worm",
+      "notes": "First npm worm with self-propagation via stolen maintainer credentials. @ctrl/tinycolor was the initial vector before the worm was contained.",
+      "packages": {
+        "@ctrl/tinycolor": ["4.1.1", "4.1.2"]
+      }
+    },
+    "react_native_mar_2026": {
+      "title": "React Native country/phone picker compromise",
+      "ecosystem": "npm",
+      "disclosed": "2026-03",
+      "family": "mobile credential stealer",
+      "reference": "https://socket.dev/blog/react-native-country-phone-picker",
+      "notes": "Two popular React Native packages compromised. Payload targeted mobile device credentials and keychain items.",
+      "packages": {
+        "react-native-country-select": ["0.3.91", "0.4.2"],
+        "react-native-international-phone-number": ["0.11.8", "0.12.1", "0.12.2", "0.12.3"]
+      }
+    },
+    "ghost_campaign_feb_2026": {
+      "title": "Ghost campaign (entirely malicious packages)",
+      "ecosystem": "npm",
+      "disclosed": "2026-02",
+      "family": "dropper + credential harvester",
+      "reference": "https://socket.dev/blog/ghost-npm-campaign-feb-2026",
+      "notes": "Entirely malicious packages published under ghost accounts. Names designed to look legitimate. All versions malicious.",
+      "packages": {
+        "ai-fast-auto-trader": ["*"],
+        "carbon-mac-copy-cloner": ["*"],
+        "coinbase-desktop-sdk": ["*"],
+        "darkslash": ["*"],
+        "pkgnewfefame1": ["*"],
+        "react-fast-utilsa": ["*"],
+        "react-performance-suite": ["*"],
+        "react-query-core-utils": ["*"],
+        "react-state-optimizer-core": ["*"]
+      }
+    },
+    "nk_contagious_interview_wave3_mar_2026": {
+      "title": "North Korean Contagious Interview wave 3",
+      "ecosystem": "npm",
+      "disclosed": "2026-03",
+      "family": "state-sponsored RAT + crypto drainer",
+      "reference": "https://socket.dev/blog/nk-contagious-interview-wave-3",
+      "notes": "Third wave of DPRK-linked Contagious Interview campaign. Packages distributed to software developer targets via fake job interviews. All versions malicious.",
+      "packages": {
+        "beautiful-plugins": ["*"],
+        "blur-plugins": ["*"],
+        "chalk-config": ["*"],
+        "flexible-loggers": ["*"],
+        "framer-motion-ext": ["*"],
+        "jsonpacks": ["*"],
+        "jsonsecs": ["*"],
+        "jsonspecific": ["*"],
+        "logbin-nodejs": ["*"],
+        "lucide-node": ["*"],
+        "mongo-errorlog": ["*"],
+        "next-log-patcher": ["*"],
+        "nextjs-insight": ["*"],
+        "node-loggers": ["*"],
+        "node-orm-mongoose": ["*"],
+        "pixel-percent": ["*"],
+        "prior-config": ["*"],
+        "proc-watch": ["*"],
+        "react-logs": ["*"],
+        "react-plaid-sdk": ["*"],
+        "reactbootstraps": ["*"],
+        "router-parse": ["*"],
+        "server-log-engine": ["*"],
+        "serverlog-dispatch": ["*"],
+        "struct-logger": ["*"],
+        "sumsub-node-websdk": ["*"],
+        "test-topdev-logger-v1": ["*"],
+        "test-topdev-logger-v3": ["*"],
+        "use-videos": ["*"],
+        "util-buffers": ["*"],
+        "vite-loader-svg": ["*"],
+        "vite-plugin-next-refresh": ["*"],
+        "vite-plugin-purify": ["*"],
+        "vite-plugin-svgn": ["*"],
+        "vite-plugin-tools": ["*"]
+      }
+    },
+    "credential_harvester_typosquats_2025": {
+      "title": "Credential harvester typosquats",
+      "ecosystem": "npm",
+      "disclosed": "2025-07 to 2025-10",
+      "family": "credential harvester",
+      "reference": "https://socket.dev/blog/credential-harvester-typosquats-2025",
+      "notes": "Typosquat campaign targeting Discord, Ethereum, and framework package names. Often use .js suffix as typosquat signal.",
+      "packages": {
+        "deezcord.js": ["*"],
+        "dezcord.js": ["*"],
+        "dizcordjs": ["*"],
+        "etherdjs": ["*"],
+        "ethesjs": ["*"],
+        "ethetsjs": ["*"],
+        "nodemonjs": ["*"],
+        "react-router-dom.js": ["*"],
+        "typescriptjs": ["*"],
+        "zustand.js": ["*"]
+      }
+    },
+    "nodecordrat_bitcoin_typosquats_2025": {
+      "title": "NodeCordRAT / Bitcoin library typosquats",
+      "ecosystem": "npm",
+      "disclosed": "2025",
+      "family": "RAT + crypto wallet drainer",
+      "reference": "https://socket.dev/blog/nodecordrat-bitcoin-typosquats",
+      "notes": "Typosquats of Bitcoin library names carrying NodeCordRAT payload.",
+      "packages": {
+        "bip40": ["*"],
+        "bitcoin-lib-js": ["*"],
+        "bitcoin-main-lib": ["*"]
+      }
+    },
+    "lazarus_graphalgo_may2025_feb2026": {
+      "title": "Lazarus Group / Graphalgo campaign",
+      "ecosystem": "npm",
+      "disclosed": "2025-05 to 2026-02",
+      "family": "state-sponsored (Lazarus)",
+      "reference": "https://socket.dev/blog/lazarus-graphalgo-campaign",
+      "notes": "Long-running Lazarus-attributed campaign using math/graph library names.",
+      "packages": {
+        "bigmathutils": ["*"],
+        "graphalgo": ["*"],
+        "graphlibx": ["*"],
+        "xpack-subscription": ["*"]
+      }
+    },
+    "rat_typosquats_2026": {
+      "title": "RAT-delivering typosquats 2026",
+      "ecosystem": "npm",
+      "disclosed": "2026",
+      "family": "RAT dropper",
+      "reference": "https://socket.dev/blog/rat-typosquats-2026",
+      "notes": "Typosquat packages delivering remote access trojans.",
+      "packages": {
+        "buildrunner-dev": ["*"],
+        "eslint-verify-plugin": ["*"]
+      }
+    },
+    "teampcp_wave1_mar_2026": {
+      "title": "TeamPCP Wave 1: Trivy to Checkmarx Actions compromise",
+      "ecosystem": "npm",
+      "disclosed": "2026-03",
+      "family": "credential stealer + lateral movement",
+      "reference": "https://checkmarx.com/blog/checkmarx-security-update/",
+      "notes": "TeamPCP used stolen Trivy CI credentials to compromise Checkmarx GitHub Actions. Payload harvested CI secrets, SSH keys, cloud credentials. Exfil to checkmarx[.]zone.",
+      "packages": {}
+    },
+    "teampcp_wave3_bitwarden_apr_2026": {
+      "title": "TeamPCP Wave 3: Bitwarden CLI npm worm",
+      "ecosystem": "npm",
+      "disclosed": "2026-04",
+      "family": "self-propagating worm + credential stealer",
+      "reference": "https://phoenix.security/teampcp-supply-chain-attack-trivy-checkmarx-github-actions-npm-canisterworm/",
+      "notes": "Cascading from Checkmarx Actions compromise. @bitwarden/cli 2026.4.0 contained self-propagating npm worm with Bun-based JS loader, GitHub commit dead-drop C2, and credential harvesting targeting AI coding assistant configs (~/.claude.json).",
+      "packages": {
+        "@bitwarden/cli": ["2026.4.0"]
+      }
+    },
+    "telnyx_wav_steg_apr_2026": {
+      "title": "Telnyx WAV steganography compromise",
+      "ecosystem": "pypi",
+      "disclosed": "2026-04",
+      "family": "steganographic payload delivery",
+      "reference": "https://checkmarx.com/zero-post/rapid-exploitation-and-clever-malware-in-the-supply-chain-last-week-in-appsec-2026-04-02/",
+      "notes": "TeamPCP compromised Telnyx PyPI package. Payload hidden in spec-valid WAV audio files (ringtone.wav/hangup.wav). XOR-encrypted executable decoded from audio frames.",
+      "packages": {
+        "telnyx": ["4.87.1", "4.87.2"]
+      }
+    },
+    "mini_shai_hulud_apr_2026": {
+      "title": "Mini Shai-Hulud: SAP CAP framework worm (TeamPCP Wave 6)",
+      "ecosystem": "npm",
+      "disclosed": "2026-04-29",
+      "family": "self-propagating worm + credential stealer + CI abuse",
+      "reference": "https://socket.dev/blog/mini-shai-hulud-cap-js-supply-chain",
+      "notes": "TeamPCP Wave 6. Cascading from Bitwarden CLI compromise (Wave 5). Preinstall hook downloads Bun 1.3.13, executes 11.7MB obfuscated JS (PBKDF2+SHA256 cipher, salt 'ctf-scramble-v2'). Steals credentials from 39+ file paths (GitHub, npm, AWS, Azure, GCP, SSH, Kubernetes, Terraform, crypto wallets, FileZilla). Exfiltrates via victim's own GitHub account (creates public repos with description 'A Mini Shai-Hulud has Appeared'). Injects Claude Code SessionStart hooks and VS Code folderOpen tasks for persistence. Installs self-hosted GHA runner named 'SHA1HULUD' with discussion.yaml C2 workflow. SAP CI abused via OIDC token exchange to publish @cap-js packages.",
+      "packages": {
+        "@cap-js/db-service": ["2.10.1"],
+        "@cap-js/postgres": ["2.2.2"],
+        "@cap-js/sqlite": ["2.2.2"],
+        "mbt": ["1.2.48"]
+      }
+    },
+    "tanstack_shai_hulud_may_2026": {
+      "title": "Mini Shai-Hulud: TanStack Router Worm (TeamPCP Wave 7)",
+      "ecosystem": "npm",
+      "disclosed": "2026-05-11",
+      "family": "self-propagating worm + credential stealer + provenance forging",
+      "reference": "https://github.com/TanStack/router/security/advisories/GHSA-g7cv-rxg3-hmpx",
+      "notes": "CVE-2026-45321 (CVSS 9.6). CI pipeline hijack via pull_request_target + cache poisoning + OIDC memory extraction from runner /proc/pid/mem. 42 TanStack packages, 84 versions in 6-minute window. Payload: 2.3MB obfuscated router_init.js with beautify() AES decryption. Steals AWS, GCP, K8s, Vault, npm, GitHub, SSH, AI configs, browser passwords, crypto wallets. Exfiltrates via Session P2P (getsession.org). Self-propagates by republishing victim npm packages with forged Sigstore/SLSA provenance. Dead-man wiper: find ~ -type f -writable | xargs shred.",
+      "packages": {
+        "@tanstack/history": ["1.161.9", "1.161.12"],
+        "@tanstack/router-utils": ["1.161.11", "1.161.14"],
+        "@tanstack/router-core": ["1.169.5", "1.169.8"],
+        "@tanstack/router-devtools-core": ["1.167.6", "1.167.9"],
+        "@tanstack/react-router-devtools": ["1.166.16", "1.166.19"],
+        "@tanstack/router-generator": ["1.166.45", "1.166.48"],
+        "@tanstack/virtual-file-routes": ["1.161.10", "1.161.13"],
+        "@tanstack/router-plugin": ["1.167.38", "1.167.41"],
+        "@tanstack/react-router": ["1.169.5", "1.169.8"],
+        "@tanstack/router-devtools": ["1.166.16", "1.166.19"],
+        "@tanstack/react-start": ["1.167.68", "1.167.71"],
+        "@tanstack/router-cli": ["1.166.46", "1.166.49"],
+        "@tanstack/router-vite-plugin": ["1.166.53", "1.166.56"],
+        "@tanstack/solid-router": ["1.169.5", "1.169.8"],
+        "@tanstack/vue-router": ["1.169.5", "1.169.8"],
+        "@tanstack/arktype-adapter": ["1.166.1", "1.166.15"],
+        "@tanstack/eslint-plugin-router": ["1.111.9", "1.111.12"],
+        "@tanstack/eslint-plugin-start": ["0.0.4", "0.0.7"],
+        "@tanstack/nitro-v2-vite-plugin": ["1.154.12", "1.154.15"],
+        "@tanstack/react-router-ssr-query": ["1.166.15", "1.166.18"],
+        "@tanstack/react-start-client": ["1.166.51", "1.166.54"],
+        "@tanstack/react-start-rsc": ["0.0.47", "0.0.50"],
+        "@tanstack/react-start-server": ["1.166.55", "1.166.58"],
+        "@tanstack/setup": ["*"]
+      }
+    },
+    "tanstack_secondary_victims_may_2026": {
+      "title": "Mini Shai-Hulud: Secondary Victims (Worm Propagation from TanStack)",
+      "ecosystem": "npm",
+      "disclosed": "2026-05-11",
+      "family": "self-propagating worm + credential stealer",
+      "reference": "https://socket.dev/blog/tanstack-npm-packages-compromised-mini-shai-hulud-supply-chain-attack",
+      "notes": "Packages compromised via worm propagation from TanStack. 373+ malicious versions across 169+ packages including @mistralai/mistralai, @opensearch-project/opensearch, 65+ @uipath/* packages. Specific affected versions not yet enumerated here; use --update-vulns for live OSV data. IOC detection via router_init.js payload filename and getsession.org exfil domain provides coverage independent of version pinning.",
+      "packages": {}
+    },
+    "node_ipc_credential_stealer_may_2026": {
+      "title": "node-ipc credential stealer (May 2026)",
+      "ecosystem": "npm",
+      "disclosed": "2026-05-14",
+      "family": "credential harvester",
+      "reference": "https://socket.dev/blog/node-ipc-credential-stealer-may-2026",
+      "notes": "IIFE appended to CJS entrypoint, no install hooks, credential harvester, DNS exfil. Dormant maintainer account takeover via expired domain re-registration (Jan 2025 expiry, May 7 2026 re-registration). Socket Research disclosure May 14 2026.",
+      "packages": {
+        "node-ipc": ["9.1.6", "9.2.3", "12.0.1"]
+      }
+    },
+    "canisterworm_icp_apr_2026": {
+      "title": "CanisterWorm ICP blockchain C2 (Apr 2026)",
+      "ecosystem": "npm",
+      "disclosed": "2026-04-22",
+      "family": "self-propagating worm + blockchain C2",
+      "reference": "https://keepsecurelabs.com/canisterworm-icp-c2",
+      "notes": "ICP blockchain C2 at canister cjn37-uyaaa-aaaac-qgnva-cai.raw.icp0.io. No domain seizure possible, no hosting provider takedown. Keepsecure Labs disclosure April 22 2026.",
+      "packages": {}
+    },
+    "shai_hulud_copycats_may_2026": {
+      "title": "Shai-Hulud open-source copycat packages (May 2026)",
+      "ecosystem": "npm",
+      "disclosed": "2026-05-12",
+      "family": "self-propagating worm (copycat)",
+      "reference": "https://github.com/TeamPCP/shai-hulud",
+      "notes": "Copycat packages using modified C2, based on open-sourced Shai-Hulud worm code published by TeamPCP on GitHub (MIT license) with $1K bounty contest. May 12 2026.",
+      "packages": {
+        "chalk-tempalte": ["*"],
+        "@deadcode09284814/axios-util": ["*"],
+        "axois-utils": ["*"],
+        "color-style-utils": ["*"]
+      }
+    },
+    "nx_console_vscode_may_2026": {
+      "title": "VS Code nrwl.angular-console extension compromise (May 2026)",
+      "ecosystem": "npm",
+      "disclosed": "2026-05-18",
+      "family": "credential stealer + VS Code extension compromise",
+      "reference": "https://step.security/blog/nrwl-angular-console-vscode-compromise-may-2026",
+      "notes": "VS Code extension compromise. Stolen credentials from TanStack @tanstack/zod-adapter infection (7-day dwell time). Targets ~/.claude/settings.json. Led to exfiltration of ~3800 GitHub internal repos. 11-minute window, ~6000 activations via auto-update. StepSecurity disclosure May 18 2026.",
+      "packages": {
+        "nrwl.angular-console": ["18.95.0"]
+      }
+    },
+    "antv_worm_propagation_may_2026": {
+      "title": "Mini Shai-Hulud: AntV/ECharts Worm Propagation (May 2026)",
+      "ecosystem": "npm",
+      "disclosed": "2026-05-19",
+      "family": "self-propagating worm + credential stealer + provenance forging",
+      "reference": "https://socket.dev/blog/antv-echarts-worm-propagation-may-2026",
+      "notes": "Worm propagation from TanStack compromise. 320+ packages, 639 malicious versions, 59M monthly downloads affected. Preinstall hook installs Bun runtime, writes persistence to .claude/ directories, forges SLSA provenance. May 19 2026.",
+      "packages": {
+        "echarts-for-react": ["1.3.7"],
+        "@antv/g2": ["5.2.8"],
+        "@antv/g6": ["5.0.28"],
+        "timeago.js": ["4.0.3"]
+      }
+    }
+  }
+}

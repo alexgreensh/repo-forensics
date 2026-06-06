@@ -1,0 +1,626 @@
+#!/usr/bin/env python3
+"""
+scan_lifecycle.py - Lifecycle Script Scanner (v2: rewritten from JS to Python)
+Detects malicious NPM hooks and Python setup.py/pyproject.toml cmdclass overrides.
+No Bun dependency, all pure Python.
+
+Created by Alex Greenshpun
+"""
+
+import os
+import re
+import sys
+import json
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import forensics_core as core
+
+SCANNER_NAME = "lifecycle"
+
+# CLI commands commonly targeted by Command-Jacking (Checkmarx, October 2024).
+# Shared across npm bin, setup.py console_scripts, and pyproject.toml [project.scripts].
+SHADOWED_COMMANDS = {
+    'aws', 'docker', 'git', 'kubectl', 'terraform', 'pip', 'pip3',
+    'npm', 'npx', 'node', 'python', 'python3', 'curl', 'wget',
+    'ssh', 'scp', 'rsync', 'ls', 'cat', 'touch', 'mkdir', 'rm',
+    'cp', 'mv', 'chmod', 'chown', 'sudo', 'su', 'gcloud', 'az',
+    'heroku', 'vercel', 'netlify', 'gh', 'brew', 'apt', 'yum',
+    'bun', 'bunx', 'deno', 'pnpm', 'yarn',
+}
+
+DANGEROUS_NPM_HOOKS = ['preinstall', 'postinstall', 'install', 'prepare', 'prepublish', 'postpublish']
+SUSPICIOUS_COMMANDS = [
+    (re.compile(r'\bcurl\b'), "curl command"),
+    (re.compile(r'\bwget\b'), "wget command"),
+    (re.compile(r'\bbash\s+-i\b'), "interactive bash"),
+    (re.compile(r'/dev/tcp'), "/dev/tcp network"),
+    (re.compile(r'\bbase64\s+-d\b.*\|\s*(sh|bash)'), "base64 decode piped to shell"),
+    (re.compile(r'\bbase64\b.*\bsh\b'), "base64 with shell execution"),
+    (re.compile(r'\bnc\s'), "netcat"),
+    (re.compile(r'\bpython\b.*-c'), "python inline execution"),
+    (re.compile(r'\bnode\b.*-e'), "node inline execution"),
+    (re.compile(r'\beval\b'), "eval command"),
+    (re.compile(r'\bbunx?\b'), "bun/bunx execution (Bun runtime stager pattern)"),
+    (re.compile(r'oven-sh/bun|bun-v\d+\.\d+'), "Bun runtime download (TeamPCP stager pattern, April 2026)"),
+    (re.compile(r'>\s*/dev/null.*2>&1'), "output suppression"),
+]
+
+# Paste service / dead-drop URLs in install hooks.
+# StegaBin/Shai-Hulud (2025-2026) staged payloads on public paste services to evade
+# static analysis; buildrunner-dev (Feb 2026) used image hosting for RGB steganography.
+PASTE_SERVICE_PATTERNS = [
+    (re.compile(r'(?i)\b(pastebin\.com|hastebin\.com|dpaste\.(org|com)|paste\.ee|ghostbin\.co|rentry\.co|ix\.io|sprunge\.us)\b'), "Paste service URL (dead-drop C2 staging pattern, StegaBin/Shai-Hulud 2025-2026)"),
+    (re.compile(r'(?i)\braw\.githubusercontent\.com/[^/]+/[^/]+/[^/]+/'), "Raw GitHub file fetch (potential dead-drop payload source)"),
+    (re.compile(r'(?i)\bgist\.githubusercontent\.com\b'), "GitHub Gist fetch (potential dead-drop payload)"),
+    (re.compile(r'(?i)\b(webhook\.site|requestbin\.com|pipedream\.net)\b'), "Webhook/request-bin service (data exfiltration endpoint)"),
+    (re.compile(r'(?i)\b(i\.ibb\.co|imgbb\.com|cloudinary\.com/[^/]+/image)\b'), "Image hosting service in install context (RGB pixel steganography vector, buildrunner-dev Feb 2026)"),
+]
+
+# Agent config directory write patterns.
+# Malicious packages that write to AI agent config dirs persist across uninstall
+# because ~/.claude/, ~/.cursor/, etc. are not cleaned up with npm/pip uninstall.
+AGENT_CONFIG_DIR_PATTERNS = [
+    (re.compile(r'(?i)(~|\$HOME|\$\{HOME\})/\.claude(/|["\']|$|\s|;|&)'), "Write to ~/.claude/ (Claude Code config injection, persists after uninstall)"),
+    (re.compile(r'(?i)(~|\$HOME|\$\{HOME\})/\.cursor(/|["\']|$|\s|;|&)'), "Write to ~/.cursor/ (Cursor config injection)"),
+    (re.compile(r'(?i)(~|\$HOME|\$\{HOME\})/\.continue(/|["\']|$|\s|;|&)'), "Write to ~/.continue/ (Continue config injection)"),
+    (re.compile(r'(?i)(~|\$HOME|\$\{HOME\})/\.windsurf(/|["\']|$|\s|;|&)'), "Write to ~/.windsurf/ (Windsurf config injection)"),
+    (re.compile(r'(?i)(~|\$HOME|\$\{HOME\})/\.codeium(/|["\']|$|\s|;|&)'), "Write to ~/.codeium/ (Codeium config injection)"),
+    (re.compile(r'(?i)mkdir\s+.*\.(claude|cursor|continue|windsurf)(/|$|\s|;|&)'), "Directory creation in AI agent config path"),
+]
+
+# Anti-forensics patterns: self-destructing installers (Axios supply chain, March 2026)
+ANTI_FORENSICS_PATTERNS = [
+    (re.compile(r'(?i)\brm\s+([-rf\s]*)(setup\.js|install\.js|postinstall\.js|preinstall\.js)'), "Self-deleting installer script"),
+    (re.compile(r'(?i)fs\.unlinkSync\s*\(\s*__filename\s*\)'), "Script deletes itself after execution (fs.unlinkSync(__filename))"),
+    (re.compile(r'(?i)fs\.unlink(Sync)?\s*\(\s*(path\.)?(resolve|join)\s*\(.*?(setup|install|postinstall)'), "Script deletes installer file after execution"),
+    (re.compile(r'(?i)fs\.writeFileSync\s*\(\s*.*?package\.json'), "Script overwrites package.json (post-execution cleanup)"),
+    (re.compile(r'(?i)(fs\.rename|fs\.copyFile)(Sync)?\s*\(.*?package\.json'), "Script replaces package.json (anti-forensics)"),
+    (re.compile(r'(?i)child_process.*\brm\s'), "child_process used to remove files (anti-forensics)"),
+]
+
+RELAY_PATTERN = re.compile(
+    r'^(node|python|python3|sh|bash|bun|deno)\s+[\w./-]+\.(js|mjs|cjs|py|sh)$'
+)
+
+KNOWN_SAFE_HOOKS = re.compile(
+    r'^('
+    r'husky(\s+(install|init))?|'
+    r'is-ci\s*\|\|\s*husky\s+(install|init)|'
+    r'patch-package|'
+    r'prisma\s+generate|'
+    r'prisma\s+migrate\s+deploy|'
+    r'tsc(\s+(-b|--build|--noEmit))?|'
+    r'esbuild\b[^|;&]*|'
+    r'(node-gyp\s+)?rebuild|'
+    r'electron-builder\s+install-app-deps|'
+    r'rimraf\s+\S+|'
+    r'ngcc(\s+[^\s|;&]+)*|'
+    r'opencollective\s+postinstall|'
+    r'npm\s+run\s+(build|compile|prepare)|'
+    r'npx\s+browserslist@latest\s+--update-db|'
+    r'lefthook\s+install|'
+    r'simple-git-hooks'
+    r')$'
+)
+
+
+def scan_package_json(file_path, rel_path):
+    """Check NPM lifecycle scripts for suspicious commands."""
+    findings = []
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        scripts = data.get('scripts', {})
+        for hook in DANGEROUS_NPM_HOOKS:
+            if hook in scripts:
+                cmd = scripts[hook]
+                cmd = cmd[:10000]
+
+                # Check for suspicious commands
+                found_suspicious = False
+                for pattern, desc in SUSPICIOUS_COMMANDS:
+                    if pattern.search(cmd):
+                        findings.append(core.Finding(
+                            scanner=SCANNER_NAME, severity="critical",
+                            title=f"NPM Hook: Suspicious '{hook}'",
+                            description=f"Hook contains {desc}",
+                            file=rel_path, line=0,
+                            snippet=f"{hook}: {cmd[:120]}",
+                            category="lifecycle-hook"
+                        ))
+                        found_suspicious = True
+                        break
+
+                if not found_suspicious:
+                    # Check for filename relay pattern: node/python/sh/bash <file>
+                    # This is THE standard supply chain attack entry point.
+                    # Even legitimate uses warrant HIGH because the external
+                    # script can contain anything. Review the referenced file.
+                    if RELAY_PATTERN.match(cmd.strip()):
+                        findings.append(core.Finding(
+                            scanner=SCANNER_NAME, severity="high",
+                            title=f"NPM Hook: '{hook}' Runs External Script",
+                            description=f"Lifecycle hook executes external file (standard supply chain attack pattern)",
+                            file=rel_path, line=0,
+                            snippet=f"{hook}: {cmd[:120]}",
+                            category="lifecycle-hook"
+                        ))
+                    elif KNOWN_SAFE_HOOKS.match(cmd.strip()):
+                        findings.append(core.Finding(
+                            scanner=SCANNER_NAME, severity="low",
+                            title=f"NPM Hook: '{hook}' (Known Safe Pattern)",
+                            description="Lifecycle hook uses recognized build tooling command",
+                            file=rel_path, line=0,
+                            snippet=f"{hook}: {cmd[:120]}",
+                            category="lifecycle-hook"
+                        ))
+                    else:
+                        findings.append(core.Finding(
+                            scanner=SCANNER_NAME, severity="medium",
+                            title=f"NPM Hook: '{hook}' Present",
+                            description=f"Lifecycle hook exists (common malware vector)",
+                            file=rel_path, line=0,
+                            snippet=f"{hook}: {cmd[:120]}",
+                            category="lifecycle-hook"
+                        ))
+
+                # Check for paste service / dead-drop URLs
+                for pattern, desc in PASTE_SERVICE_PATTERNS:
+                    if pattern.search(cmd):
+                        findings.append(core.Finding(
+                            scanner=SCANNER_NAME, severity="critical",
+                            title=f"NPM Hook: Paste Service URL in '{hook}'",
+                            description=f"Lifecycle hook references {desc}",
+                            file=rel_path, line=0,
+                            snippet=f"{hook}: {cmd[:120]}",
+                            category="lifecycle-hook"
+                        ))
+                        break
+
+                # Check for agent config directory writes
+                for pattern, desc in AGENT_CONFIG_DIR_PATTERNS:
+                    if pattern.search(cmd):
+                        findings.append(core.Finding(
+                            scanner=SCANNER_NAME, severity="critical",
+                            title=f"NPM Hook: Agent Config Dir Write in '{hook}'",
+                            description=f"Lifecycle hook writes to AI agent config directory: {desc}",
+                            file=rel_path, line=0,
+                            snippet=f"{hook}: {cmd[:120]}",
+                            category="lifecycle-hook"
+                        ))
+                        break
+
+                # Check for anti-forensics patterns
+                for pattern, desc in ANTI_FORENSICS_PATTERNS:
+                    if pattern.search(cmd):
+                        findings.append(core.Finding(
+                            scanner=SCANNER_NAME, severity="critical",
+                            title=f"Anti-Forensics in '{hook}' Hook",
+                            description=f"Lifecycle hook contains self-destructing pattern: {desc} (Axios supply chain attack pattern, March 2026)",
+                            file=rel_path, line=0,
+                            snippet=f"{hook}: {cmd[:120]}",
+                            category="anti-forensics"
+                        ))
+                        break
+
+        # Check bin field for command-jacking (Checkmarx, October 2024)
+        bin_field = data.get('bin', {})
+        if isinstance(bin_field, str):
+            bin_field = {data.get('name', ''): bin_field}
+        if isinstance(bin_field, dict):
+            for cmd_name in bin_field:
+                if cmd_name.lower() in SHADOWED_COMMANDS:
+                    findings.append(core.Finding(
+                        scanner=SCANNER_NAME, severity="critical",
+                        title=f"Command-Jacking: bin '{cmd_name}' Shadows System Command",
+                        description=f"Package registers bin entry '{cmd_name}' which shadows a common CLI tool. After install, running '{cmd_name}' executes this package's code instead of the real tool (Checkmarx Command-Jacking, October 2024)",
+                        file=rel_path, line=0,
+                        snippet=f"bin.{cmd_name}: {str(bin_field[cmd_name])[:80]}",
+                        category="command-jacking"
+                    ))
+
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as e:
+        print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)
+    return findings
+
+
+def scan_js_anti_forensics(file_path, rel_path):
+    """Detect anti-forensics patterns in JS files referenced by lifecycle hooks.
+
+    Patterns include: self-deleting scripts (fs.unlinkSync(__filename)),
+    package.json overwrite after execution, and version mismatch indicators.
+    Source: Axios supply chain compromise, March 31, 2026.
+    """
+    findings = []
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        lines = content.split('\n')
+        for i, line in enumerate(lines):
+            if len(line) > core.MAX_LINE_LENGTH:
+                continue  # MAX_LINE_LENGTH guard
+            for pattern, desc in ANTI_FORENSICS_PATTERNS:
+                if pattern.search(line):
+                    findings.append(core.Finding(
+                        scanner=SCANNER_NAME, severity="critical",
+                        title=f"Anti-Forensics Pattern: {desc}",
+                        description="Script contains self-destructing or evidence-cleanup pattern (supply chain attack indicator)",
+                        file=rel_path, line=i + 1,
+                        snippet=line.strip()[:120],
+                        category="anti-forensics"
+                    ))
+
+    except (OSError, UnicodeDecodeError) as e:
+        print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)
+    return findings
+
+
+def scan_setup_py(file_path, rel_path):
+    """Check Python setup.py for cmdclass overrides (arbitrary code on pip install)."""
+    findings = []
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # Check for cmdclass override
+        if re.search(r'cmdclass\s*=\s*\{', content):
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="high",
+                title="setup.py: cmdclass Override",
+                description="Custom cmdclass can execute arbitrary code during pip install",
+                file=rel_path, line=0,
+                snippet="cmdclass override detected",
+                category="lifecycle-hook"
+            ))
+
+        # Check for subprocess/os.system in setup.py
+        for suspicious in ['subprocess', 'os.system', 'os.popen', 'urllib', 'requests.', 'socket.']:
+            if suspicious in content:
+                line_no = 0
+                for i, line in enumerate(content.split('\n')):
+                    if suspicious in line:
+                        line_no = i + 1
+                        break
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="critical",
+                    title=f"setup.py: Suspicious Import ({suspicious})",
+                    description="setup.py contains network/execution code that runs during installation",
+                    file=rel_path, line=line_no,
+                    snippet=content.split('\n')[line_no - 1].strip()[:120] if line_no > 0 else suspicious,
+                    category="lifecycle-hook"
+                ))
+
+        # Check for Command-Jacking via console_scripts entry points
+        entry_points_match = re.search(r"entry_points\s*=\s*\{[^}]*'console_scripts'\s*:\s*\[(.*?)\]", content, re.DOTALL)
+        if entry_points_match:
+            scripts_text = entry_points_match.group(1)
+            for ep_match in re.finditer(r"['\"](\w+)\s*=", scripts_text):
+                cmd_name = ep_match.group(1)
+                if cmd_name.lower() in SHADOWED_COMMANDS:
+                    findings.append(core.Finding(
+                        scanner=SCANNER_NAME, severity="critical",
+                        title=f"Command-Jacking: console_scripts '{cmd_name}' Shadows System Command",
+                        description=f"Package registers console_scripts entry '{cmd_name}' which shadows a common CLI tool (Checkmarx Command-Jacking, October 2024)",
+                        file=rel_path, line=0,
+                        snippet=f"console_scripts: {cmd_name}",
+                        category="command-jacking"
+                    ))
+
+    except (OSError, UnicodeDecodeError) as e:
+        print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)
+    return findings
+
+
+def scan_pyproject_toml(file_path, rel_path):
+    """Check pyproject.toml for cmdclass overrides."""
+    findings = []
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        if '[tool.setuptools.cmdclass]' in content or 'cmdclass' in content.lower():
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="high",
+                title="pyproject.toml: cmdclass Override",
+                description="Custom cmdclass can execute arbitrary code during pip install",
+                file=rel_path, line=0,
+                snippet="cmdclass override in pyproject.toml",
+                category="lifecycle-hook"
+            ))
+
+        # Check for Command-Jacking via [project.scripts]
+        in_scripts = False
+        for i, line in enumerate(content.split('\n')):
+            stripped = line.strip()
+            if stripped in ('[project.scripts]', '[project.entry-points.console_scripts]'):
+                in_scripts = True
+                continue
+            if in_scripts:
+                if stripped.startswith('['):
+                    in_scripts = False
+                    continue
+                ep_match = re.match(r'(\w+)\s*=', stripped)
+                if ep_match:
+                    cmd_name = ep_match.group(1)
+                    if cmd_name.lower() in SHADOWED_COMMANDS:
+                        findings.append(core.Finding(
+                            scanner=SCANNER_NAME, severity="critical",
+                            title=f"Command-Jacking: [project.scripts] '{cmd_name}' Shadows System Command",
+                            description=f"Package registers script entry '{cmd_name}' which shadows a common CLI tool (Checkmarx Command-Jacking, October 2024)",
+                            file=rel_path, line=i + 1,
+                            snippet=stripped[:120],
+                            category="command-jacking"
+                        ))
+
+    except (OSError, UnicodeDecodeError) as e:
+        print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)
+    return findings
+
+
+# --- .pth File Injection Detection (liteLLM-style attack, March 2026) ---
+
+# Known malicious .pth filenames - lazy loaded from ioc_manager
+_KNOWN_MALICIOUS_PTH = None
+
+_FALLBACK_MALICIOUS_PTH = {
+    'litellm_init.pth', 'litellm-init.pth', 'litellm.pth',
+    'llm_init.pth', 'init_hook.pth', 'startup.pth',
+}
+
+
+def _get_known_malicious_pth():
+    """Lazy-load known malicious .pth filenames from ioc_manager."""
+    global _KNOWN_MALICIOUS_PTH
+    if _KNOWN_MALICIOUS_PTH is None:
+        try:
+            import ioc_manager as _ioc
+            _KNOWN_MALICIOUS_PTH = _ioc.get_iocs().get('malicious_pth_files', _FALLBACK_MALICIOUS_PTH)
+        except (ImportError, OSError, json.JSONDecodeError, ValueError) as e:
+            print(f"[!] IOC loading failed, using fallback: {e}", file=sys.stderr)
+            _KNOWN_MALICIOUS_PTH = _FALLBACK_MALICIOUS_PTH
+    return _KNOWN_MALICIOUS_PTH
+
+PTH_EXEC_PATTERNS = [
+    (re.compile(r'\bexec\s*\('), "exec() call"),
+    (re.compile(r'\beval\s*\('), "eval() call"),
+    (re.compile(r'\bcompile\s*\('), "compile() call"),
+    (re.compile(r'\b__import__\s*\('), "__import__() call"),
+    (re.compile(r'\bos\.system\s*\('), "os.system() call"),
+    (re.compile(r'\bsubprocess'), "subprocess usage"),
+]
+
+
+def scan_pth_files(file_path, rel_path):
+    """Detect malicious .pth files (Python startup injection vector).
+
+    .pth files in site-packages execute import statements on Python startup.
+    The liteLLM attack (March 2026) used this to auto-exfiltrate all credentials
+    on `pip install` without any user action.
+    """
+    findings = []
+    basename = os.path.basename(file_path)
+
+    try:
+        with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+            content = f.read()
+    except OSError:
+        return findings
+
+    lines = content.strip().split('\n')
+
+    # Check for known malicious filenames (CRITICAL)
+    if basename.lower() in _get_known_malicious_pth():
+        findings.append(core.Finding(
+            scanner=SCANNER_NAME, severity="critical",
+            title=f"Known Malicious .pth Filename: {basename}",
+            description="Filename matches known supply chain attack IOC (liteLLM-style .pth injection)",
+            file=rel_path, line=0,
+            snippet=f"Known IOC: {basename}",
+            category="pth-injection"
+        ))
+
+    # Check for base64 content (CRITICAL)
+    # Pre-filter with simple 'in' check to avoid ReDoS on long alphanumeric lines
+    base64_pattern = re.compile(r'[A-Za-z0-9+/]{40,}={0,2}')
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if len(stripped) > 10000:
+            continue  # MAX_LINE_LENGTH guard against ReDoS
+        # Skip filesystem paths (legitimate .pth content)
+        if stripped.startswith('/') or stripped.startswith('.') or 'site-packages' in stripped:
+            continue
+        # Require at least one +, /, or = to distinguish from plain alphanumeric
+        if not any(c in stripped for c in ('+', '/', '=')):
+            continue
+        if base64_pattern.search(stripped):
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="critical",
+                title=".pth File: Base64 Content",
+                description=".pth file contains base64-encoded data (obfuscated payload, liteLLM attack pattern)",
+                file=rel_path, line=i + 1,
+                snippet=line.strip()[:120],
+                category="pth-injection"
+            ))
+            break  # One finding per file for base64
+
+    # Check for exec/eval/compile (CRITICAL)
+    for i, line in enumerate(lines):
+        for pattern, desc in PTH_EXEC_PATTERNS:
+            if pattern.search(line):
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="critical",
+                    title=f".pth File: {desc}",
+                    description=f".pth file contains {desc}. Executes on Python startup without user action.",
+                    file=rel_path, line=i + 1,
+                    snippet=line.strip()[:120],
+                    category="pth-injection"
+                ))
+                break  # One finding per line
+
+    # Check for import statements (MEDIUM - legitimate but worth flagging)
+    import_pattern = re.compile(r'^import\s+\S+')
+    for i, line in enumerate(lines):
+        if import_pattern.match(line.strip()):
+            # Only flag if no exec/eval already found (to avoid noise)
+            if not any(f.category == "pth-injection" and f.severity == "critical" for f in findings):
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="medium",
+                    title=".pth File: Import Statement",
+                    description=".pth file with import statement runs code on Python startup",
+                    file=rel_path, line=i + 1,
+                    snippet=line.strip()[:120],
+                    category="pth-injection"
+                ))
+                break  # One import finding is enough
+
+    # If .pth file exists but has no suspicious content, still note it (LOW)
+    if not findings:
+        findings.append(core.Finding(
+            scanner=SCANNER_NAME, severity="low",
+            title=f".pth File Present: {basename}",
+            description=".pth files execute on Python startup. Verify this is intentional.",
+            file=rel_path, line=0,
+            snippet=content[:120].replace('\n', ' '),
+            category="pth-injection"
+        ))
+
+    return findings
+
+
+def scan_claude_settings(file_path, rel_path):
+    """Detect malicious Claude Code hook injection in .claude/settings.json.
+
+    Mini Shai-Hulud (TeamPCP Wave 6, April 2026) injects SessionStart hooks
+    that execute dropper scripts on every Claude Code session start.
+    """
+    findings = []
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        hooks = data.get('hooks', {})
+        for event_name, event_hooks in hooks.items():
+            if not isinstance(event_hooks, list):
+                continue
+            for hook_entry in event_hooks:
+                if not isinstance(hook_entry, dict):
+                    continue
+                # Support both nested format ({matcher, hooks: [{command}]})
+                # and flat format ({command, type}) used in Claude Code docs
+                if 'hooks' in hook_entry:
+                    hook_list = hook_entry.get('hooks', [])
+                elif 'command' in hook_entry:
+                    hook_list = [hook_entry]
+                else:
+                    continue
+                for hook in hook_list:
+                    if not isinstance(hook, dict):
+                        continue
+                    cmd = hook.get('command', '')
+                    if not cmd:
+                        continue
+                    for pattern, desc in SUSPICIOUS_COMMANDS:
+                        if pattern.search(cmd):
+                            findings.append(core.Finding(
+                                scanner=SCANNER_NAME, severity="critical",
+                                title=f"Claude Code Hook Injection: {event_name}",
+                                description=f"Claude Code {event_name} hook contains {desc}. "
+                                    "Mini Shai-Hulud injects SessionStart hooks to re-execute "
+                                    "dropper on every session (TeamPCP Wave 6, April 2026)",
+                                file=rel_path, line=0,
+                                snippet=f"{event_name}: {cmd[:120]}",
+                                category="ai-tool-persistence"
+                            ))
+                            break
+                    if re.search(r'setup\.mjs|execution\.js|config\.mjs', cmd):
+                        findings.append(core.Finding(
+                            scanner=SCANNER_NAME, severity="critical",
+                            title="Claude Code Hook: Shai-Hulud Dropper",
+                            description="Claude Code hook executes known TeamPCP dropper filename",
+                            file=rel_path, line=0,
+                            snippet=f"{event_name}: {cmd[:120]}",
+                            category="ai-tool-persistence"
+                        ))
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError, TypeError, AttributeError):
+        pass
+    return findings
+
+
+def scan_vscode_tasks(file_path, rel_path):
+    """Detect malicious VS Code tasks with folderOpen auto-run.
+
+    Mini Shai-Hulud injects tasks.json with runOptions.runOn: folderOpen
+    to execute dropper when a developer opens the project in VS Code.
+    """
+    findings = []
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        for task in data.get('tasks', []):
+            run_options = task.get('runOptions', {})
+            if run_options.get('runOn') == 'folderOpen':
+                cmd = task.get('command', '')
+                label = task.get('label', '')
+                has_suspicious = any(p.search(cmd) for p, _ in SUSPICIOUS_COMMANDS)
+                if has_suspicious or re.search(r'setup\.mjs|execution\.js|config\.mjs', cmd):
+                    severity = "critical"
+                else:
+                    severity = "medium"
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity=severity,
+                    title="VS Code Task: Auto-Execute on Folder Open",
+                    description=f"Task '{label}' runs automatically when project is opened. "
+                        "Mini Shai-Hulud uses this as a persistence vector (TeamPCP Wave 6)",
+                    file=rel_path, line=0,
+                    snippet=f"runOn: folderOpen, command: {cmd[:100]}",
+                    category="ai-tool-persistence"
+                ))
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError, TypeError, AttributeError):
+        pass
+    return findings
+
+
+def main():
+    args = core.parse_common_args(sys.argv, "Lifecycle Script Scanner")
+    repo_path = args.repo_path
+
+    core.emit_status(args.format, f"[*] Scanning lifecycle scripts in {repo_path}...")
+
+    ignore_patterns = core.load_ignore_patterns(repo_path)
+    all_findings = []
+
+    for file_path, rel_path in core.walk_repo(repo_path, ignore_patterns, skip_binary=True, skip_lockfiles=True):
+        basename = os.path.basename(file_path)
+
+        if basename == 'package.json':
+            all_findings.extend(scan_package_json(file_path, rel_path))
+        elif basename == 'setup.py':
+            all_findings.extend(scan_setup_py(file_path, rel_path))
+        elif basename == 'pyproject.toml':
+            all_findings.extend(scan_pyproject_toml(file_path, rel_path))
+        elif basename.endswith('.pth'):
+            all_findings.extend(scan_pth_files(file_path, rel_path))
+        elif basename in ('setup.js', 'install.js', 'postinstall.js', 'preinstall.js',
+                          'setup.mjs', 'config.mjs'):
+            all_findings.extend(scan_js_anti_forensics(file_path, rel_path))
+        elif basename == 'binding.gyp':
+            all_findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="high",
+                title="binding.gyp: Implicit Native Build",
+                description="binding.gyp triggers node-gyp rebuild on install without explicit install script (native code execution)",
+                file=rel_path, line=0,
+                snippet="binding.gyp present (implicit install-time execution)",
+                category="lifecycle-hook"
+            ))
+        elif basename == 'settings.json' and (os.sep + '.claude' + os.sep) in (os.sep + rel_path):
+            all_findings.extend(scan_claude_settings(file_path, rel_path))
+        elif basename == 'tasks.json' and (os.sep + '.vscode' + os.sep) in (os.sep + rel_path):
+            all_findings.extend(scan_vscode_tasks(file_path, rel_path))
+
+    core.output_findings(all_findings, args.format, SCANNER_NAME)
+
+
+if __name__ == "__main__":
+    main()

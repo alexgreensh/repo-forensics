@@ -1,0 +1,20 @@
+{
+  "name": "alexgreensh-repo-forensics",
+  "interface": {
+    "displayName": "Repo Forensics by Alex Greenshpun"
+  },
+  "plugins": [
+    {
+      "name": "repo-forensics",
+      "source": {
+        "source": "local",
+        "path": "./plugins/repo-forensics"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Security"
+    }
+  ]
+}

@@ -1,0 +1,282 @@
+---
+name: repo-forensics
+description: Security forensics for git repos, AI skills, and MCP servers. Audits dependencies, detects prompt injection, credential theft, runtime dynamism, manifest drift, known CVEs, CISA KEV (actively exploited) vulns, and 2026 attack patterns. Not for fixing vulnerabilities or pentesting.
+metadata:
+  author: Alex Greenshpun
+allowed-tools: Bash Read Glob Grep
+user-invocable: true
+argument-hint: <repo_path> [--skill-scan] [--format text|json|summary] [--update-iocs] [--update-vulns] [--no-vulns] [--offline] [--watch] [--verify-install]
+---
+
+<!-- repo-forensics v2 | built by Alex Greenshpun | https://linkedin.com/in/alexgreensh -->
+
+# Repo Forensics v2
+
+Deep security auditing for repositories, AI agent skills, and MCP servers.
+
+## Highlights
+
+- **Auto-scan hook** (v2): PostToolUse hook auto-triggers on `git clone`, `git pull`, `pip install`, `npm install/update`, `gem install/update`, `brew install/upgrade`, etc. Zero-overhead for non-matching commands.
+- **Pre-execution gate** (v2.6): PreToolUse hook blocks known-malicious packages and pipe-to-shell commands BEFORE execution. IOC-only, <10ms latency, no subprocess calls.
+- **Session security scanner** (v2.6.3): SessionStart hook detects updated plugins/skills/MCP servers, refreshes threat databases daily, runs fast IOC check + full 20-scanner deep scan on changed items. Sub-1ms when nothing changed.
+- **.pth file injection detection** (v2): Detects liteLLM-style Python startup injection attacks (exec/eval/base64/known IOC filenames)
+- **Transitive dependency scanning** (v2): Deep-parses `package-lock.json`, `yarn.lock`, `poetry.lock`, `Pipfile.lock` for supply chain IOCs
+- **DAST scanner** (`scan_dast.py`): Dynamic analysis of Claude Code hooks with 8 malicious payload types, sandboxed execution
+- **File integrity monitor** (`scan_integrity.py`): SHA256 baselines for critical config files, drift detection with `--watch`
+- **IOC auto-update** (`--update-iocs`): Pull latest indicators of compromise from remote feed
+- **Installation verification** (`--verify-install`): Verify repo-forensics itself hasn't been tampered with
+- **GitHub Actions** (`action.yml`): CI/CD integration for automated security gating
+- **Runtime behavior prediction** (`scan_runtime_dynamism.py`): Detects code that changes behavior after install: dynamic imports, fetch-then-execute, self-modification, time bombs, dynamic tool descriptions
+- **Manifest drift detection** (`scan_manifest_drift.py`): Compares declared vs actual dependencies, catches phantom deps, runtime installs, conditional import+install fallbacks
+- **MCP rug pull detection**: Tool descriptions sourced from database, network, env vars, or conditional logic
+- **Enhanced AST analysis**: 12 patterns including marshal.loads, types.CodeType, sys.addaudithook, bytes decode obfuscation, self-modification
+- **Test suite**: 1,280+ pytest tests covering all scanners
+- **OpenClaw/ClawHub scanning**: Auto-detects OpenClaw skills, validates frontmatter, tools.json, SOUL.md, .clawhubignore
+- **Anti-forensics detection** (v2): Self-deleting installers, package.json overwrite, version mismatch (Axios supply chain pattern)
+- **Compromised version detection** (v2): Flags known-bad versions of legitimate packages (Axios 1.14.1/0.30.4, liteLLM 1.82.8)
+- **Suspicious npm scope detection** (v2): Flags systematic MCP server forking campaigns (iflow-mcp)
+- **Host IOC scanning** (v2): Known RAT binary paths, C2 domains, malicious file hashes
+- **CVE-2026-33068 detection** (v2): Workspace trust bypass via bypassPermissions in Claude Code settings
+- **Post-incident forensics** (v2.2): npm cache/log artifacts, RAT binary detection, C2 persistence, node_modules traces that survive dropper self-cleanup
+- **Supply chain hardening** (v2.2): .npmrc scanning, missing lockfile detection, git/HTTP dep flagging, hostname bypass fix, unbounded Python range detection, install script severity elevation
+- **Devcontainer security scanning** (v2.6.5): JSON-based analysis of devcontainer.json for host secret mounts, container escape vectors, localEnv interpolation, lifecycle command risks, and untrusted features
+- **Framework env prefix leak detection** (v2.6.5): Catches secrets exposed to browser bundles via NEXT_PUBLIC_, REACT_APP_, VITE_, EXPO_PUBLIC_, GATSBY_, NX_PUBLIC_ prefixes
+- **process.env exposure detection** (v2.6.5): Flags console.log(process.env), JSON.stringify(process.env), and crash report env dumps
+- **Docker ARG secret detection** (v2.6.5): Catches secrets passed via ARG directives (permanently visible in docker history)
+- **1Password/Vault token detection** (v2.6.5): OP_CONNECT_TOKEN, ops_ service account tokens, hvs. Vault tokens
+- **20 scanners** with 41 correlation rules
+
+## When to Use
+
+- **Auditing a new repo or dependency** before adding it to your project
+- **Vetting AI skills/plugins** before installation (prompt injection, credential theft, backdoors)
+- **Auditing MCP servers** for tool poisoning, SQL injection, config risks
+- **Security review** when someone asks "is this code secure?"
+- **Forensic investigation** of a suspected compromise
+- **CI/CD gating** with machine-readable output and exit codes
+- **Hook security testing** to verify Claude Code hooks handle malicious input safely
+
+## Quick Start
+
+Full audit (all 20 scanners):
+```bash
+./scripts/run_forensics.sh /path/to/repo
+```
+
+Focused AI skill scan (10 scanners, faster):
+```bash
+./scripts/run_forensics.sh /path/to/repo --skill-scan
+```
+
+With IOC update and integrity monitoring:
+```bash
+./scripts/run_forensics.sh /path/to/repo --update-iocs --watch
+```
+
+Verify your installation:
+```bash
+./scripts/run_forensics.sh /path/to/repo --verify-install
+```
+
+JSON output for automation:
+```bash
+./scripts/run_forensics.sh /path/to/repo --format json
+```
+
+## Severity System
+
+| Level | Score | Meaning | Exit Code |
+|-------|-------|---------|-----------|
+| CRITICAL | 4 | Active threat, immediate action required | 2 |
+| HIGH | 3 | Significant risk, investigate promptly | 1 |
+| MEDIUM | 2 | Potential issue, review recommended | 1 |
+| LOW | 1 | Informational, may be false positive | 0 |
+
+## Scanners
+
+| Scanner | What It Detects | Mode |
+|---------|----------------|------|
+| **runtime_dynamism** | Dynamic imports, fetch-then-execute, self-modification, time bombs, dynamic tool descriptions | skill + full |
+| **manifest_drift** | Phantom dependencies, runtime package installs, conditional import+install, declared-but-unused deps | skill + full |
+| **skill_threats** | Prompt injection, unicode smuggling, prerequisite attacks, ClickFix, MCP tool injection | skill + full |
+| **agent_skills** | SKILL.md frontmatter abuse, tools.json FSP, agent config injection (SOUL.md/AGENTS.md/CLAUDE.md), .clawhubignore bypass, ClawHavoc IOCs. Covers Claude Code, OpenClaw, Codex, Cursor, MCP. | skill + full |
+| **mcp_security** | SQL injection to prompt escalation, tool poisoning, rug pull enablers, config CVEs | skill + full |
+| **dataflow** | Source-to-sink taint tracking (env vars to network calls), cross-file import taint | skill + full |
+| **secrets** | 50+ patterns: API keys, tokens, private keys, database URIs, JWTs, framework env prefix leaks, 1Password/Vault tokens, .env variant files | skill + full |
+| **sast** | Dangerous functions, injection, shell execution across 8 languages, process.env exposure, path traversal | skill + full |
+| **lifecycle** | NPM hooks + Python setup.py/pyproject.toml cmdclass overrides + anti-forensics (self-deleting installers, package.json overwrite) | skill + full |
+| **integrity** | SHA256 baselines for .claude/settings.json, CLAUDE.md, hook scripts. Drift detection with `--watch` | full |
+| **dast** | Dynamic hook testing: 8 payload types (injection, traversal, amplification, env leak) in sandbox | full |
+| **entropy** | Per-string Shannon entropy, base64 blocks, hex strings (combo detection) | full |
+| **infra** | Docker (ENV/ARG secrets, .env COPY), K8s, GitHub Actions, Claude Code config (CVE-2025-59536, CVE-2026-21852, CVE-2026-33068) | full |
+| **devcontainer** | JSON-based devcontainer.json analysis: host mounts, privileged mode, docker.sock, remoteEnv localEnv interpolation, lifecycle commands, untrusted features | skill + full |
+| **dependencies** | NPM + Python typosquatting, l33t normalization, IOC packages (SANDWORM_MODE 2026), compromised version detection (Axios, liteLLM), suspicious scope detection (iflow-mcp) | full |
+| **ast_analysis** | Python AST: obfuscated exec chains, `__reduce__` backdoors, marshal/types bytecode, audit hook abuse, self-modification | full |
+| **binary** | Executables hidden as images/text files | full |
+| **git_forensics** | Time anomalies, GPG signature issues, identity inconsistencies | full |
+
+## Dynamic Analysis (DAST)
+
+The `scan_dast.py` scanner executes hook scripts with malicious payloads in a sandboxed subprocess:
+
+**8 payload types:**
+1. Prompt injection in tool input
+2. Path traversal in file arguments
+3. Command injection via backticks/subshell
+4. Oversized input (amplification test)
+5. Unicode smuggling in arguments
+6. Environment variable exfiltration attempt
+7. Shell metacharacter injection
+8. Null byte injection
+
+**Safety:** All execution uses subprocess with 5s timeout, stdout/stderr capture, scrubbed environment, temp directory isolation, no shell=True.
+
+## File Integrity Monitor
+
+The `scan_integrity.py` scanner protects critical configuration files:
+
+- SHA256 baselines for `.claude/settings.json`, `CLAUDE.md`, `.mcp.json`, hook scripts
+- **`--watch` mode**: Creates baseline on first run, alerts on drift on subsequent runs
+- Detects dangerous hook commands (curl, wget, eval, base64, /dev/tcp)
+- Flags executable config files (unusual permission bits)
+
+## CVE + CISA KEV Auto-Enrichment (v2.6)
+
+The dependency scanner automatically enriches findings with live vulnerability data:
+
+- **OSV (Open Source Vulnerabilities):** Every pinned `(ecosystem, package, version)` found in a manifest or lockfile is queried against `api.osv.dev`. Matches emit a `cve` finding with CVSS-mapped severity and suggested fix versions.
+- **CISA KEV (Known Exploited Vulnerabilities):** CVE aliases are cross-referenced against the CISA KEV catalog — CVEs confirmed actively exploited in the wild. Any match is escalated to **CRITICAL** severity (category `cve-kev`) regardless of CVSS, because exploitation in the wild is the strongest prioritization signal.
+- **Caches:** KEV catalog is cached 24h (`~/.cache/repo-forensics/kev.json`). OSV per-package queries cache 24h (`~/.cache/repo-forensics/osv-queries.json`, LRU-capped at 4000 entries). Both files are written atomically with mode 0o600.
+- **Security:** Feed URLs are hardcoded constants. No user-overridable URL at the public API (SSRF guardrail). Response size caps, HTTPS-only fetch, fail-closed CVE ID validation, and oversized-response rejection. A malformed or hostile feed returns an empty result rather than crashing the scanner.
+- **Offline mode:** `--offline` uses cached data only; `--no-vulns` disables the feature entirely.
+- **CLI:** `--update-vulns` refreshes the KEV catalog before scanning. Standalone tool: `python3 scripts/vuln_feed.py --query npm lodash 4.17.20`.
+
+## IOC Auto-Update
+
+The `--update-iocs` flag pulls latest indicators of compromise from a hosted JSON feed:
+
+- C2 IP addresses, malicious domains, known-bad packages
+- Cached locally in `.forensics-iocs.json` (24h TTL)
+- Falls back to hardcoded IOCs when offline
+- Managed by `ioc_manager.py` (`--show` to inspect, `--update` to pull)
+
+## Installation Verification
+
+The `--verify-install` flag checks that repo-forensics itself hasn't been tampered with:
+
+- Compares all skill files against `checksums.json` (SHA256)
+- Detects modified, missing, or unexpected files
+- Run `verify_install.py --generate` at release time to create checksums
+
+## AI Skill Threat Detection
+
+The `scan_skill_threats.py` scanner detects 10 categories of AI agent skill attacks:
+
+1. **Prompt injection directives** ("ignore previous instructions", persona reassignment)
+2. **Invisible unicode smuggling** (zero-width chars, RTL override, Cyrillic + Greek homoglyphs)
+3. **Prerequisite red flags** (curl-pipe-bash, password-protected archives, xattr -c)
+4. **Credential exfiltration** (bulk env access + network calls, webhook services)
+5. **Persistence mechanisms** (LaunchAgents, crontab, shell RC modifications)
+6. **Scope escalation** (accessing ~/.ssh, browser data, Keychain, other skills)
+7. **Stealth directives** ("do not log", output suppression with background exec)
+8. **Known campaign IOCs** (C2 IPs from ClawHavoc, SANDWORM_MODE, Telegram/Discord exfil)
+9. **ClickFix / sleeper malware** (curl|base64-d|bash delivery, glot.io pastebins, SKILL.md prereqs)
+10. **MCP tool description injection** (Invariant Labs `<IMPORTANT>` tag, "note to the AI", hidden instructions in JSON description fields)
+
+## MCP Attack Surface
+
+The `scan_mcp_security.py` scanner covers MCP-specific attack vectors discovered in 2025-2026:
+
+### Tool Poisoning Attack (TPA)
+Hidden instructions injected into tool `description` fields load into LLM context without user visibility. Canonical pattern: `<IMPORTANT>` tag (Invariant Labs, 2025).
+
+### SQL Injection to Stored Prompt Injection
+SQL injection in MCP server code can write malicious prompts into databases that are later retrieved and executed by agents (Trend Micro TrendAI, May 2025).
+
+### Configuration Risks
+- **CVE-2025-59536** (CVSS 8.7): Claude Code hooks execute before trust dialog, RCE via `.claude/settings.json`
+- **CVE-2026-21852** (CVSS 7.5): `ANTHROPIC_BASE_URL` override exfiltrates API keys
+- **CVE-2025-49596** (CVSS 9.4): MCP Inspector DNS rebinding via `0.0.0.0` binding
+- **CVE-2025-6514** (CVSS 9.6): mcp-remote OAuth command injection
+- **CVE-2026-33068** (CVSS 7.7): Workspace trust bypass via `bypassPermissions` in `.claude/settings.json`
+- **`enableAllProjectMcpServers: true`**: Bypasses per-server consent dialogs
+
+### Tool Shadowing
+Cross-tool contamination where one tool's description instructs the LLM to modify behavior of other tools (Invariant Labs 2025).
+
+### Rug Pull Enablers
+Tool descriptions sourced from mutable data (database queries, network requests, environment variables, runtime file loads). These don't prove malicious intent but flag that tool behavior can change without code changes (Lukas Kania, March 2026; OWASP MCP07).
+
+## Runtime Behavior Prediction
+
+The `scan_runtime_dynamism.py` scanner detects static indicators that code will change behavior after install:
+
+1. **Dynamic imports**: `importlib.import_module(variable)`, `__import__(env_var)`, `require(variable)`, ES `import(variable)`
+2. **Fetch-then-execute**: `requests.get(url).text` piped to `eval()`, runtime `pip install`/`npm install`, download-and-run scripts
+3. **Self-modification**: `types.FunctionType()`, `types.CodeType()`, `marshal.loads()`, `open(__file__, 'w')`, `SourcelessFileLoader` (CVE-2026-2297)
+4. **Time bombs**: `datetime.now() > datetime(2026,6,1)`, unix timestamp comparisons, counter-based activation, probabilistic triggers
+5. **Dynamic tool descriptions**: MCP description from `db.query()`, `requests.get()`, `os.environ`, conditional descriptions
+
+Uses both regex patterns and Python AST analysis for reliable detection.
+
+## Manifest Drift Detection
+
+The `scan_manifest_drift.py` scanner compares what a package DECLARES vs what it actually USES:
+
+- **Phantom dependencies**: Module imported in code but not in `requirements.txt`/`package.json`
+- **Runtime package installs**: `subprocess.run(["pip", "install", pkg])` in code
+- **Conditional import+install**: `try: import X except: os.system("pip install X")`
+- **Declared but unused**: Package in manifest but never imported (potential dependency confusion decoy)
+
+Supports Python (requirements.txt, pyproject.toml, setup.py) and Node.js (package.json).
+
+## Correlation Engine
+
+The correlation engine (`forensics_core.py`) identifies compound threats across 14 rules:
+
+1. Environment/credential access + network call = **Potential Data Exfiltration** (critical)
+2. Base64 encoding + exec/eval = **Obfuscated Code Execution** (critical)
+3. Sensitive file read + network call = **Credential Theft Pattern** (high)
+4. Prompt injection + code execution = **Prompt-Assisted Code Execution** (critical)
+5. Lifecycle hook + network call = **Install-Time Exfiltration** (critical)
+6. SQL injection + MCP/skill_threats finding = **SQL Injection Prompt Escalation** (critical)
+7. Tool metadata poisoning + code execution = **Tool Metadata Poisoning Chain** (critical)
+8. Unicode smuggling + prompt injection in docs = **Hidden Instruction Attack in Documentation** (high)
+9. Dynamic import + network fetch = **Deferred Payload Loading** (critical)
+10. Time/counter trigger + exec/eval = **Time-Triggered Malware** (critical)
+11. Dynamic tool description + MCP server = **MCP Rug Pull Enabler** (high)
+12. Phantom dependency + network call = **Shadow Dependency with Network Access** (critical)
+13. Pipe exfiltration + network sink = **Shell Script Data Exfiltration Chain** (critical)
+14. Tools.json poisoning + prompt injection = **Agent Skill Compound Attack** (critical)
+
+## Configuration
+
+Create `.forensicsignore` in the repo root to suppress false positives:
+```text
+tests/fixtures/secrets.json
+legacy/unsafe_code/*
+src/config/dev_keys.py
+```
+
+Note: `.forensicsignore` itself is scanned for attacker-planted wildcard suppression patterns.
+
+## Output Formats
+
+- `--format text` (default): Colored human-readable output with severity tags
+- `--format json`: Machine-readable JSON array of Finding objects
+- `--format summary`: Counts only (for CI/CD scripting)
+
+## GitHub Actions
+
+Add to your workflow:
+```yaml
+- uses: alexgreensh/repo-forensics@v1
+  with:
+    mode: full
+    format: text
+    update-iocs: true
+```
+
+## Research Sources
+
+See `references/research_sources.md` for full credits and links to the published research that informed this skill's threat detection capabilities.

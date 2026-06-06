@@ -11,7 +11,7 @@ Audit untrusted repos before they touch your agent. Fully local, zero dependenci
 </p>
 
 <p align="center">
-  <a href="https://github.com/alexgreensh/repo-forensics/releases"><img src="https://img.shields.io/badge/version-2.9.0-green.svg" alt="Version 2.9.0"></a>
+  <a href="https://github.com/alexgreensh/repo-forensics/releases"><img src="https://img.shields.io/badge/version-2.9.1-green.svg" alt="Version 2.9.1"></a>
   <a href="https://github.com/alexgreensh/repo-forensics/releases"><img src="https://img.shields.io/github/release-date/alexgreensh/repo-forensics?label=last%20release&color=blue" alt="Last Release"></a>
   <a href="https://github.com/alexgreensh/repo-forensics/stargazers"><img src="https://img.shields.io/github/stars/alexgreensh/repo-forensics" alt="GitHub Stars"></a>
   <a href="https://github.com/alexgreensh/repo-forensics/commits/main"><img src="https://img.shields.io/github/commit-activity/m/alexgreensh/repo-forensics" alt="Commit Activity"></a>
@@ -60,6 +60,19 @@ Hooks auto-wire on install. Every `git clone`, `npm install`, `pip install` is s
 <summary><b>Codex CLI</b> (auto-scan on install)</summary>
 
 Install the plugin via the Codex marketplace. Hooks auto-wire from `plugin.json`. Same three hooks as Claude Code: PreToolUse (IOC gate), PostToolUse (auto-scan), SessionStart (security scan).
+
+```bash
+codex plugin marketplace add .
+codex plugin add repo-forensics@alexgreensh-repo-forensics
+```
+
+For a local checkout/manual wire-up:
+
+```bash
+python3 scripts/codex_install.py
+# restart Codex, then prove Codex registered the hooks
+python3 scripts/codex_install.py --verify --require-registered
+```
 
 </details>
 
@@ -160,7 +173,7 @@ Once installed as a plugin, repo-forensics runs automatically in the background.
 | Platform | Auto-Wire | Manual Setup |
 |----------|-----------|-------------|
 | Claude Code | Plugin install auto-registers all 3 hooks | None needed |
-| Codex CLI | Plugin install auto-registers all 3 hooks | None needed |
+| Codex CLI | Plugin install auto-registers all 3 hooks | Local checkout: `python3 scripts/codex_install.py` |
 | OpenClaw | Not auto-wired by plugin system | One-time: `python3 scripts/openclaw_install.py` |
 | Cursor / NanoClaw / CLI | N/A (no plugin hook system) | Use manual `/repo-forensics` invocation |
 

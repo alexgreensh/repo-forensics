@@ -1,0 +1,33 @@
+(version 1)
+
+;; Forensify domain sub-agent sandbox profile (macOS Seatbelt)
+;;
+;; v2.5.0: allow-default with selective denies for network and filesystem writes.
+;; v2.5.1: inverted to deny-default with exhaustive explicit allow list.
+;;         Verified against macOS 14/15 with Homebrew and framework Python installs.
+;;
+;; NOTE: target repo path must be added dynamically per-invocation by the
+;; forensify orchestrator (pass as an additional (allow file-read* (subpath ...))
+;; rule or via the COORD_PATH param mechanism).
+
+(deny default)
+
+;; Block all network access — domain sub-agents must not exfiltrate data
+(deny network*)
+
+;; --- Python runtime ---
+(allow file-read* (subpath "/usr"))
+(allow file-read* (subpath "/Library/Frameworks/Python.framework"))
+(allow file-read* (subpath "/opt/homebrew"))
+
+;; --- Coord folder (read + write) ---
+(allow file-read-data (subpath "/tmp/forensify-coord"))
+(allow file-write* (subpath "/tmp/forensify-coord"))
+
+;; --- Execute system and homebrew binaries ---
+(allow process-exec (subpath "/usr"))
+(allow process-exec (subpath "/opt/homebrew"))
+
+;; --- Required Python internals ---
+(allow mach-lookup)
+(allow sysctl-read)

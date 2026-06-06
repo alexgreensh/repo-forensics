@@ -1,5 +1,6 @@
 # Test fixtures contain intentionally malicious patterns for scanner validation
 skills/repo-forensics/tests/*
+skills/forensify/tests/*
 
 # Integrity checksums (SHA256 hashes trigger entropy scanner)
 skills/repo-forensics/checksums.json
@@ -26,6 +27,9 @@ CHANGELOG.md
 # CLA workflow has a legitimate bot-signing webhook the scanner mis-flags
 # as install-time exfiltration (lifecycle + network keyword co-occurrence).
 .github/workflows/cla.yml
+
+# Generated Codex marketplace mirror; root skills/hooks remain canonical.
+plugins/repo-forensics/
 
 # Vendor directories — common build/cache paths that generate false positives.
 # Users scanning vendored dependencies should remove these lines.

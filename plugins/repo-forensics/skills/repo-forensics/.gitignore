@@ -1,0 +1,17 @@
+# Internal / self-learning notes — never commit
+FIELD_NOTES.md
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo

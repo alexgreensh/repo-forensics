@@ -1,0 +1,267 @@
+#!/usr/bin/env python3
+"""
+scan_sast.py - Static Application Security Testing (v2)
+Identifies dangerous functions, injection patterns, and code vulnerabilities.
+Fixed: duplicate import, added os.system/__import__/compile/Function,
+does NOT skip tests/ (attackers hide malware there per Snyk research).
+
+Created by Alex Greenshpun
+"""
+
+import os
+import re
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import forensics_core as core
+
+SCANNER_NAME = "sast"
+
+# NOTE: tests/ is NOT in core.IGNORE_DIRS either (attackers hide malware there)
+
+SAST_PATTERNS = {
+    ".py": [
+        {"name": "Dangerous Eval", "severity": "high", "regex": re.compile(r'\beval\s*\('), "category": "code-execution"},
+        {"name": "Dangerous Exec", "severity": "high", "regex": re.compile(r'\bexec\s*\('), "category": "code-execution"},
+        {"name": "Dynamic Import", "severity": "high", "regex": re.compile(r'\b__import__\s*\('), "category": "code-execution"},
+        {"name": "Dynamic Compile", "severity": "medium", "regex": re.compile(r'\bcompile\s*\([^)]*[\'"]exec[\'"]'), "category": "code-execution"},
+        {"name": "Unsafe Deserialization", "severity": "critical", "regex": re.compile(r'\b(pickle|cPickle|shelve|yaml)\.(loads?|load_all|unsafe_load)\s*\('), "category": "deserialization"},
+        {"name": "Shell Injection (subprocess)", "severity": "critical", "regex": re.compile(r'\bsubprocess\.(call|run|Popen|check_output|check_call)\s*\([^)]*shell\s*=\s*True'), "category": "shell-injection"},
+        {"name": "Shell Injection (os)", "severity": "critical", "regex": re.compile(r'\bos\.(popen|system)\s*\('), "category": "shell-injection"},
+        {"name": "SQL Injection Pattern", "severity": "high", "regex": re.compile(r'(?i)(execute|cursor\.execute)\s*\([^)]*(%s|%d|\+|\.format|f[\'"])'), "category": "injection"},
+        {"name": "Hardcoded IP", "severity": "low", "regex": re.compile(r'[\'\"]\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}[\'"]'), "category": "hardcoded"},
+        {"name": "Model Confusion: Bare from_pretrained Path", "severity": "high", "regex": re.compile(r'from_pretrained\s*\(\s*[\'"][a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+[\'"]'), "category": "model-confusion"},
+        {"name": "Model Confusion: trust_remote_code=True", "severity": "critical", "regex": re.compile(r'trust_remote_code\s*=\s*True'), "category": "model-confusion"},
+        {"name": "Unsafe Model Load: torch.load weights_only=False", "severity": "critical", "regex": re.compile(r'torch\.load\s*\([^)]*weights_only\s*=\s*False'), "category": "model-confusion"},
+        {"name": "Unsafe Pickle Model Load", "severity": "high", "regex": re.compile(r'torch\.load\s*\((?![^)]*\bweights_only\b)'), "category": "model-confusion"},
+        {"name": "Destructive: shutil.rmtree on Home", "severity": "critical", "regex": re.compile(r'shutil\.rmtree\s*\(\s*(?:os\.path\.expanduser\([^)]*~|os\.environ[^)]*HOME)'), "category": "destructive-command"},
+        {"name": "PyPI Worm: Programmatic Publish", "severity": "critical", "regex": re.compile(r'twine\s+upload|subprocess.*twine.*upload|setup\.py\s+sdist\s+upload'), "category": "worm-propagation"},
+        {"name": "Kernel Exploit: AF_ALG Socket", "severity": "critical", "regex": re.compile(r'(?:socket\.)?socket\s*\(\s*(?:38|0x26|(?:socket\.)?AF_ALG)\s*[\s,)]'), "category": "kernel-exploit"},
+        {"name": "Kernel Exploit: Crypto Template Bind", "severity": "critical", "regex": re.compile(r'\.bind\s*\(\s*\(\s*[\'"](?:aead|skcipher)[\'"]'), "category": "kernel-exploit"},
+        {"name": "Kernel Exploit: authencesn Reference", "severity": "high", "regex": re.compile(r'\bauthencesn\b'), "category": "kernel-exploit"},
+        # Reflection-based RCE: getattr + __import__ combo (dynamic attribute dispatch)
+        {"name": "Reflection RCE: getattr + __import__ combo", "severity": "high", "regex": re.compile(r'getattr\s*\(\s*__import__\s*\('), "category": "reflection-rce"},
+        {"name": "Process Memory Read (/proc)", "severity": "critical", "regex": re.compile(r'/proc/\d+/mem|/proc/self/mem'), "category": "memory-forensics"},
+        {"name": "Process Enumeration (/proc)", "severity": "high", "regex": re.compile(r'os\.listdir\s*\(\s*["\']/?proc["\']|glob\.glob\s*\(\s*["\']/?proc/\d|/proc/\*/cmdline'), "category": "process-enumeration"},
+        {"name": "Runner.Worker Process Hunt", "severity": "critical", "regex": re.compile(r'\bRunner\.Worker\b|\bRunner\.Listener\b', re.IGNORECASE), "category": "process-enumeration"},
+        {"name": "OIDC Token Exchange", "severity": "critical", "regex": re.compile(r'ACTIONS_ID_TOKEN_REQUEST_TOKEN|ACTIONS_ID_TOKEN_REQUEST_URL|oidc/token/exchange'), "category": "ci-token-abuse"},
+    ],
+    ".js": [
+        {"name": "Dangerous Eval", "severity": "high", "regex": re.compile(r'\beval\s*\('), "category": "code-execution"},
+        {"name": "Function Constructor", "severity": "high", "regex": re.compile(r'\bnew\s+Function\s*\('), "category": "code-execution"},
+        {"name": "Unsafe HTML", "severity": "high", "regex": re.compile(r'dangerouslySetInnerHTML'), "category": "xss"},
+        {"name": "innerHTML Assignment", "severity": "medium", "regex": re.compile(r'\.innerHTML\s*='), "category": "xss"},
+        {"name": "Child Process Exec", "severity": "critical", "regex": re.compile(r'(require\s*\(\s*[\'"]child_process[\'"]\s*\)|child_process)\.(exec|execSync|spawn)\s*\('), "category": "shell-injection"},
+        {"name": "Implied Eval (setTimeout)", "severity": "medium", "regex": re.compile(r'setTimeout\s*\(\s*[\'"][^\'"]+[\'"]'), "category": "code-execution"},
+        {"name": "document.write", "severity": "medium", "regex": re.compile(r'document\.write\s*\('), "category": "xss"},
+        {"name": "SQL String Concat", "severity": "high", "regex": re.compile(r'(?i)(SELECT|INSERT|UPDATE|DELETE)\s+.*\+\s*(?:req\.|params\.|query\.)'), "category": "injection"},
+        {"name": "process.env Logged to Console", "severity": "high", "regex": re.compile(r'console\.(log|error|warn|debug|info)\s*\([^)]*process\.env\s*[,)]'), "category": "secret-exposure"},
+        {"name": "process.env Serialized (JSON.stringify)", "severity": "high", "regex": re.compile(r'JSON\.stringify\s*\(\s*process\.env\s*[,)]'), "category": "secret-exposure"},
+        {"name": "process.env in Crash Report", "severity": "high", "regex": re.compile(r'(?:writeFile|writeFileSync|appendFile)\s*\([^)]*process\.env'), "category": "secret-exposure"},
+        {"name": "Path Traversal: Unsanitized File Serve", "severity": "high", "regex": re.compile(r'(?:sendFile|readFile|readFileSync|createReadStream)\s*\([^)]*(?:req\.path|req\.params|req\.query|req\.url)'), "category": "path-traversal"},
+        {"name": "Path Traversal: Unsanitized path.join", "severity": "high", "regex": re.compile(r'path\.(?:join|resolve)\s*\([^)]*(?:req\.path|req\.params|req\.query|req\.url)'), "category": "path-traversal"},
+        {"name": "Direct /proc Filesystem Access", "severity": "high", "regex": re.compile(r'''['"]/proc/self/environ['"]'''), "category": "path-traversal"},
+        {"name": "NPM Worm: Package Enumeration", "severity": "critical", "regex": re.compile(r'npm\s+access\s+ls-packages|npm\s+whoami|registry\.npmjs\.org.*/-/v1/search'), "category": "worm-propagation"},
+        {"name": "NPM Worm: Programmatic Publish", "severity": "critical", "regex": re.compile(r'npm\s+publish|child_process.*npm.*publish|exec.*npm\s+publish'), "category": "worm-propagation"},
+        {"name": "NPM Token Theft", "severity": "critical", "regex": re.compile(r'\.npmrc|NPM_TOKEN|npm_token|npm-token'), "category": "credential-theft"},
+        {"name": "Git-Based Exfiltration: Repo Creation", "severity": "critical", "regex": re.compile(r'POST\s+/user/repos|repos\.create|createForAuthenticatedUser|user/repos'), "category": "git-exfiltration"},
+        {"name": "Git-Based Exfiltration: Content Push", "severity": "high", "regex": re.compile(r'PUT\s+/repos/.*/contents/|repos\.createOrUpdateFileContents|createOrUpdateFile'), "category": "git-exfiltration"},
+        {"name": "Git-Based Exfiltration: Commit Search C2", "severity": "critical", "regex": re.compile(r'/search/commits\?q=|search\.commits|commits\?q='), "category": "git-exfiltration"},
+        {"name": "OIDC Token Exchange", "severity": "critical", "regex": re.compile(r'ACTIONS_ID_TOKEN_REQUEST_TOKEN|ACTIONS_ID_TOKEN_REQUEST_URL|oidc/token/exchange'), "category": "ci-token-abuse"},
+        {"name": "Process Memory Read (/proc)", "severity": "critical", "regex": re.compile(r'/proc/\d+/mem|/proc/self/mem'), "category": "memory-forensics"},
+        {"name": "Process Enumeration (/proc)", "severity": "high", "regex": re.compile(r'readdir\w*\s*\(\s*["\']/?proc["\']|/proc/\*/cmdline'), "category": "process-enumeration"},
+        {"name": "Runner.Worker Process Hunt", "severity": "critical", "regex": re.compile(r'\bRunner\.Worker\b|\bRunner\.Listener\b', re.IGNORECASE), "category": "process-enumeration"},
+        {"name": "Double Base64 Encoding", "severity": "high", "regex": re.compile(r'base64\s+-w\s*0\s*\|\s*base64|btoa\(btoa\(|b64encode\(.*b64encode\('), "category": "obfuscation"},
+        {"name": "AWS STS Credential Validation", "severity": "high", "regex": re.compile(r'GetCallerIdentity|sts\.amazonaws\.com|sts\.(get|assume)'), "category": "credential-validation"},
+        {"name": "Cloud Secrets Manager Enumeration", "severity": "high", "regex": re.compile(r'secretsmanager:ListSecrets|secretsmanager:GetSecretValue|ListSecrets|GetSecretValue'), "category": "credential-theft"},
+        {"name": "AI Tool Config Theft", "severity": "critical", "regex": re.compile(r'\.claude\.json|\.claude/mcp\.json|\.kiro/settings/mcp\.json'), "category": "credential-theft"},
+        {"name": "Session P2P Exfiltration", "severity": "critical", "regex": re.compile(r'getsession\.org|filev2\.getsession|seed[123]\.getsession'), "category": "exfiltration"},
+        {"name": "Provenance Forging: Crypto Key + Sign", "severity": "critical", "regex": re.compile(r'generateKeyPairSync\s*\(.*\bsign\b'), "category": "provenance-forging"},
+        {"name": "Provenance Forging: in-toto/SLSA Attestation", "severity": "high", "regex": re.compile(r'in-toto\.io|intoto.*attestation|slsa.*provenance'), "category": "provenance-forging"},
+        {"name": "NPM Tarball Manipulation", "severity": "critical", "regex": re.compile(r'updateTarball'), "category": "worm-propagation"},
+        {"name": "Mass Encrypted String Obfuscation (beautify)", "severity": "high", "regex": re.compile(r'beautify\s*\(\s*["\'][0-9a-fA-F]+["\']'), "category": "obfuscation"},
+        {"name": "Dead-Man Wiper (JS)", "severity": "critical", "regex": re.compile(r'find\s+~\s+-type\s+f.*shred|xargs\s+shred\b'), "category": "destructive-command"},
+    ],
+    ".ts": [
+        {"name": "Dangerous Eval", "severity": "high", "regex": re.compile(r'\beval\s*\('), "category": "code-execution"},
+        {"name": "Function Constructor", "severity": "high", "regex": re.compile(r'\bnew\s+Function\s*\('), "category": "code-execution"},
+        {"name": "Unsafe HTML", "severity": "high", "regex": re.compile(r'dangerouslySetInnerHTML'), "category": "xss"},
+        {"name": "Child Process Exec", "severity": "critical", "regex": re.compile(r'child_process\.(exec|execSync|spawn)\s*\('), "category": "shell-injection"},
+        {"name": "process.env Logged to Console", "severity": "high", "regex": re.compile(r'console\.(log|error|warn|debug|info)\s*\([^)]*process\.env\s*[,)]'), "category": "secret-exposure"},
+        {"name": "process.env Serialized (JSON.stringify)", "severity": "high", "regex": re.compile(r'JSON\.stringify\s*\(\s*process\.env\s*[,)]'), "category": "secret-exposure"},
+        {"name": "Path Traversal: Unsanitized File Serve", "severity": "high", "regex": re.compile(r'(?:sendFile|readFile|readFileSync|createReadStream)\s*\([^)]*(?:req\.path|req\.params|req\.query|req\.url)'), "category": "path-traversal"},
+        {"name": "Path Traversal: Unsanitized path.join", "severity": "high", "regex": re.compile(r'path\.(?:join|resolve)\s*\([^)]*(?:req\.path|req\.params|req\.query|req\.url)'), "category": "path-traversal"},
+        {"name": "Direct /proc Filesystem Access", "severity": "high", "regex": re.compile(r'''['"]/proc/self/environ['"]'''), "category": "path-traversal"},
+        {"name": "Session P2P Exfiltration", "severity": "critical", "regex": re.compile(r'getsession\.org|filev2\.getsession|seed[123]\.getsession'), "category": "exfiltration"},
+        {"name": "Process Memory Read (/proc)", "severity": "critical", "regex": re.compile(r'/proc/\d+/mem|/proc/self/mem'), "category": "memory-forensics"},
+        {"name": "Process Enumeration (/proc)", "severity": "high", "regex": re.compile(r'readdir\w*\s*\(\s*["\']/?proc["\']|/proc/\*/cmdline'), "category": "process-enumeration"},
+        {"name": "Runner.Worker Process Hunt", "severity": "critical", "regex": re.compile(r'\bRunner\.Worker\b|\bRunner\.Listener\b', re.IGNORECASE), "category": "process-enumeration"},
+        {"name": "OIDC Token Exchange", "severity": "critical", "regex": re.compile(r'ACTIONS_ID_TOKEN_REQUEST_TOKEN|ACTIONS_ID_TOKEN_REQUEST_URL|oidc/token/exchange'), "category": "ci-token-abuse"},
+    ],
+    ".tsx": [
+        {"name": "Dangerous Eval", "severity": "high", "regex": re.compile(r'\beval\s*\('), "category": "code-execution"},
+        {"name": "Unsafe HTML", "severity": "high", "regex": re.compile(r'dangerouslySetInnerHTML'), "category": "xss"},
+    ],
+    ".jsx": [
+        {"name": "Dangerous Eval", "severity": "high", "regex": re.compile(r'\beval\s*\('), "category": "code-execution"},
+        {"name": "Unsafe HTML", "severity": "high", "regex": re.compile(r'dangerouslySetInnerHTML'), "category": "xss"},
+    ],
+    ".php": [
+        {"name": "Shell Execution", "severity": "critical", "regex": re.compile(r'\b(shell_exec|exec|passthru|system|popen)\s*\('), "category": "shell-injection"},
+        {"name": "Eval", "severity": "high", "regex": re.compile(r'\beval\s*\('), "category": "code-execution"},
+        {"name": "SQL Injection", "severity": "high", "regex": re.compile(r'(?i)mysql_query\s*\(\s*["\'].*\$'), "category": "injection"},
+        {"name": "File Inclusion", "severity": "critical", "regex": re.compile(r'\b(include|require)(_once)?\s*\(\s*\$'), "category": "injection"},
+    ],
+    ".java": [
+        {"name": "Command Execution", "severity": "critical", "regex": re.compile(r'Runtime\.getRuntime\(\)\.exec'), "category": "shell-injection"},
+        {"name": "ProcessBuilder", "severity": "high", "regex": re.compile(r'new\s+ProcessBuilder\s*\('), "category": "shell-injection"},
+        {"name": "Unsafe Deserialization", "severity": "critical", "regex": re.compile(r'ObjectInputStream.*readObject'), "category": "deserialization"},
+        # Reflection-based RCE: only flag when argument is a variable (not string literal)
+        {"name": "Reflection RCE: Method.invoke", "severity": "high", "regex": re.compile(r'\.invoke\s*\(\s*[a-zA-Z_]\w*'), "category": "reflection-rce"},
+        {"name": "Reflection RCE: Class.forName", "severity": "high", "regex": re.compile(r'Class\.forName\s*\(\s*[a-zA-Z_]\w*'), "category": "reflection-rce"},
+        {"name": "Reflection RCE: getMethod", "severity": "high", "regex": re.compile(r'getMethod\s*\(\s*[a-zA-Z_]\w*'), "category": "reflection-rce"},
+        {"name": "Reflection RCE: getDeclaredMethod", "severity": "high", "regex": re.compile(r'getDeclaredMethod\s*\(\s*[a-zA-Z_]\w*'), "category": "reflection-rce"},
+    ],
+    ".go": [
+        {"name": "Command Execution", "severity": "high", "regex": re.compile(r'exec\.Command\s*\('), "category": "shell-injection"},
+        {"name": "Unsafe Pointer", "severity": "medium", "regex": re.compile(r'unsafe\.Pointer'), "category": "memory-safety"},
+        # Reflection-based RCE: only flag when argument is a variable
+        {"name": "Reflection RCE: reflect.ValueOf", "severity": "high", "regex": re.compile(r'reflect\.ValueOf\s*\(\s*[a-zA-Z_]\w*'), "category": "reflection-rce"},
+        {"name": "Reflection RCE: reflect.Call", "severity": "high", "regex": re.compile(r'\.Call\s*\(\s*\[\s*\]reflect\.Value'), "category": "reflection-rce"},
+        {"name": "Process Memory Read (/proc)", "severity": "critical", "regex": re.compile(r'/proc/\d+/mem|/proc/self/mem'), "category": "memory-forensics"},
+        {"name": "Process Enumeration (/proc)", "severity": "high", "regex": re.compile(r'ioutil\.ReadDir\s*\(\s*["\']/?proc["\']|filepath\.Glob\s*\(\s*["\']/?proc/'), "category": "process-enumeration"},
+        {"name": "Runner.Worker Process Hunt", "severity": "critical", "regex": re.compile(r'\bRunner\.Worker\b|\bRunner\.Listener\b', re.IGNORECASE), "category": "process-enumeration"},
+        {"name": "OIDC Token Exchange", "severity": "critical", "regex": re.compile(r'ACTIONS_ID_TOKEN_REQUEST_TOKEN|ACTIONS_ID_TOKEN_REQUEST_URL|oidc/token/exchange'), "category": "ci-token-abuse"},
+    ],
+    ".rb": [
+        {"name": "Eval", "severity": "high", "regex": re.compile(r'\beval\s*\('), "category": "code-execution"},
+        {"name": "System Call", "severity": "critical", "regex": re.compile(r'\b(system|exec|`|%x)\s*[\(\[]'), "category": "shell-injection"},
+        {"name": "Send Method", "severity": "medium", "regex": re.compile(r'\bsend\s*\(\s*params'), "category": "code-execution"},
+        # Reflection-based RCE: send/public_send/method with variable argument
+        {"name": "Reflection RCE: send with variable", "severity": "high", "regex": re.compile(r'\b(?:public_)?send\s*\(\s*[a-zA-Z_]\w*(?!\s*["\'])'), "category": "reflection-rce"},
+        {"name": "Reflection RCE: method() with variable", "severity": "high", "regex": re.compile(r'\.method\s*\(\s*[a-zA-Z_]\w*'), "category": "reflection-rce"},
+    ],
+    ".cs": [
+        # Reflection-based RCE: only flag when argument is a variable (not string literal)
+        {"name": "Reflection RCE: MethodInfo.Invoke", "severity": "high", "regex": re.compile(r'\.Invoke\s*\(\s*[a-zA-Z_]\w*'), "category": "reflection-rce"},
+        {"name": "Reflection RCE: Assembly.Load", "severity": "high", "regex": re.compile(r'Assembly\.Load\w*\s*\(\s*[a-zA-Z_]\w*'), "category": "reflection-rce"},
+        {"name": "Reflection RCE: Activator.CreateInstance", "severity": "high", "regex": re.compile(r'Activator\.CreateInstance\s*\(\s*[a-zA-Z_]\w*'), "category": "reflection-rce"},
+    ],
+    ".sh": [
+        {"name": "Eval in Shell", "severity": "high", "regex": re.compile(r'\beval\s+'), "category": "code-execution"},
+        {"name": "Curl Pipe Bash", "severity": "critical", "regex": re.compile(r'curl\s+.*\|\s*(ba)?sh'), "category": "shell-injection"},
+        {"name": "Pipe to Shell Interpreter", "severity": "critical", "regex": re.compile(r'\|[\s\\]*\b(bash|sh|zsh|ksh|dash)\b'), "category": "shell-injection"},
+        {"name": "Nested Command Substitution", "severity": "high", "regex": re.compile(r'\$\([^)]*\$\('), "category": "code-execution"},
+        {"name": "Pipe Exfiltration: env to network", "severity": "critical", "regex": re.compile(r'(env|printenv|cat\s+\.env|cat\s+~/\.ssh|cat\s+~/\.aws)\s*\|.*\b(curl|wget|nc|ncat|socat)\b', re.IGNORECASE), "category": "exfiltration"},
+        {"name": "Pipe Exfiltration: sensitive file to network", "severity": "critical", "regex": re.compile(r'cat\s+[^\|]*(?:\.env|credential|password|secret|\.ssh|\.aws|\.gnupg|id_rsa|shadow)[^\|]*\|.*\b(curl|wget|nc|ncat)\b', re.IGNORECASE), "category": "exfiltration"},
+        {"name": "Redirect to /dev/tcp", "severity": "critical", "regex": re.compile(r'>\s*/dev/tcp/', re.IGNORECASE), "category": "exfiltration"},
+        {"name": "Reverse shell pattern", "severity": "critical", "regex": re.compile(r'bash\s+-i\s+>&\s*/dev/tcp/|nc\s+(-e|--exec)\s+/bin/(ba)?sh', re.IGNORECASE), "category": "exfiltration"},
+        {"name": "Destructive: File Shredding", "severity": "critical", "regex": re.compile(r'\bshred\s+(-[uvzn\s]+)*.*(\$HOME|~/|/home/)'), "category": "destructive-command"},
+        {"name": "Destructive: Home Directory Wipe", "severity": "critical", "regex": re.compile(r'\brm\s+(-[rf]+\s+)+(\$HOME|~/|~\b|/home/)'), "category": "destructive-command"},
+        {"name": "Destructive: Disk Overwrite", "severity": "critical", "regex": re.compile(r'\bdd\s+if=/dev/(zero|random|urandom)\s+of=/dev/(sd|nvme|vd)'), "category": "destructive-command"},
+        {"name": "Destructive: Windows Cipher Wipe", "severity": "critical", "regex": re.compile(r'\bcipher\s+/[wW]:', re.IGNORECASE), "category": "destructive-command"},
+        {"name": "GHA Runner Backdoor: Config Script", "severity": "critical", "regex": re.compile(r'config\.sh\s+--url\s+https://github\.com/.*--token'), "category": "runner-backdoor"},
+        {"name": "GHA Runner Backdoor: Service Install", "severity": "high", "regex": re.compile(r'svc\.sh\s+(install|start)'), "category": "runner-backdoor"},
+        {"name": "Kernel Exploit: algif_aead Module Load", "severity": "high", "regex": re.compile(r'\b(?:modprobe|insmod)\s+(?:\S*/)?algif_aead\b'), "category": "kernel-exploit"},
+        {"name": "Process Memory Read (/proc)", "severity": "critical", "regex": re.compile(r'dd\s+if=/proc/\d+/mem|cat\s+/proc/\d+/mem|/proc/self/mem'), "category": "memory-forensics"},
+        {"name": "Process Enumeration (/proc)", "severity": "high", "regex": re.compile(r'ls\s+/proc/|for\s+.*\s+in\s+/proc/\*/|/proc/\*/cmdline'), "category": "process-enumeration"},
+        {"name": "Runner.Worker Process Hunt", "severity": "critical", "regex": re.compile(r'\bRunner\.Worker\b|\bRunner\.Listener\b', re.IGNORECASE), "category": "process-enumeration"},
+        {"name": "OIDC Token Exchange", "severity": "critical", "regex": re.compile(r'ACTIONS_ID_TOKEN_REQUEST_TOKEN|ACTIONS_ID_TOKEN_REQUEST_URL|oidc/token/exchange'), "category": "ci-token-abuse"},
+    ],
+}
+
+
+CSS_STEG_PATTERNS = [
+    (re.compile(r'display:\s*none', re.IGNORECASE), "CSS hiding: display:none"),
+    (re.compile(r'visibility:\s*hidden', re.IGNORECASE), "CSS hiding: visibility:hidden"),
+    (re.compile(r'opacity:\s*0(?:\s*[;},!]|\s*$)', re.IGNORECASE), "CSS hiding: opacity:0"),
+    (re.compile(r'font-size:\s*0', re.IGNORECASE), "CSS hiding: zero-size text"),
+    (re.compile(r'position:\s*absolute.*left:\s*-\d{4,}', re.IGNORECASE), "CSS hiding: positioned off-screen"),
+    (re.compile(r'clip:\s*rect\(0', re.IGNORECASE), "CSS hiding: clipped to zero area"),
+    (re.compile(r'text-indent:\s*-\d{4,}', re.IGNORECASE), "CSS hiding: text pushed off-screen"),
+    (re.compile(r'overflow:\s*hidden[^;]*height:\s*0', re.IGNORECASE), "CSS hiding: zero-height container"),
+    (re.compile(r'color:\s*(?:white|#fff(?:fff)?|rgba?\([^)]*,\s*0\s*\))', re.IGNORECASE), "CSS hiding: text matching background"),
+]
+
+CSS_STEG_EXTENSIONS = {'.html', '.htm', '.svg', '.jsx', '.tsx', '.vue', '.md'}
+
+def scan_css_steganography(file_path, rel_path):
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext not in CSS_STEG_EXTENSIONS:
+        return []
+    findings = []
+    try:
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            content = f.read()
+    except (OSError, UnicodeDecodeError):
+        return []
+    lines = content.split('\n')
+    for i, line in enumerate(lines):
+        if len(line) > core.MAX_LINE_LENGTH:
+            continue
+        for pat, title in CSS_STEG_PATTERNS:
+            if pat.search(line):
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="medium",
+                    title=title,
+                    description="Visual hiding technique that could conceal instructions from human reviewers (DeepMind AI Agent Traps, March 2026).",
+                    file=rel_path, line=i + 1,
+                    snippet=line.strip()[:120],
+                    category="css-steganography"
+                ))
+                break
+    return findings
+
+
+def scan_file(file_path, rel_path):
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext not in SAST_PATTERNS:
+        return []
+
+    findings = []
+    try:
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            lines = f.readlines()
+            for i, line in enumerate(lines):
+                if len(line) > core.MAX_LINE_LENGTH:
+                    continue
+                for pattern in SAST_PATTERNS[ext]:
+                    if pattern['regex'].search(line):
+                        findings.append(core.Finding(
+                            scanner=SCANNER_NAME,
+                            severity=pattern['severity'],
+                            title=pattern['name'],
+                            description=f"Potential {pattern['category']} vulnerability",
+                            file=rel_path,
+                            line=i + 1,
+                            snippet=line.strip()[:120],
+                            category=pattern['category']
+                        ))
+    except (OSError, UnicodeDecodeError) as e:
+        print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)
+    return findings
+
+
+def main():
+    args = core.parse_common_args(sys.argv, "SAST Vulnerability Scanner")
+    repo_path = args.repo_path
+
+    core.emit_status(args.format, f"[*] Starting SAST scan on {repo_path}...")
+
+    ignore_patterns = core.load_ignore_patterns(repo_path)
+    if ignore_patterns:
+        core.emit_status(args.format, f"[*] Loaded {len(ignore_patterns)} custom ignore patterns from .forensicsignore")
+
+    all_findings = []
+
+    # Use custom skip_dirs to NOT exclude tests/
+    for file_path, rel_path in core.walk_repo(repo_path, ignore_patterns, skip_binary=True):
+        findings = scan_file(file_path, rel_path)
+        all_findings.extend(findings)
+        all_findings.extend(scan_css_steganography(file_path, rel_path))
+
+    core.output_findings(all_findings, args.format, SCANNER_NAME)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,7 @@
+{
+  "domain": "plugins",
+  "display_name": "Plugins & Marketplace Trust Chain",
+  "description": "Installed plugins, marketplace registries, blocklists. Provenance verification, manifest drift, dependency integrity.",
+  "scanners": ["scan_infra", "scan_integrity", "scan_manifest_drift", "scan_lifecycle", "scan_dependencies"],
+  "inventory_surfaces": ["plugins"]
+}
