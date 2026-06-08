@@ -3,8 +3,25 @@
 import os
 import json
 import stat
+import hmac
+import hashlib
 import pytest
 import scan_integrity as scanner
+
+
+@pytest.fixture(autouse=True)
+def isolate_signing_key(monkeypatch, tmp_path):
+    """Redirect HOME so _get_signing_key_path() resolves under tmp_path.
+
+    This prevents tests from writing to or deleting the real
+    ~/.cache/repo-forensics/forensics-key on the developer's machine.
+    The repo fixture (repo_with_hooks, etc.) lives under tmp_path directly,
+    while the fake home lives at tmp_path / 'home' -- a sibling, not a child,
+    so key-outside-repo assertions remain valid.
+    """
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.setenv("HOME", str(fake_home))
 
 
 class TestCriticalFileDiscovery:
@@ -122,12 +139,12 @@ class TestHMACSigning:
         assert len(data['_hmac']) == 64  # SHA256 hex length
 
     def test_signing_key_created(self, repo_with_hooks):
-        """Saving a baseline should create the signing key file with 0600 permissions."""
+        """Saving a baseline should create the signing key outside the repo with 0600 permissions."""
         files = scanner.find_critical_files(str(repo_with_hooks))
         scanner.watch_mode(str(repo_with_hooks), files, "text")
-        key_path = repo_with_hooks / scanner.SIGNING_KEY_FILENAME
-        assert key_path.exists()
-        mode = key_path.stat().st_mode
+        key_path = scanner._get_signing_key_path()
+        assert os.path.exists(key_path)
+        mode = os.stat(key_path).st_mode
         assert stat.S_IMODE(mode) == 0o600
 
     def test_valid_hmac_no_findings(self, repo_with_hooks):
@@ -160,9 +177,9 @@ class TestHMACSigning:
         """Deleting the signing key when baseline has HMAC should trigger a HIGH finding."""
         files = scanner.find_critical_files(str(repo_with_hooks))
         scanner.watch_mode(str(repo_with_hooks), files, "text")
-        # Delete the signing key
-        key_path = repo_with_hooks / scanner.SIGNING_KEY_FILENAME
-        key_path.unlink()
+        # Delete the signing key at its new out-of-repo location
+        key_path = scanner._get_signing_key_path()
+        os.unlink(key_path)
         # Load should detect missing key
         _, integrity_findings = scanner.load_baseline(str(repo_with_hooks))
         high = [f for f in integrity_findings if f.severity == "high"]
@@ -189,11 +206,118 @@ class TestHMACSigning:
         """The same signing key should be reused for subsequent baseline saves."""
         files = scanner.find_critical_files(str(repo_with_hooks))
         scanner.watch_mode(str(repo_with_hooks), files, "text")
-        key_path = repo_with_hooks / scanner.SIGNING_KEY_FILENAME
-        with open(str(key_path), 'rb') as f:
+        key_path = scanner._get_signing_key_path()
+        with open(key_path, 'rb') as f:
             key1 = f.read()
         # Save again (simulates re-run)
         scanner.watch_mode(str(repo_with_hooks), files, "text")
-        with open(str(key_path), 'rb') as f:
+        with open(key_path, 'rb') as f:
             key2 = f.read()
         assert key1 == key2
+
+    def test_legacy_repo_key_verifies_and_migrates(self, repo_with_hooks):
+        """Existing baselines signed by the old repo-root key must stay trusted."""
+        key = b"legacy signing key for tests!!123"
+        legacy_key_path = repo_with_hooks / scanner.SIGNING_KEY_FILENAME
+        legacy_key_path.write_bytes(key)
+        legacy_key_path.chmod(0o600)
+
+        files = scanner.find_critical_files(str(repo_with_hooks))
+        baseline = {
+            'files': {
+                rel_path: scanner.sha256_file(full_path)
+                for rel_path, full_path in files.items()
+            },
+            '_meta': {'created': '2026-01-01T00:00:00Z', 'tool': 'legacy', 'version': 'v1'},
+        }
+        content = json.dumps(baseline, sort_keys=True)
+        baseline['_hmac'] = hmac.new(key, content.encode('utf-8'), hashlib.sha256).hexdigest()
+        baseline_path = repo_with_hooks / scanner.BASELINE_FILENAME
+        baseline_path.write_text(json.dumps(baseline))
+
+        loaded, integrity_findings = scanner.load_baseline(str(repo_with_hooks))
+
+        assert loaded is not None
+        assert [f for f in integrity_findings if f.category == "integrity-hmac"] == []
+        new_key_path = scanner._get_signing_key_path()
+        assert os.path.exists(new_key_path)
+        with open(new_key_path, 'rb') as f:
+            assert f.read() == key
+        assert not legacy_key_path.exists()
+
+    def test_legacy_repo_key_prevents_watch_reset(self, repo_with_hooks):
+        """Watch mode must compare against a legacy signed baseline, not recreate it."""
+        key = b"legacy signing key for tests!!456"
+        legacy_key_path = repo_with_hooks / scanner.SIGNING_KEY_FILENAME
+        legacy_key_path.write_bytes(key)
+
+        files = scanner.find_critical_files(str(repo_with_hooks))
+        baseline = {
+            'files': {
+                rel_path: scanner.sha256_file(full_path)
+                for rel_path, full_path in files.items()
+            },
+            '_meta': {'created': '2026-01-01T00:00:00Z', 'tool': 'legacy', 'version': 'v1'},
+        }
+        content = json.dumps(baseline, sort_keys=True)
+        baseline['_hmac'] = hmac.new(key, content.encode('utf-8'), hashlib.sha256).hexdigest()
+        baseline_path = repo_with_hooks / scanner.BASELINE_FILENAME
+        baseline_path.write_text(json.dumps(baseline))
+
+        (repo_with_hooks / "CLAUDE.md").write_text("# modified\n")
+
+        findings = scanner.watch_mode(str(repo_with_hooks), scanner.find_critical_files(str(repo_with_hooks)), "text")
+
+        assert any("File modified since baseline: CLAUDE.md" in f.title for f in findings)
+        assert not any("Signing key missing" in f.title for f in findings)
+
+
+class TestSigningKeyOutsideRepo:
+    """Verify that the HMAC signing key is stored outside the repository root.
+
+    These tests create the repo under tmp_path / "repo" so that the fake HOME
+    (tmp_path / "home", set by the autouse isolate_signing_key fixture) and
+    the repo root are siblings -- neither is a parent of the other.  This
+    prevents a false failure where both paths start with the same tmp_path prefix.
+    """
+
+    def _make_repo(self, tmp_path):
+        """Create a minimal repo directory as a sibling of the fake HOME."""
+        import json
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        claude_dir = repo / ".claude"
+        claude_dir.mkdir()
+        (claude_dir / "settings.json").write_text(json.dumps({
+            "hooks": {"PreToolUse": [{"command": "echo ok"}]}
+        }))
+        (repo / "CLAUDE.md").write_text("# Project\n")
+        return repo
+
+    def test_key_path_is_outside_repo_root(self, tmp_path):
+        """The signing key must not be stored inside the repo directory."""
+        repo = self._make_repo(tmp_path)
+        repo_root = str(repo)
+        key_path = scanner._get_signing_key_path()
+        # Key path must not be inside the repo root
+        assert not key_path.startswith(repo_root), (
+            f"Signing key path '{key_path}' is inside the repo root '{repo_root}'. "
+            "The key would be readable by anyone with repo access."
+        )
+        # Key path must not be the bare .forensics-key filename directly in the repo root
+        assert not (
+            os.path.basename(key_path) == scanner.SIGNING_KEY_FILENAME and
+            os.path.dirname(os.path.abspath(key_path)) == os.path.abspath(repo_root)
+        ), "Signing key is stored as .forensics-key directly in the repo root."
+
+    def test_key_file_permissions_are_0600(self, tmp_path):
+        """After creating a baseline, the signing key must have 0600 permissions."""
+        repo = self._make_repo(tmp_path)
+        files = scanner.find_critical_files(str(repo))
+        scanner.watch_mode(str(repo), files, "text")
+        key_path = scanner._get_signing_key_path()
+        assert os.path.exists(key_path), "Signing key was not created"
+        mode = os.stat(key_path).st_mode
+        assert stat.S_IMODE(mode) == 0o600, (
+            f"Signing key has permissions {oct(stat.S_IMODE(mode))}, expected 0o600"
+        )
