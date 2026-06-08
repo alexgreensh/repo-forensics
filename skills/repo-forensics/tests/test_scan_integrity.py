@@ -3,6 +3,8 @@
 import os
 import json
 import stat
+import hmac
+import hashlib
 import pytest
 import scan_integrity as scanner
 
@@ -212,6 +214,62 @@ class TestHMACSigning:
         with open(key_path, 'rb') as f:
             key2 = f.read()
         assert key1 == key2
+
+    def test_legacy_repo_key_verifies_and_migrates(self, repo_with_hooks):
+        """Existing baselines signed by the old repo-root key must stay trusted."""
+        key = b"legacy signing key for tests!!123"
+        legacy_key_path = repo_with_hooks / scanner.SIGNING_KEY_FILENAME
+        legacy_key_path.write_bytes(key)
+        legacy_key_path.chmod(0o600)
+
+        files = scanner.find_critical_files(str(repo_with_hooks))
+        baseline = {
+            'files': {
+                rel_path: scanner.sha256_file(full_path)
+                for rel_path, full_path in files.items()
+            },
+            '_meta': {'created': '2026-01-01T00:00:00Z', 'tool': 'legacy', 'version': 'v1'},
+        }
+        content = json.dumps(baseline, sort_keys=True)
+        baseline['_hmac'] = hmac.new(key, content.encode('utf-8'), hashlib.sha256).hexdigest()
+        baseline_path = repo_with_hooks / scanner.BASELINE_FILENAME
+        baseline_path.write_text(json.dumps(baseline))
+
+        loaded, integrity_findings = scanner.load_baseline(str(repo_with_hooks))
+
+        assert loaded is not None
+        assert [f for f in integrity_findings if f.category == "integrity-hmac"] == []
+        new_key_path = scanner._get_signing_key_path()
+        assert os.path.exists(new_key_path)
+        with open(new_key_path, 'rb') as f:
+            assert f.read() == key
+        assert not legacy_key_path.exists()
+
+    def test_legacy_repo_key_prevents_watch_reset(self, repo_with_hooks):
+        """Watch mode must compare against a legacy signed baseline, not recreate it."""
+        key = b"legacy signing key for tests!!456"
+        legacy_key_path = repo_with_hooks / scanner.SIGNING_KEY_FILENAME
+        legacy_key_path.write_bytes(key)
+
+        files = scanner.find_critical_files(str(repo_with_hooks))
+        baseline = {
+            'files': {
+                rel_path: scanner.sha256_file(full_path)
+                for rel_path, full_path in files.items()
+            },
+            '_meta': {'created': '2026-01-01T00:00:00Z', 'tool': 'legacy', 'version': 'v1'},
+        }
+        content = json.dumps(baseline, sort_keys=True)
+        baseline['_hmac'] = hmac.new(key, content.encode('utf-8'), hashlib.sha256).hexdigest()
+        baseline_path = repo_with_hooks / scanner.BASELINE_FILENAME
+        baseline_path.write_text(json.dumps(baseline))
+
+        (repo_with_hooks / "CLAUDE.md").write_text("# modified\n")
+
+        findings = scanner.watch_mode(str(repo_with_hooks), scanner.find_critical_files(str(repo_with_hooks)), "text")
+
+        assert any("File modified since baseline: CLAUDE.md" in f.title for f in findings)
+        assert not any("Signing key missing" in f.title for f in findings)
 
 
 class TestSigningKeyOutsideRepo:
