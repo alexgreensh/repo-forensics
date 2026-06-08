@@ -59,6 +59,7 @@ class Finding:
         for _field in ("scanner", "title", "description", "file", "snippet", "category"):
             if getattr(self, _field) is None:
                 setattr(self, _field, "")
+        self._tags = (self.description + " " + self.title + " " + self.category).lower()
 
     def to_dict(self):
         return asdict(self)
@@ -438,12 +439,22 @@ def findings_from_dicts(dicts):
     scanner output). Type coercion for `line` (to int) is delegated to
     Finding.__post_init__ which handles None, str, and out-of-range values.
     """
-    out = []
+    return list(findings_from_dicts_iter(dicts))
+
+
+def findings_from_dicts_iter(dicts):
+    """Yield Finding instances lazily from a sequence of dicts.
+
+    Generator variant of findings_from_dicts. Passing this directly to
+    correlate() avoids holding a full parallel Finding list in memory
+    alongside the source dicts -- correlate() builds its by_file dict
+    by consuming the iterator once, so no separate list is ever created.
+    """
     for d in dicts:
         if not isinstance(d, dict):
             continue
         try:
-            out.append(Finding(
+            yield Finding(
                 scanner=d.get("scanner", "unknown"),
                 severity=d.get("severity", "low"),
                 title=d.get("title", ""),
@@ -452,10 +463,9 @@ def findings_from_dicts(dicts):
                 line=d.get("line", 0),
                 snippet=d.get("snippet", ""),
                 category=d.get("category", ""),
-            ))
+            )
         except (TypeError, ValueError):
             continue
-    return out
 
 
 def correlate(findings):
@@ -513,9 +523,9 @@ def correlate(findings):
         for f in file_findings:
             if exclude_scanner and f.scanner == exclude_scanner:
                 continue
-            desc_lower = (f.description + " " + f.title + " " + f.category).lower()
+            tags = f._tags
             for kw in keywords:
-                if kw in desc_lower:
+                if kw in tags:
                     return True
         return False
 
@@ -835,9 +845,9 @@ def correlate(findings):
             """
             ids = set()
             for i, f in enumerate(file_findings):
-                desc_lower = (f.description + " " + f.title + " " + f.category).lower()
+                tags = f._tags
                 for kw in keywords:
-                    if kw in desc_lower:
+                    if kw in tags:
                         ids.add(i)
                         break
             return ids
@@ -1106,9 +1116,9 @@ def correlate(findings):
         """Return dict mapping directory -> list of findings matching keywords."""
         result = {}
         for f in flist:
-            desc_lower = (f.description + " " + f.title + " " + f.category).lower()
+            tags = f._tags
             for kw in keywords:
-                if kw in desc_lower:
+                if kw in tags:
                     d = os.path.dirname(f.file) if f.file else ""
                     result.setdefault(d, []).append(f)
                     break

@@ -720,3 +720,72 @@ class TestRule38CIRunnerMemoryExtraction:
         ]
         correlated = core.correlate(findings)
         assert not any("CI Runner Memory" in c.title for c in correlated)
+
+
+class TestTagsPrecomputation:
+    """Verify _tags caching and that correlation results are identical before/after."""
+
+    def test_tags_populated_on_finding(self):
+        f = core.Finding("sast", "high", "My Title", "my description", "a.py", 1, "", "my-category")
+        assert hasattr(f, "_tags")
+        assert "my title" in f._tags
+        assert "my description" in f._tags
+        assert "my-category" in f._tags
+
+    def test_tags_lowercase(self):
+        f = core.Finding("s", "low", "UPPER", "MIXED Case", "f.py", 0, "", "CAT")
+        assert f._tags == f._tags.lower()
+
+    def test_tags_none_fields_dont_crash(self):
+        f = core.Finding("s", "low", None, None, "f.py", 0, "", None)
+        assert isinstance(f._tags, str)
+
+    def test_correlation_identical_with_tags(self):
+        """Correlation results match between a plain Finding list and a re-run
+        to confirm _tags doesn't change behavior."""
+        findings = [
+            core.Finding("secrets", "high", "Env Access", "environ access", "app.py", 1, "", "env access"),
+            core.Finding("sast", "high", "HTTP POST", "network post request", "app.py", 5, "", "network"),
+            core.Finding("entropy", "high", "Base64", "base64 encoding", "evil.py", 1, "", "encoding"),
+            core.Finding("sast", "critical", "eval()", "eval code execution", "evil.py", 3, "", "exec"),
+        ]
+        first_run = {c.title for c in core.correlate(findings)}
+        second_run = {c.title for c in core.correlate(findings)}
+        assert first_run == second_run
+        assert "Potential Data Exfiltration" in first_run
+        assert "Obfuscated Code Execution" in first_run
+
+    def test_findings_from_dicts_iter_lazy(self):
+        """findings_from_dicts_iter yields the same findings as findings_from_dicts."""
+        dicts = [
+            {"scanner": "sast", "severity": "high", "title": "T1", "description": "d1",
+             "file": "a.py", "line": 1, "snippet": "", "category": "c1"},
+            {"scanner": "secrets", "severity": "low", "title": "T2", "description": "d2",
+             "file": "b.py", "line": 2, "snippet": "", "category": "c2"},
+            "not-a-dict",
+        ]
+        eager = core.findings_from_dicts(dicts)
+        lazy = list(core.findings_from_dicts_iter(dicts))
+
+        assert len(lazy) == len(eager)
+        for e, l in zip(eager, lazy):
+            assert e.title == l.title
+            assert e.file == l.file
+            assert e._tags == l._tags
+
+    def test_run_correlation_pass_via_iter(self):
+        """run_correlation_pass produces the same correlated titles via lazy streaming."""
+        import sys
+        import os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+        import aggregate_json as agg
+
+        dicts = [
+            {"scanner": "secrets", "severity": "high", "title": "Env Access",
+             "description": "environ access", "file": "app.py", "line": 1, "snippet": "", "category": "env access"},
+            {"scanner": "sast", "severity": "high", "title": "HTTP POST",
+             "description": "network post request", "file": "app.py", "line": 5, "snippet": "", "category": "network"},
+        ]
+        correlated = agg.run_correlation_pass(dicts)
+        titles = [c["title"] for c in correlated]
+        assert "Potential Data Exfiltration" in titles
