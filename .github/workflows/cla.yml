@@ -21,7 +21,7 @@ jobs:
         with:
           path-to-signatures: "signatures/cla.json"
           path-to-document: "https://github.com/alexgreensh/repo-forensics/blob/main/CLA.md"
-          branch: "main"
+          branch: "cla-signatures"
           allowlist: "alexgreensh,dependabot[bot],bot*"
           custom-notsigned-prcomment: |
             Thank you for your contribution! Before we can merge this PR, you need to sign our [Contributor License Agreement](https://github.com/alexgreensh/repo-forensics/blob/main/CLA.md).
