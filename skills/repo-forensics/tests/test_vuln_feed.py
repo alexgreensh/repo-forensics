@@ -403,6 +403,39 @@ def test_check_package_vulnerabilities_non_kev_cve(monkeypatch, tmp_path):
     assert result[0]["suggested_severity"] == "high"
 
 
+@pytest.mark.parametrize("label,expected", [
+    ("CRITICAL", "critical"),
+    ("HIGH", "high"),
+    ("MEDIUM", "medium"),
+    ("LOW", "low"),
+    ("critical", "critical"),   # lowercase label also maps correctly
+])
+def test_severity_label_without_cvss_vector(label, expected):
+    """OSV label-only severity (no CVSS vector) must map to the correct tier."""
+    vuln = {"severity": {"type": "CVSS_V3", "score": label}}
+    assert vuln_feed._suggest_severity(vuln, in_kev=False) == expected
+
+
+def test_keyboard_interrupt_not_swallowed_in_npm_fetch(tmp_path):
+    """KeyboardInterrupt raised inside a fetch must propagate, not be swallowed."""
+    def _raise(*_a, **_kw):
+        raise KeyboardInterrupt
+
+    with unittest.mock.patch.object(vuln_feed, "_https_fetch", side_effect=_raise):
+        with pytest.raises(KeyboardInterrupt):
+            vuln_feed.fetch_npm_freshness("mylib", "1.0.0", cache_dir=str(tmp_path))
+
+
+def test_keyboard_interrupt_not_swallowed_in_pypi_fetch(tmp_path):
+    """KeyboardInterrupt raised inside a fetch must propagate, not be swallowed."""
+    def _raise(*_a, **_kw):
+        raise KeyboardInterrupt
+
+    with unittest.mock.patch.object(vuln_feed, "_https_fetch", side_effect=_raise):
+        with pytest.raises(KeyboardInterrupt):
+            vuln_feed.fetch_pypi_freshness("mylib", "1.0.0", cache_dir=str(tmp_path))
+
+
 # ======================================================================
 # Torture room: adversarial inputs
 # ======================================================================
