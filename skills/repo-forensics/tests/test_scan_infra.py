@@ -528,6 +528,56 @@ class TestCachePoisoningPRT:
         assert len(cache) == 0
 
 
+class TestCacheLineTracking:
+    """Cache action line tracking: enumerate() vs list.index() regression."""
+
+    def test_second_cache_action_reports_correct_line(self, tmp_path):
+        """When two identical 'uses: actions/cache@v3' lines exist, the unsafe
+        second occurrence must be reported at its own line, not the first line.
+
+        With list.index() (bug): processing the second cache resolves back to
+        the first occurrence's index, looks ahead and finds the safe hashFiles
+        key -> emits zero findings (silent miss).
+
+        With enumerate() (fix): uses the current iteration index -> looks ahead
+        from the second cache line, finds the static key -> emits one finding
+        at the correct line number.
+        """
+        workflow = tmp_path / ".github" / "workflows"
+        workflow.mkdir(parents=True)
+        ci = workflow / "ci.yml"
+        # Both 'uses:' lines are textually identical (same indentation) so that
+        # list.index() always resolves to the first occurrence.
+        ci.write_text(
+            "name: CI\n"
+            "on: [push]\n"
+            "jobs:\n"
+            "  build:\n"
+            "    runs-on: ubuntu-latest\n"
+            "    steps:\n"
+            "      - name: Restore npm cache\n"
+            "        uses: actions/cache@v3\n"
+            "        with:\n"
+            "          key: ${{ hashFiles('**/package-lock.json') }}\n"
+            "      - name: Restore pip cache\n"
+            "        uses: actions/cache@v3\n"
+            "        with:\n"
+            "          key: pip-static-key\n"
+        )
+        # Line numbers: the second 'uses: actions/cache@v3' is line 12 (1-indexed).
+        findings = scanner.scan_github_actions(str(ci), ".github/workflows/ci.yml")
+        cache_findings = [f for f in findings if "Cache Key Without Content Hash" in f.title]
+        assert len(cache_findings) == 1, (
+            f"Expected 1 cache-key finding, got {len(cache_findings)}. "
+            "If 0, list.index() resolved second occurrence to first line and "
+            "looked up the safe hashFiles key instead of the static key."
+        )
+        assert cache_findings[0].line == 12, (
+            f"Expected finding at line 12 (second cache action), got line {cache_findings[0].line}. "
+            "list.index() would have returned line 8 (first occurrence)."
+        )
+
+
 class TestBase64DecodeAndExecute:
     """Megalodon-style base64 decode-and-execute detection (May 2026)."""
 
