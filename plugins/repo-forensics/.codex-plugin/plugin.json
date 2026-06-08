@@ -1,6 +1,6 @@
 {
   "name": "repo-forensics",
-  "version": "2.9.2",
+  "version": "2.9.3",
   "description": "Audit untrusted repos before they touch your agent. Fully local, zero dependencies, zero telemetry.",
   "skills": "./skills/",
   "hooks": "./hooks/hooks.json",
