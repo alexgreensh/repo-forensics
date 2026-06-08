@@ -127,28 +127,39 @@ def test_first_run_nudge_handles_codex_home_with_spaces(tmp_path):
     assert "unbound variable" not in result.stderr
 
 
-def test_first_run_nudge_rejects_codex_home_with_semicolon(tmp_path):
-    """CODEX_HOME containing shell metacharacters must be rejected cleanly."""
+def test_first_run_nudge_handles_quoted_codex_home_metacharacters(tmp_path):
+    """Quoted CODEX_HOME paths with shell metacharacters are valid paths."""
+    home = tmp_path / "home"
+    codex_home = tmp_path / "codex $HOME; still a path"
+    cache_root = codex_home / "plugins" / "cache" / "repo-forensics" / "2.9.0"
+    script = _install_nudge_script(cache_root)
+    env = {
+        **os.environ,
+        "HOME": str(home),
+        "CODEX_HOME": str(codex_home),
+    }
+
+    result = _run_script(script, env)
+
+    assert result.returncode == 0
+    assert "codex plugin marketplace upgrade" in result.stdout
+    assert result.stderr == ""
+
+
+def test_first_run_nudge_skips_missing_explicit_codex_home(tmp_path):
+    """A nonexistent explicit CODEX_HOME is skipped before path matching."""
     home = tmp_path / "home"
     env = {
         **os.environ,
         "HOME": str(home),
-        "CODEX_HOME": "/tmp/legit;rm -rf /tmp/bad",
+        "CODEX_HOME": str(tmp_path / "missing-codex-home"),
     }
-    # Use the canonical script directly (no cache install needed — script
-    # exits before the cache path check when it detects unsafe characters).
-    result = subprocess.run(
-        ["bash", str(NUDGE_SCRIPT)],
-        capture_output=True,
-        text=True,
-        env=env,
-        timeout=5,
-        check=False,
-    )
+
+    result = _run_script(NUDGE_SCRIPT, env)
 
     assert result.returncode == 0
     assert result.stdout == ""
-    assert "unsafe characters" in result.stderr
+    assert "CODEX_ROOT not found" in result.stderr
 
 
 def test_pre_scan_wrapper_survives_stripped_path_and_preserves_block_exit():

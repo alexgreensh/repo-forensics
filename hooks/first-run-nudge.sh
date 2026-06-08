@@ -20,15 +20,6 @@
 SCRIPT_DIR="$(dirname "$0")"
 PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# Reject CODEX_HOME values containing shell metacharacters to prevent
-# command injection or silent failures from misinterpreted paths.
-case "${CODEX_HOME:-}" in
-  *[\;\|\&\`\$\(\)]*)
-    echo "Warning: CODEX_HOME contains unsafe characters, skipping" >&2
-    exit 0
-    ;;
-esac
-
 CODEX_ROOT="${CODEX_HOME:-${HOME}/.codex}"
 
 # If the user explicitly set CODEX_HOME, validate it exists before proceeding.
