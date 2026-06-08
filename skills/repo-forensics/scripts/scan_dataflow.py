@@ -22,61 +22,62 @@ SCANNER_NAME = "dataflow"
 
 # === Sources: where sensitive data enters ===
 PYTHON_SOURCES = [
-    (re.compile(r'(\w+)\s*=\s*os\.environ\b'), "os.environ access"),
-    (re.compile(r'(\w+)\s*=\s*os\.environ\.copy\(\)'), "os.environ.copy()"),
-    (re.compile(r'(\w+)\s*=\s*os\.environ\.get\('), "os.environ.get()"),
-    (re.compile(r'(\w+)\s*=\s*os\.environ\['), "os.environ[] access"),
-    (re.compile(r'(\w+)\s*=\s*getattr\s*\(\s*os\s*,\s*["\']environ["\']\)'), "getattr(os, 'environ') evasion"),
+    (re.compile(r'(\w+)\s*=\s*os\.environ\b', re.IGNORECASE), "os.environ access"),
+    (re.compile(r'(\w+)\s*=\s*os\.environ\.copy\(\)', re.IGNORECASE), "os.environ.copy()"),
+    (re.compile(r'(\w+)\s*=\s*os\.environ\.get\(', re.IGNORECASE), "os.environ.get()"),
+    (re.compile(r'(\w+)\s*=\s*os\.environ\[', re.IGNORECASE), "os.environ[] access"),
+    (re.compile(r'(\w+)\s*=\s*os\.getenv\(', re.IGNORECASE), "os.getenv() access"),
+    (re.compile(r'(\w+)\s*=\s*getattr\s*\(\s*os\s*,\s*["\']environ["\']\)', re.IGNORECASE), "getattr(os, 'environ') evasion"),
     (re.compile(r'(\w+)\s*=\s*open\s*\([^)]*(?:\.env|\.ssh|\.aws|credentials|\.gnupg|\.config|\.claude|\.kiro|\.kube|\.terraform|sitemanager\.xml|recentservers\.xml|\.atomic|msal_token_cache|\.remmina|\.ovpn|\.npmrc|\.git-credentials)'), "Sensitive file read"),
     (re.compile(r'(\w+)\s*=\s*pathlib\.Path\s*\([^)]*(?:\.env|\.ssh|\.aws|credentials|\.claude|\.kiro|\.kube|\.terraform|msal_token_cache|sitemanager\.xml|\.atomic)'), "Sensitive path access"),
-    (re.compile(r'(\w+)\s*=\s*dotenv\.dotenv_values\('), "dotenv values load"),
+    (re.compile(r'(\w+)\s*=\s*dotenv\.dotenv_values\(', re.IGNORECASE), "dotenv values load"),
 ]
 
 JS_SOURCES = [
-    (re.compile(r'(?:const|let|var)\s+(\w+)\s*=\s*process\.env\b'), "process.env access"),
-    (re.compile(r'(?:const|let|var)\s+(\w+)\s*=\s*Object\.keys\s*\(\s*process\.env'), "process.env enumeration"),
+    (re.compile(r'(?:const|let|var)\s+(\w+)\s*=\s*process\.env\b', re.IGNORECASE), "process.env access"),
+    (re.compile(r'(?:const|let|var)\s+(\w+)\s*=\s*Object\.keys\s*\(\s*process\.env', re.IGNORECASE), "process.env enumeration"),
     (re.compile(r'(?:const|let|var)\s+(\w+)\s*=\s*(?:fs\.)?readFileSync\s*\([^)]*(?:\.env|\.ssh|\.aws|credential|\.claude|\.kiro|\.kube|\.terraform|sitemanager\.xml|\.atomic|msal_token_cache|\.npmrc|\.git-credentials)'), "Sensitive file read"),
-    (re.compile(r'(?:const|let|var)\s+(\w+)\s*=\s*require\s*\(["\']dotenv["\']\)'), "dotenv require"),
-    (re.compile(r'(?:const|let|var)\s+(\w+)\s*=\s*JSON\.parse\s*\(\s*(?:fs\.)?readFileSync'), "JSON file parse"),
+    (re.compile(r'(?:const|let|var)\s+(\w+)\s*=\s*require\s*\(["\']dotenv["\']\)', re.IGNORECASE), "dotenv require"),
+    (re.compile(r'(?:const|let|var)\s+(\w+)\s*=\s*JSON\.parse\s*\(\s*(?:fs\.)?readFileSync', re.IGNORECASE), "JSON file parse"),
 ]
 
 # === Sinks: where data leaves ===
 PYTHON_SINKS = [
-    re.compile(r'requests\.(post|put|patch|delete)\s*\('),
-    re.compile(r'urllib\.request\.(urlopen|Request)\s*\('),
-    re.compile(r'http\.client\.HTTPConnection'),
-    re.compile(r'httpx\.(post|put|patch|delete|AsyncClient)\s*\('),
-    re.compile(r'aiohttp\.ClientSession'),
-    re.compile(r'subprocess\.(run|call|Popen|check_output)\s*\('),
-    re.compile(r'os\.system\s*\('),
-    re.compile(r'os\.popen\s*\('),
-    re.compile(r'eval\s*\('),
-    re.compile(r'exec\s*\('),
-    re.compile(r'__import__\s*\('),
+    re.compile(r'requests\.(post|put|patch|delete)\s*\(', re.IGNORECASE),
+    re.compile(r'urllib\.request\.(urlopen|Request)\s*\(', re.IGNORECASE),
+    re.compile(r'http\.client\.HTTPConnection', re.IGNORECASE),
+    re.compile(r'httpx\.(post|put|patch|delete|AsyncClient)\s*\(', re.IGNORECASE),
+    re.compile(r'aiohttp\.ClientSession', re.IGNORECASE),
+    re.compile(r'subprocess\.(run|call|Popen|check_output)\s*\(', re.IGNORECASE),
+    re.compile(r'os\.system\s*\(', re.IGNORECASE),
+    re.compile(r'os\.popen\s*\(', re.IGNORECASE),
+    re.compile(r'eval\s*\(', re.IGNORECASE),
+    re.compile(r'exec\s*\(', re.IGNORECASE),
+    re.compile(r'__import__\s*\(', re.IGNORECASE),
 ]
 
 JS_SINKS = [
-    re.compile(r'fetch\s*\('),
-    re.compile(r'axios\.(post|put|patch|delete)\s*\('),
-    re.compile(r'XMLHttpRequest'),
-    re.compile(r'require\s*\(["\']child_process["\']\)'),
-    re.compile(r'child_process\.(exec|spawn|execSync)\s*\('),
-    re.compile(r'eval\s*\('),
-    re.compile(r'Function\s*\('),
-    re.compile(r'new\s+WebSocket\s*\('),
+    re.compile(r'fetch\s*\(', re.IGNORECASE),
+    re.compile(r'axios\.(post|put|patch|delete)\s*\(', re.IGNORECASE),
+    re.compile(r'XMLHttpRequest', re.IGNORECASE),
+    re.compile(r'require\s*\(["\']child_process["\']\)', re.IGNORECASE),
+    re.compile(r'child_process\.(exec|spawn|execSync)\s*\(', re.IGNORECASE),
+    re.compile(r'eval\s*\(', re.IGNORECASE),
+    re.compile(r'Function\s*\(', re.IGNORECASE),
+    re.compile(r'new\s+WebSocket\s*\(', re.IGNORECASE),
 ]
 
 # === Assignment tracking ===
 ASSIGN_PATTERN = re.compile(r'(?:(?:const|let|var)\s+)?(\w+)\s*=\s*(.*)')
 TAINT_PROPAGATORS = [
-    re.compile(r'base64\.(b64encode|encode|urlsafe_b64encode)\s*\('),
-    re.compile(r'json\.dumps\s*\('),
-    re.compile(r'str\s*\('),
-    re.compile(r'\.encode\s*\('),
-    re.compile(r'Buffer\.from\s*\('),
-    re.compile(r'btoa\s*\('),
-    re.compile(r'JSON\.stringify\s*\('),
-    re.compile(r'encodeURIComponent\s*\('),
+    re.compile(r'base64\.(b64encode|encode|urlsafe_b64encode)\s*\(', re.IGNORECASE),
+    re.compile(r'json\.dumps\s*\(', re.IGNORECASE),
+    re.compile(r'str\s*\(', re.IGNORECASE),
+    re.compile(r'\.encode\s*\(', re.IGNORECASE),
+    re.compile(r'Buffer\.from\s*\(', re.IGNORECASE),
+    re.compile(r'btoa\s*\(', re.IGNORECASE),
+    re.compile(r'JSON\.stringify\s*\(', re.IGNORECASE),
+    re.compile(r'encodeURIComponent\s*\(', re.IGNORECASE),
 ]
 
 
