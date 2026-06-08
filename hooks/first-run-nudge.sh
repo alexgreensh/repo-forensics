@@ -19,7 +19,17 @@
 
 SCRIPT_DIR="$(dirname "$0")"
 PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
 CODEX_ROOT="${CODEX_HOME:-${HOME}/.codex}"
+
+# If the user explicitly set CODEX_HOME, validate it exists before proceeding.
+# When unset we fall back to the default guess ($HOME/.codex), which may simply
+# not exist yet on Claude-only machines — that is normal and should not abort.
+if [ -n "${CODEX_HOME:-}" ] && [ ! -d "$CODEX_ROOT" ]; then
+  echo "Warning: CODEX_ROOT not found: $CODEX_ROOT" >&2
+  exit 0
+fi
+
 if [ -d "$CODEX_ROOT" ]; then
     CODEX_ROOT="$(cd "$CODEX_ROOT" && pwd)"
 fi
