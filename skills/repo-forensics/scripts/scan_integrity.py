@@ -50,13 +50,23 @@ BASELINE_FILENAME = '.forensics-baseline.json'
 SIGNING_KEY_FILENAME = '.forensics-key'
 
 
-def _get_or_create_signing_key(repo_path):
-    """Get or create a 32-byte HMAC signing key for baseline integrity verification."""
-    key_path = os.path.join(repo_path, SIGNING_KEY_FILENAME)
+def _get_signing_key_path():
+    """Return the path where the HMAC signing key is stored (outside the repo)."""
+    return os.path.expanduser("~/.cache/repo-forensics/forensics-key")
+
+
+def _get_or_create_signing_key(repo_path):  # repo_path kept for API compatibility
+    """Get or create a 32-byte HMAC signing key for baseline integrity verification.
+
+    The key is stored in ~/.cache/repo-forensics/forensics-key so it is never
+    committed or readable from inside the repository.
+    """
+    key_path = _get_signing_key_path()
     try:
         if os.path.exists(key_path):
             with open(key_path, 'rb') as f:
                 return f.read()
+        os.makedirs(os.path.dirname(key_path), exist_ok=True)
         key = secrets.token_bytes(32)
         with open(key_path, 'wb') as f:
             f.write(key)
@@ -197,7 +207,7 @@ def load_baseline(repo_path):
 
     if stored_hmac is not None:
         # Baseline has an HMAC, verify it
-        key_path = os.path.join(repo_path, SIGNING_KEY_FILENAME)
+        key_path = _get_signing_key_path()
         if not os.path.exists(key_path):
             integrity_findings.append(core.Finding(
                 scanner=SCANNER_NAME, severity="high",
