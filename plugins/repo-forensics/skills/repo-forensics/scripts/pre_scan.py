@@ -46,9 +46,17 @@ INSTALL_PATTERNS = [
     (re.compile(r'clawhub\s+(?:install|publish)\s+(.+)'), 'openclaw_install'),
 ]
 
+_DOWNLOADERS = r'(?:curl|wget|aria2c|http|Invoke-WebRequest)'
+_SHELLS = r'(?:sudo\s+)?(?:/[\w/.-]*/)?(?:bash|zsh|dash|ksh|csh|tcsh|fish|pwsh|sh)(?!\w)'
+_BASE64_PIPE = r'base64\s+(?:-d|--decode)\s*\|'
+
 PIPE_TO_SHELL = re.compile(
-    r'(?:curl|wget)\s+[^|]*\|\s*(?:sudo\s+)?(?:ba)?sh'
-    r'|(?:curl|wget)\s+[^>]*>\s*/tmp/[^\s;]+\s*[;&]\s*(?:sudo\s+)?(?:ba)?sh\s+/tmp/'
+    r'(?:'
+    r'(?:' + _DOWNLOADERS + r')\s+[^|]*\|\s*(?:' + _BASE64_PIPE + r'\s*)?(?:' + _SHELLS + r'|iex)'
+    r'|' + _BASE64_PIPE + r'\s*(?:' + _SHELLS + r'|iex)'
+    r'|(?:' + _DOWNLOADERS + r')\s+[^>]*>\s*/tmp/[^\s;]+\s*(?:;|&&?)\s*(?:' + _SHELLS + r')\s+/tmp/'
+    r')',
+    re.IGNORECASE,
 )
 
 INSTALL_FLAGS = re.compile(r'\s+--?[a-zA-Z][\w-]*(?:\s+[^\s-][^\s]*)?')

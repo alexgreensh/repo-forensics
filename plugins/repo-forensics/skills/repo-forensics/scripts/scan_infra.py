@@ -520,12 +520,12 @@ def scan_github_actions(file_path, rel_path):
             ))
 
         # Item 8: GHA cache poisoning - actions/cache without content hash in key
-        for line in lines:
+        for i, line in enumerate(lines):
             stripped_l = line.strip()
             m_cache = re.search(r'uses:\s*actions/cache@', stripped_l)
             if m_cache:
                 # Look ahead for the key: field within next few lines
-                cache_line_idx = lines.index(line)
+                cache_line_idx = i
                 key_content = ""
                 for look_line in lines[cache_line_idx:min(cache_line_idx + 10, len(lines))]:
                     key_match = re.search(r'key\s*:\s*(.+)', look_line)

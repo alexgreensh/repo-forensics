@@ -135,7 +135,7 @@ def scan_npm_cache():
                     # Entirely malicious packages (any version)
                     for pkg_name, desc in MALICIOUS_PACKAGES.items():
                         # Match on tarball URL pattern to avoid substring false positives
-                        if f"/{pkg_name}/-/" in content or f"/{pkg_name}" in content.split('"key"')[0:1]:
+                        if f"/{pkg_name}/-/" in content or f"/{pkg_name}" in content.split('"key"')[0]:
                             findings.append(core.Finding(
                                 scanner=SCANNER_NAME, severity="critical",
                                 title=f"Compromised Package in npm Cache: {pkg_name}",

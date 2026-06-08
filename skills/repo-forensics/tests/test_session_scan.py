@@ -724,6 +724,18 @@ class TestDeepScanItem:
         findings = session_scan.deep_scan_item(tmp_dir, "test", "plugin")
         assert findings == []
 
+    def test_clean_exit_without_posix_getpgid(self, tmp_dir, monkeypatch):
+        """Windows lacks os.getpgid; SessionStart deep scan must not crash."""
+        script = os.path.join(tmp_dir, "fake_forensics.sh")
+        create_file(script, '#!/bin/bash\necho "{}"\nexit 0')
+        os.chmod(script, 0o755)
+        monkeypatch.setattr(session_scan, 'RUN_FORENSICS_SCRIPT', script)
+        monkeypatch.delattr(session_scan.os, 'getpgid', raising=False)
+
+        findings = session_scan.deep_scan_item(tmp_dir, "test", "plugin")
+
+        assert findings == []
+
     def test_critical_exit_with_json(self, tmp_dir, monkeypatch):
         script = os.path.join(tmp_dir, "fake_forensics.sh")
         output = json.dumps({
@@ -767,6 +779,28 @@ class TestDeepScanItem:
         findings = session_scan.deep_scan_item(tmp_dir, "test", "plugin", timeout=1)
         assert len(findings) == 1
         assert "timed out" in findings[0]
+
+    def test_kill_process_group_without_posix_apis_falls_back_to_proc_kill(self, monkeypatch):
+        """Windows lacks os.killpg and signal.SIGKILL; direct proc.kill is used."""
+        class FakeProc:
+            def __init__(self):
+                self.killed = False
+                self.wait_calls = []
+
+            def kill(self):
+                self.killed = True
+
+            def wait(self, timeout=None):
+                self.wait_calls.append(timeout)
+
+        proc = FakeProc()
+        monkeypatch.delattr(session_scan.os, 'killpg', raising=False)
+        monkeypatch.delattr(session_scan.signal, 'SIGKILL', raising=False)
+
+        session_scan._kill_process_group(12345, proc)
+
+        assert proc.killed is True
+        assert proc.wait_calls == [2]
 
     def test_unparseable_output_fallback(self, tmp_dir, monkeypatch):
         script = os.path.join(tmp_dir, "bad_forensics.sh")

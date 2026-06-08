@@ -140,14 +140,10 @@ def run_correlation_pass(all_findings):
         print(f"[!] Correlation pass skipped: {e}", file=sys.stderr)
         return []
 
-    # Delegate dict->Finding conversion to the shared helper so this path
-    # stays in sync with auto_scan.run_targeted_scan. Previously both files
-    # hand-rolled this conversion with subtly different int-coercion logic;
-    # Finding.__post_init__ now handles line coercion centrally. (PR-F1.)
-    finding_objs = core.findings_from_dicts(all_findings)
-
+    # Pass a lazy iterator so correlate() builds its by_file dict without
+    # a separate intermediate Finding list existing alongside all_findings.
     try:
-        correlated = core.correlate(finding_objs)
+        correlated = core.correlate(core.findings_from_dicts_iter(all_findings))
     except (AttributeError, KeyError, TypeError, ValueError) as e:
         # Narrow the except to expected types so NameError / ImportError bugs
         # in new correlation rules fail loud during development instead of

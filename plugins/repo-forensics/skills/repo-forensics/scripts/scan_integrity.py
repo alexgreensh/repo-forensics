@@ -50,17 +50,57 @@ BASELINE_FILENAME = '.forensics-baseline.json'
 SIGNING_KEY_FILENAME = '.forensics-key'
 
 
-def _get_or_create_signing_key(repo_path):
-    """Get or create a 32-byte HMAC signing key for baseline integrity verification."""
-    key_path = os.path.join(repo_path, SIGNING_KEY_FILENAME)
+def _get_signing_key_path():
+    """Return the path where the HMAC signing key is stored (outside the repo)."""
+    return os.path.expanduser("~/.cache/repo-forensics/forensics-key")
+
+
+def _get_legacy_signing_key_path(repo_path):
+    """Return the pre-migration repo-local signing key path."""
+    return os.path.join(repo_path, SIGNING_KEY_FILENAME)
+
+
+def _read_signing_key(path):
+    with open(path, 'rb') as f:
+        return f.read()
+
+
+def _write_signing_key(path, key):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'wb') as f:
+        f.write(key)
+    os.chmod(path, 0o600)
+
+
+def _migrate_legacy_signing_key(repo_path, key):
+    """Copy a verified legacy key outside the repo and remove the old copy."""
+    new_path = _get_signing_key_path()
+    legacy_path = _get_legacy_signing_key_path(repo_path)
+    if not os.path.exists(new_path):
+        _write_signing_key(new_path, key)
+    try:
+        os.remove(legacy_path)
+    except OSError:
+        pass
+
+
+def _get_or_create_signing_key(repo_path):  # repo_path kept for API compatibility
+    """Get or create a 32-byte HMAC signing key for baseline integrity verification.
+
+    The key is stored in ~/.cache/repo-forensics/forensics-key so it is never
+    committed or readable from inside the repository.
+    """
+    key_path = _get_signing_key_path()
     try:
         if os.path.exists(key_path):
-            with open(key_path, 'rb') as f:
-                return f.read()
+            return _read_signing_key(key_path)
+        legacy_path = _get_legacy_signing_key_path(repo_path)
+        if os.path.exists(legacy_path):
+            key = _read_signing_key(legacy_path)
+            _migrate_legacy_signing_key(repo_path, key)
+            return key
         key = secrets.token_bytes(32)
-        with open(key_path, 'wb') as f:
-            f.write(key)
-        os.chmod(key_path, 0o600)
+        _write_signing_key(key_path, key)
         return key
     except OSError:
         return secrets.token_bytes(32)
@@ -197,8 +237,12 @@ def load_baseline(repo_path):
 
     if stored_hmac is not None:
         # Baseline has an HMAC, verify it
-        key_path = os.path.join(repo_path, SIGNING_KEY_FILENAME)
-        if not os.path.exists(key_path):
+        key_paths = [
+            _get_signing_key_path(),
+            _get_legacy_signing_key_path(repo_path),
+        ]
+        existing_key_paths = [path for path in key_paths if os.path.exists(path)]
+        if not existing_key_paths:
             integrity_findings.append(core.Finding(
                 scanner=SCANNER_NAME, severity="high",
                 title="Signing key missing for HMAC-signed baseline",
@@ -208,19 +252,28 @@ def load_baseline(repo_path):
                 category="integrity-hmac"
             ))
             return None, integrity_findings
-        else:
-            key = _get_or_create_signing_key(repo_path)
-            content = json.dumps(baseline, sort_keys=True)
+        content = json.dumps(baseline, sort_keys=True)
+        for key_path in existing_key_paths:
+            try:
+                key = _read_signing_key(key_path)
+            except OSError:
+                continue
             expected = hmac.new(key, content.encode('utf-8'), hashlib.sha256).hexdigest()
-            if not hmac.compare_digest(stored_hmac, expected):
-                integrity_findings.append(core.Finding(
-                    scanner=SCANNER_NAME, severity="critical",
-                    title="Baseline integrity compromised",
-                    description="HMAC verification failed - baseline may have been tampered with",
-                    file=BASELINE_FILENAME, line=0,
-                    snippet=f"stored: {stored_hmac[:16]}... expected: {expected[:16]}...",
-                    category="integrity-hmac"
-                ))
+            if hmac.compare_digest(stored_hmac, expected):
+                if key_path == _get_legacy_signing_key_path(repo_path):
+                    try:
+                        _migrate_legacy_signing_key(repo_path, key)
+                    except OSError:
+                        pass
+                return baseline, integrity_findings
+        integrity_findings.append(core.Finding(
+            scanner=SCANNER_NAME, severity="critical",
+            title="Baseline integrity compromised",
+            description="HMAC verification failed - baseline may have been tampered with",
+            file=BASELINE_FILENAME, line=0,
+            snippet=f"stored: {stored_hmac[:16]}...",
+            category="integrity-hmac"
+        ))
     elif baseline:
         # Baseline exists but has no HMAC (legacy or tampered)
         integrity_findings.append(core.Finding(

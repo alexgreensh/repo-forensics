@@ -477,12 +477,24 @@ def check_package_vulnerabilities(ecosystem, name, version,
     return out
 
 
+_SEVERITY_LABEL_MAP = {
+    "CRITICAL": "critical",
+    "HIGH": "high",
+    "MEDIUM": "medium",
+    "LOW": "low",
+}
+
+
 def _suggest_severity(vuln, in_kev):
     """Map OSV severity + KEV presence to our scanner's severity tiers."""
     if in_kev:
         return "critical"
     sev = vuln.get("severity") or {}
     score_str = sev.get("score", "")
+    # OSV sometimes returns a plain label ("CRITICAL") instead of a CVSS vector.
+    label = _SEVERITY_LABEL_MAP.get(score_str.upper() if isinstance(score_str, str) else "")
+    if label is not None:
+        return label
     # CVSS vector strings start with "CVSS:3.x/..." — extract basescore if present
     # Also tolerate plain numeric strings.
     cvss = _parse_cvss_score(score_str)
@@ -569,9 +581,11 @@ def fetch_npm_freshness(name, version, cache_dir=None, offline=False):
     try:
         raw = _https_fetch(url, NPM_REGISTRY_MAX_BYTES)
         data = json.loads(raw.decode("utf-8"))
-    except Exception as e:
+    except (urllib.error.URLError, json.JSONDecodeError, OSError, ValueError) as e:
         print(f"[!] npm freshness fetch failed for {name}@{version}: {e}",
               file=sys.stderr)
+        return None
+    if not isinstance(data, dict):
         return None
 
     try:
@@ -615,7 +629,7 @@ def fetch_npm_freshness(name, version, cache_dir=None, offline=False):
             "maintainer": maintainer,
             "prev_maintainer": prev_maintainer,
         }
-    except Exception as e:
+    except (urllib.error.URLError, json.JSONDecodeError, OSError, ValueError) as e:
         print(f"[!] npm freshness parse failed for {name}@{version}: {e}",
               file=sys.stderr)
         return None
@@ -663,9 +677,11 @@ def fetch_pypi_freshness(name, version, cache_dir=None, offline=False):
     try:
         raw = _https_fetch(url, PYPI_REGISTRY_MAX_BYTES)
         data = json.loads(raw.decode("utf-8"))
-    except Exception as e:
+    except (urllib.error.URLError, json.JSONDecodeError, OSError, ValueError) as e:
         print(f"[!] PyPI freshness fetch failed for {name}@{version}: {e}",
               file=sys.stderr)
+        return None
+    if not isinstance(data, dict):
         return None
 
     try:
@@ -712,7 +728,7 @@ def fetch_pypi_freshness(name, version, cache_dir=None, offline=False):
             "maintainer": maintainer,
             "prev_maintainer": prev_maintainer,
         }
-    except Exception as e:
+    except (urllib.error.URLError, json.JSONDecodeError, OSError, ValueError) as e:
         print(f"[!] PyPI freshness parse failed for {name}@{version}: {e}",
               file=sys.stderr)
         return None

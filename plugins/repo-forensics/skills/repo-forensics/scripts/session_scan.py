@@ -451,9 +451,11 @@ def scan_item(dirpath, label, item_type, checksums):
 def deep_scan_item(dirpath, label, item_type, timeout=None):
     """Run the full run_forensics.sh scanner suite on a changed item.
 
-    Uses start_new_session=True so the entire process tree (bash + all
-    backgrounded scanner children) shares a process group. On timeout,
-    os.killpg kills the whole group, preventing orphaned scanner zombies.
+    On POSIX, uses start_new_session=True so the entire process tree
+    (bash + all backgrounded scanner children) shares a process group.
+    On timeout, os.killpg kills the whole group, preventing orphaned
+    scanner zombies. Windows lacks os.getpgid/os.killpg, so it falls
+    back to killing the direct subprocess.
 
     Returns list of finding strings (empty = clean). Never raises.
     """
@@ -467,6 +469,7 @@ def deep_scan_item(dirpath, label, item_type, timeout=None):
         return []
 
     proc = None
+    pgid = None
     stdout = ""
     try:
         proc = subprocess.Popen(
@@ -480,14 +483,14 @@ def deep_scan_item(dirpath, label, item_type, timeout=None):
             cwd=dirpath,
             start_new_session=True,
         )
-        pgid = os.getpgid(proc.pid)
+        pgid = _get_process_group_id(proc)
         stdout, _ = proc.communicate(timeout=effective_timeout)
     except subprocess.TimeoutExpired:
         _kill_process_group(pgid, proc)
         return [f"deep scan timed out after {effective_timeout}s (partial results unavailable)"]
     except OSError:
         if proc is not None:
-            _kill_process_group(getattr(proc, 'pid', None), proc)
+            _kill_process_group(pgid, proc)
         return []
     finally:
         if proc is not None and proc.stdout and not proc.stdout.closed:
@@ -520,20 +523,37 @@ def deep_scan_item(dirpath, label, item_type, timeout=None):
     return findings
 
 
+def _get_process_group_id(proc):
+    """Return POSIX process group id for a subprocess, or None on Windows."""
+    getpgid = getattr(os, 'getpgid', None)
+    if proc is None or getpgid is None:
+        return None
+    try:
+        return getpgid(proc.pid)
+    except OSError:
+        return None
+
+
 def _kill_process_group(pgid, proc):
-    """SIGTERM a process group, wait briefly, then escalate to SIGKILL."""
-    if pgid:
+    """Terminate a POSIX process group, or fall back to the direct process."""
+    killpg = getattr(os, 'killpg', None)
+    sigterm = getattr(signal, 'SIGTERM', None)
+    sigkill = getattr(signal, 'SIGKILL', None)
+    if pgid and killpg is not None:
         try:
-            os.killpg(pgid, signal.SIGTERM)
+            if sigterm is not None:
+                killpg(pgid, sigterm)
         except OSError:
             pass
+        if proc is not None:
+            try:
+                proc.wait(timeout=1)
+                return
+            except (subprocess.TimeoutExpired, OSError):
+                pass
         try:
-            proc.wait(timeout=1)
-            return
-        except (subprocess.TimeoutExpired, OSError):
-            pass
-        try:
-            os.killpg(pgid, signal.SIGKILL)
+            if sigkill is not None:
+                killpg(pgid, sigkill)
         except OSError:
             pass
     if proc is not None:
