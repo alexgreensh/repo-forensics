@@ -122,7 +122,6 @@ def scan_npm_cache():
         return findings
 
     # Check the index entries for known bad packages
-    tmp_dir = os.path.join(npm_cache, "tmp")
     index_entries = os.path.join(npm_cache, "index-v5")
     if os.path.isdir(index_entries):
         for root, _dirs, files in os.walk(index_entries):
@@ -282,7 +281,7 @@ def scan_host_artifacts():
                     if c2 in content:
                         findings.append(core.Finding(
                             scanner=SCANNER_NAME, severity="critical",
-                            title=f"C2 Persistence in LaunchAgent",
+                            title="C2 Persistence in LaunchAgent",
                             description=f"LaunchAgent/Daemon references C2 indicator '{c2}'",
                             file=os.path.relpath(plist, "/"), line=0,
                             snippet=f"plist references {c2}",
@@ -291,7 +290,7 @@ def scan_host_artifacts():
                 if "act.mond" in content or "plain-crypto" in content:
                     findings.append(core.Finding(
                         scanner=SCANNER_NAME, severity="critical",
-                        title=f"RAT Persistence in LaunchAgent",
+                        title="RAT Persistence in LaunchAgent",
                         description="LaunchAgent references known RAT artifacts",
                         file=os.path.relpath(plist, "/"), line=0,
                         snippet="plist references RAT binary or dropper",

@@ -184,6 +184,119 @@ The scary part is that these are not just prompts. Many can execute hooks, read 
 Repo Forensics is intentionally boring in the security-tool sense: local only, no cloud upload, no API key, no pip install, no Docker. Clone it, run it against a repo, and get a severity-ranked verdict with exit codes for CI.
 ```
 
+## Rule-Pack Publishing and Signing Workflow
+
+Rule packs are the versioned JSON files in `skills/repo-forensics/data/rulepacks/`. The
+signed bundle in `iocs/rulepacks.json` lets those packs reach installed users between
+code releases. This section documents how to author, sign, and publish rule-pack updates.
+
+### Authoring and editing rule packs
+
+Rule packs live at `skills/repo-forensics/data/rulepacks/<scanner>.json`. The JSON
+schema requires these top-level fields:
+
+```json
+{
+  "schema_version": 1,
+  "generated": "YYYY-MM-DD",
+  "pack": "<scanner-name>",
+  "pack_version": <strictly-increasing integer>,
+  "rules": [ ... ]
+}
+```
+
+Each rule object requires:
+
+```json
+{
+  "id": "<SCANNER>-<CATEGORY>-<NNN>",
+  "type": "regex|keyword|charset|map",
+  "pattern": "<regex string>",
+  "title": "Human-readable title",
+  "severity": "critical|high|medium|low",
+  "confidence": 0.0,
+  "category": "<category-tag>",
+  "explanation": "Why this pattern is suspicious.",
+  "examples": {
+    "match": ["...string that must match..."],
+    "no_match": ["...string that must NOT match..."]
+  }
+}
+```
+
+Rules with `type: keyword` use a `values` array instead of `pattern`. Rules with
+`type: charset` use a `codepoints` array. Rules with `type: map` use a `mapping`
+object. SAST rules may include an `extensions` list to gate on file type.
+
+Rule ids are stable forever. Retired rules keep their id with `"retired": true` rather
+than being deleted, so user suppression files never dangle.
+
+**Bump `pack_version`** (an integer) by at least 1 whenever any rule content changes.
+The feed acceptance pipeline enforces strictly-increasing integers; string or semver
+comparisons are intentionally not used.
+
+### Signing and publishing
+
+Key generation (once, offline):
+
+```bash
+python3 scripts/gen_rulepack_keys.py
+# Outputs: rulepack_pubkey.hex (commit this)
+#          rulepack_privkey.hex (NEVER commit; store offline)
+```
+
+The private key belongs in `~/.claude/_backups/` and your password manager. It is
+never committed to the repository.
+
+Sign and publish (per release, after editing packs):
+
+```bash
+python3 scripts/sign_rulepacks.py
+# Reads:   skills/repo-forensics/data/rulepacks/*.json
+# Reads:   iocs/latest.json
+# Writes:  iocs/rulepacks.json        (bundled packs)
+#          iocs/rulepacks.json.sig    (Ed25519 signature over raw bundle bytes)
+#          iocs/latest.json.sig       (Ed25519 signature over raw IOC feed bytes)
+```
+
+Commit the four files (`iocs/rulepacks.json`, `iocs/rulepacks.json.sig`,
+`iocs/latest.json.sig`, and any updated pack files under `data/rulepacks/`) to main.
+The daily refresh pipeline on user machines fetches from the committed feed URL.
+
+### Key ceremony and rotation
+
+- **Public key constants**: `rulepack_feed.RULEPACK_FEED_PUBKEY_HEX` (rule-pack feed)
+  and `ioc_manager.IOC_FEED_PUBKEY_HEX` (IOC feed). These are pinned in source.
+- **Private key**: generate offline, store in `~/.claude/_backups/` and a password
+  manager. Never commit, never leave on a networked machine longer than necessary.
+- **Rotation**: generate a new keypair with `gen_rulepack_keys.py`, update both
+  pubkey constants in `rulepack_feed.py` and `ioc_manager.py`, and ship a code
+  release. Old clients continue using the old key until they update. The feed
+  degrades gracefully if verification fails (shipped packs remain authoritative),
+  so a key rotation does not break existing installs.
+- **Backup**: store the p12/hex backup alongside the existing key material in
+  `~/.claude/_backups/` with a dated filename (e.g.,
+  `rulepack-signing-key-2026-06-10.hex`).
+
+### Acceptance chain (for reference)
+
+When a user's machine fetches the bundle, `rulepack_feed.py` enforces in order:
+
+1. HTTPS only, host allowlist, 5 MB size cap.
+2. Ed25519 signature over the exact raw fetched bytes (before any decode).
+3. JSON parse + schema major-version gate.
+4. `generated` timestamp no older than 30 days (replay protection).
+5. `pack_version` strictly greater than the persisted floor.
+6. Per-rule example self-tests including ReDoS timeout.
+7. Atomic cache write to `~/.cache/repo-forensics/rulepacks/` (dir mode 0700) +
+   floor update.
+
+Any failure leaves the prior cache (or shipped packs) authoritative and sets a
+degraded flag surfaced in scan output. The rule-pack-degraded and IOC-degraded
+flags are reported separately.
+
+---
+
 ## GitHub Social Preview
 
 Use the existing Repo Forensics artwork, starting from `diagrams/hero.svg` or the source file behind that artwork. Do not introduce a separate generated visual style for social preview images.

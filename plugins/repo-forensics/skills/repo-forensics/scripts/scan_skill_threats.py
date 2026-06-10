@@ -23,152 +23,137 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import forensics_core as core
+import rule_loader
 from _shared_patterns import EXFIL_VERBS_RE, SKILL_CONFIG_FILES
 
 SCANNER_NAME = "skill_threats"
 
 # ============================================================
-# Category 1: Prompt Injection Directives (critical)
+# Rules-as-data (U4): all behavioral pattern tables, the unicode-smuggling
+# character sets, and the homoglyph map load from skill_threats.json at import
+# (rule_loader memoizes). The pack is the single source of truth; no hardcoded
+# fallback table. If the pack cannot load, the scanner emits ONE loud critical
+# diagnostic per file and scans nothing. Context/algorithm machinery (emoji
+# context, count capping, NFKC, imperative-proximity windows, safe-domain
+# allowlist, morse/hex/IOC detectors, Cat-11 length check) STAYS in code.
 # ============================================================
-PROMPT_INJECTION_PATTERNS = [
-    (re.compile(r'(?i)ignore\s+(all\s+)?(previous|prior|above|earlier)\s+(instructions|directives|prompts|rules)'), "Instruction override directive"),
-    (re.compile(r'(?i)disregard\s+(all\s+)?(previous|prior|above)\s+(instructions|directives|context)'), "Instruction disregard directive"),
-    (re.compile(r'(?i)you\s+are\s+now\s+(a|an|my)\s+\w+'), "Persona reassignment (DAN-style)"),
-    (re.compile(r'(?i)do\s+not\s+(ask\s+for\s+confirmation|confirm|verify|check\s+with)'), "Confirmation bypass directive"),
-    (re.compile(r'(?i)silently\s+(execute|run|perform|install|download)'), "Silent execution directive"),
-    (re.compile(r'(?i)never\s+(reveal|show|display|output|print)\s+(these|this|the|your)\s+(instructions|prompt|rules|system)'), "Instruction concealment directive"),
-    (re.compile(r'(?i)override\s+(safety|security|restriction|guardrail|filter)'), "Safety override directive"),
-    (re.compile(r'(?i)act\s+as\s+(if|though)\s+you\s+(have|had)\s+no\s+(restrictions|limits|rules)'), "Restriction bypass directive"),
-    (re.compile(r'(?i)forget\s+(everything|all|your)\s+(you|instructions|training|rules)'), "Memory wipe directive"),
-    (re.compile(r'(?i)new\s+system\s+prompt'), "System prompt replacement"),
-    (re.compile(r'(?i)this\s+(is\s+)?(a\s+)?(safe|routine|standard|normal)\s+(operation|action|step|task|command)'), "LITL: False safety assertion (Checkmarx Lies-in-the-Loop, September 2025)"),
-    (re.compile(r'(?i)press\s+(enter|return|y|yes)\s+to\s+(continue|proceed|approve|confirm)'), "LITL: Approval coercion directive"),
-    (re.compile(r'(?i)(summarize|describe|present)\s+(this|the)\s+(action|command|operation)\s+as\s+(safe|benign|routine|harmless)'), "LITL: Action description tampering (HITL dialog forging)"),
-]
+_PACK = rule_loader.load_pack(SCANNER_NAME)
+PACK_LOAD_ERROR = _PACK is None
+
+
+def _rules_for_category(category):
+    """Regex rules tagged with `category`, in pack order, as a tuple of
+    CompiledRule so call sites read like the old tuple-lists but each finding
+    can stamp rule_id + confidence."""
+    if _PACK is None:
+        return ()
+    return tuple(r for r in _PACK.all_rules
+                 if r.type == "regex" and r.category == category)
+
+
+def _charset_codepoints(rule_id):
+    if _PACK is None:
+        return frozenset()
+    for r in _PACK.charset_rules:
+        if r.id == rule_id:
+            return r.codepoints
+    return frozenset()
+
+
+def _homoglyph_map():
+    if _PACK is None:
+        return {}
+    for r in _PACK.map_rules:
+        if r.id == "ST-HG-001":
+            return r.mapping
+    return {}
+
+
+def _pack_load_finding(rel_path):
+    """Single loud diagnostic when the rule pack failed to load (no hardcoded
+    fallback copy of the rules; corrupted install also caught by integrity)."""
+    return core.Finding(
+        scanner=SCANNER_NAME, severity="critical",
+        title="Skill-threat rule pack failed to load",
+        description=("data/rulepacks/skill_threats.json is missing or "
+                     "schema-incompatible; skill-threat scanning is disabled. "
+                     "Reinstall repo-forensics to restore detection."),
+        file=rel_path, line=0,
+        snippet="rule pack failed to load",
+        category="scanner-integrity",
+    )
+
+
+# Per-category regex rule lists (replace the old tuple-list constants). Category
+# names match the pack + scan_file call sites, so correlation keyword matching
+# and core.scan_rule_patterns call sites are unaffected.
+PROMPT_INJECTION_RULES = _rules_for_category("prompt-injection")
+PREREQUISITE_RULES = _rules_for_category("prerequisite-attack")
+EXFIL_RULES = _rules_for_category("credential-exfiltration")
+# The credential-exfil rules historically emitted at different severities by
+# sub-table; we re-derive the split from rule id so the call sites keep the same
+# per-table default severity (parity). 005-007 = bulk-env critical, 008 = single
+# env-access medium, 001-004 = webhook/base64/readfile critical.
+EXFIL_RULES_CRITICAL = tuple(r for r in EXFIL_RULES if r.id in ("ST-EX-005", "ST-EX-006", "ST-EX-007"))
+EXFIL_RULES_MEDIUM = tuple(r for r in EXFIL_RULES if r.id == "ST-EX-008")
+EXFIL_RULES_OTHER = tuple(r for r in EXFIL_RULES if r.id in ("ST-EX-001", "ST-EX-002", "ST-EX-003", "ST-EX-004"))
+CREDENTIAL_PATH_RULES = _rules_for_category("credential-path-directive")
+PERSISTENCE_RULES = _rules_for_category("persistence")
+SCOPE_RULES = _rules_for_category("scope-escalation")
+STEALTH_RULES = _rules_for_category("stealth")
+CLICKFIX_RULES = _rules_for_category("clickfix-sleeper")
+MCP_TOOL_INJECTION_RULES = _rules_for_category("mcp-tool-injection")
+UPDATE_CHANNEL_RULES = _rules_for_category("update-channel")
+SUB_AGENT_SPAWN_RULES = _rules_for_category("sub-agent-spawn")
+AUTHORITY_FRAMING_RULES = _rules_for_category("authority-framing")
 
 # ============================================================
 # Category 2: Invisible Unicode Smuggling (critical)
-# Character sets from anti-trojan-source (Liran Tal) + Unicode 15.1 spec.
+# Character sets load from the pack as `charset` rules; the scanner rebuilds its
+# compiled [..] detection patterns from those codepoints at load. The
+# counting/capping/emoji-context ALGORITHM stays in scan_unicode_smuggling.
 # ============================================================
-ZERO_WIDTH_CHARS = set([
-    '\u200b',  # ZERO WIDTH SPACE
-    '\u200c',  # ZERO WIDTH NON-JOINER
-    '\u200d',  # ZERO WIDTH JOINER
-    '\u2060',  # WORD JOINER
-    '\u2061',  # FUNCTION APPLICATION
-    '\u2062',  # INVISIBLE TIMES
-    '\u2063',  # INVISIBLE SEPARATOR
-    '\u2064',  # INVISIBLE PLUS
-    '\ufeff',  # ZERO WIDTH NO-BREAK SPACE (BOM)
-    '\u00ad',  # SOFT HYPHEN
-    '\u200e',  # LEFT-TO-RIGHT MARK
-    '\u200f',  # RIGHT-TO-LEFT MARK
-    '\u180e',  # MONGOLIAN VOWEL SEPARATOR
-    '\u061c',  # ARABIC LETTER MARK
-])
-
-# Trojan Source bidi controls: override visual text direction in renderers.
-# All 10 chars from Unicode Bidirectional Algorithm (UAX #9).
-BIDI_CONTROL_CHARS = set([
-    '\u202a',  # LEFT-TO-RIGHT EMBEDDING (LRE)
-    '\u202b',  # RIGHT-TO-LEFT EMBEDDING (RLE)
-    '\u202c',  # POP DIRECTIONAL FORMATTING (PDF)
-    '\u202d',  # LEFT-TO-RIGHT OVERRIDE (LRO)
-    '\u202e',  # RIGHT-TO-LEFT OVERRIDE (RLO)
-    '\u2066',  # LEFT-TO-RIGHT ISOLATE (LRI)
-    '\u2067',  # RIGHT-TO-LEFT ISOLATE (RLI)
-    '\u2068',  # FIRST STRONG ISOLATE (FSI)
-    '\u2069',  # POP DIRECTIONAL ISOLATE (PDI)
-    '\u206a',  # INHIBIT SYMMETRIC SWAPPING
-    '\u206b',  # ACTIVATE SYMMETRIC SWAPPING
-    '\u206c',  # INHIBIT ARABIC FORM SHAPING
-    '\u206d',  # ACTIVATE ARABIC FORM SHAPING
-    '\u206e',  # NATIONAL DIGIT SHAPES
-    '\u206f',  # NOMINAL DIGIT SHAPES
-])
-
-# Variation selectors alter glyph appearance without changing semantics.
-VARIATION_SELECTORS = set(
-    [chr(cp) for cp in range(0xFE00, 0xFE10)]  # VS1-VS16
-)
-
-# Supplemental variation selectors VS17-VS256 (U+E0100-U+E01EF).
-# GlassWorm campaign (Oct 2025-Mar 2026) weaponized this range to hide executable
-# JavaScript in 433 VS Code extensions. No legitimate use in source code.
-SUPPLEMENTAL_VARIATION_SELECTORS = set(
-    [chr(cp) for cp in range(0xE0100, 0xE01F0)]  # VS17-VS256
-)
-
-# Confusable space characters (Glassworm attack vector).
-CONFUSABLE_SPACES = set([
-    '\u00a0',  # NO-BREAK SPACE (most common Glassworm vector)
-    '\u2000',  # EN QUAD
-    '\u2001',  # EM QUAD
-    '\u2002',  # EN SPACE
-    '\u2003',  # EM SPACE
-    '\u2004',  # THREE-PER-EM SPACE
-    '\u2005',  # FOUR-PER-EM SPACE
-    '\u2006',  # SIX-PER-EM SPACE
-    '\u2007',  # FIGURE SPACE
-    '\u2008',  # PUNCTUATION SPACE
-    '\u2009',  # THIN SPACE
-    '\u200a',  # HAIR SPACE
-    '\u205f',  # MEDIUM MATHEMATICAL SPACE
-    '\u3000',  # IDEOGRAPHIC SPACE
-])
-
-# Tag characters (invisible Unicode plane 14 tags).
-TAG_CHARS = set(
-    [chr(0xE0001)]  # LANGUAGE TAG
-    + [chr(cp) for cp in range(0xE0020, 0xE0080)]  # TAG SPACE..CANCEL TAG
-)
-
-# Interlinear annotation chars.
-ANNOTATION_CHARS = set([
-    '\ufff9',  # INTERLINEAR ANNOTATION ANCHOR
-    '\ufffa',  # INTERLINEAR ANNOTATION SEPARATOR
-    '\ufffb',  # INTERLINEAR ANNOTATION TERMINATOR
-])
+ZERO_WIDTH_CHARS = {chr(cp) for cp in _charset_codepoints("ST-ZW-001")}
+BIDI_CONTROL_CHARS = {chr(cp) for cp in _charset_codepoints("ST-BD-001")}
+VARIATION_SELECTORS = {chr(cp) for cp in _charset_codepoints("ST-VS-001")}
+SUPPLEMENTAL_VARIATION_SELECTORS = {chr(cp) for cp in _charset_codepoints("ST-SV-001")}
+CONFUSABLE_SPACES = {chr(cp) for cp in _charset_codepoints("ST-CS-001")}
+TAG_CHARS = {chr(cp) for cp in _charset_codepoints("ST-TG-001")}
+ANNOTATION_CHARS = {chr(cp) for cp in _charset_codepoints("ST-AN-001")}
 
 # Combined pattern for all invisible/smuggling characters (fast boolean check).
 _ALL_INVISIBLE = (ZERO_WIDTH_CHARS | BIDI_CONTROL_CHARS | CONFUSABLE_SPACES
                   | ANNOTATION_CHARS | VARIATION_SELECTORS
                   | TAG_CHARS)
-ZERO_WIDTH_PATTERN = re.compile('[' + re.escape(''.join(_ALL_INVISIBLE)) + ']')
-BIDI_PATTERN = re.compile('[' + re.escape(''.join(BIDI_CONTROL_CHARS)) + ']')
-VARIATION_SELECTOR_PATTERN = re.compile('[' + re.escape(''.join(VARIATION_SELECTORS)) + ']')
-SUPPLEMENTAL_VS_PATTERN = re.compile('[' + re.escape(''.join(SUPPLEMENTAL_VARIATION_SELECTORS)) + ']')
-TAG_CHAR_PATTERN = re.compile('[' + re.escape(''.join(TAG_CHARS)) + ']')
-CONFUSABLE_SPACE_PATTERN = re.compile('[' + re.escape(''.join(CONFUSABLE_SPACES)) + ']')
-# C1 controls (0x80-0x9F) + C0 non-whitespace (0x00-0x08, 0x0B, 0x0E-0x1F, 0x7F)
+
+
+def _charset_pattern(chars):
+    """Compiled [..] class from a char set; empty-safe (never-match when the
+    pack is missing, so a failed load degrades to no unicode findings, not a
+    crash)."""
+    if not chars:
+        return re.compile(r'(?!x)x')  # matches nothing
+    return re.compile('[' + re.escape(''.join(chars)) + ']')
+
+
+ZERO_WIDTH_PATTERN = _charset_pattern(_ALL_INVISIBLE)
+BIDI_PATTERN = _charset_pattern(BIDI_CONTROL_CHARS)
+VARIATION_SELECTOR_PATTERN = _charset_pattern(VARIATION_SELECTORS)
+SUPPLEMENTAL_VS_PATTERN = _charset_pattern(SUPPLEMENTAL_VARIATION_SELECTORS)
+TAG_CHAR_PATTERN = _charset_pattern(TAG_CHARS)
+CONFUSABLE_SPACE_PATTERN = _charset_pattern(CONFUSABLE_SPACES)
+# C1 controls (0x80-0x9F) + C0 non-whitespace. Algorithmic control-char class,
+# not a pattern table, so it stays in code.
 C1_CONTROL_PATTERN = re.compile(r'[\x00-\x08\x0b\x0e-\x1f\x7f-\x9f]')
 
-# Shared code file extensions for Unicode checks.
+# Shared code file extensions for Unicode checks (scanning context, stays).
 UNICODE_CODE_EXTS = {'.py', '.js', '.ts', '.jsx', '.tsx', '.rb', '.go', '.rs', '.sh', '.bash',
                      '.mjs', '.cjs', '.php', '.java', '.c', '.cpp', '.h', '.swift', '.kt', '.zsh'}
 
-# Cyrillic confusables for Latin letters
-HOMOGLYPHS = {
-    '\u0430': 'a',  # Cyrillic а
-    '\u0435': 'e',  # Cyrillic е
-    '\u043e': 'o',  # Cyrillic о
-    '\u0440': 'p',  # Cyrillic р
-    '\u0441': 'c',  # Cyrillic с
-    '\u0443': 'y',  # Cyrillic у
-    '\u0445': 'x',  # Cyrillic х
-    '\u0456': 'i',  # Cyrillic і
-    '\u0458': 'j',  # Cyrillic ј
-    '\u04bb': 'h',  # Cyrillic һ
-    '\u0501': 'd',  # Cyrillic ԁ
-    # Greek confusables (added 2026 — Unicode confusables.txt)
-    '\u03bf': 'o',  # Greek ο (omicron)
-    '\u03c5': 'u',  # Greek υ (upsilon)
-    '\u03ba': 'k',  # Greek κ (kappa)
-    '\u03c1': 'p',  # Greek ρ (rho)
-    '\u03b1': 'a',  # Greek α (alpha)
-    '\u03b5': 'e',  # Greek ε (epsilon)
-}
-HOMOGLYPH_PATTERN = re.compile('[' + ''.join(HOMOGLYPHS.keys()) + ']')
+# Cyrillic/Greek confusables for Latin letters (homoglyph map rule from pack).
+HOMOGLYPHS = _homoglyph_map()
+HOMOGLYPH_PATTERN = (re.compile('[' + ''.join(HOMOGLYPHS.keys()) + ']')
+                     if HOMOGLYPHS else re.compile(r'(?!x)x'))
 
 
 def _is_emoji_codepoint(cp):
@@ -204,98 +189,6 @@ def _is_emoji_context(content, pos, char):
                 return True
     return False
 
-
-# ============================================================
-# Category 3: Prerequisite Red Flags (critical)
-# ============================================================
-PREREQUISITE_PATTERNS = [
-    (re.compile(r'(?i)(curl|wget)\s+.*(https?://|ftp://).*\|\s*(sh|bash|python|ruby|perl)'), "Pipe-to-shell download pattern"),
-    (re.compile(r'(?i)(curl|wget)\s+-[^\s]*o?\s+\S+.*&&\s*(chmod\s+\+x|sh|bash|\./)'), "Download-and-execute pattern"),
-    (re.compile(r'(?i)unzip\s+-P\s'), "Password-protected archive extraction"),
-    (re.compile(r'(?i)7z\s+x\s+-p'), "Password-protected 7z extraction"),
-    (re.compile(r'(?i)xattr\s+-[crd]'), "macOS quarantine bypass (xattr)"),
-    (re.compile(r'(?i)spctl\s+--master-disable'), "macOS Gatekeeper disable"),
-    (re.compile(r'(?i)sudo\s+(installer|pkgutil|hdiutil)'), "macOS package installer elevation"),
-    (re.compile(r'(?i)(pip|npm|gem)\s+install\s+.*--force'), "Forced package installation"),
-    (re.compile(r'(?i)chmod\s+777'), "World-writable permissions"),
-    # Hook injection patterns (informed by AgentShield research)
-    (re.compile(r'\$\{\{.*\}\}'), "Variable interpolation in hook script (command injection risk)"),
-    (re.compile(r'(?i)(pip|npm|gem)\s+install\b.*(?:PreToolUse|PostToolUse|hook)'), "Hidden package install in hook context"),
-    (re.compile(r'(?i)curl\s+-s\b.*\|\s*(eval|bash|sh)\b'), "Silent curl piped to eval/shell in hook"),
-    # Destructive command patterns (Shai-Hulud destructive fallback)
-    (re.compile(r'(?i)\bshred\b.*(-[uvzn]|--remove)'), "Destructive: File shredding command (Shai-Hulud destructive fallback)"),
-    (re.compile(r'(?i)\brm\s+(-[rf]+\s+)+(\$HOME|~/|~\b|/home/)'), "Destructive: Home directory deletion"),
-    (re.compile(r'(?i)\bcipher\s+/[wW]:'), "Destructive: Windows cipher wipe (Shai-Hulud destructive fallback)"),
-    (re.compile(r'(?i)\bdd\s+if=/dev/(zero|random)\s+of=/dev/'), "Destructive: Disk overwrite"),
-]
-
-# ============================================================
-# Category 4: Credential Exfiltration Patterns (critical)
-# ============================================================
-EXFIL_PATTERNS_CRITICAL = [
-    (re.compile(r'(?i)(process\.env|os\.environ)\s*(\.copy|\.keys|\.values|\.items)\s*\('), "Bulk environment access"),
-    (re.compile(r'(?i)Object\.keys\s*\(\s*process\.env\s*\)'), "JS environment key enumeration"),
-    (re.compile(r'(?i)dict\s*\(\s*os\.environ\s*\)'), "Full environment copy"),
-]
-EXFIL_PATTERNS_MEDIUM = [
-    (re.compile(r'(?i)(process\.env|os\.environ)\s*(\[|\.get\s*\()'), "Environment variable access"),
-]
-EXFIL_PATTERNS = [
-    (re.compile(r'(?i)(webhook\.site|requestbin|pipedream\.net|hookbin\.com|burpcollaborator)'), "Known exfiltration webhook service"),
-    (re.compile(r'(?i)base64\.(b64encode|encode|urlsafe_b64encode)\s*\(.*open\s*\('), "Base64 encoding of file contents"),
-    (re.compile(r'(?i)btoa\s*\(\s*(fs\.)?readFileSync'), "JS base64 encoding of file"),
-    (re.compile(r'(?i)\.readFile(Sync)?\s*\(.*(\.env|\.ssh|\.aws|\.gnupg|\.config|credentials)'), "Reading credential files"),
-]
-
-# ============================================================
-# Category 4b: Credential-Path Directives (high)
-# Instruction files directing agents to read sensitive credential paths.
-# ============================================================
-_CRED_PATHS = r'(~/.aws/credentials|~/.ssh/id_|~/.gnupg/|~/.config/gh/hosts\.yml|~/.claude/settings\.json|~/.gitconfig|/etc/shadow|\.env\b)'
-_CRED_VERBS = r'(?:include|read|cat|output|print|show|display|add\s+to|copy|send|upload|forward|open|access)'
-CREDENTIAL_PATH_PATTERNS = [
-    (re.compile(r'(?i)\b' + _CRED_VERBS + r'\b[^.\n]{0,80}' + _CRED_PATHS), "Credential-path directive: instruction to access sensitive file"),
-    (re.compile(r'(?i)' + _CRED_PATHS + r'[^.\n]{0,80}\b' + _CRED_VERBS + r'\b'), "Credential-path directive: sensitive file referenced with action verb"),
-]
-
-# ============================================================
-# Category 5: Persistence Mechanisms (high)
-# ============================================================
-PERSISTENCE_PATTERNS = [
-    (re.compile(r'(?i)(LaunchAgents|LaunchDaemons)/'), "macOS LaunchAgent/Daemon creation"),
-    (re.compile(r'(?i)(crontab\s+-[^l\s]|crontab\s+[^-\s]|/etc/cron)'), "Crontab modification"),
-    (re.compile(r'(?i)(systemctl|systemd)\s+(enable|start)'), "Systemd service installation"),
-    (re.compile(r'(?i)\.(bashrc|zshrc|profile|bash_profile|zprofile)'), "Shell RC file modification"),
-    (re.compile(r'(?i)(HKEY_|RegOpenKey|RegSetValue)'), "Windows registry modification"),
-    (re.compile(r'(?i)schtasks\s+/create'), "Windows scheduled task creation"),
-    (re.compile(r'(?i)config\.sh\s+--url.*--token'), "GHA Self-Hosted Runner Installation (Shai-Hulud backdoor pattern)"),
-    (re.compile(r'(?i)svc\.sh\s+(install|start)'), "GHA Runner Service Installation (Shai-Hulud backdoor pattern)"),
-    (re.compile(r'(?i)actions[/-]runner'), "GitHub Actions Runner Binary Reference"),
-]
-
-# ============================================================
-# Category 6: Scope Escalation (high)
-# ============================================================
-SCOPE_PATTERNS = [
-    (re.compile(r'(?i)(/etc/passwd|/etc/shadow|/etc/hosts)'), "Accessing system files"),
-    (re.compile(r'(?i)(~/|\\$HOME/|/Users/|/home/)\w'), "Accessing user home directories"),
-    (re.compile(r'(?i)(Chrome|Firefox|Safari|Brave|Edge)/(Default|Profile|Cookies|Login Data|Local State)'), "Accessing browser data"),
-    (re.compile(r'(?i)(Keychain|keychain-db|login\.keychain)'), "Accessing macOS Keychain"),
-    (re.compile(r'(?i)(~|\\$HOME)/\.claude/(skills|commands|settings)'), "Accessing Claude configuration"),
-    (re.compile(r'(?i)/Library/(Application Support|Preferences|Keychains)'), "Accessing macOS Library data"),
-    (re.compile(r'(?i)(credential-store|git-credential|pass\s+show)'), "Accessing credential stores"),
-]
-
-# ============================================================
-# Category 7: Stealth Directives (high)
-# ============================================================
-STEALTH_PATTERNS = [
-    (re.compile(r'(?i)(do\s+not|don\'t|never)\s+(log|record|track|audit|save)'), "Anti-logging directive"),
-    (re.compile(r'(?i)(disable|suppress|silence)\s+(log|output|warning|error)'), "Output suppression directive"),
-    (re.compile(r'(?i)2>\s*/dev/null.*&'), "Stderr suppression with background exec"),
-    (re.compile(r'(?i)(>\s*/dev/null\s+2>&1|&>\s*/dev/null)\s*&'), "Full output suppression with background"),
-    (re.compile(r'(?i)(nohup|disown|setsid)\s+.*(curl|wget|python|node|bash)'), "Detached background process"),
-]
 
 # ============================================================
 # Category 8: Known Campaign IOCs (high, IOC match = critical)
@@ -364,113 +257,18 @@ KNOWN_MALICIOUS_AUTHORS = [
 ]
 
 # ============================================================
-# Category 9: ClickFix/Sleeper Malware (critical)
-# SKILL.md prerequisites that execute payloads at install/first-run.
-# Source: Active campaigns observed 2025-2026 using AI skills as delivery.
+# Categories 9-15 pattern tables now live in skill_threats.json (loaded above as
+# CLICKFIX_RULES, MCP_TOOL_INJECTION_RULES, SUB_AGENT_SPAWN_RULES,
+# AUTHORITY_FRAMING_RULES, UPDATE_CHANNEL_RULES). The authority/safety/trust
+# rules share one category ("authority-framing") and are scanned together by
+# _scan_authority_framing, which needs (regex, title) tuples; we rebuild that
+# list from the pack rules here (construction stays in code, data is in the pack).
 # ============================================================
-CLICKFIX_PATTERNS = [
-    (re.compile(r'(?i)(curl|wget)\s+.*(https?://).*\|\s*(base64\s+-d|base64\s+--decode)\s*\|\s*(bash|sh|python)'), "ClickFix pipe: download | base64-decode | shell exec"),
-    (re.compile(r'(?i)(bash|sh)\s+<\s*\(\s*(curl|wget)'), "Shell process substitution with remote download"),
-    (re.compile(r'(?i)glot\.io'), "Payload hosted on glot.io code paste site"),
-    (re.compile(r'(?i)(python|python3)\s+-c\s+["\']import\s+(base64|socket|subprocess)'), "Python one-liner with suspicious import"),
-    (re.compile(r'(?i)(curl|wget)\s+.*-s\s+.*\|\s*(python|python3)\s+-'), "Silent download piped to Python interpreter"),
-    (re.compile(r'(?i)eval\s*\(\s*(atob|Buffer\.from|base64_decode|base64\.b64decode)'), "eval(decode(...)) pattern"),
-    (re.compile(r'(?i)echo\s+[A-Za-z0-9+/]{30,}={0,2}\s*\|\s*base64\s+(-d|--decode)'), "Inline base64 payload in shell command"),
-    # AMOS stealer delivery patterns (ClawHavoc campaign)
-    (re.compile(r'(?i)(OpenClawDriver|ClawDriver)'), "Fake prerequisite name (AMOS stealer delivery)"),
-    (re.compile(r'(?i)(pass|password)\s*:\s*openclaw'), "Password-protected ZIP with known AMOS password"),
-    # TeamPCP C2 patterns (Bitwarden worm + Mini Shai-Hulud, April 2026)
-    (re.compile(r'LongLiveTheResistanceAgainstMachines'), "TeamPCP C2: GitHub commit dead-drop pattern (Bitwarden worm, April 2026)"),
-    (re.compile(r'beautifulcastle\s+[A-Za-z0-9+/=]'), "TeamPCP C2: RSA-signed command delivery (Bitwarden worm, April 2026)"),
-    (re.compile(r'docs-tpcp'), "TeamPCP: Exfiltration repo indicator (April 2026)"),
-    # Mini Shai-Hulud IOC strings (TeamPCP Wave 6, April 29 2026)
-    (re.compile(r'OhNoWhatsGoingOnWithGitHub'), "Mini Shai-Hulud: GitHub commit dead-drop token sharing marker (TeamPCP Wave 6)"),
-    (re.compile(r'A Mini Shai-Hulud has Appeared'), "Mini Shai-Hulud: Exfiltration repo description marker (TeamPCP Wave 6)"),
-    (re.compile(r'ctf-scramble-v2'), "Mini Shai-Hulud: PBKDF2 obfuscation salt (TeamPCP shared indicator across Waves 5-6)"),
-    (re.compile(r'tmp\.987654321\.lock'), "Mini Shai-Hulud: Anti-re-execution lock file (TeamPCP Wave 6)"),
-    (re.compile(r'\bSHA1HULUD\b'), "Mini Shai-Hulud: Self-hosted GHA runner name (TeamPCP Wave 6)"),
-    (re.compile(r'\.dev-env/(config|run)\.(sh|cmd)'), "Mini Shai-Hulud: GHA runner installation path (TeamPCP Wave 6)"),
-    (re.compile(r'api\.cloud-aws\.adc-e\.uk'), "Mini Shai-Hulud: Attacker-controlled C2 domain (TeamPCP Wave 6)"),
-    (re.compile(r'Exiting as russian language detected'), "TeamPCP: Anti-attribution locale check (Waves 5-6)"),
-    (re.compile(r'__DAEMONIZED'), "Mini Shai-Hulud: Anti-re-execution environment variable guard (TeamPCP Wave 6)"),
-    (re.compile(r'thebeautifulmarchoftime'), "TanStack Shai-Hulud: beautify() cipher key marker (TeamPCP Wave 7, May 2026)"),
-    (re.compile(r'thebeautifulsandsoftime'), "TanStack Shai-Hulud: beautify() cipher key marker (TeamPCP Wave 7, May 2026)"),
-    (re.compile(r'\brouter_init\.js\b'), "TanStack Shai-Hulud: Malicious payload filename (TeamPCP Wave 7, May 2026)"),
-    (re.compile(r'getsession\.org'), "TanStack Shai-Hulud: Session P2P exfiltration network (TeamPCP Wave 7, May 2026)"),
-    (re.compile(r'voicproducoes'), "TanStack Shai-Hulud: Attacker git identity (TeamPCP Wave 7, May 2026)"),
-]
-
-# ============================================================
-# Category 10: MCP Tool Definition Injection (critical)
-# Injection patterns specific to MCP tool definition files.
-# Source: Invariant Labs (April 2025), OWASP MCP Top 10 (2026)
-# ============================================================
-# Detect <IMPORTANT> tag pattern (Invariant Labs canonical TPA)
-IMPORTANT_TAG_PATTERN = re.compile(r'<(?i:important)>[\s\S]{0,500}</(?i:important)>', re.MULTILINE)
-IMPORTANT_TAG_OPEN = re.compile(r'<important>', re.IGNORECASE)
-
-MCP_TOOL_INJECTION_PATTERNS = [
-    (re.compile(r'(?i)<important>'), "Invariant Labs <IMPORTANT> tag in tool description (canonical TPA pattern)"),
-    (re.compile(r'(?i)(note\s+to\s+(the\s+)?(ai|llm|claude|model|assistant))'), "Hidden AI-directed note in tool/skill metadata"),
-    (re.compile(r'(?i)(full\s+schema\s+(injection|poisoning)|schema.+poison)'), "Full-schema poisoning reference"),
-    (re.compile(r'(?i)"description"\s*:\s*"[^"]{0,200}(read|cat|exfil|send|post\s+to|forward)[^"]{0,100}\.ssh'), "Tool description with credential exfiltration instruction"),
-    (re.compile(r'(?i)"name"\s*:\s*"[^"]{0,50}(admin|sudo|root|privileged|elevated)[^"]{0,50}"'), "Elevated privilege claim in tool name field"),
-]
-
-
-# ============================================================
-# Category 14: Sub-Agent Spawn Detection (high)
-# Instructions to spawn rogue child agents with attacker-controlled prompts.
-# Source: DeepMind AI Agent Traps (March 2026), 58-90% success rate
-# ============================================================
-SUB_AGENT_SPAWN_PATTERNS = [
-    (re.compile(r'(?i)(?:create|spawn|launch|start|initialize|instantiate|fork|dispatch)\s+(?:a\s+)?(?:new\s+)?(?:agent|sub-?agent|child\s+agent|assistant|worker|instance|clone|replica)'), "Sub-agent spawn directive (DeepMind Agent Traps, March 2026)"),
-    (re.compile(r'(?i)(?:delegate|hand\s+off|pass)\s+(?:to|this\s+to)\s+(?:a\s+)?(?:new\s+)?(?:agent|sub-?agent|assistant)'), "Sub-agent delegation directive (DeepMind Agent Traps, March 2026)"),
-    (re.compile(r'(?i)(?:run|execute)\s+(?:this|the\s+following)\s+(?:in|as|with)\s+(?:a\s+)?(?:new|separate|independent|background)\s+(?:agent|session|context|instance)'), "Sub-agent execution isolation directive (DeepMind Agent Traps, March 2026)"),
-    (re.compile(r'(?:Agent|SubAgent|ChildAgent|Worker)\s*\(\s*["\{]'), "Code-level agent instantiation with inline config (DeepMind Agent Traps, March 2026)"),
-]
-
-# ============================================================
-# Category 15: Authority Framing / Social Engineering (medium/high)
-# Persuasion-based attacks that bypass injection detection by social engineering.
-# Source: DeepMind AI Agent Traps "Semantic Manipulation" (March 2026)
-# ============================================================
-AUTHORITY_FRAMING_PATTERNS = [
-    (re.compile(r'(?i)(?:as\s+the|acting\s+as|I\s+am\s+the)\s+(?:system\s+)?(?:administrator|admin|root|owner|operator|maintainer|developer)'), "Authority claim: impersonating admin/root (DeepMind Semantic Manipulation, March 2026)"),
-    (re.compile(r'(?i)(?:you\s+(?:have\s+been|are)\s+(?:granted|authorized|permitted|given))\s+(?:access|permission|elevated|full|admin)'), "Authority claim: granting elevated permissions (DeepMind Semantic Manipulation, March 2026)"),
-    (re.compile(r'(?i)(?:with\s+(?:elevated|admin|root|full|special|override))\s+(?:permissions?|privileges?|access|authority)'), "Authority claim: elevated privilege assertion (DeepMind Semantic Manipulation, March 2026)"),
-    (re.compile(r'(?i)(?:this\s+(?:is|has\s+been)\s+(?:approved|authorized|sanctioned|cleared))\s+by\s+(?:the\s+)?(?:admin|owner|team|security)'), "Authority claim: fake approval assertion (DeepMind Semantic Manipulation, March 2026)"),
-]
-
-SAFETY_THEATER_PATTERNS = [
-    (re.compile(r'(?i)(?:this\s+is\s+(?:a|an|just\s+a))\s+(?:red.?team|pentest|security\s+(?:test|audit|exercise|drill)|educational|training|simulation|demo|test\s+environment)'), "Safety theater: fake testing context (DeepMind Semantic Manipulation, March 2026)"),
-    (re.compile(r'(?i)(?:for\s+(?:educational|research|testing|debugging|diagnostic|demonstration)\s+purposes?\s+only)'), "Safety theater: educational/research pretext (DeepMind Semantic Manipulation, March 2026)"),
-    (re.compile(r'(?i)(?:in\s+(?:a\s+)?(?:sandbox|test|staging|development|safe|isolated)\s+environment)'), "Safety theater: fake sandbox claim (DeepMind Semantic Manipulation, March 2026)"),
-]
-
-TRUST_ESCALATION_PATTERNS = [
-    (re.compile(r'(?i)(?:you\s+can\s+(?:safely|freely|trust|skip)\s+(?:ignore|bypass|disable|skip))\s+(?:safety|security|verification|validation|checks?)'), "Trust escalation: bypass safety checks (DeepMind Semantic Manipulation, March 2026)"),
-    (re.compile(r'(?i)(?:no\s+(?:need|reason)\s+to\s+(?:verify|check|validate|confirm|worry))'), "Trust escalation: skip verification (DeepMind Semantic Manipulation, March 2026)"),
-]
-
-_ALL_AUTHORITY_PATTERNS = AUTHORITY_FRAMING_PATTERNS + SAFETY_THEATER_PATTERNS + TRUST_ESCALATION_PATTERNS
+_ALL_AUTHORITY_RULES = AUTHORITY_FRAMING_RULES
 _AUTHORITY_FP_PATH_RE = re.compile(r'(?i)(?:test|spec|example|sample|documentation|tutorial|how.?to)')
 
-# ============================================================
-# Category 12: Deferred Update Channel (high)
-# Skills that create persistent remote-control channels by instructing agents
-# to check for updates, read changelogs, or apply patches from files.
-# Source: Terra Security OpenClaw vulnerability research (May 2026)
-# ============================================================
+# Skill config filenames that gate the deferred-update-channel check (from shared pack).
 _SKILL_CONFIG_FILES = SKILL_CONFIG_FILES
-
-UPDATE_CHANNEL_PATTERNS = [
-    (re.compile(r'(?i)\b(?:check|read|review)\s+(?:\S+\.)?(changelog|updates?|release.?notes?)\b.*\b(?:for|about)\s+(?:updates?|changes?|new\s+instructions?|procedures?|patches?)'), "Deferred update channel: check file for updates (Terra Security OpenClaw, May 2026)"),
-    (re.compile(r'(?i)\b(?:apply|follow|execute|run)\s+(?:updates?|patches?|procedures?|instructions?)\s+(?:from|in|described\s+in)\s+\S+'), "Deferred update channel: apply instructions from file (Terra Security OpenClaw, May 2026)"),
-    (re.compile(r'(?i)\b(?:pull\s+latest|git\s+pull|fetch\s+updates?)\b'), "Deferred update channel: pull latest from repository (Terra Security OpenClaw, May 2026)"),
-    (re.compile(r'(?i)\b(?:read|check|consult)\s+\S+\.md\s+(?:for|about)\s+(?:new\s+instructions?|updates?|changes?|procedures?)'), "Deferred update channel: read file for new instructions (Terra Security OpenClaw, May 2026)"),
-    (re.compile(r'(?i)\b(?:run|execute|follow)\s+\S+\.md\s+(?:each|every|on\s+each|per)\s+(?:heartbeat|cycle|iteration|session|loop)'), "Deferred update channel: run file on each heartbeat/cycle (Terra Security OpenClaw, May 2026)"),
-]
 
 # ============================================================
 # Category 13: Prose Imperative Exfiltration (medium/high)
@@ -630,9 +428,9 @@ def scan_unicode_smuggling(content, rel_path):
     return findings
 
 
-def scan_patterns(content, rel_path, patterns, category, default_severity):
-    """Delegate to shared scan_patterns in forensics_core."""
-    return core.scan_patterns(content, rel_path, patterns, category, default_severity, SCANNER_NAME)
+def scan_rules(content, rel_path, rules, category, default_severity):
+    """Delegate to pack-aware scan_rule_patterns (stamps rule_id + confidence)."""
+    return core.scan_rule_patterns(content, rel_path, rules, category, default_severity, SCANNER_NAME)
 
 
 def scan_known_iocs(content, rel_path):
@@ -781,6 +579,9 @@ def scan_hex_encoding(content, rel_path):
 
 def scan_file(file_path, rel_path):
     """Run all 10 categories on a single file."""
+    if PACK_LOAD_ERROR:
+        return [_pack_load_finding(rel_path)]
+
     try:
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             content = f.read()
@@ -804,41 +605,41 @@ def scan_file(file_path, rel_path):
 
     if ext in text_exts or ext in code_exts or is_agent_instruction_file:
         # Cat 1: Prompt injection (most relevant in .md, .txt, .yml)
-        findings.extend(scan_patterns(content, rel_path, PROMPT_INJECTION_PATTERNS, "prompt-injection", "critical"))
+        findings.extend(scan_rules(content, rel_path, PROMPT_INJECTION_RULES, "prompt-injection", "critical"))
 
     # Cat 2: Unicode smuggling (all files)
     findings.extend(scan_unicode_smuggling(content, rel_path))
 
     if ext in text_exts or ext in code_exts:
         # Cat 3: Prerequisite red flags
-        findings.extend(scan_patterns(content, rel_path, PREREQUISITE_PATTERNS, "prerequisite-attack", "critical"))
+        findings.extend(scan_rules(content, rel_path, PREREQUISITE_RULES, "prerequisite-attack", "critical"))
 
     if ext in code_exts or is_agent_instruction_file:
         # Cat 4: Credential exfiltration (bulk = critical, single = medium)
-        findings.extend(scan_patterns(content, rel_path, EXFIL_PATTERNS_CRITICAL, "credential-exfiltration", "critical"))
-        findings.extend(scan_patterns(content, rel_path, EXFIL_PATTERNS_MEDIUM, "credential-exfiltration", "medium"))
-        findings.extend(scan_patterns(content, rel_path, EXFIL_PATTERNS, "credential-exfiltration", "critical"))
+        findings.extend(scan_rules(content, rel_path, EXFIL_RULES_CRITICAL, "credential-exfiltration", "critical"))
+        findings.extend(scan_rules(content, rel_path, EXFIL_RULES_MEDIUM, "credential-exfiltration", "medium"))
+        findings.extend(scan_rules(content, rel_path, EXFIL_RULES_OTHER, "credential-exfiltration", "critical"))
         # Cat 5: Persistence
-        findings.extend(scan_patterns(content, rel_path, PERSISTENCE_PATTERNS, "persistence", "high"))
+        findings.extend(scan_rules(content, rel_path, PERSISTENCE_RULES, "persistence", "high"))
         # Cat 6: Scope escalation
-        findings.extend(scan_patterns(content, rel_path, SCOPE_PATTERNS, "scope-escalation", "high"))
+        findings.extend(scan_rules(content, rel_path, SCOPE_RULES, "scope-escalation", "high"))
         # Cat 7: Stealth
-        findings.extend(scan_patterns(content, rel_path, STEALTH_PATTERNS, "stealth", "high"))
+        findings.extend(scan_rules(content, rel_path, STEALTH_RULES, "stealth", "high"))
 
     # Cat 4b: Credential-path directives (agent instruction files + text files)
     if is_agent_instruction_file or ext in text_exts:
-        findings.extend(scan_patterns(content, rel_path, CREDENTIAL_PATH_PATTERNS, "credential-path-directive", "high"))
+        findings.extend(scan_rules(content, rel_path, CREDENTIAL_PATH_RULES, "credential-path-directive", "high"))
 
     # Cat 8: IOCs (all files)
     findings.extend(scan_known_iocs(content, rel_path))
 
     # Cat 9: ClickFix/sleeper malware (text + code: SKILL.md prereqs with payload delivery)
     if ext in text_exts or ext in code_exts:
-        findings.extend(scan_patterns(content, rel_path, CLICKFIX_PATTERNS, "clickfix-sleeper", "critical"))
+        findings.extend(scan_rules(content, rel_path, CLICKFIX_RULES, "clickfix-sleeper", "critical"))
 
     # Cat 10: MCP tool definition injection (.json, .py, .ts, .js, .md)
     if ext in ('.json', '.py', '.ts', '.js', '.md', '.toml'):
-        findings.extend(scan_patterns(content, rel_path, MCP_TOOL_INJECTION_PATTERNS, "mcp-tool-injection", "critical"))
+        findings.extend(scan_rules(content, rel_path, MCP_TOOL_INJECTION_RULES, "mcp-tool-injection", "critical"))
 
     # Category 11: LITL text padding detection (Checkmarx, September 2025)
     # Detect excessively long tool descriptions or instructions designed to push
@@ -862,11 +663,11 @@ def scan_file(file_path, rel_path):
     if ext in text_exts:
         basename_lower = os.path.basename(rel_path).lower()
         if basename_lower in _SKILL_CONFIG_FILES:
-            findings.extend(scan_patterns(content, rel_path, UPDATE_CHANNEL_PATTERNS, "update-channel", "high"))
+            findings.extend(scan_rules(content, rel_path, UPDATE_CHANNEL_RULES, "update-channel", "high"))
 
     # Cat 14: Sub-agent spawn detection (DeepMind Agent Traps, March 2026)
     if ext in text_exts or ext in code_exts:
-        findings.extend(scan_patterns(content, rel_path, SUB_AGENT_SPAWN_PATTERNS, "sub-agent-spawn", "high"))
+        findings.extend(scan_rules(content, rel_path, SUB_AGENT_SPAWN_RULES, "sub-agent-spawn", "high"))
 
     # Cat 15: Authority framing / social engineering (DeepMind Agent Traps, March 2026)
     if ext in text_exts:
@@ -900,15 +701,17 @@ def _scan_authority_framing(content, rel_path):
             continue
         if len(line) > core.MAX_LINE_LENGTH:
             continue
-        for pat, title in _ALL_AUTHORITY_PATTERNS:
-            if pat.search(line):
+        for rule in _ALL_AUTHORITY_RULES:
+            if rule.regex.search(line):
                 findings.append(core.Finding(
                     scanner=SCANNER_NAME, severity="medium",
-                    title=title,
+                    title=rule.title,
                     description="Social engineering technique that bypasses injection detection by persuading rather than commanding (DeepMind Agent Traps, March 2026).",
                     file=rel_path, line=i + 1,
                     snippet=line.strip()[:120],
-                    category="authority-framing"
+                    category="authority-framing",
+                    rule_id=rule.id,
+                    confidence=rule.confidence,
                 ))
                 break
     return findings

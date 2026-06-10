@@ -260,7 +260,7 @@ def scan_github_actions(file_path, rel_path):
                 if not is_sha_pinned and not is_official:
                     findings.append(core.Finding(
                         scanner=SCANNER_NAME, severity="high",
-                        title=f"GHA: Unpinned Third-Party Action",
+                        title="GHA: Unpinned Third-Party Action",
                         description=f"Action '{action}@{ref}' not pinned to commit SHA (supply chain risk)",
                         file=rel_path, line=i+1, snippet=stripped[:120],
                         category="ci-cd"
@@ -268,7 +268,7 @@ def scan_github_actions(file_path, rel_path):
                 elif not is_sha_pinned and is_official:
                     findings.append(core.Finding(
                         scanner=SCANNER_NAME, severity="medium",
-                        title=f"GHA: Unpinned Official Action",
+                        title="GHA: Unpinned Official Action",
                         description=f"Action '{action}@{ref}' not pinned to commit SHA (official action compromise is a real vector)",
                         file=rel_path, line=i+1, snippet=stripped[:120],
                         category="ci-cd"
@@ -660,7 +660,7 @@ def scan_npmrc(file_path, rel_path):
                     findings.append(core.Finding(
                         scanner=SCANNER_NAME, severity="critical",
                         title=".npmrc: Custom git Binary Override",
-                        description=f"git= points to non-system path (PackageGate .npmrc injection bypass vector)",
+                        description="git= points to non-system path (PackageGate .npmrc injection bypass vector)",
                         file=rel_path, line=i + 1, snippet=stripped[:120],
                         category="npmrc-config"
                     ))

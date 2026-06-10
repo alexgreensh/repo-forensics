@@ -268,6 +268,26 @@ def _refresh_kev(scripts_dir):
         return False
 
 
+def _refresh_rulepacks(scripts_dir):
+    """Fetch + verify + cache the signed rule-pack bundle (U6). Returns True on
+    success. Runs WITHIN the existing 60s SIGALRM hard cap and the single-
+    instance lock — its self-test step reuses rule_loader's save/restore SIGALRM
+    so it never clobbers our cap. Cross-platform updater (no macOS assumptions),
+    though this refresher itself is macOS-launchd-only."""
+    try:
+        feed_path = os.path.join(scripts_dir, "rulepack_feed.py")
+        rulepack_feed = _import_module_by_path("rulepack_feed", feed_path)
+        if rulepack_feed is None:
+            _log("rulepack_feed module not found")
+            return False
+        ok, msg = rulepack_feed.update_rulepacks()
+        _log(f"RULEPACKS: ok={ok} msg={msg}")
+        return bool(ok)
+    except Exception as e:
+        _log(f"rule-pack refresh exception: {type(e).__name__}: {e}")
+        return False
+
+
 def main():
     if os.environ.get(ENV_KILL_SWITCH, "").lower() in ("1", "true", "yes", "on"):
         _log("kill switch active — exiting")
@@ -303,8 +323,9 @@ def main():
             forensics_core = None
         ok_ioc = _refresh_iocs(scripts_dir)
         ok_kev = _refresh_kev(scripts_dir)
+        ok_rulepacks = _refresh_rulepacks(scripts_dir)
         _write_marker(forensics_core=forensics_core)
-        _log(f"refresh done (ioc={ok_ioc}, kev={ok_kev})")
+        _log(f"refresh done (ioc={ok_ioc}, kev={ok_kev}, rulepacks={ok_rulepacks})")
     finally:
         try:
             fcntl.flock(lock_fd, fcntl.LOCK_UN)

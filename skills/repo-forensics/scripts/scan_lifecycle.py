@@ -154,7 +154,7 @@ def scan_package_json(file_path, rel_path):
                         findings.append(core.Finding(
                             scanner=SCANNER_NAME, severity="high",
                             title=f"NPM Hook: '{hook}' Runs External Script",
-                            description=f"Lifecycle hook executes external file (standard supply chain attack pattern)",
+                            description="Lifecycle hook executes external file (standard supply chain attack pattern)",
                             file=rel_path, line=0,
                             snippet=f"{hook}: {cmd[:120]}",
                             category="lifecycle-hook"
@@ -172,7 +172,7 @@ def scan_package_json(file_path, rel_path):
                         findings.append(core.Finding(
                             scanner=SCANNER_NAME, severity="medium",
                             title=f"NPM Hook: '{hook}' Present",
-                            description=f"Lifecycle hook exists (common malware vector)",
+                            description="Lifecycle hook exists (common malware vector)",
                             file=rel_path, line=0,
                             snippet=f"{hook}: {cmd[:120]}",
                             category="lifecycle-hook"

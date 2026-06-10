@@ -28,6 +28,7 @@ import unicodedata
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import forensics_core as core
+import rule_loader
 from _shared_patterns import EXFIL_VERBS
 
 
@@ -60,21 +61,56 @@ def _normalize_for_keyword_match(text):
 SCANNER_NAME = "mcp_security"
 
 # ============================================================
+# Rules-as-data (U4): the MCP behavioral pattern tables and the
+# tool-injection keyword list load from data/rulepacks/mcp_security.json at
+# import (rule_loader memoizes). The pack is the single source of truth; no
+# hardcoded fallback table. If the pack cannot load, the scanner emits ONE loud
+# critical diagnostic per file and scans nothing. The composed regexes that
+# rebuild from the shared EXFIL_VERBS list (PROMPT_INJECTION_IMPERATIVE_REGEX,
+# EXFIL_VERB_URL_PATTERN), the tool-def field extractors, NFKC normalization,
+# and the MCP file heuristic are ALGORITHM and stay in code.
+# ============================================================
+_PACK = rule_loader.load_pack(SCANNER_NAME)
+PACK_LOAD_ERROR = _PACK is None
+
+
+def _rules_for_category(category):
+    if _PACK is None:
+        return ()
+    return tuple(r for r in _PACK.all_rules
+                 if r.type == "regex" and r.category == category)
+
+
+def _keyword_values(rule_id):
+    if _PACK is None:
+        return ()
+    for r in _PACK.keyword_rules:
+        if r.id == rule_id:
+            return r.values
+    return ()
+
+
+def _pack_load_finding(rel_path):
+    """Single loud diagnostic when the rule pack failed to load (no hardcoded
+    fallback copy; corrupted install also caught by the integrity scanner)."""
+    return core.Finding(
+        scanner=SCANNER_NAME, severity="critical",
+        title="MCP-security rule pack failed to load",
+        description=("data/rulepacks/mcp_security.json is missing or "
+                     "schema-incompatible; MCP scanning is disabled. "
+                     "Reinstall repo-forensics to restore detection."),
+        file=rel_path, line=0,
+        snippet="rule pack failed to load",
+        category="scanner-integrity",
+    )
+
+
+# ============================================================
 # Category A: SQL Injection in MCP Server Code (critical)
 # SQL injection can store malicious prompts for agent execution.
 # Source: Trend Micro, May 2025
 # ============================================================
-SQL_INJECTION_PATTERNS = [
-    (re.compile(r'(?i)(cursor\.execute|connection\.execute|db\.execute)\s*\([^)]*\+'), "SQL string concatenation in execute() call"),
-    (re.compile(r'(?i)(cursor\.execute|connection\.execute|db\.execute)\s*\(\s*f["\']'), "SQL f-string interpolation in execute() call"),
-    (re.compile(r'(?i)(cursor\.execute|connection\.execute|db\.execute)\s*\([^)]*%\s*\('), "SQL % formatting in execute() call"),
-    (re.compile(r'(?i)(cursor\.execute|connection\.execute|db\.execute)\s*\([^)]*\.format\s*\('), "SQL .format() in execute() call"),
-    (re.compile(r'(?i)["\']SELECT\s[^"\']*["\'\s]*\+'), "SQL SELECT with string concatenation"),
-    (re.compile(r'(?i)["\']INSERT\s[^"\']*["\'\s]*\+'), "SQL INSERT with string concatenation"),
-    (re.compile(r'(?i)["\']UPDATE\s[^"\']*["\'\s]*\+'), "SQL UPDATE with string concatenation"),
-    (re.compile(r'(?i)["\']DELETE\s[^"\']*["\'\s]*\+'), "SQL DELETE with string concatenation"),
-    (re.compile(r'(?i)["\']SELECT\s.*\+\s*\w'), "SQL SELECT with variable concatenation"),
-]
+SQL_INJECTION_RULES = _rules_for_category("sql-injection")
 
 # ============================================================
 # Category B: Tool Metadata Poisoning (critical)
@@ -82,41 +118,7 @@ SQL_INJECTION_PATTERNS = [
 # These are invisible to users reading the skill name but loaded into LLM context.
 # Source: Invariant Labs (April 2025), ClawHavoc campaign (Jan-Feb 2026)
 # ============================================================
-TOOL_INJECTION_KEYWORDS = [
-    "ignore previous", "ignore all previous", "disregard",
-    "you are now", "do not ask", "silently execute",
-    "never reveal", "override safety", "new system prompt",
-    "forget everything", "act as if you have no",
-    "your new instructions",
-    # Invariant Labs canonical patterns (2026)
-    "<important>", "note to the ai", "note to claude", "note to llm",
-    "read ~/.ssh", "cat ~/.ssh",
-    # Network exfiltration targets — anchored to URL schemes and credential
-    # targets so benign English ("send to the GPU", "send to the server",
-    # "send to the queue") does not false-positive. Issue #9 (marcgadsdon,
-    # 2026-04-05): bare "send to" substring cascaded into compound criticals
-    # in Flowise's Ollama parameter descriptions.
-    "send to http", "send to ftp", "send to webhook",
-    "send credentials to", "send data to http",
-    "post to http", "exfiltrate",
-    #
-    # REMOVED 2026-04-05 (torture-room pattern-recognition Finding 3):
-    #
-    # "from now on", "always remember", "you must always"
-    #   → moved to PROMPT_INJECTION_IMPERATIVE_REGEX below, which requires
-    #     an attack verb (ignore|execute|send|cat|read|write|override|etc.)
-    #     within 50 characters. As bare substrings these phrases triggered
-    #     on benign instruction text like "From now on, the tool returns
-    #     JSON" or "Always remember to pass a valid API key" — same false
-    #     positive class as Issue #9.
-    #
-    # "when using this tool", "when calling this tool", "before using"
-    #   → already covered by TOOL_SHADOWING_PATTERNS regex at a stricter
-    #     anchor ("when using" + action verb within 60 chars). As bare
-    #     substrings they fired on every well-documented MCP/LangChain/
-    #     Flowise tool description that mentions usage instructions.
-    #     Pure deduplication — no recall loss.
-]
+TOOL_INJECTION_KEYWORDS = list(_keyword_values("SM-KW-001"))
 
 # Prompt-injection imperatives that are too common in benign documentation
 # as bare substrings but become highly specific when followed by an attack
@@ -153,23 +155,10 @@ EXFIL_VERB_URL_PATTERN = re.compile(
 
 # Tool shadowing: description instructs agent to hijack trusted tools
 # Source: Invariant Labs tool shadowing demo (April 2025)
-TOOL_SHADOWING_PATTERNS = [
-    (re.compile(r'(?i)when\s+(using|calling|invoking)\s+.{0,60}(send|email|post|write|delete|push|commit)'), "Tool shadowing: hijack instruction targeting another tool action"),
-    (re.compile(r'(?i)redirect\s+all\s+(emails?|messages?|output)'), "Tool shadowing: redirect all output"),
-    (re.compile(r'(?i)instead\s+of\s+(sending|emailing|posting)\s+to\s+the\s+(user|real|original)'), "Tool shadowing: intercept and reroute"),
-    (re.compile(r'(?i)(bcc|cc|forward|copy)\s+all\s+(to|emails?\s+to)\s+'), "Tool shadowing: silent BCC/forward pattern"),
-]
+TOOL_SHADOWING_RULES = _rules_for_category("tool-shadowing")
 
 # MCP configuration risks (2026 CVE patterns)
-MCP_CONFIG_RISKS = [
-    (re.compile(r'(?i)enableAllProjectMcpServers\s*["\']?\s*:\s*true'), "enableAllProjectMcpServers:true (CVE-2025-59536 consent bypass)"),
-    (re.compile(r'(?i)(ANTHROPIC_BASE_URL|anthropic_base_url)\s*[=:]\s*["\']?https?://'), "ANTHROPIC_BASE_URL override (CVE-2026-21852: API key exfiltration risk)"),
-    (re.compile(r'(?i)(host|bind|listen)\s*[=:]\s*["\']?0\.0\.0\.0'), "MCP server binding to 0.0.0.0 (CVE-2025-49596 DNS rebinding surface)"),
-    (re.compile(r'(?i)(allowedOrigins|allowed_origins)\s*[=:]\s*["\']?\*["\']?'), "Wildcard CORS in MCP server (CSRF/DNS rebinding risk)"),
-    (re.compile(r'(?i)(\.ssh/id_rsa|\.cursor/mcp\.json|\.claude/settings|ANTHROPIC_API_KEY)\s*'), "Credential/config path reference in MCP tool field"),
-    # CVE-2025-6514 (CVSS 9.6): mcp-remote OAuth command injection via crafted authorization_endpoint
-    (re.compile(r'(?i)(authorization_endpoint|authorizationEndpoint)\s*[=:]\s*["\']?https?://(?!accounts\.google\.com|login\.microsoftonline\.com|github\.com)'), "Suspicious authorization_endpoint in mcp-remote OAuth config (CVE-2025-6514 vector)"),
-]
+MCP_CONFIG_RULES = _rules_for_category("mcp-config-risk")
 
 # Match tool schema fields containing injection text (Full-Schema Poisoning, CyberArk 2025)
 # Check description, name, title, summary — all schema fields can carry injection payloads
@@ -189,36 +178,21 @@ TOOL_NAME_PATTERN = re.compile(
 # Structured result objects or sampling API calls containing injection text.
 # Source: Palo Alto Unit 42
 # ============================================================
-SAMPLING_INJECTION_PATTERNS = [
-    (re.compile(r'(?i)force_tool_call|forceToolCall|force-tool-call'), "Force-tool-call pattern (sampling injection)"),
-    (re.compile(r'(?i)(include_context|includeContext)\s*=?\s*["\']allServers["\']'), "Cross-server context inclusion (privilege escalation)"),
-    (re.compile(r'(?i)(createMessage|create_message)\s*\(.*system.*ignore'), "Sampling createMessage with injection payload"),
-    (re.compile(r'(?i)maxTokens\s*=\s*["\']?0["\']?\s*[,;)].*include_context'), "Zero-token sampling with cross-server context"),
-]
+SAMPLING_INJECTION_RULES = _rules_for_category("sampling-injection")
 
 # ============================================================
 # Category D: Cross-Domain Privilege Escalation (high)
 # Single privileged credential used across multiple permission scopes.
 # Source: Invariant Labs
 # ============================================================
-CROSS_DOMAIN_PATTERNS = [
-    (re.compile(r'(?i)(GITHUB_TOKEN|github_token)\s*=\s*(os\.environ|os\.getenv|process\.env)'), "GITHUB_TOKEN in MCP server (write-scope risk)"),
-    (re.compile(r'(?i)(admin_token|master_token|super_token|root_token)\s*=\s*["\'\w]'), "Privileged hardcoded token name in MCP"),
-    (re.compile(r'(?i)permissions\s*=\s*["\']?(admin|root|write:all|full_access)["\']?'), "Broad permission scope assignment in MCP"),
-    (re.compile(r'(?i)(scope|access_level)\s*=\s*["\']?(admin|all|full|root)["\']?'), "Overly broad scope/access level in MCP"),
-]
+CROSS_DOMAIN_RULES = _rules_for_category("cross-domain-privilege")
 
 # ============================================================
 # Category E: Log-to-Leak Patterns (high)
 # Logging all tool calls to an external endpoint.
 # Source: OpenReview (MCP log-to-leak analysis)
 # ============================================================
-LOG_EXFIL_PATTERNS = [
-    (re.compile(r'(?i)(log|logger|logging)\.(info|debug|warning|error|critical)\s*\(.*tool_(call|result|input|output)'), "Logging all tool calls (potential exfil channel)"),
-    (re.compile(r'(?i)(send_log|log_to|emit_log|post_log)\s*\(.*(https?://|webhook|endpoint)'), "Logging to external HTTP endpoint"),
-    (re.compile(r'(?i)(tool_call|tool_result)\s*.*requests\.(post|put)\s*\('), "Tool call data sent via HTTP POST"),
-    (re.compile(r'(?i)(audit_log|access_log|call_log)\s*=.*https?://'), "Audit log URL pointing to remote server"),
-]
+LOG_EXFIL_RULES = _rules_for_category("log-to-leak")
 
 # ============================================================
 # Category G: Rug Pull Enablers (high)
@@ -228,36 +202,9 @@ LOG_EXFIL_PATTERNS = [
 # Source: Lukas Kania "Your MCP Server's Tool Descriptions Changed Last Night" (March 2026)
 # OWASP MCP03 (Tool Poisoning), MCP07 (Rug Pull)
 # ============================================================
-RUG_PULL_PATTERNS = [
-    (re.compile(r'description\s*[=:]\s*(cursor|db|conn|session)\.\w*(query|execute|fetch|get)'), "Rug Pull Enabler: tool description from database query"),
-    (re.compile(r'description\s*[=:]\s*(requests\.(get|post)|fetch|urllib|http)'), "Rug Pull Enabler: tool description fetched from network"),
-    (re.compile(r'description\s*[=:]\s*(os\.environ|os\.getenv|process\.env)'), "Rug Pull Enabler: tool description from environment variable"),
-    (re.compile(r'description\s*[=:]\s*(open|json\.load|yaml\.load|toml\.load)\s*\('), "Rug Pull Enabler: tool description loaded from file at runtime"),
-    (re.compile(r'if\b.*:\s*\n\s*.*description\s*='), "Rug Pull Enabler: conditional tool description assignment"),
-    (re.compile(r'(tools|tool_list)\s*=\s*(requests|fetch|db\.|cursor\.)'), "Rug Pull Enabler: tool list from external source"),
-    # OWASP MCP07: inputSchema and annotations can also be rug-pulled
-    (re.compile(r'inputSchema\s*[=:]\s*(requests|fetch|db\.|cursor\.|os\.environ|os\.getenv)'), "Rug Pull Enabler: inputSchema from external source"),
-    (re.compile(r'annotations\s*[=:]\s*(requests|fetch|db\.|cursor\.|os\.environ|os\.getenv)'), "Rug Pull Enabler: annotations from external source"),
-]
+RUG_PULL_RULES = _rules_for_category("rug-pull-enabler")
 
-MCP_STDIO_COMMAND_RISKS = [
-    (
-        re.compile(r'(?is)StdioServerParameters\s*\([^)]*\bcommand\s*=\s*(?!["\'])([A-Za-z_][\w.]*|request\.|req\.|os\.environ|os\.getenv|process\.env)'),
-        "StdioServerParameters command is sourced from a variable or request/env object",
-    ),
-    (
-        re.compile(r'(?is)StdioServerParameters\s*\([^)]*\bargs\s*=\s*(?!\s*\[)([A-Za-z_][\w.]*|request\.|req\.|os\.environ|os\.getenv|process\.env)'),
-        "StdioServerParameters args are sourced from a variable or request/env object",
-    ),
-    (
-        re.compile(r'(?is)MultiServerMCPClient\s*\(\s*(?!\{)([A-Za-z_][\w.]*|request\.|req\.|json\.load|yaml\.load|os\.environ|os\.getenv|process\.env)'),
-        "MultiServerMCPClient configuration is mutable or externally sourced",
-    ),
-    (
-        re.compile(r'(?is)["\']command["\']\s*:\s*(os\.environ|os\.getenv|process\.env|request\.|req\.|body\.)'),
-        "MCP command field is sourced from env or request data",
-    ),
-]
+MCP_STDIO_COMMAND_RULES = _rules_for_category("mcp-stdio-command-risk")
 
 # MCP framework signals for file heuristic
 MCP_SIGNALS = [
@@ -373,22 +320,24 @@ def scan_tool_shadowing(content, rel_path):
     for i, line in enumerate(lines):
         if len(line) > core.MAX_LINE_LENGTH:
             continue
-        for pattern, title in TOOL_SHADOWING_PATTERNS:
-            if pattern.search(line):
+        for rule in TOOL_SHADOWING_RULES:
+            if rule.regex.search(line):
                 findings.append(core.Finding(
                     scanner=SCANNER_NAME, severity="critical",
-                    title=f"Tool Shadowing: {title}",
+                    title=f"Tool Shadowing: {rule.title}",
                     description="Cross-tool contamination: this tool's metadata may override trusted tool behavior",
                     file=rel_path, line=i + 1,
                     snippet=line.strip()[:120],
-                    category="tool-shadowing"
+                    category="tool-shadowing",
+                    rule_id=rule.id,
+                    confidence=rule.confidence,
                 ))
     return findings
 
 
-def scan_patterns(content, rel_path, patterns, category, default_severity):
-    """Delegate to shared scan_patterns in forensics_core."""
-    return core.scan_patterns(content, rel_path, patterns, category, default_severity, SCANNER_NAME)
+def scan_rules(content, rel_path, rules, category, default_severity):
+    """Delegate to pack-aware scan_rule_patterns (stamps rule_id + confidence)."""
+    return core.scan_rule_patterns(content, rel_path, rules, category, default_severity, SCANNER_NAME)
 
 
 def is_mcp_related(file_path, rel_path, content_sample):
@@ -415,6 +364,9 @@ def scan_file(file_path, rel_path):
     if ext not in target_exts:
         return []
 
+    if PACK_LOAD_ERROR:
+        return [_pack_load_finding(rel_path)]
+
     try:
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             content = f.read()
@@ -430,23 +382,23 @@ def scan_file(file_path, rel_path):
     # For code files, run full MCP pattern categories
     if ext in ('.py', '.js', '.ts'):
         # SQL injection: check all code files (not just MCP)
-        findings.extend(scan_patterns(content, rel_path, SQL_INJECTION_PATTERNS, "sql-injection", "critical"))
+        findings.extend(scan_rules(content, rel_path, SQL_INJECTION_RULES, "sql-injection", "critical"))
 
         # Deeper checks only for likely MCP server files
         content_sample = content[:8000]
         if is_mcp_related(file_path, rel_path, content_sample):
-            findings.extend(scan_patterns(content, rel_path, SAMPLING_INJECTION_PATTERNS, "sampling-injection", "high"))
-            findings.extend(scan_patterns(content, rel_path, CROSS_DOMAIN_PATTERNS, "cross-domain-privilege", "high"))
-            findings.extend(scan_patterns(content, rel_path, LOG_EXFIL_PATTERNS, "log-to-leak", "high"))
+            findings.extend(scan_rules(content, rel_path, SAMPLING_INJECTION_RULES, "sampling-injection", "high"))
+            findings.extend(scan_rules(content, rel_path, CROSS_DOMAIN_RULES, "cross-domain-privilege", "high"))
+            findings.extend(scan_rules(content, rel_path, LOG_EXFIL_RULES, "log-to-leak", "high"))
             findings.extend(scan_tool_shadowing(content, rel_path))
-            findings.extend(scan_patterns(content, rel_path, MCP_CONFIG_RISKS, "mcp-config-risk", "critical"))
+            findings.extend(scan_rules(content, rel_path, MCP_CONFIG_RULES, "mcp-config-risk", "critical"))
             # Category G: Rug Pull Enablers - dynamic tool descriptions
-            findings.extend(scan_patterns(content, rel_path, RUG_PULL_PATTERNS, "rug-pull-enabler", "high"))
-            findings.extend(scan_patterns(content, rel_path, MCP_STDIO_COMMAND_RISKS, "mcp-stdio-command-risk", "high"))
+            findings.extend(scan_rules(content, rel_path, RUG_PULL_RULES, "rug-pull-enabler", "high"))
+            findings.extend(scan_rules(content, rel_path, MCP_STDIO_COMMAND_RULES, "mcp-stdio-command-risk", "high"))
 
     # MCP config files (.json) — check for enableAllProjectMcpServers, ANTHROPIC_BASE_URL
     if ext == '.json' or basename in ('settings.json', 'claude_desktop_config.json', '.mcp.json'):
-        findings.extend(scan_patterns(content, rel_path, MCP_CONFIG_RISKS, "mcp-config-risk", "critical"))
+        findings.extend(scan_rules(content, rel_path, MCP_CONFIG_RULES, "mcp-config-risk", "critical"))
 
     # Category H: MCP tool name collision detection
     if ext == '.json' or basename in ('settings.json', 'claude_desktop_config.json', '.mcp.json'):

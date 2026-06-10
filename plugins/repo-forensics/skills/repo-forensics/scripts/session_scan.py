@@ -448,7 +448,7 @@ def scan_item(dirpath, label, item_type, checksums):
     return findings
 
 
-def deep_scan_item(dirpath, label, item_type, timeout=None):
+def deep_scan_item(dirpath, label, item_type, timeout=None, adjudication_sink=None):
     """Run the full run_forensics.sh scanner suite on a changed item.
 
     On POSIX, uses start_new_session=True so the entire process tree
@@ -514,6 +514,13 @@ def deep_scan_item(dirpath, label, item_type, timeout=None):
                     detail = scanner.get('detail', scanner.get('message', ''))
                     if detail:
                         findings.append(f"[{sev.upper()}] {scanner_name}: {detail}")
+            # Collect WARN-tier findings flagged for adjudication (U8). These
+            # carry needs_adjudication=true from aggregate_json; they feed the
+            # injection-safe adjudication block built once in main().
+            if adjudication_sink is not None:
+                for finding in data.get('findings', []):
+                    if isinstance(finding, dict) and finding.get('needs_adjudication') is True:
+                        adjudication_sink.append(finding)
     except (json.JSONDecodeError, ValueError):
         if proc.returncode == 2:
             findings.append("deep scan found CRITICAL issues (parse failed, check manually)")
@@ -757,6 +764,7 @@ def main():
     # manifest drift — threats that IOC-only checks miss.
     # Only runs when items actually changed (rare). Skipped on first run
     # (too many items) and when run_forensics.sh is missing.
+    adjudication_findings = []
     if scan_items and not is_first_run and os.path.isfile(RUN_FORENSICS_SCRIPT):
         deep_start = time.monotonic()
         for dirpath, label, itype, checksums in scan_items:
@@ -769,7 +777,7 @@ def main():
                 break
             deep_findings = deep_scan_item(dirpath, label, itype, timeout=min(
                 DEEP_SCAN_TIMEOUT_PER_ITEM, remaining
-            ))
+            ), adjudication_sink=adjudication_findings)
             scan_results.setdefault(f"{itype}:{dirpath}", []).extend(deep_findings)
 
     # Format output
@@ -777,6 +785,19 @@ def main():
         refresh_messages, scan_items, scan_results,
         is_first_run, len(items)
     )
+
+    # Adjudication block (U8): append the injection-safe WARN-tier block after
+    # the status lines, mirroring the auto_scan / run_forensics text paths. The
+    # WARN findings were collected from each deep scan's aggregate JSON. Empty
+    # on a clean scan, so a clean session emits no block.
+    if adjudication_findings:
+        try:
+            import adjudication
+            block = adjudication.build_adjudication_block(adjudication_findings)
+            if block:
+                lines.append(block)
+        except ImportError:
+            pass
 
     # Save baseline before exit (output_session_context calls sys.exit).
     # detect_changes already produced fresh entries for every item; reuse them

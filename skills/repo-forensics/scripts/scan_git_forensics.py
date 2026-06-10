@@ -92,7 +92,7 @@ def analyze_commits(commits, repo_path):
                 findings.append(core.Finding(
                     scanner=SCANNER_NAME, severity="medium",
                     title="Time Lag (>30 days)",
-                    description=f"Large gap between author and committer dates",
+                    description="Large gap between author and committer dates",
                     file=f"commit:{commit_hash}", line=0,
                     snippet=f"Author: {author_date_str}, Commit: {committer_date_str}",
                     category="time-anomaly"
@@ -103,7 +103,7 @@ def analyze_commits(commits, repo_path):
                 findings.append(core.Finding(
                     scanner=SCANNER_NAME, severity="high",
                     title="Impossible Time (Committer before Author)",
-                    description=f"Committer date is before author date (time manipulation)",
+                    description="Committer date is before author date (time manipulation)",
                     file=f"commit:{commit_hash}", line=0,
                     snippet=f"Author: {author_date_str}, Commit: {committer_date_str}",
                     category="time-anomaly"
@@ -119,7 +119,7 @@ def analyze_commits(commits, repo_path):
                     title="Bad GPG Signature",
                     description=f"Commit {commit_hash} has an invalid/expired GPG signature",
                     file=f"commit:{commit_hash}", line=0,
-                    snippet=f"GPG status: Bad signature",
+                    snippet="GPG status: Bad signature",
                     category="signature"
                 ))
 
@@ -180,7 +180,7 @@ def scan_replace_refs(repo_path):
         return findings
 
     if output:
-        ref_lines = [l for l in output.splitlines() if l.strip()]
+        ref_lines = [ln for ln in output.splitlines() if ln.strip()]
         ref_names = []
         for line in ref_lines:
             parts = line.split()
@@ -241,7 +241,7 @@ def scan_grafts(repo_path):
     if not content:
         return findings
 
-    lines = [l for l in content.splitlines() if l.strip() and not l.startswith('#')]
+    lines = [ln for ln in content.splitlines() if ln.strip() and not ln.startswith('#')]
     if not lines:
         return findings
 

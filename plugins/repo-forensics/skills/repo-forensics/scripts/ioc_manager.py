@@ -41,7 +41,21 @@ if _SCRIPTS_DIR not in sys.path:
 IOC_FEED_URL = "https://raw.githubusercontent.com/alexgreensh/repo-forensics/main/iocs/latest.json"
 
 CACHE_FILENAME = ".forensics-iocs.json"
+# Raw signed feed bytes + detached signature for verify-on-load (KTD-11). Stored
+# separately from the reserialized JSON cache so signature verification runs over
+# the EXACT bytes that were signed (never a parse-and-reserialize round-trip).
+RAW_CACHE_FILENAME = ".forensics-iocs.raw"
+SIG_CACHE_FILENAME = ".forensics-iocs.sig"
 CACHE_MAX_AGE_HOURS = 24
+
+# Pinned Ed25519 public key for the signed IOC feed (KTD-11). SAME keypair that
+# signs the rule-pack bundle (symmetric trust model). The private seed is held
+# OFFLINE; this module only ever VERIFIES.
+IOC_FEED_PUBKEY_HEX = (
+    "a6529e80619abaf38bec2b15154ca8f540f9a830e310f1a0c7a6771e85f1b76c"
+)
+# Detached-signature feed URL (sits beside IOC_FEED_URL).
+_SIG_MAX_BYTES = 256
 # Configurable TTL for the on-disk IOC cache. Adjusting this constant controls
 # how long a successfully-fetched remote feed is trusted before the scanner
 # considers itself degraded and emits a warning.
@@ -251,6 +265,67 @@ def _cache_path(cache_dir=None):
     return os.path.join(os.path.expanduser("~"), ".cache", "repo-forensics", CACHE_FILENAME)
 
 
+def _raw_cache_path(cache_dir=None):
+    base = cache_dir if cache_dir else os.path.join(
+        os.path.expanduser("~"), ".cache", "repo-forensics")
+    return os.path.join(base, RAW_CACHE_FILENAME)
+
+
+def _sig_cache_path(cache_dir=None):
+    base = cache_dir if cache_dir else os.path.join(
+        os.path.expanduser("~"), ".cache", "repo-forensics")
+    return os.path.join(base, SIG_CACHE_FILENAME)
+
+
+def _atomic_write_bytes(path, data, mode=0o600):
+    """Atomic binary write (temp + fsync + rename) for the detached signature."""
+    d = os.path.dirname(path)
+    os.makedirs(d, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=d, prefix=".tmp-", suffix=".sig")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(tmp, mode)
+        os.replace(tmp, path)
+    except OSError:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def _verify_ioc_cache_signature(cache_dir=None):
+    """Verify the cached IOC feed's detached signature over its EXACT raw bytes
+    (KTD-11 verify-on-load). Returns:
+        True  -> a valid signature is present (trusted)
+        False -> a .sig is present but verification failed (tampered/invalid)
+        None  -> no raw/sig pair present (old-client / unsigned feed)
+
+    A False result means the new client should treat the IOC channel as degraded
+    while STILL applying hardcoded fallback IOCs. A None result is the legacy
+    path: no signature material exists, behavior unchanged for old feeds.
+    """
+    raw_path = _raw_cache_path(cache_dir)
+    sig_path = _sig_cache_path(cache_dir)
+    if not (os.path.isfile(raw_path) and os.path.isfile(sig_path)):
+        return None
+    try:
+        with open(raw_path, "rb") as f:
+            raw = f.read()
+        with open(sig_path, "rb") as f:
+            sig = f.read()
+    except OSError:
+        return False
+    try:
+        import _ed25519
+        return bool(_ed25519.verify(sig, raw, bytes.fromhex(IOC_FEED_PUBKEY_HEX)))
+    except Exception:
+        return False
+
+
 def _load_cache(cache_dir=None, ttl_hours=None):
     """Load cached IOCs if fresh enough.
 
@@ -310,14 +385,8 @@ def _validate_feed_url(url):
     return host in _IOC_HOST_ALLOWLIST
 
 
-def fetch_remote_iocs(feed_url=None):
-    """Fetch IOCs from remote feed. Returns dict or None on failure.
-
-    Security: URL must be HTTPS and point to an allowlisted host. Any
-    file://, http://, or unknown-host URL is rejected before the socket
-    is opened. Response is byte-capped and JSON-parsed before use.
-    """
-    url = feed_url or IOC_FEED_URL
+def _fetch_url_bytes(url, max_bytes):
+    """Fetch `url` returning raw bytes (capped) or None. https + allowlist only."""
     if not _validate_feed_url(url):
         print(f"[!] IOC feed URL rejected (non-https or host not allowlisted): {url!r}",
               file=sys.stderr)
@@ -327,25 +396,70 @@ def fetch_remote_iocs(feed_url=None):
         import urllib.error
         req = urllib.request.Request(url, headers={'User-Agent': 'repo-forensics/v2'})
         with urllib.request.urlopen(req, timeout=10) as resp:
-            raw = resp.read(_IOC_MAX_BYTES + 1)
-            if len(raw) > _IOC_MAX_BYTES:
-                print(f"[!] IOC feed exceeded {_IOC_MAX_BYTES} byte cap", file=sys.stderr)
+            raw = resp.read(max_bytes + 1)
+            if len(raw) > max_bytes:
+                print(f"[!] IOC feed exceeded {max_bytes} byte cap", file=sys.stderr)
                 return None
-            data = json.loads(raw.decode('utf-8'))
-        return data
-    except (urllib.error.URLError, json.JSONDecodeError, OSError, ValueError) as e:
+            return raw
+    except (urllib.error.URLError, OSError, ValueError) as e:
         print(f"[!] IOC fetch failed: {e}", file=sys.stderr)
         return None
 
 
-def update_iocs(feed_url=None, cache_dir=None):
+def fetch_remote_iocs(feed_url=None, _return_raw=False):
+    """Fetch IOCs from remote feed. Returns dict or None on failure.
+
+    Security: URL must be HTTPS and point to an allowlisted host. Any
+    file://, http://, or unknown-host URL is rejected before the socket
+    is opened. Response is byte-capped and JSON-parsed before use.
+
+    When `_return_raw` is True, returns (dict, raw_bytes) so update_iocs can
+    persist the EXACT signed bytes for verify-on-load (KTD-11).
+    """
+    url = feed_url or IOC_FEED_URL
+    raw = _fetch_url_bytes(url, _IOC_MAX_BYTES)
+    if raw is None:
+        return (None, None) if _return_raw else None
+    try:
+        data = json.loads(raw.decode('utf-8'))
+    except (json.JSONDecodeError, ValueError) as e:
+        print(f"[!] IOC fetch failed: {e}", file=sys.stderr)
+        return (None, None) if _return_raw else None
+    return (data, raw) if _return_raw else data
+
+
+def _save_raw_and_sig(raw_bytes, sig_bytes, cache_dir=None):
+    """Persist the exact signed feed bytes + detached signature atomically so
+    verify-on-load can re-check the signature over the literal bytes."""
+    import forensics_core
+    if raw_bytes is not None:
+        forensics_core.atomic_write_text(
+            _raw_cache_path(cache_dir), raw_bytes.decode('utf-8', 'replace'),
+            mode=0o600,
+        )
+    if sig_bytes is not None:
+        _atomic_write_bytes(_sig_cache_path(cache_dir), sig_bytes, mode=0o600)
+
+
+def update_iocs(feed_url=None, cache_dir=None, sig_url=None):
     """Pull latest IOCs from remote feed and cache locally.
-    Returns (success: bool, message: str)."""
-    data = fetch_remote_iocs(feed_url)
+    Returns (success: bool, message: str).
+
+    Also fetches the detached `.sig` (KTD-11) and persists the EXACT raw feed
+    bytes so verify-on-load can re-verify the signature. A missing/invalid `.sig`
+    does NOT fail the update (backward compatibility + availability) — it just
+    means the cache loads degraded on the new client.
+    """
+    data, raw = fetch_remote_iocs(feed_url, _return_raw=True)
     if data is None:
         return False, "Failed to fetch IOCs from remote feed (using hardcoded fallback)"
 
     _save_cache(data, cache_dir)
+    # Fetch + persist the detached signature alongside the raw bytes. Best
+    # effort: absence is tolerated (old feeds), verification happens on load.
+    sig = _fetch_url_bytes(sig_url or (feed_url or IOC_FEED_URL) + ".sig",
+                           _SIG_MAX_BYTES)
+    _save_raw_and_sig(raw, sig, cache_dir)
     version = data.get('version', 'unknown')
     c2_count = len(data.get('c2_ips', []))
     domain_count = len(data.get('malicious_domains', []))
@@ -377,6 +491,17 @@ def get_iocs(cache_dir=None):
     # successful update will not be detected.
     ioc_degraded = cached is None
 
+    # KTD-11 verify-on-load: a cached feed whose detached .sig FAILS verification
+    # is treated as degraded (intelligence channel may be poisoned, e.g. an
+    # attacker deleting a malicious domain). The hardcoded fallback IOCs still
+    # apply regardless. A signature that is simply absent (None) is the legacy
+    # path — behavior unchanged, no degraded escalation from signing.
+    sig_state = _verify_ioc_cache_signature(cache_dir) if cached else None
+    ioc_signature_invalid = sig_state is False
+    if ioc_signature_invalid:
+        print("[!] Cached IOC feed signature INVALID — intelligence channel "
+              "untrusted (using hardcoded fallback IOCs).", file=sys.stderr)
+
     # Start with hardcoded
     result = {
         'c2_ips': list(HARDCODED_C2_IPS),
@@ -385,11 +510,17 @@ def get_iocs(cache_dir=None):
         'malicious_pypi': set(HARDCODED_MALICIOUS_PYPI),
         'malicious_pth_files': set(HARDCODED_MALICIOUS_PTH_FILES),
         'compromised_versions': {},
-        '_ioc_degraded': ioc_degraded,
+        '_ioc_degraded': ioc_degraded or ioc_signature_invalid,
+        # Distinct sub-flag so callers can emit the IOC-signature-specific
+        # message (vs the plain "no fresh cache" degraded message).
+        '_ioc_signature_invalid': ioc_signature_invalid,
     }
 
-    # Merge remote IOCs if available
-    if cached:
+    # Merge remote IOCs if available. When the signature is INVALID we refuse to
+    # trust the cached feed contents (an attacker could have DELETED a malicious
+    # domain); only hardcoded IOCs are kept. A merely-absent signature (legacy)
+    # still merges, preserving old-feed behavior.
+    if cached and not ioc_signature_invalid:
         result['c2_ips'] = list(set(result['c2_ips'] + cached.get('c2_ips', [])))
         result['malicious_domains'] = list(set(result['malicious_domains'] + cached.get('malicious_domains', [])))
         result['malicious_npm'].update(cached.get('malicious_npm_packages', []))

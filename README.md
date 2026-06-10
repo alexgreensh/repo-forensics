@@ -11,7 +11,7 @@ Audit untrusted repos before they touch your agent. Fully local, zero dependenci
 </p>
 
 <p align="center">
-  <a href="https://github.com/alexgreensh/repo-forensics/releases"><img src="https://img.shields.io/badge/version-2.9.2-green.svg" alt="Version 2.9.2"></a>
+  <a href="https://github.com/alexgreensh/repo-forensics/releases"><img src="https://img.shields.io/badge/version-2.10.0-green.svg" alt="Version 2.10.0"></a>
   <a href="https://github.com/alexgreensh/repo-forensics/releases"><img src="https://img.shields.io/github/release-date/alexgreensh/repo-forensics?label=last%20release&color=blue" alt="Last Release"></a>
   <a href="https://github.com/alexgreensh/repo-forensics/stargazers"><img src="https://img.shields.io/badge/stars-98-yellow.svg?logo=github" alt="GitHub Stars: 98"></a>
   <a href="https://github.com/alexgreensh/repo-forensics/commits/main"><img src="https://img.shields.io/github/commit-activity/m/alexgreensh/repo-forensics" alt="Commit Activity"></a>

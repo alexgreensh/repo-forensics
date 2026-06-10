@@ -142,7 +142,7 @@ def find_hook_scripts(repo_path):
         claude_entries = os.listdir(claude_dir) if os.path.isdir(claude_dir) else []
     except OSError:
         claude_entries = []
-        print(f"[!] WARNING: Could not read .claude/ directory - standalone hooks not tested", file=sys.stderr)
+        print("[!] WARNING: Could not read .claude/ directory - standalone hooks not tested", file=sys.stderr)
     if claude_entries:
         for f in claude_entries:
             fp = os.path.join(claude_dir, f)
@@ -274,7 +274,7 @@ def execute_hook_with_payload(hook, payload, repo_path):
     except subprocess.TimeoutExpired:
         result['timed_out'] = True
 
-    except (OSError, PermissionError, ValueError) as e:
+    except (OSError, PermissionError, ValueError):
         # Can't execute (e.g., null bytes in env) - not a finding, just skip
         return findings
 
@@ -369,7 +369,7 @@ def execute_hook_with_payload(hook, payload, repo_path):
                 findings.append(core.Finding(
                     scanner=SCANNER_NAME, severity="critical",
                     title=f"Path traversal succeeded: {hook['event']}",
-                    description=f"Hook output contains '/etc/passwd' content after path traversal test",
+                    description="Hook output contains '/etc/passwd' content after path traversal test",
                     file=hook['source'], line=0,
                     snippet=combined_output[:120],
                     category="dast-traversal"

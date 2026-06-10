@@ -85,6 +85,13 @@ def scan_file(file_path, rel_path, threshold=5.8):
             for m in BASE64_PATTERN.finditer(stripped):
                 matched = m.group(0)
                 if len(matched) >= 80:
+                    # Skip data-URI payloads (e.g. CSS url("data:image/png;base64,...")
+                    # or HTML/SVG src="data:..."). Standard web practice for inline
+                    # assets; a base64 image in a data URI cannot self-execute, so
+                    # flagging it is a false positive (benign-corpus styles.css).
+                    prefix = stripped[:m.start()]
+                    if 'data:' in prefix and prefix.rstrip().endswith(';base64,'):
+                        continue
                     findings.append(core.Finding(
                         scanner=SCANNER_NAME, severity="high",
                         title="Base64 Encoded Block",

@@ -2,6 +2,82 @@
 
 All notable changes to repo-forensics. Versions follow semver.
 
+## [2.10.0] - 2026-06-10
+
+### Architecture
+
+- **Rules-as-data**: Detection patterns for secrets, SAST, skill threats, MCP
+  security, shared patterns, and runtime dynamism now live in versioned JSON
+  rule packs (`data/rulepacks/*.json`, ~545 rules across 6 packs). Each rule
+  carries a stable `id`, `type`, `title`, `severity`, `confidence`,
+  `explanation`, and embedded `examples` that run as tests on pack load.
+  Algorithmic scanners (entropy, AST, DAST, git forensics, integrity, manifest
+  drift, binary, lifecycle, dependencies, infra, devcontainer, post-incident,
+  dataflow, entrypoint) remain code-driven and are explicitly noted as such.
+- **Signed daily rule-pack feed**: New behavioral rules reach installed users
+  without a code release. An Ed25519-signed bundle (`iocs/rulepacks.json` +
+  `.sig`) is fetched by the existing daily `refresh_threat_dbs.py` pipeline.
+  The same signing pipeline now covers `iocs/latest.json` as well, so both
+  update channels carry matching trust guarantees. Shipped packs remain
+  authoritative when the feed is unavailable, invalid, or tampered; scanning
+  always works offline.
+- **Vendored Ed25519 verify-only** (`_ed25519.py`): stdlib-only, ~150 lines,
+  no external dependencies. Signatures are re-verified on every cache load
+  (not only at fetch) to cover the postinstall-malware threat class. Cache
+  directory created with mode 0700.
+- **Rollback and replay protection**: Feed acceptance requires a strictly
+  increasing `pack_version` integer, a `generated` timestamp no older than
+  30 days, and a persisted pack-version floor that survives cache clears.
+  Signature is verified over exact raw bytes before any decode.
+
+### Confidence Tiers and Verdict Levels
+
+- Findings now carry a `confidence` score alongside `severity`. Four verdict
+  tiers shape output and agent routing: **BLOCK** (confidence >= 0.92),
+  **WARN** (>= 0.60), **INFO** (>= 0.30), **SUPPRESSED** (< 0.30 or
+  user-suppressed). Severity continues to drive exit codes (0/1/2/99)
+  unchanged.
+- SUPPRESSED findings are excluded from summary counts and exit-code
+  computation but remain visible under a top-level `suppressed` key for
+  auditability.
+- Per-finding suppression via `.forensicsignore` extended with
+  `rule:<id>[:<glob>]` syntax. Suppressing a critical-severity rule escalates
+  to a CRITICAL suppression-tampering finding; suppressing more than 5 rules
+  total escalates to HIGH (mass-suppression guard).
+
+### Benign-Corpus Regression Gate
+
+- New offline FP gate (`tests/test_benign_corpus.py`) runs all scanners
+  against a committed corpus of tricky-but-clean content (emoji/ZWJ-rich
+  markdown, legitimate `postinstall` scripts, `.env.example`, clean SKILL.md
+  files, OAuth docs prose). Any rule change that introduces new false positives
+  on the corpus fails pytest before the change can ship. Extended corpus from
+  pinned-SHA snapshots is supported for deeper local validation.
+
+### LLM Adjudication
+
+- WARN-tier findings are marked `needs_adjudication`. The auto-scan and
+  session-scan outputs emit a self-contained adjudication block (capped at 5
+  findings, sorted by confidence descending) with injection-safe formatting:
+  every snippet line carries a `> SNIPPET: ` prefix so attacker-controlled
+  content cannot escape the data boundary. Metadata (rule id, title,
+  explanation, confidence) appears before the snippet so the agent anchors on
+  rule context before encountering adversarial text. Verdict vocabulary:
+  `confirm` / `downgrade` (reason required) / `escalate`. The agent can only
+  annotate or escalate; BLOCK-tier behavior and pre-scan blocking are outside
+  the agent's authority.
+
+### Internals
+
+- New `rule_loader.py` module loads, validates, compiles, and self-tests JSON
+  rule packs. ReDoS guards (pattern-length cap, nested-quantifier heuristic,
+  per-rule self-test timeout) are mandatory. Path resolution is anchored to the
+  install directory so a hostile `data/rulepacks/` in the scan target is never
+  loaded.
+- `Finding` dataclass gains `rule_id` and `confidence`; `aggregate_json.py`
+  computes verdict tiers and the `verdicts` summary block. All existing JSON
+  schema keys are preserved.
+
 ## [2.7.8] - 2026-05-07
 
 ### Detection
