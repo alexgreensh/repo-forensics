@@ -27,6 +27,19 @@ RESET = "\033[0m"
 BOLD = "\033[1m"
 
 
+# Severity -> default confidence fallback map (KTD-8). Any code path that
+# does not explicitly set confidence (legacy scanners, correlation-synthesized
+# findings) gets a severity-derived value here. Confidence is ADDITIVE: it
+# shapes verdict-tier messaging and adjudication only; severity still drives
+# the 0/1/2/99 exit-code contract (KTD-7).
+SEVERITY_CONFIDENCE = {
+    "critical": 0.95,
+    "high": 0.80,
+    "medium": 0.60,
+    "low": 0.40,
+}
+
+
 @dataclass
 class Finding:
     scanner: str       # "secrets", "sast", "skill_threats", etc.
@@ -37,6 +50,8 @@ class Finding:
     line: int          # Line number (0 if N/A)
     snippet: str       # Code context (max 120 chars)
     category: str      # "secret", "injection", "exfiltration", etc.
+    rule_id: str = ""      # Stable rule id (e.g. "ST-PI-001"); "" for code-baked findings
+    confidence: float = 0.0  # 0.0-1.0; 0.0/None means "fill from severity map"
 
     def __post_init__(self):
         # Defensive type coercion at the trust boundary between the in-process
@@ -59,6 +74,28 @@ class Finding:
         for _field in ("scanner", "title", "description", "file", "snippet", "category"):
             if getattr(self, _field) is None:
                 setattr(self, _field, "")
+        # rule_id is a plain string identifier; coerce non-strings/None to "".
+        if not isinstance(self.rule_id, str):
+            self.rule_id = "" if self.rule_id is None else str(self.rule_id)
+        # Confidence dimension (KTD-7/8). When unset (None or exactly 0.0),
+        # derive from the severity map so every finding carries a meaningful
+        # confidence even on legacy code paths. Any explicitly-provided value
+        # is clamped to [0.0, 1.0]. A non-numeric value falls back to the
+        # severity-derived default rather than crashing the aggregator.
+        if self.confidence is None:
+            self.confidence = SEVERITY_CONFIDENCE.get(self.severity, 0.40)
+        else:
+            try:
+                conf = float(self.confidence)
+            except (TypeError, ValueError):
+                conf = 0.0
+            if conf == 0.0:
+                conf = SEVERITY_CONFIDENCE.get(self.severity, 0.40)
+            elif conf < 0.0:
+                conf = 0.0
+            elif conf > 1.0:
+                conf = 1.0
+            self.confidence = conf
         self._tags = (self.description + " " + self.title + " " + self.category).lower()
 
     def to_dict(self):
@@ -83,7 +120,13 @@ class Finding:
 # --- .forensicsignore Support (backward compatible) ---
 
 def load_ignore_patterns(repo_path):
-    """Loads ignore patterns from a .forensicsignore file in the repo root."""
+    """Loads PATH ignore patterns from a .forensicsignore file in the repo root.
+
+    Backward compatible: returns the list of path-glob patterns used by the
+    file walk. `rule:<id>[:<glob>]` lines are per-finding suppression
+    directives (U1) handled separately by load_rule_suppressions() and are
+    deliberately excluded here so they never act as path globs.
+    """
     ignore_file = os.path.join(repo_path, '.forensicsignore')
     patterns = []
 
@@ -92,12 +135,78 @@ def load_ignore_patterns(repo_path):
             with open(ignore_file, 'r', encoding='utf-8') as f:
                 for line in f:
                     line = line.strip()
-                    if line and not line.startswith('#'):
+                    if line and not line.startswith('#') and not line.startswith('rule:'):
                         patterns.append(line)
         except (OSError, UnicodeDecodeError) as e:
             print(f"[!] Warning: Could not read .forensicsignore: {e}", file=sys.stderr)
 
     return patterns
+
+
+def load_rule_suppressions(repo_path):
+    """Parse per-finding rule suppressions from a .forensicsignore file.
+
+    Recognizes lines of the form:
+        rule:<rule_id>            -> suppress that rule everywhere
+        rule:<rule_id>:<glob>     -> suppress that rule only under <glob>
+
+    The glob may itself contain ':' (e.g. a Windows-style path); only the
+    first colon after the `rule:` prefix splits id from glob. A finding is
+    suppressed when its rule_id matches and (if a glob is present) its file
+    path matches the glob via fnmatch.
+
+    Returns a list of dicts: {"rule_id": str, "glob": str|None, "raw": str}.
+    Malformed lines (empty id) are skipped.
+    """
+    ignore_file = os.path.join(repo_path, '.forensicsignore')
+    suppressions = []
+
+    if not os.path.exists(ignore_file):
+        return suppressions
+
+    try:
+        with open(ignore_file, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('#') or not line.startswith('rule:'):
+                    continue
+                body = line[len('rule:'):]
+                # Split id from optional glob on the FIRST colon.
+                if ':' in body:
+                    rule_id, glob = body.split(':', 1)
+                    rule_id = rule_id.strip()
+                    glob = glob.strip() or None
+                else:
+                    rule_id = body.strip()
+                    glob = None
+                if not rule_id:
+                    continue
+                suppressions.append({"rule_id": rule_id, "glob": glob, "raw": line})
+    except (OSError, UnicodeDecodeError) as e:
+        print(f"[!] Warning: Could not read .forensicsignore: {e}", file=sys.stderr)
+
+    return suppressions
+
+
+def suppression_matches(suppression, rule_id, file_path):
+    """Return True if a suppression directive applies to a finding.
+
+    Match semantics (U5/U8 build on this):
+      - rule_id must equal suppression["rule_id"] exactly (case-sensitive,
+        matching the published `<SCANNER>-<CATEGORY>-<NNN>` id convention).
+      - If suppression["glob"] is set, the finding's file path must also match
+        that glob via fnmatch (forward-slash normalized for cross-platform
+        consistency). A finding with no rule_id never matches.
+    """
+    if not rule_id:
+        return False
+    if suppression.get("rule_id") != rule_id:
+        return False
+    glob = suppression.get("glob")
+    if not glob:
+        return True
+    path = (file_path or "").replace(os.sep, "/")
+    return fnmatch.fnmatch(path, glob)
 
 
 # Patterns that suppress too much of the walk to be plausibly legitimate.

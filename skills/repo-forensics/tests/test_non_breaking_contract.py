@@ -450,3 +450,41 @@ class TestJsonParseability:
                 f"stderr (first 2000 chars)={result.stderr[:2000]}\n"
                 f"JSONDecodeError: {exc}"
             )
+
+
+# ---------------------------------------------------------------------------
+# 6. U1 additive keys: verdicts + suppressed appear without breaking contract
+# ---------------------------------------------------------------------------
+
+
+class TestU1AdditiveKeys:
+    """U1 adds top-level `verdicts` and `suppressed` keys plus per-finding
+    `rule_id`/`confidence`. These are purely additive — the locked contract
+    above must still pass, and the new keys must have the documented shape.
+    Crucially, `suppressed` is a TOP-LEVEL key, never a scanner entry, so the
+    exact-set scanner-name check (test_no_unexpected_scanner_names) is untouched.
+    """
+
+    def test_verdicts_block_present_and_shaped(self, clean_repo):
+        _, payload = _run_forensics(clean_repo)
+        assert "verdicts" in payload
+        assert set(payload["verdicts"].keys()) == {"block", "warn", "info", "suppressed"}
+        for v in payload["verdicts"].values():
+            assert isinstance(v, int)
+
+    def test_suppressed_top_level_key_present_and_list(self, clean_repo):
+        _, payload = _run_forensics(clean_repo)
+        assert "suppressed" in payload
+        assert isinstance(payload["suppressed"], list)
+
+    def test_suppressed_not_a_scanner_entry(self, clean_repo):
+        _, payload = _run_forensics(clean_repo)
+        scanner_names = {s["name"] for s in payload["scanners"]}
+        assert "suppressed" not in scanner_names
+
+    def test_findings_carry_confidence(self, repo_with_prompt_injection):
+        _, payload = _run_forensics(repo_with_prompt_injection)
+        for f in payload["findings"]:
+            assert "confidence" in f
+            assert "rule_id" in f
+            assert 0.0 <= f["confidence"] <= 1.0

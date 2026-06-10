@@ -789,3 +789,99 @@ class TestTagsPrecomputation:
         correlated = agg.run_correlation_pass(dicts)
         titles = [c["title"] for c in correlated]
         assert "Potential Data Exfiltration" in titles
+
+
+class TestFindingConfidence:
+    """U1: confidence dimension + rule_id on Finding."""
+
+    def test_confidence_defaults_from_severity(self):
+        for sev, expected in [
+            ("critical", 0.95), ("high", 0.80), ("medium", 0.60), ("low", 0.40)
+        ]:
+            f = core.Finding("s", sev, "t", "d", "f", 0, "", "c")
+            assert f.confidence == expected
+
+    def test_unknown_severity_confidence_fallback(self):
+        f = core.Finding("s", "bogus", "t", "d", "f", 0, "", "c")
+        assert f.confidence == 0.40
+
+    def test_explicit_confidence_preserved(self):
+        f = core.Finding("s", "low", "t", "d", "f", 0, "", "c", confidence=0.73)
+        assert f.confidence == 0.73
+
+    def test_confidence_clamped_above_one(self):
+        f = core.Finding("s", "low", "t", "d", "f", 0, "", "c", confidence=1.5)
+        assert f.confidence == 1.0
+
+    def test_confidence_clamped_below_zero(self):
+        f = core.Finding("s", "low", "t", "d", "f", 0, "", "c", confidence=-0.5)
+        assert f.confidence == 0.0
+
+    def test_none_confidence_falls_back_to_severity(self):
+        f = core.Finding("s", "high", "t", "d", "f", 0, "", "c", confidence=None)
+        assert f.confidence == 0.80
+
+    def test_non_numeric_confidence_falls_back(self):
+        f = core.Finding("s", "high", "t", "d", "f", 0, "", "c", confidence="oops")
+        assert f.confidence == 0.80
+
+    def test_rule_id_default_empty(self):
+        f = core.Finding("s", "high", "t", "d", "f", 0, "", "c")
+        assert f.rule_id == ""
+
+    def test_rule_id_preserved(self):
+        f = core.Finding("s", "high", "t", "d", "f", 0, "", "c", rule_id="ST-PI-001")
+        assert f.rule_id == "ST-PI-001"
+
+    def test_to_dict_includes_new_keys_excludes_tags(self):
+        f = core.Finding("s", "high", "t", "d", "f", 0, "", "c", rule_id="X-Y-1")
+        d = f.to_dict()
+        assert d["rule_id"] == "X-Y-1"
+        assert "confidence" in d
+        assert d["confidence"] == 0.80
+        assert "_tags" not in d
+
+
+class TestRuleSuppressionParsing:
+    """U1: .forensicsignore rule: line parsing + match semantics."""
+
+    def _write_ignore(self, tmp_path, content):
+        (tmp_path / ".forensicsignore").write_text(content)
+
+    def test_rule_line_excluded_from_path_patterns(self, tmp_path):
+        self._write_ignore(tmp_path, "node_modules/\nrule:SC-KEY-001\n")
+        patterns = core.load_ignore_patterns(str(tmp_path))
+        assert "node_modules/" in patterns
+        assert all(not p.startswith("rule:") for p in patterns)
+
+    def test_parse_rule_without_glob(self, tmp_path):
+        self._write_ignore(tmp_path, "rule:SC-KEY-001\n")
+        supps = core.load_rule_suppressions(str(tmp_path))
+        assert len(supps) == 1
+        assert supps[0]["rule_id"] == "SC-KEY-001"
+        assert supps[0]["glob"] is None
+
+    def test_parse_rule_with_glob(self, tmp_path):
+        self._write_ignore(tmp_path, "rule:SC-KEY-001:tests/**\n")
+        supps = core.load_rule_suppressions(str(tmp_path))
+        assert supps[0]["rule_id"] == "SC-KEY-001"
+        assert supps[0]["glob"] == "tests/**"
+
+    def test_malformed_empty_id_skipped(self, tmp_path):
+        self._write_ignore(tmp_path, "rule:\nrule::tests/**\n")
+        supps = core.load_rule_suppressions(str(tmp_path))
+        assert supps == []
+
+    def test_suppression_matches_id_only(self):
+        supp = {"rule_id": "SC-KEY-001", "glob": None}
+        assert core.suppression_matches(supp, "SC-KEY-001", "anywhere/x.py")
+        assert not core.suppression_matches(supp, "OTHER-001", "anywhere/x.py")
+
+    def test_suppression_matches_with_glob(self):
+        supp = {"rule_id": "SC-KEY-001", "glob": "tests/**"}
+        assert core.suppression_matches(supp, "SC-KEY-001", "tests/a/b.py")
+        assert not core.suppression_matches(supp, "SC-KEY-001", "src/b.py")
+
+    def test_suppression_no_match_when_rule_id_empty(self):
+        supp = {"rule_id": "SC-KEY-001", "glob": None}
+        assert not core.suppression_matches(supp, "", "tests/x.py")

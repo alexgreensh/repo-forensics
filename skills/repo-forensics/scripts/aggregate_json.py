@@ -19,6 +19,36 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 SEVERITY_ORDER = {"critical": 4, "high": 3, "medium": 2, "low": 1}
 VALID_EXIT_CODES = {0, 1, 2}
 
+# Verdict tiers by confidence (KTD-7 / R4). These shape messaging and the
+# adjudication flow only; severity still drives the 0/1/2/99 exit code.
+# SUPPRESSED is also assigned to any user-suppressed finding regardless of
+# its confidence.
+VERDICT_BLOCK_MIN = 0.92
+VERDICT_WARN_MIN = 0.60
+VERDICT_INFO_MIN = 0.30
+
+# Threshold above which suppressing rules via `rule:` lines is treated as a
+# mass-suppression abuse signal (HIGH). Mirrors the DANGEROUS_IGNORE_PATTERNS
+# escalation in forensics_core for path globs.
+MASS_SUPPRESSION_THRESHOLD = 5
+
+
+def verdict_tier(confidence, suppressed=False):
+    """Map a confidence score (and suppression flag) to a verdict tier."""
+    if suppressed:
+        return "suppressed"
+    try:
+        conf = float(confidence)
+    except (TypeError, ValueError):
+        conf = 0.0
+    if conf >= VERDICT_BLOCK_MIN:
+        return "block"
+    if conf >= VERDICT_WARN_MIN:
+        return "warn"
+    if conf >= VERDICT_INFO_MIN:
+        return "info"
+    return "suppressed"
+
 # Text-mode severity colors (match forensics_core.py)
 SEVERITY_COLORS = {
     "critical": "\033[91m",
@@ -94,6 +124,126 @@ def load_scanner_results(tmpdir):
     return scanners, all_findings
 
 
+_SEVERITY_CONFIDENCE = {
+    "critical": 0.95,
+    "high": 0.80,
+    "medium": 0.60,
+    "low": 0.40,
+}
+
+
+def _finding_confidence(finding):
+    """Return a finding's confidence, filling from severity when absent/zero.
+
+    Legacy scanners emit dicts without a `confidence` key; their findings get
+    the severity-derived default so verdict tiering is consistent with
+    forensics_core.Finding.__post_init__ (KTD-8).
+    """
+    conf = finding.get("confidence")
+    if conf is None:
+        return _SEVERITY_CONFIDENCE.get(finding.get("severity", "low"), 0.40)
+    try:
+        conf = float(conf)
+    except (TypeError, ValueError):
+        return _SEVERITY_CONFIDENCE.get(finding.get("severity", "low"), 0.40)
+    if conf == 0.0:
+        return _SEVERITY_CONFIDENCE.get(finding.get("severity", "low"), 0.40)
+    if conf < 0.0:
+        return 0.0
+    if conf > 1.0:
+        return 1.0
+    return conf
+
+
+def apply_suppressions(all_findings, repo_path):
+    """Partition findings into active vs user-suppressed and emit abuse guards.
+
+    Reads `rule:<id>[:<glob>]` directives from <repo_path>/.forensicsignore and
+    suppresses any finding whose rule_id (and path glob, if present) matches.
+
+    Abuse guards (mirroring DANGEROUS_IGNORE_PATTERNS):
+      - Suppressing a CRITICAL-severity rule -> a CRITICAL "suppression
+        tampering" finding (active, counts toward exit code).
+      - Suppressing MORE THAN MASS_SUPPRESSION_THRESHOLD rules via `rule:`
+        lines -> a HIGH "mass-suppression" finding.
+
+    Returns (active_findings, suppressed_findings). Every applied suppression
+    appears among the suppressed findings; none is silently dropped. The guard
+    findings themselves are appended to active_findings.
+    """
+    suppressions = []
+    try:
+        import forensics_core as core
+        suppressions = core.load_rule_suppressions(repo_path)
+    except (ImportError, OSError) as exc:
+        print(f"[!] Rule-suppression load skipped: {exc}", file=sys.stderr)
+        return list(all_findings), []
+
+    if not suppressions:
+        return list(all_findings), []
+
+    active = []
+    suppressed = []
+    critical_rules_suppressed = set()
+
+    for finding in all_findings:
+        rule_id = finding.get("rule_id", "") or ""
+        matched = None
+        if rule_id:
+            for supp in suppressions:
+                if core.suppression_matches(supp, rule_id, finding.get("file", "")):
+                    matched = supp
+                    break
+        if matched is not None:
+            if finding.get("severity") == "critical":
+                critical_rules_suppressed.add(rule_id)
+            suppressed.append(finding)
+        else:
+            active.append(finding)
+
+    guard_findings = []
+
+    # Guard 1: suppression of a critical-severity rule = tampering (CRITICAL).
+    for rule_id in sorted(critical_rules_suppressed):
+        guard_findings.append({
+            "scanner": "meta",
+            "severity": "critical",
+            "title": ".forensicsignore: Critical Rule Suppression",
+            "description": (
+                f"Suppresses critical-severity rule '{rule_id}'. Suppressing a "
+                f"critical rule is the shape of attacker-planted tampering."
+            ),
+            "file": ".forensicsignore",
+            "line": 0,
+            "snippet": f"rule:{rule_id}",
+            "category": "configuration",
+            "rule_id": "",
+            "confidence": 0.95,
+        })
+
+    # Guard 2: mass suppression (HIGH) regardless of suppressed rules' severity.
+    if len(suppressions) > MASS_SUPPRESSION_THRESHOLD:
+        guard_findings.append({
+            "scanner": "meta",
+            "severity": "high",
+            "title": ".forensicsignore: Mass Rule Suppression",
+            "description": (
+                f"Suppresses {len(suppressions)} rules via rule: lines "
+                f"(threshold {MASS_SUPPRESSION_THRESHOLD}). Mass suppression of "
+                f"WARN-tier rules silently empties the adjudication pipeline."
+            ),
+            "file": ".forensicsignore",
+            "line": 0,
+            "snippet": f"{len(suppressions)} rule: suppressions",
+            "category": "configuration",
+            "rule_id": "",
+            "confidence": 0.80,
+        })
+
+    active.extend(guard_findings)
+    return active, suppressed
+
+
 def build_summary(findings):
     summary = {"critical": 0, "high": 0, "medium": 0, "low": 0, "total": 0}
 
@@ -104,6 +254,20 @@ def build_summary(findings):
         summary["total"] += 1
 
     return summary
+
+
+def build_verdicts(active_findings, suppressed_findings):
+    """Count findings by verdict tier.
+
+    Active findings tier by confidence; all user-suppressed findings count as
+    SUPPRESSED. Low-confidence (<0.30) active findings also land in SUPPRESSED.
+    """
+    verdicts = {"block": 0, "warn": 0, "info": 0, "suppressed": 0}
+    for finding in active_findings:
+        tier = verdict_tier(_finding_confidence(finding))
+        verdicts[tier] += 1
+    verdicts["suppressed"] += len(suppressed_findings)
+    return verdicts
 
 
 def calculate_report_exit_code(summary, scanners):
@@ -199,8 +363,16 @@ def build_report(tmpdir, repo_path, skill_scan):
             "findings": correlated_findings,
         })
 
+    # Per-finding suppression (U1). User-suppressed findings are pulled out of
+    # the active set BEFORE summary/exit-code computation so they cannot affect
+    # severity counts or the 0/1/2/99 contract, but they remain visible under
+    # the top-level `suppressed` key for auditability. Abuse-guard findings
+    # (critical-rule suppression, mass suppression) are added to the active set.
+    all_findings, suppressed_findings = apply_suppressions(all_findings, repo_path)
+
     all_findings.sort(key=lambda item: -SEVERITY_ORDER.get(item.get("severity", "low"), 0))
     summary = build_summary(all_findings)
+    verdicts = build_verdicts(all_findings, suppressed_findings)
     exit_code = calculate_report_exit_code(summary, scanners)
 
     return {
@@ -209,8 +381,10 @@ def build_report(tmpdir, repo_path, skill_scan):
         "scanner_count": len(scanners),
         "scanners": scanners,
         "summary": summary,
+        "verdicts": verdicts,
         "exit_code": exit_code,
         "findings": all_findings,
+        "suppressed": suppressed_findings,
     }
 
 
