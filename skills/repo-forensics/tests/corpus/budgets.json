@@ -1,0 +1,83 @@
+{
+  "_comment": "Per-item maximum allowed findings per severity for the committed benign corpus. Target is zero across the board. Nonzero budgets are documented below with rationale. Critical/high budgets for genuine FPs are marked with TODO referencing the scanner rule for future fixes.",
+
+  "benign/emoji_rich.md": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "_comment": "Emoji ZWJ + VS16 sequences. The _is_emoji_context() guard in scan_skill_threats correctly suppresses U+200D and U+FE0F inside emoji sequences (issue #16). This file verifies that guard stays working."
+  },
+
+  "benign/ml_training_docs.md": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "_comment": "'Send N layers to the GPU' / 'send data to the queue' prose. The EXFIL_VERBS_RE proximity regex must NOT fire on subject-object ordering where 'send to' points at hardware/abstractions rather than a network exfiltration target (issue #9)."
+  },
+
+  "benign/package.json": {
+    "critical": 0,
+    "high": 1,
+    "medium": 0,
+    "low": 0,
+    "_comment": "TODO(scan_lifecycle.py / RELAY_PATTERN): postinstall: 'node scripts/setup.js' trips NPM Hook: 'postinstall' Runs External Script (HIGH). This is intentional scanner behavior — every postinstall that runs an external file is considered HIGH because it is THE standard supply chain attack entry point. The finding is correct for security analysis; this corpus item verifies the scanner does NOT escalate a plain node-relay to CRITICAL (which would be a regression). Budget of high:1 is accepted and documented here."
+  },
+
+  "benign/devcontainer.json": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "_comment": "Devcontainer with vendor feature images from ghcr.io/devcontainers/ only, no host mounts, no secret env vars forwarded, no dangerous lifecycle commands. Verifies scan_devcontainer stays clean on a typical 'pip install -r requirements.txt' postCreateCommand."
+  },
+
+  "benign/.env.example": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "_comment": ".env.example with blank placeholder values only (all values are empty or =localhost/=5432/=development). scan_secrets correctly exempts .env.example (in ENV_FILE_SAFE). No patterns trip because values are not realistic-looking credentials."
+  },
+
+  "benign/SKILL.md": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "_comment": "Skill description that legitimately uses 'you must', 'ignore', and 'tools' in benign imperative prose. Verifies the authority-framing / tool-injection detectors do not fire on ordinary instructional language used in developer-facing documentation."
+  },
+
+  "benign/oauth_api_docs.md": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "_comment": "OAuth 2.0 documentation with angle-bracket placeholders (<ACCESS_TOKEN>, <REFRESH_TOKEN>, <CLIENT_ID>) rather than realistic-looking credential strings. Verifies that API documentation prose with 'Bearer <placeholder>' does NOT trip the Bearer Token secret rule. If a future rule change causes this to fire, the doc writer must use angle-bracket placeholders."
+  },
+
+  "benign/styles.css": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "_comment": "Two base64 data-URIs (inline SVG + PNG). scan_entropy now has a data-URI context guard (skips base64 inside data:...;base64, payloads), so this benign CSS produces zero findings. The FP the corpus originally exposed is fixed."
+  },
+
+  "benign/ci.yml": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "_comment": "GitHub Actions workflow with all actions SHA-pinned (no @main/@master, no version tag without SHA). The infra scanner's 'Unpinned Official Action' finding requires the ci.yml to be at .github/workflows/ci.yml. The test runs scan_file scanners on this path; the infra workflow walk is tested separately in test_scan_infra.py. SHA pins used: checkout@11bd71901bbe5b1630ceea73d27597364c9af683 (v4.2.2), setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b (v5.3.0), upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 (v4.6.0)."
+  },
+
+  "benign/Dockerfile": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "_comment": "Multi-stage Dockerfile with ARG for non-sensitive build metadata (APP_VERSION, BUILD_DATE, GIT_COMMIT) and ENV for non-sensitive runtime config (APP_ENV, PORT, PYTHONDONTWRITEBYTECODE). No passwords, keys, or tokens in ARG/ENV. Verifies the Dockerfile scanner does not fire on normal build/runtime parameters."
+  }
+}

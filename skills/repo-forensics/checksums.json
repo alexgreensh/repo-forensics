@@ -1,7 +1,7 @@
 {
   "version": "2",
   "generator": "repo-forensics/verify_install",
-  "file_count": 46,
+  "file_count": 47,
   "files": {
     ".gitignore": "8b2598a3359a556874b8069d42dea2686f07d46c3ca1b540c4025788b258180a",
     "SKILL.md": "4b8089cffa847bfd2764df585dd7f19e23953801ed9b5a2a69180e657d7c29fd",
@@ -17,6 +17,7 @@
     "scripts/_shared_patterns.py": "8c61da2345bf57bd59bf6e4fe4424530db8f280238f0cc65fd82b897afedf57b",
     "scripts/aggregate_json.py": "d7575e89d37b4770bb01edad60215355e6538a77e124474b99c519a418e7c869",
     "scripts/auto_scan.py": "0e8af4ccccadd150256767b6984aac1d790481f3cf8d97df382c81fcd30fdbda",
+    "scripts/corpus_sync.py": "7feb0e2de6ede9ac909da8b5f8335cfd9e0181f97dc2b4b355b751e8ddb3234e",
     "scripts/dast_sandbox.sb": "6f6e9571a73aa8a9d07e7e4c5c0e6ae49fb6447c5f34a446154d301c6c4e8875",
     "scripts/forensics_core.py": "54576149d7dc049f8d21cb5ea0c1169ef2d72da9a376fceb9760849d352f4c37",
     "scripts/gen_rule_ids.py": "0ca34e28ed02c767790c9c898ee6e364518a898e4a6e71ea3ef314a56075c34e",
@@ -33,7 +34,7 @@
     "scripts/scan_dataflow.py": "9944c784f5c3efe102ccf41b2f4eac24c099cc2bb48e17007fba1217bf7ad1ac",
     "scripts/scan_dependencies.py": "bcfa1c10f0a2741024a5176b53dc501055a74c832a3ca6f4f59355df5b4d6e30",
     "scripts/scan_devcontainer.py": "066c27d4e4273a2d37ef3b989cd92735beba25fed1bd618111f3558e6d16ef7a",
-    "scripts/scan_entropy.py": "c27a83523d4b9b63b880d948aa60ab269b6ab340fb2a5cd325c705495b4e5712",
+    "scripts/scan_entropy.py": "fb484bf53c4050b4f8db43128124ab107d17113b9f96fc8aec066b06addd21f4",
     "scripts/scan_entrypoint.py": "8a8486276449b8f3fa91a0739c6d718303458b1cda6754ebe19f03d9ec10ef10",
     "scripts/scan_git_forensics.py": "5f93c363e3a390968cea0301d00ad8b1524d5402d1401af22e0037f18151543f",
     "scripts/scan_infra.py": "a948222b7932a79f042b78b787a093661c3c0d0c2718dc18db152b9f573685ef",

@@ -1,0 +1,27 @@
+{
+  "name": "my-webapp",
+  "version": "1.0.0",
+  "description": "A typical web application with a postinstall build step",
+  "scripts": {
+    "postinstall": "node scripts/setup.js",
+    "build": "webpack --mode production",
+    "start": "node server.js",
+    "test": "jest --coverage",
+    "lint": "eslint src/"
+  },
+  "dependencies": {
+    "express": "^4.18.0",
+    "lodash": "^4.17.21",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "jest": "^29.5.0",
+    "webpack": "^5.88.0",
+    "eslint": "^8.45.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "MIT"
+}

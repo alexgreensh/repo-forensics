@@ -1,0 +1,39 @@
+/* styles.css - Application stylesheet with inline SVG data URIs.
+   Base64-encoded images in data: URIs are standard CSS practice and
+   are NOT script execution (no decode-and-exec). */
+
+/* Application logo as inline SVG (base64-encoded for zero round-trips) */
+.logo {
+  background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZD0iTTEyIDJMMiAyMmgyMEwxMiAyeiIgZmlsbD0iIzMzMyIvPjwvc3ZnPg==");
+  background-repeat: no-repeat;
+  background-size: contain;
+  width: 32px;
+  height: 32px;
+}
+
+/* Small spinner icon as inline PNG */
+.spinner-icon {
+  background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAB3RJTUUH4QkTDxMTByZXjAAAABl0RVh0Q29tbWVudABDcmVhdGVkIHdpdGggR0lNUFeBDhcAAAARSURBVBjTY2AYBaNgFAIAABwAASwFBdEAAAAASUVORK5CYII=");
+  width: 8px;
+  height: 8px;
+}
+
+/* Standard layout utilities */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+.visually-hidden {
+  /* Accessibility: screen-reader only, intentional — not steganography */
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
