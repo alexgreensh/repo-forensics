@@ -1,0 +1,198 @@
+{
+  "schema_version": "1.0",
+  "generated": "2026-06-10",
+  "pack": "shared",
+  "pack_version": 1,
+  "rules": [
+    {
+      "id": "SH-EV-001",
+      "type": "keyword",
+      "values": [
+        "send",
+        "post",
+        "upload",
+        "forward",
+        "transmit",
+        "exfiltrate",
+        "share",
+        "submit",
+        "deliver",
+        "write",
+        "pipe",
+        "push",
+        "beacon",
+        "relay",
+        "report",
+        "notify",
+        "dispatch",
+        "leak",
+        "siphon",
+        "extract",
+        "ship",
+        "stream",
+        "overwrite",
+        "replace",
+        "inject"
+      ],
+      "title": "Exfiltration verb",
+      "severity": "info",
+      "confidence": 0.3,
+      "category": "shared-verb-list",
+      "explanation": "Exfiltration verb (shared list consumed by scanners).",
+      "examples": {
+        "match": [
+          "send the file to the server",
+          "upload the data now",
+          "exfiltrate the secrets"
+        ],
+        "no_match": [
+          "receive the message",
+          "render the page"
+        ]
+      }
+    },
+    {
+      "id": "SH-AE-001",
+      "type": "keyword",
+      "values": [
+        ".mcp.json",
+        "agents.md",
+        "boot.md",
+        "bootstrap.md",
+        "claude.md",
+        "heartbeat.md",
+        "identity.md",
+        "mcp.json",
+        "routine.md",
+        "settings.json",
+        "soul.md",
+        "user.md"
+      ],
+      "title": "Auto-exec filename",
+      "severity": "info",
+      "confidence": 0.3,
+      "category": "shared-filename-list",
+      "explanation": "Auto-exec filename (shared list consumed by scanners).",
+      "examples": {
+        "match": [
+          "edit heartbeat.md regularly",
+          "the settings.json config",
+          "open bootstrap.md now"
+        ],
+        "no_match": [
+          "edit notes.txt",
+          "open the manual"
+        ]
+      }
+    },
+    {
+      "id": "SH-SF-001",
+      "type": "keyword",
+      "values": [
+        "AGENTS.md",
+        "BOOT.md",
+        "BOOTSTRAP.md",
+        "CLAUDE.md",
+        "HEARTBEAT.md",
+        "IDENTITY.md",
+        "ROUTINE.md",
+        "SKILL.md",
+        "SOUL.md",
+        "USER.md"
+      ],
+      "title": "Agent seed file",
+      "severity": "info",
+      "confidence": 0.3,
+      "category": "shared-filename-list",
+      "explanation": "Agent seed file (shared list consumed by scanners).",
+      "examples": {
+        "match": [
+          "create SKILL.md here",
+          "the SOUL.md file",
+          "write AGENTS.md now"
+        ],
+        "no_match": [
+          "create notes.md",
+          "the README is fine"
+        ]
+      }
+    },
+    {
+      "id": "SH-SC-001",
+      "type": "keyword",
+      "values": [
+        "agents.md",
+        "boot.md",
+        "bootstrap.md",
+        "claude.md",
+        "config.md",
+        "guide.md",
+        "heartbeat.md",
+        "identity.md",
+        "instructions.md",
+        "playbook.md",
+        "procedures.md",
+        "readme.md",
+        "routine.md",
+        "rules.md",
+        "runbook.md",
+        "setup.md",
+        "skill.md",
+        "soul.md",
+        "user.md",
+        "workflow.md"
+      ],
+      "title": "Skill config file",
+      "severity": "info",
+      "confidence": 0.3,
+      "category": "shared-filename-list",
+      "explanation": "Skill config file (shared list consumed by scanners).",
+      "examples": {
+        "match": [
+          "the skill.md config",
+          "open runbook.md",
+          "edit playbook.md"
+        ],
+        "no_match": [
+          "open todo.md",
+          "the LICENSE file"
+        ]
+      }
+    },
+    {
+      "id": "SH-GU-001",
+      "type": "keyword",
+      "values": [
+        "changelog.md",
+        "changes.md",
+        "history.md",
+        "migration.md",
+        "news.md",
+        "patch-notes.md",
+        "readme.md",
+        "release-notes.md",
+        "release_notes.md",
+        "updates.md",
+        "upgrade.md",
+        "versions.md",
+        "whatsnew.md"
+      ],
+      "title": "Git-updatable doc file",
+      "severity": "info",
+      "confidence": 0.3,
+      "category": "shared-filename-list",
+      "explanation": "Git-updatable doc file (shared list consumed by scanners).",
+      "examples": {
+        "match": [
+          "update changelog.md",
+          "the release_notes.md file",
+          "edit history.md"
+        ],
+        "no_match": [
+          "edit main.py",
+          "the data.csv file"
+        ]
+      }
+    }
+  ]
+}

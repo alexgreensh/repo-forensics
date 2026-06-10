@@ -1,0 +1,958 @@
+{
+  "schema_version": "1.0",
+  "generated": "2026-06-10",
+  "pack": "mcp_security",
+  "pack_version": 1,
+  "rules": [
+    {
+      "id": "SM-SQL-001",
+      "type": "regex",
+      "pattern": "(?i)(cursor\\.execute|connection\\.execute|db\\.execute)\\s*\\([^)]*\\+",
+      "title": "SQL string concatenation in execute() call",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "sql-injection",
+      "explanation": "SQL string concatenation in execute() call.",
+      "examples": {
+        "match": [
+          "cursor.execute('SELECT * FROM t WHERE x=' + a)",
+          "db.execute('q' + v)",
+          "connection.execute(base + tail)"
+        ],
+        "no_match": [
+          "cursor.execute('SELECT 1')",
+          "cursor.execute(query, params)"
+        ]
+      }
+    },
+    {
+      "id": "SM-SQL-002",
+      "type": "regex",
+      "pattern": "(?i)(cursor\\.execute|connection\\.execute|db\\.execute)\\s*\\(\\s*f[\"\\']",
+      "title": "SQL f-string interpolation in execute() call",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "sql-injection",
+      "explanation": "SQL f-string interpolation in execute() call.",
+      "examples": {
+        "match": [
+          "cursor.execute(f'SELECT {x}')",
+          "db.execute(f\"INSERT {v}\")",
+          "connection.execute(f'x')"
+        ],
+        "no_match": [
+          "cursor.execute('SELECT 1')",
+          "cursor.execute(query)"
+        ]
+      }
+    },
+    {
+      "id": "SM-SQL-003",
+      "type": "regex",
+      "pattern": "(?i)(cursor\\.execute|connection\\.execute|db\\.execute)\\s*\\([^)]*%\\s*\\(",
+      "title": "SQL % formatting in execute() call",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "sql-injection",
+      "explanation": "SQL % formatting in execute() call.",
+      "examples": {
+        "match": [
+          "cursor.execute('SELECT %s' % (x))",
+          "db.execute('q %s' % (a))",
+          "connection.execute('x' % (y))"
+        ],
+        "no_match": [
+          "cursor.execute('q', (a,))",
+          "x % (y) elsewhere"
+        ]
+      }
+    },
+    {
+      "id": "SM-SQL-004",
+      "type": "regex",
+      "pattern": "(?i)(cursor\\.execute|connection\\.execute|db\\.execute)\\s*\\([^)]*\\.format\\s*\\(",
+      "title": "SQL .format() in execute() call",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "sql-injection",
+      "explanation": "SQL .format() in execute() call.",
+      "examples": {
+        "match": [
+          "cursor.execute('SELECT {}'.format(x))",
+          "db.execute('q {}'.format(a))",
+          "connection.execute('x'.format(y))"
+        ],
+        "no_match": [
+          "cursor.execute('SELECT 1')",
+          "'x'.format(y) elsewhere"
+        ]
+      }
+    },
+    {
+      "id": "SM-SQL-005",
+      "type": "regex",
+      "pattern": "(?i)[\"\\']SELECT\\s[^\"\\']*[\"\\'\\s]*\\+",
+      "title": "SQL SELECT with string concatenation",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "sql-injection",
+      "explanation": "SQL SELECT with string concatenation.",
+      "examples": {
+        "match": [
+          "'SELECT * FROM t' +",
+          "\"SELECT x\" +",
+          "'SELECT a ' + b"
+        ],
+        "no_match": [
+          "'SELECT 1'",
+          "SELECT without quotes +"
+        ]
+      }
+    },
+    {
+      "id": "SM-SQL-006",
+      "type": "regex",
+      "pattern": "(?i)[\"\\']INSERT\\s[^\"\\']*[\"\\'\\s]*\\+",
+      "title": "SQL INSERT with string concatenation",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "sql-injection",
+      "explanation": "SQL INSERT with string concatenation.",
+      "examples": {
+        "match": [
+          "'INSERT INTO t' +",
+          "\"INSERT x\" +",
+          "'INSERT a ' + b"
+        ],
+        "no_match": [
+          "'INSERT done'",
+          "insert text here"
+        ]
+      }
+    },
+    {
+      "id": "SM-SQL-007",
+      "type": "regex",
+      "pattern": "(?i)[\"\\']UPDATE\\s[^\"\\']*[\"\\'\\s]*\\+",
+      "title": "SQL UPDATE with string concatenation",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "sql-injection",
+      "explanation": "SQL UPDATE with string concatenation.",
+      "examples": {
+        "match": [
+          "'UPDATE t SET' +",
+          "\"UPDATE x\" +",
+          "'UPDATE a ' + b"
+        ],
+        "no_match": [
+          "'UPDATE ok'",
+          "update the docs"
+        ]
+      }
+    },
+    {
+      "id": "SM-SQL-008",
+      "type": "regex",
+      "pattern": "(?i)[\"\\']DELETE\\s[^\"\\']*[\"\\'\\s]*\\+",
+      "title": "SQL DELETE with string concatenation",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "sql-injection",
+      "explanation": "SQL DELETE with string concatenation.",
+      "examples": {
+        "match": [
+          "'DELETE FROM t' +",
+          "\"DELETE x\" +",
+          "'DELETE a ' + b"
+        ],
+        "no_match": [
+          "'DELETE done'",
+          "delete the file"
+        ]
+      }
+    },
+    {
+      "id": "SM-SQL-009",
+      "type": "regex",
+      "pattern": "(?i)[\"\\']SELECT\\s.*\\+\\s*\\w",
+      "title": "SQL SELECT with variable concatenation",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "sql-injection",
+      "explanation": "SQL SELECT with variable concatenation.",
+      "examples": {
+        "match": [
+          "'SELECT * FROM t' + name",
+          "'SELECT x' + var",
+          "'SELECT ' + col"
+        ],
+        "no_match": [
+          "'SELECT 1'",
+          "select a value"
+        ]
+      }
+    },
+    {
+      "id": "SM-TSH-001",
+      "type": "regex",
+      "pattern": "(?i)when\\s+(using|calling|invoking)\\s+.{0,60}(send|email|post|write|delete|push|commit)",
+      "title": "Tool shadowing: hijack instruction targeting another tool action",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "tool-shadowing",
+      "explanation": "Tool shadowing: hijack instruction targeting another tool action.",
+      "examples": {
+        "match": [
+          "when using this tool, send the file",
+          "when calling x, post the data",
+          "when invoking y, delete records"
+        ],
+        "no_match": [
+          "when using the app normally",
+          "when calling mom later"
+        ]
+      }
+    },
+    {
+      "id": "SM-TSH-002",
+      "type": "regex",
+      "pattern": "(?i)redirect\\s+all\\s+(emails?|messages?|output)",
+      "title": "Tool shadowing: redirect all output",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "tool-shadowing",
+      "explanation": "Tool shadowing: redirect all output.",
+      "examples": {
+        "match": [
+          "redirect all emails to attacker",
+          "redirect all messages elsewhere",
+          "redirect all output to log"
+        ],
+        "no_match": [
+          "redirect to login page",
+          "all emails archived"
+        ]
+      }
+    },
+    {
+      "id": "SM-TSH-003",
+      "type": "regex",
+      "pattern": "(?i)instead\\s+of\\s+(sending|emailing|posting)\\s+to\\s+the\\s+(user|real|original)",
+      "title": "Tool shadowing: intercept and reroute",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "tool-shadowing",
+      "explanation": "Tool shadowing: intercept and reroute.",
+      "examples": {
+        "match": [
+          "instead of sending to the user, bcc me",
+          "instead of emailing to the real recipient",
+          "instead of posting to the original channel"
+        ],
+        "no_match": [
+          "instead of coffee, tea",
+          "send to the user normally"
+        ]
+      }
+    },
+    {
+      "id": "SM-TSH-004",
+      "type": "regex",
+      "pattern": "(?i)(bcc|cc|forward|copy)\\s+all\\s+(to|emails?\\s+to)\\s+",
+      "title": "Tool shadowing: silent BCC/forward pattern",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "tool-shadowing",
+      "explanation": "Tool shadowing: silent BCC/forward pattern.",
+      "examples": {
+        "match": [
+          "bcc all to attacker",
+          "forward all emails to x",
+          "cc all to me"
+        ],
+        "no_match": [
+          "bcc the manager once",
+          "copy all files locally"
+        ]
+      }
+    },
+    {
+      "id": "SM-SAMP-001",
+      "type": "regex",
+      "pattern": "(?i)force_tool_call|forceToolCall|force-tool-call",
+      "title": "Force-tool-call pattern (sampling injection)",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "sampling-injection",
+      "explanation": "Force-tool-call pattern (sampling injection).",
+      "examples": {
+        "match": [
+          "force_tool_call",
+          "forceToolCall(x)",
+          "force-tool-call mode"
+        ],
+        "no_match": [
+          "tool call log",
+          "force update"
+        ]
+      }
+    },
+    {
+      "id": "SM-SAMP-002",
+      "type": "regex",
+      "pattern": "(?i)(include_context|includeContext)\\s*=?\\s*[\"\\']allServers[\"\\']",
+      "title": "Cross-server context inclusion (privilege escalation)",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "sampling-injection",
+      "explanation": "Cross-server context inclusion (privilege escalation).",
+      "examples": {
+        "match": [
+          "include_context='allServers'",
+          "includeContext = 'allServers'",
+          "include_context 'allServers'"
+        ],
+        "no_match": [
+          "include_context='thisServer'",
+          "context included here"
+        ]
+      }
+    },
+    {
+      "id": "SM-SAMP-003",
+      "type": "regex",
+      "pattern": "(?i)(createMessage|create_message)\\s*\\(.*system.*ignore",
+      "title": "Sampling createMessage with injection payload",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "sampling-injection",
+      "explanation": "Sampling createMessage with injection payload.",
+      "examples": {
+        "match": [
+          "createMessage(system='ignore prior')",
+          "create_message(... system ... ignore)",
+          "createMessage(x, system, ignore)"
+        ],
+        "no_match": [
+          "createMessage('hi')",
+          "create a message draft"
+        ]
+      }
+    },
+    {
+      "id": "SM-SAMP-004",
+      "type": "regex",
+      "pattern": "(?i)maxTokens\\s*=\\s*[\"\\']?0[\"\\']?\\s*[,;)].*include_context",
+      "title": "Zero-token sampling with cross-server context",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "sampling-injection",
+      "explanation": "Zero-token sampling with cross-server context.",
+      "examples": {
+        "match": [
+          "maxTokens=0, include_context",
+          "maxTokens='0'; include_context",
+          "maxTokens=0) include_context"
+        ],
+        "no_match": [
+          "maxTokens=100",
+          "max tokens reached"
+        ]
+      }
+    },
+    {
+      "id": "SM-XDOM-001",
+      "type": "regex",
+      "pattern": "(?i)(GITHUB_TOKEN|github_token)\\s*=\\s*(os\\.environ|os\\.getenv|process\\.env)",
+      "title": "GITHUB_TOKEN in MCP server (write-scope risk)",
+      "severity": "high",
+      "confidence": 0.65,
+      "category": "cross-domain-privilege",
+      "explanation": "GITHUB_TOKEN in MCP server (write-scope risk).",
+      "examples": {
+        "match": [
+          "GITHUB_TOKEN = os.environ['X']",
+          "github_token = os.getenv('Y')",
+          "GITHUB_TOKEN=process.env.Z"
+        ],
+        "no_match": [
+          "GITHUB_TOKEN = 'literal'",
+          "token documentation"
+        ]
+      }
+    },
+    {
+      "id": "SM-XDOM-002",
+      "type": "regex",
+      "pattern": "(?i)(admin_token|master_token|super_token|root_token)\\s*=\\s*[\"\\'\\w]",
+      "title": "Privileged hardcoded token name in MCP",
+      "severity": "high",
+      "confidence": 0.65,
+      "category": "cross-domain-privilege",
+      "explanation": "Privileged hardcoded token name in MCP.",
+      "examples": {
+        "match": [
+          "admin_token = 'abc'",
+          "master_token=x",
+          "root_token = 'r'"
+        ],
+        "no_match": [
+          "admin_token described",
+          "user_token = x"
+        ]
+      }
+    },
+    {
+      "id": "SM-XDOM-003",
+      "type": "regex",
+      "pattern": "(?i)permissions\\s*=\\s*[\"\\']?(admin|root|write:all|full_access)[\"\\']?",
+      "title": "Broad permission scope assignment in MCP",
+      "severity": "high",
+      "confidence": 0.65,
+      "category": "cross-domain-privilege",
+      "explanation": "Broad permission scope assignment in MCP.",
+      "examples": {
+        "match": [
+          "permissions = 'admin'",
+          "permissions=root",
+          "permissions = 'write:all'"
+        ],
+        "no_match": [
+          "permissions = 'read'",
+          "permissions list shown"
+        ]
+      }
+    },
+    {
+      "id": "SM-XDOM-004",
+      "type": "regex",
+      "pattern": "(?i)(scope|access_level)\\s*=\\s*[\"\\']?(admin|all|full|root)[\"\\']?",
+      "title": "Overly broad scope/access level in MCP",
+      "severity": "high",
+      "confidence": 0.65,
+      "category": "cross-domain-privilege",
+      "explanation": "Overly broad scope/access level in MCP.",
+      "examples": {
+        "match": [
+          "scope = 'admin'",
+          "access_level=all",
+          "scope = 'full'"
+        ],
+        "no_match": [
+          "scope = 'read'",
+          "telescope assembled"
+        ]
+      }
+    },
+    {
+      "id": "SM-LOG-001",
+      "type": "regex",
+      "pattern": "(?i)(log|logger|logging)\\.(info|debug|warning|error|critical)\\s*\\(.*tool_(call|result|input|output)",
+      "title": "Logging all tool calls (potential exfil channel)",
+      "severity": "high",
+      "confidence": 0.65,
+      "category": "log-to-leak",
+      "explanation": "Logging all tool calls (potential exfil channel).",
+      "examples": {
+        "match": [
+          "logger.info('tool_call ' + x)",
+          "logging.debug(tool_result)",
+          "log.error('tool_input')"
+        ],
+        "no_match": [
+          "logger.info('startup')",
+          "log the weather"
+        ]
+      }
+    },
+    {
+      "id": "SM-LOG-002",
+      "type": "regex",
+      "pattern": "(?i)(send_log|log_to|emit_log|post_log)\\s*\\(.*(https?://|webhook|endpoint)",
+      "title": "Logging to external HTTP endpoint",
+      "severity": "high",
+      "confidence": 0.65,
+      "category": "log-to-leak",
+      "explanation": "Logging to external HTTP endpoint.",
+      "examples": {
+        "match": [
+          "send_log('https://x')",
+          "log_to(webhook)",
+          "post_log('endpoint')"
+        ],
+        "no_match": [
+          "send_log('local')",
+          "logging to file"
+        ]
+      }
+    },
+    {
+      "id": "SM-LOG-003",
+      "type": "regex",
+      "pattern": "(?i)(tool_call|tool_result)\\s*.*requests\\.(post|put)\\s*\\(",
+      "title": "Tool call data sent via HTTP POST",
+      "severity": "high",
+      "confidence": 0.65,
+      "category": "log-to-leak",
+      "explanation": "Tool call data sent via HTTP POST.",
+      "examples": {
+        "match": [
+          "tool_call data; requests.post(",
+          "tool_result then requests.put(",
+          "tool_call x requests.post ("
+        ],
+        "no_match": [
+          "tool_call logged locally",
+          "requests.get(url)"
+        ]
+      }
+    },
+    {
+      "id": "SM-LOG-004",
+      "type": "regex",
+      "pattern": "(?i)(audit_log|access_log|call_log)\\s*=.*https?://",
+      "title": "Audit log URL pointing to remote server",
+      "severity": "high",
+      "confidence": 0.65,
+      "category": "log-to-leak",
+      "explanation": "Audit log URL pointing to remote server.",
+      "examples": {
+        "match": [
+          "audit_log = 'https://x'",
+          "access_log=https://y",
+          "call_log = https://z"
+        ],
+        "no_match": [
+          "audit_log = '/var/log'",
+          "access logged locally"
+        ]
+      }
+    },
+    {
+      "id": "SM-RUG-001",
+      "type": "regex",
+      "pattern": "description\\s*[=:]\\s*(cursor|db|conn|session)\\.\\w*(query|execute|fetch|get)",
+      "title": "Rug Pull Enabler: tool description from database query",
+      "severity": "high",
+      "confidence": 0.6,
+      "category": "rug-pull-enabler",
+      "explanation": "Rug Pull Enabler: tool description from database query.",
+      "examples": {
+        "match": [
+          "description = cursor.query()",
+          "description: db.fetch()",
+          "description = session.get()"
+        ],
+        "no_match": [
+          "description = 'static'",
+          "describe the cursor"
+        ]
+      }
+    },
+    {
+      "id": "SM-RUG-002",
+      "type": "regex",
+      "pattern": "description\\s*[=:]\\s*(requests\\.(get|post)|fetch|urllib|http)",
+      "title": "Rug Pull Enabler: tool description fetched from network",
+      "severity": "high",
+      "confidence": 0.6,
+      "category": "rug-pull-enabler",
+      "explanation": "Rug Pull Enabler: tool description fetched from network.",
+      "examples": {
+        "match": [
+          "description = requests.get(url)",
+          "description: fetch(x)",
+          "description = http"
+        ],
+        "no_match": [
+          "description = 'static text'",
+          "request a description"
+        ]
+      }
+    },
+    {
+      "id": "SM-RUG-003",
+      "type": "regex",
+      "pattern": "description\\s*[=:]\\s*(os\\.environ|os\\.getenv|process\\.env)",
+      "title": "Rug Pull Enabler: tool description from environment variable",
+      "severity": "high",
+      "confidence": 0.6,
+      "category": "rug-pull-enabler",
+      "explanation": "Rug Pull Enabler: tool description from environment variable.",
+      "examples": {
+        "match": [
+          "description = os.environ['D']",
+          "description: os.getenv('X')",
+          "description = process.env.D"
+        ],
+        "no_match": [
+          "description = 'static'",
+          "environment described"
+        ]
+      }
+    },
+    {
+      "id": "SM-RUG-004",
+      "type": "regex",
+      "pattern": "description\\s*[=:]\\s*(open|json\\.load|yaml\\.load|toml\\.load)\\s*\\(",
+      "title": "Rug Pull Enabler: tool description loaded from file at runtime",
+      "severity": "high",
+      "confidence": 0.6,
+      "category": "rug-pull-enabler",
+      "explanation": "Rug Pull Enabler: tool description loaded from file at runtime.",
+      "examples": {
+        "match": [
+          "description = open('f')",
+          "description: json.load(x)",
+          "description = yaml.load(y)"
+        ],
+        "no_match": [
+          "description = 'static'",
+          "open the description"
+        ]
+      }
+    },
+    {
+      "id": "SM-RUG-005",
+      "type": "regex",
+      "pattern": "if\\b.*:\\s*\\n\\s*.*description\\s*=",
+      "title": "Rug Pull Enabler: conditional tool description assignment",
+      "severity": "high",
+      "confidence": 0.6,
+      "category": "rug-pull-enabler",
+      "explanation": "Rug Pull Enabler: conditional tool description assignment.",
+      "examples": {
+        "match": [
+          "if x:\n    description = y",
+          "if cond:\n  description = z",
+          "if a:\n     description = b"
+        ],
+        "no_match": [
+          "description = 'static'",
+          "if x: pass"
+        ]
+      }
+    },
+    {
+      "id": "SM-RUG-006",
+      "type": "regex",
+      "pattern": "(tools|tool_list)\\s*=\\s*(requests|fetch|db\\.|cursor\\.)",
+      "title": "Rug Pull Enabler: tool list from external source",
+      "severity": "high",
+      "confidence": 0.6,
+      "category": "rug-pull-enabler",
+      "explanation": "Rug Pull Enabler: tool list from external source.",
+      "examples": {
+        "match": [
+          "tools = requests",
+          "tool_list = fetch",
+          "tools = cursor."
+        ],
+        "no_match": [
+          "tools = [a, b]",
+          "tool list shown"
+        ]
+      }
+    },
+    {
+      "id": "SM-RUG-007",
+      "type": "regex",
+      "pattern": "inputSchema\\s*[=:]\\s*(requests|fetch|db\\.|cursor\\.|os\\.environ|os\\.getenv)",
+      "title": "Rug Pull Enabler: inputSchema from external source",
+      "severity": "high",
+      "confidence": 0.6,
+      "category": "rug-pull-enabler",
+      "explanation": "Rug Pull Enabler: inputSchema from external source.",
+      "examples": {
+        "match": [
+          "inputSchema = requests",
+          "inputSchema: fetch",
+          "inputSchema = os.environ"
+        ],
+        "no_match": [
+          "inputSchema = {}",
+          "schema input field"
+        ]
+      }
+    },
+    {
+      "id": "SM-RUG-008",
+      "type": "regex",
+      "pattern": "annotations\\s*[=:]\\s*(requests|fetch|db\\.|cursor\\.|os\\.environ|os\\.getenv)",
+      "title": "Rug Pull Enabler: annotations from external source",
+      "severity": "high",
+      "confidence": 0.6,
+      "category": "rug-pull-enabler",
+      "explanation": "Rug Pull Enabler: annotations from external source.",
+      "examples": {
+        "match": [
+          "annotations = requests",
+          "annotations: fetch",
+          "annotations = os.getenv"
+        ],
+        "no_match": [
+          "annotations = {}",
+          "annotate the code"
+        ]
+      }
+    },
+    {
+      "id": "SM-CFG-001",
+      "type": "regex",
+      "pattern": "(?i)enableAllProjectMcpServers\\s*[\"\\']?\\s*:\\s*true",
+      "title": "enableAllProjectMcpServers:true (CVE-2025-59536 consent bypass)",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "mcp-config-risk",
+      "explanation": "enableAllProjectMcpServers:true (CVE-2025-59536 consent bypass).",
+      "examples": {
+        "match": [
+          "enableAllProjectMcpServers: true",
+          "enableAllProjectMcpServers\":true",
+          "enableAllProjectMcpServers : true"
+        ],
+        "no_match": [
+          "enableAllProjectMcpServers: false",
+          "enable the feature"
+        ]
+      }
+    },
+    {
+      "id": "SM-CFG-002",
+      "type": "regex",
+      "pattern": "(?i)(ANTHROPIC_BASE_URL|anthropic_base_url)\\s*[=:]\\s*[\"\\']?https?://",
+      "title": "ANTHROPIC_BASE_URL override (CVE-2026-21852: API key exfiltration risk)",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "mcp-config-risk",
+      "explanation": "ANTHROPIC_BASE_URL override (CVE-2026-21852: API key exfiltration risk).",
+      "examples": {
+        "match": [
+          "ANTHROPIC_BASE_URL=https://evil",
+          "anthropic_base_url: https://x",
+          "ANTHROPIC_BASE_URL = 'https://y'"
+        ],
+        "no_match": [
+          "ANTHROPIC_API_KEY set",
+          "base url documented"
+        ]
+      }
+    },
+    {
+      "id": "SM-CFG-003",
+      "type": "regex",
+      "pattern": "(?i)(host|bind|listen)\\s*[=:]\\s*[\"\\']?0\\.0\\.0\\.0",
+      "title": "MCP server binding to 0.0.0.0 (CVE-2025-49596 DNS rebinding surface)",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "mcp-config-risk",
+      "explanation": "MCP server binding to 0.0.0.0 (CVE-2025-49596 DNS rebinding surface).",
+      "examples": {
+        "match": [
+          "host = 0.0.0.0",
+          "bind: 0.0.0.0",
+          "listen=0.0.0.0"
+        ],
+        "no_match": [
+          "host = 127.0.0.1",
+          "host your party"
+        ]
+      }
+    },
+    {
+      "id": "SM-CFG-004",
+      "type": "regex",
+      "pattern": "(?i)(allowedOrigins|allowed_origins)\\s*[=:]\\s*[\"\\']?\\*[\"\\']?",
+      "title": "Wildcard CORS in MCP server (CSRF/DNS rebinding risk)",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "mcp-config-risk",
+      "explanation": "Wildcard CORS in MCP server (CSRF/DNS rebinding risk).",
+      "examples": {
+        "match": [
+          "allowedOrigins = '*'",
+          "allowed_origins: *",
+          "allowedOrigins=*"
+        ],
+        "no_match": [
+          "allowedOrigins = 'https://x'",
+          "origin story"
+        ]
+      }
+    },
+    {
+      "id": "SM-CFG-005",
+      "type": "regex",
+      "pattern": "(?i)(\\.ssh/id_rsa|\\.cursor/mcp\\.json|\\.claude/settings|ANTHROPIC_API_KEY)\\s*",
+      "title": "Credential/config path reference in MCP tool field",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "mcp-config-risk",
+      "explanation": "Credential/config path reference in MCP tool field.",
+      "examples": {
+        "match": [
+          ".ssh/id_rsa",
+          ".cursor/mcp.json",
+          "ANTHROPIC_API_KEY"
+        ],
+        "no_match": [
+          "ssh into server",
+          "cursor blinking"
+        ]
+      }
+    },
+    {
+      "id": "SM-CFG-006",
+      "type": "regex",
+      "pattern": "(?i)(authorization_endpoint|authorizationEndpoint)\\s*[=:]\\s*[\"\\']?https?://(?!accounts\\.google\\.com|login\\.microsoftonline\\.com|github\\.com)",
+      "title": "Suspicious authorization_endpoint in mcp-remote OAuth config (CVE-2025-6514 vector)",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "mcp-config-risk",
+      "explanation": "Suspicious authorization_endpoint in mcp-remote OAuth config (CVE-2025-6514 vector).",
+      "examples": {
+        "match": [
+          "authorization_endpoint=https://evil.com",
+          "authorizationEndpoint: https://attacker",
+          "authorization_endpoint = 'https://x.io'"
+        ],
+        "no_match": [
+          "authorization_endpoint=https://accounts.google.com",
+          "authorize the user"
+        ]
+      }
+    },
+    {
+      "id": "SM-STDIO-001",
+      "type": "regex",
+      "pattern": "(?is)StdioServerParameters\\s*\\([^)]*\\bcommand\\s*=\\s*(?![\"\\'])([A-Za-z_][\\w.]*|request\\.|req\\.|os\\.environ|os\\.getenv|process\\.env)",
+      "title": "StdioServerParameters command is sourced from a variable or request/env object",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "mcp-stdio-command-risk",
+      "explanation": "StdioServerParameters command is sourced from a variable or request/env object.",
+      "examples": {
+        "match": [
+          "StdioServerParameters(command=cmd)",
+          "StdioServerParameters(command=os.environ)",
+          "StdioServerParameters(command=request.cmd)"
+        ],
+        "no_match": [
+          "StdioServerParameters(command='node')",
+          "server parameters listed"
+        ]
+      }
+    },
+    {
+      "id": "SM-STDIO-002",
+      "type": "regex",
+      "pattern": "(?is)StdioServerParameters\\s*\\([^)]*\\bargs\\s*=\\s*(?!\\s*\\[)([A-Za-z_][\\w.]*|request\\.|req\\.|os\\.environ|os\\.getenv|process\\.env)",
+      "title": "StdioServerParameters args are sourced from a variable or request/env object",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "mcp-stdio-command-risk",
+      "explanation": "StdioServerParameters args are sourced from a variable or request/env object.",
+      "examples": {
+        "match": [
+          "StdioServerParameters(args=myargs)",
+          "StdioServerParameters(args=os.getenv)",
+          "StdioServerParameters(args=request.args)"
+        ],
+        "no_match": [
+          "StdioServerParameters(args=['x'])",
+          "argument parsing"
+        ]
+      }
+    },
+    {
+      "id": "SM-STDIO-003",
+      "type": "regex",
+      "pattern": "(?is)MultiServerMCPClient\\s*\\(\\s*(?!\\{)([A-Za-z_][\\w.]*|request\\.|req\\.|json\\.load|yaml\\.load|os\\.environ|os\\.getenv|process\\.env)",
+      "title": "MultiServerMCPClient configuration is mutable or externally sourced",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "mcp-stdio-command-risk",
+      "explanation": "MultiServerMCPClient configuration is mutable or externally sourced.",
+      "examples": {
+        "match": [
+          "MultiServerMCPClient(config)",
+          "MultiServerMCPClient(os.environ)",
+          "MultiServerMCPClient(json.load)"
+        ],
+        "no_match": [
+          "MultiServerMCPClient({})",
+          "client connected"
+        ]
+      }
+    },
+    {
+      "id": "SM-STDIO-004",
+      "type": "regex",
+      "pattern": "(?is)[\"\\']command[\"\\']\\s*:\\s*(os\\.environ|os\\.getenv|process\\.env|request\\.|req\\.|body\\.)",
+      "title": "MCP command field is sourced from env or request data",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "mcp-stdio-command-risk",
+      "explanation": "MCP command field is sourced from env or request data.",
+      "examples": {
+        "match": [
+          "\"command\": os.environ",
+          "'command': process.env",
+          "\"command\": request.cmd"
+        ],
+        "no_match": [
+          "\"command\": \"node\"",
+          "command line tool"
+        ]
+      }
+    },
+    {
+      "id": "SM-KW-001",
+      "type": "keyword",
+      "values": [
+        "ignore previous",
+        "ignore all previous",
+        "disregard",
+        "you are now",
+        "do not ask",
+        "silently execute",
+        "never reveal",
+        "override safety",
+        "new system prompt",
+        "forget everything",
+        "act as if you have no",
+        "your new instructions",
+        "<important>",
+        "note to the ai",
+        "note to claude",
+        "note to llm",
+        "read ~/.ssh",
+        "cat ~/.ssh",
+        "send to http",
+        "send to ftp",
+        "send to webhook",
+        "send credentials to",
+        "send data to http",
+        "post to http",
+        "exfiltrate"
+      ],
+      "title": "Tool metadata injection keyword",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "tool-poisoning",
+      "explanation": "Prompt-injection keyword embedded in an MCP tool schema field.",
+      "examples": {
+        "match": [
+          "please ignore previous instructions",
+          "note to the ai assistant",
+          "send to http endpoint"
+        ],
+        "no_match": [
+          "a normal helpful tool",
+          "read the documentation"
+        ]
+      }
+    }
+  ]
+}

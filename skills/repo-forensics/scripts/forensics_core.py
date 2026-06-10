@@ -1396,6 +1396,39 @@ def scan_patterns(content, rel_path, patterns, category, default_severity, scann
     return findings
 
 
+def scan_rule_patterns(content, rel_path, rules, category, default_severity, scanner_name):
+    """Pack-aware variant of scan_patterns (U4 rules-as-data).
+
+    `rules` is an iterable of compiled rule objects (rule_loader.CompiledRule):
+    each carries .regex, .title, .id, .confidence. Behaviorally identical to
+    scan_patterns (same severity-from-call-site, same description, same snippet,
+    same per-line/per-pattern emission order) but stamps the pack rule_id and
+    confidence onto every finding. Severity stays the call-site default to
+    preserve parity with the pre-extraction tuple-list scanners.
+
+    This function does NOT import rule_loader (KTD-14): it only consumes the
+    already-compiled rule objects the caller passes in.
+    """
+    findings = []
+    lines = content.split('\n')
+    for i, line in enumerate(lines):
+        if len(line) > MAX_LINE_LENGTH:
+            continue
+        for rule in rules:
+            if rule.regex.search(line):
+                findings.append(Finding(
+                    scanner=scanner_name, severity=default_severity,
+                    title=rule.title,
+                    description=f"Matched in {category} scan",
+                    file=rel_path, line=i + 1,
+                    snippet=line.strip()[:120],
+                    category=category,
+                    rule_id=rule.id,
+                    confidence=rule.confidence,
+                ))
+    return findings
+
+
 def parse_common_args(argv, scanner_name):
     """Parse common CLI args for scanners: <repo_path> [--format text|json|summary]"""
     import argparse

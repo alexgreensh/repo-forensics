@@ -1,0 +1,968 @@
+[
+ [
+  "ANTHROPIC_BASE_URL override (CVE-2026-21852: API key exfiltration risk)",
+  "critical",
+  "mcp_SM-CFG-002.py",
+  1,
+  "mcp-config-risk"
+ ],
+ [
+  "ANTHROPIC_BASE_URL override (CVE-2026-21852: API key exfiltration risk)",
+  "critical",
+  "mcp_SM-CFG-002.py",
+  2,
+  "mcp-config-risk"
+ ],
+ [
+  "ANTHROPIC_BASE_URL override (CVE-2026-21852: API key exfiltration risk)",
+  "critical",
+  "mcp_SM-CFG-002.py",
+  3,
+  "mcp-config-risk"
+ ],
+ [
+  "Audit log URL pointing to remote server",
+  "high",
+  "mcp_SM-LOG-004.py",
+  1,
+  "log-to-leak"
+ ],
+ [
+  "Audit log URL pointing to remote server",
+  "high",
+  "mcp_SM-LOG-004.py",
+  2,
+  "log-to-leak"
+ ],
+ [
+  "Audit log URL pointing to remote server",
+  "high",
+  "mcp_SM-LOG-004.py",
+  3,
+  "log-to-leak"
+ ],
+ [
+  "Broad permission scope assignment in MCP",
+  "high",
+  "mcp_SM-XDOM-003.py",
+  1,
+  "cross-domain-privilege"
+ ],
+ [
+  "Broad permission scope assignment in MCP",
+  "high",
+  "mcp_SM-XDOM-003.py",
+  2,
+  "cross-domain-privilege"
+ ],
+ [
+  "Broad permission scope assignment in MCP",
+  "high",
+  "mcp_SM-XDOM-003.py",
+  3,
+  "cross-domain-privilege"
+ ],
+ [
+  "Credential/config path reference in MCP tool field",
+  "critical",
+  "mcp_SM-CFG-002.py",
+  4,
+  "mcp-config-risk"
+ ],
+ [
+  "Credential/config path reference in MCP tool field",
+  "critical",
+  "mcp_SM-CFG-005.py",
+  1,
+  "mcp-config-risk"
+ ],
+ [
+  "Credential/config path reference in MCP tool field",
+  "critical",
+  "mcp_SM-CFG-005.py",
+  2,
+  "mcp-config-risk"
+ ],
+ [
+  "Credential/config path reference in MCP tool field",
+  "critical",
+  "mcp_SM-CFG-005.py",
+  3,
+  "mcp-config-risk"
+ ],
+ [
+  "Cross-server context inclusion (privilege escalation)",
+  "high",
+  "mcp_SM-SAMP-002.py",
+  1,
+  "sampling-injection"
+ ],
+ [
+  "Cross-server context inclusion (privilege escalation)",
+  "high",
+  "mcp_SM-SAMP-002.py",
+  2,
+  "sampling-injection"
+ ],
+ [
+  "Cross-server context inclusion (privilege escalation)",
+  "high",
+  "mcp_SM-SAMP-002.py",
+  3,
+  "sampling-injection"
+ ],
+ [
+  "Force-tool-call pattern (sampling injection)",
+  "high",
+  "mcp_SM-SAMP-001.py",
+  1,
+  "sampling-injection"
+ ],
+ [
+  "Force-tool-call pattern (sampling injection)",
+  "high",
+  "mcp_SM-SAMP-001.py",
+  2,
+  "sampling-injection"
+ ],
+ [
+  "Force-tool-call pattern (sampling injection)",
+  "high",
+  "mcp_SM-SAMP-001.py",
+  3,
+  "sampling-injection"
+ ],
+ [
+  "GITHUB_TOKEN in MCP server (write-scope risk)",
+  "high",
+  "mcp_SM-XDOM-001.py",
+  1,
+  "cross-domain-privilege"
+ ],
+ [
+  "GITHUB_TOKEN in MCP server (write-scope risk)",
+  "high",
+  "mcp_SM-XDOM-001.py",
+  2,
+  "cross-domain-privilege"
+ ],
+ [
+  "GITHUB_TOKEN in MCP server (write-scope risk)",
+  "high",
+  "mcp_SM-XDOM-001.py",
+  3,
+  "cross-domain-privilege"
+ ],
+ [
+  "Logging all tool calls (potential exfil channel)",
+  "high",
+  "mcp_SM-LOG-001.py",
+  1,
+  "log-to-leak"
+ ],
+ [
+  "Logging all tool calls (potential exfil channel)",
+  "high",
+  "mcp_SM-LOG-001.py",
+  2,
+  "log-to-leak"
+ ],
+ [
+  "Logging all tool calls (potential exfil channel)",
+  "high",
+  "mcp_SM-LOG-001.py",
+  3,
+  "log-to-leak"
+ ],
+ [
+  "Logging to external HTTP endpoint",
+  "high",
+  "mcp_SM-LOG-002.py",
+  1,
+  "log-to-leak"
+ ],
+ [
+  "Logging to external HTTP endpoint",
+  "high",
+  "mcp_SM-LOG-002.py",
+  2,
+  "log-to-leak"
+ ],
+ [
+  "Logging to external HTTP endpoint",
+  "high",
+  "mcp_SM-LOG-002.py",
+  3,
+  "log-to-leak"
+ ],
+ [
+  "MCP command field is sourced from env or request data",
+  "high",
+  "mcp_SM-STDIO-004.py",
+  1,
+  "mcp-stdio-command-risk"
+ ],
+ [
+  "MCP command field is sourced from env or request data",
+  "high",
+  "mcp_SM-STDIO-004.py",
+  2,
+  "mcp-stdio-command-risk"
+ ],
+ [
+  "MCP command field is sourced from env or request data",
+  "high",
+  "mcp_SM-STDIO-004.py",
+  3,
+  "mcp-stdio-command-risk"
+ ],
+ [
+  "MCP server binding to 0.0.0.0 (CVE-2025-49596 DNS rebinding surface)",
+  "critical",
+  "mcp_SM-CFG-003.py",
+  1,
+  "mcp-config-risk"
+ ],
+ [
+  "MCP server binding to 0.0.0.0 (CVE-2025-49596 DNS rebinding surface)",
+  "critical",
+  "mcp_SM-CFG-003.py",
+  2,
+  "mcp-config-risk"
+ ],
+ [
+  "MCP server binding to 0.0.0.0 (CVE-2025-49596 DNS rebinding surface)",
+  "critical",
+  "mcp_SM-CFG-003.py",
+  3,
+  "mcp-config-risk"
+ ],
+ [
+  "MultiServerMCPClient configuration is mutable or externally sourced",
+  "high",
+  "mcp_SM-STDIO-003.py",
+  1,
+  "mcp-stdio-command-risk"
+ ],
+ [
+  "MultiServerMCPClient configuration is mutable or externally sourced",
+  "high",
+  "mcp_SM-STDIO-003.py",
+  2,
+  "mcp-stdio-command-risk"
+ ],
+ [
+  "MultiServerMCPClient configuration is mutable or externally sourced",
+  "high",
+  "mcp_SM-STDIO-003.py",
+  3,
+  "mcp-stdio-command-risk"
+ ],
+ [
+  "Overly broad scope/access level in MCP",
+  "high",
+  "mcp_SM-XDOM-004.py",
+  1,
+  "cross-domain-privilege"
+ ],
+ [
+  "Overly broad scope/access level in MCP",
+  "high",
+  "mcp_SM-XDOM-004.py",
+  2,
+  "cross-domain-privilege"
+ ],
+ [
+  "Overly broad scope/access level in MCP",
+  "high",
+  "mcp_SM-XDOM-004.py",
+  3,
+  "cross-domain-privilege"
+ ],
+ [
+  "Privileged hardcoded token name in MCP",
+  "high",
+  "mcp_SM-XDOM-002.py",
+  1,
+  "cross-domain-privilege"
+ ],
+ [
+  "Privileged hardcoded token name in MCP",
+  "high",
+  "mcp_SM-XDOM-002.py",
+  2,
+  "cross-domain-privilege"
+ ],
+ [
+  "Privileged hardcoded token name in MCP",
+  "high",
+  "mcp_SM-XDOM-002.py",
+  3,
+  "cross-domain-privilege"
+ ],
+ [
+  "Rug Pull Enabler: annotations from external source",
+  "high",
+  "mcp_SM-RUG-008.py",
+  1,
+  "rug-pull-enabler"
+ ],
+ [
+  "Rug Pull Enabler: annotations from external source",
+  "high",
+  "mcp_SM-RUG-008.py",
+  2,
+  "rug-pull-enabler"
+ ],
+ [
+  "Rug Pull Enabler: annotations from external source",
+  "high",
+  "mcp_SM-RUG-008.py",
+  3,
+  "rug-pull-enabler"
+ ],
+ [
+  "Rug Pull Enabler: inputSchema from external source",
+  "high",
+  "mcp_SM-RUG-007.py",
+  1,
+  "rug-pull-enabler"
+ ],
+ [
+  "Rug Pull Enabler: inputSchema from external source",
+  "high",
+  "mcp_SM-RUG-007.py",
+  2,
+  "rug-pull-enabler"
+ ],
+ [
+  "Rug Pull Enabler: inputSchema from external source",
+  "high",
+  "mcp_SM-RUG-007.py",
+  3,
+  "rug-pull-enabler"
+ ],
+ [
+  "Rug Pull Enabler: tool description fetched from network",
+  "high",
+  "mcp_SM-RUG-002.py",
+  1,
+  "rug-pull-enabler"
+ ],
+ [
+  "Rug Pull Enabler: tool description fetched from network",
+  "high",
+  "mcp_SM-RUG-002.py",
+  2,
+  "rug-pull-enabler"
+ ],
+ [
+  "Rug Pull Enabler: tool description fetched from network",
+  "high",
+  "mcp_SM-RUG-002.py",
+  3,
+  "rug-pull-enabler"
+ ],
+ [
+  "Rug Pull Enabler: tool description from database query",
+  "high",
+  "mcp_SM-RUG-001.py",
+  1,
+  "rug-pull-enabler"
+ ],
+ [
+  "Rug Pull Enabler: tool description from database query",
+  "high",
+  "mcp_SM-RUG-001.py",
+  2,
+  "rug-pull-enabler"
+ ],
+ [
+  "Rug Pull Enabler: tool description from database query",
+  "high",
+  "mcp_SM-RUG-001.py",
+  3,
+  "rug-pull-enabler"
+ ],
+ [
+  "Rug Pull Enabler: tool description from environment variable",
+  "high",
+  "mcp_SM-RUG-003.py",
+  1,
+  "rug-pull-enabler"
+ ],
+ [
+  "Rug Pull Enabler: tool description from environment variable",
+  "high",
+  "mcp_SM-RUG-003.py",
+  2,
+  "rug-pull-enabler"
+ ],
+ [
+  "Rug Pull Enabler: tool description from environment variable",
+  "high",
+  "mcp_SM-RUG-003.py",
+  3,
+  "rug-pull-enabler"
+ ],
+ [
+  "Rug Pull Enabler: tool description loaded from file at runtime",
+  "high",
+  "mcp_SM-RUG-004.py",
+  1,
+  "rug-pull-enabler"
+ ],
+ [
+  "Rug Pull Enabler: tool description loaded from file at runtime",
+  "high",
+  "mcp_SM-RUG-004.py",
+  2,
+  "rug-pull-enabler"
+ ],
+ [
+  "Rug Pull Enabler: tool description loaded from file at runtime",
+  "high",
+  "mcp_SM-RUG-004.py",
+  3,
+  "rug-pull-enabler"
+ ],
+ [
+  "Rug Pull Enabler: tool list from external source",
+  "high",
+  "mcp_SM-RUG-006.py",
+  1,
+  "rug-pull-enabler"
+ ],
+ [
+  "Rug Pull Enabler: tool list from external source",
+  "high",
+  "mcp_SM-RUG-006.py",
+  2,
+  "rug-pull-enabler"
+ ],
+ [
+  "Rug Pull Enabler: tool list from external source",
+  "high",
+  "mcp_SM-RUG-006.py",
+  3,
+  "rug-pull-enabler"
+ ],
+ [
+  "SQL % formatting in execute() call",
+  "critical",
+  "mcp_SM-SQL-003.py",
+  1,
+  "sql-injection"
+ ],
+ [
+  "SQL % formatting in execute() call",
+  "critical",
+  "mcp_SM-SQL-003.py",
+  2,
+  "sql-injection"
+ ],
+ [
+  "SQL % formatting in execute() call",
+  "critical",
+  "mcp_SM-SQL-003.py",
+  3,
+  "sql-injection"
+ ],
+ [
+  "SQL .format() in execute() call",
+  "critical",
+  "mcp_SM-SQL-004.py",
+  1,
+  "sql-injection"
+ ],
+ [
+  "SQL .format() in execute() call",
+  "critical",
+  "mcp_SM-SQL-004.py",
+  2,
+  "sql-injection"
+ ],
+ [
+  "SQL .format() in execute() call",
+  "critical",
+  "mcp_SM-SQL-004.py",
+  3,
+  "sql-injection"
+ ],
+ [
+  "SQL DELETE with string concatenation",
+  "critical",
+  "mcp_SM-SQL-008.py",
+  1,
+  "sql-injection"
+ ],
+ [
+  "SQL DELETE with string concatenation",
+  "critical",
+  "mcp_SM-SQL-008.py",
+  2,
+  "sql-injection"
+ ],
+ [
+  "SQL DELETE with string concatenation",
+  "critical",
+  "mcp_SM-SQL-008.py",
+  3,
+  "sql-injection"
+ ],
+ [
+  "SQL INSERT with string concatenation",
+  "critical",
+  "mcp_SM-SQL-006.py",
+  1,
+  "sql-injection"
+ ],
+ [
+  "SQL INSERT with string concatenation",
+  "critical",
+  "mcp_SM-SQL-006.py",
+  2,
+  "sql-injection"
+ ],
+ [
+  "SQL INSERT with string concatenation",
+  "critical",
+  "mcp_SM-SQL-006.py",
+  3,
+  "sql-injection"
+ ],
+ [
+  "SQL SELECT with string concatenation",
+  "critical",
+  "mcp_SM-SQL-001.py",
+  1,
+  "sql-injection"
+ ],
+ [
+  "SQL SELECT with string concatenation",
+  "critical",
+  "mcp_SM-SQL-005.py",
+  1,
+  "sql-injection"
+ ],
+ [
+  "SQL SELECT with string concatenation",
+  "critical",
+  "mcp_SM-SQL-005.py",
+  2,
+  "sql-injection"
+ ],
+ [
+  "SQL SELECT with string concatenation",
+  "critical",
+  "mcp_SM-SQL-005.py",
+  3,
+  "sql-injection"
+ ],
+ [
+  "SQL SELECT with string concatenation",
+  "critical",
+  "mcp_SM-SQL-009.py",
+  1,
+  "sql-injection"
+ ],
+ [
+  "SQL SELECT with string concatenation",
+  "critical",
+  "mcp_SM-SQL-009.py",
+  2,
+  "sql-injection"
+ ],
+ [
+  "SQL SELECT with string concatenation",
+  "critical",
+  "mcp_SM-SQL-009.py",
+  3,
+  "sql-injection"
+ ],
+ [
+  "SQL SELECT with string concatenation",
+  "critical",
+  "sql_injection.py",
+  3,
+  "sql-injection"
+ ],
+ [
+  "SQL SELECT with variable concatenation",
+  "critical",
+  "mcp_SM-SQL-001.py",
+  1,
+  "sql-injection"
+ ],
+ [
+  "SQL SELECT with variable concatenation",
+  "critical",
+  "mcp_SM-SQL-005.py",
+  3,
+  "sql-injection"
+ ],
+ [
+  "SQL SELECT with variable concatenation",
+  "critical",
+  "mcp_SM-SQL-009.py",
+  1,
+  "sql-injection"
+ ],
+ [
+  "SQL SELECT with variable concatenation",
+  "critical",
+  "mcp_SM-SQL-009.py",
+  2,
+  "sql-injection"
+ ],
+ [
+  "SQL SELECT with variable concatenation",
+  "critical",
+  "mcp_SM-SQL-009.py",
+  3,
+  "sql-injection"
+ ],
+ [
+  "SQL SELECT with variable concatenation",
+  "critical",
+  "sql_injection.py",
+  3,
+  "sql-injection"
+ ],
+ [
+  "SQL UPDATE with string concatenation",
+  "critical",
+  "mcp_SM-SQL-007.py",
+  1,
+  "sql-injection"
+ ],
+ [
+  "SQL UPDATE with string concatenation",
+  "critical",
+  "mcp_SM-SQL-007.py",
+  2,
+  "sql-injection"
+ ],
+ [
+  "SQL UPDATE with string concatenation",
+  "critical",
+  "mcp_SM-SQL-007.py",
+  3,
+  "sql-injection"
+ ],
+ [
+  "SQL f-string interpolation in execute() call",
+  "critical",
+  "SA-PY-008.py",
+  3,
+  "sql-injection"
+ ],
+ [
+  "SQL f-string interpolation in execute() call",
+  "critical",
+  "mcp_SM-SQL-002.py",
+  1,
+  "sql-injection"
+ ],
+ [
+  "SQL f-string interpolation in execute() call",
+  "critical",
+  "mcp_SM-SQL-002.py",
+  2,
+  "sql-injection"
+ ],
+ [
+  "SQL f-string interpolation in execute() call",
+  "critical",
+  "mcp_SM-SQL-002.py",
+  3,
+  "sql-injection"
+ ],
+ [
+  "SQL f-string interpolation in execute() call",
+  "critical",
+  "sql_injection.py",
+  4,
+  "sql-injection"
+ ],
+ [
+  "SQL string concatenation in execute() call",
+  "critical",
+  "mcp_SM-SQL-001.py",
+  1,
+  "sql-injection"
+ ],
+ [
+  "SQL string concatenation in execute() call",
+  "critical",
+  "mcp_SM-SQL-001.py",
+  2,
+  "sql-injection"
+ ],
+ [
+  "SQL string concatenation in execute() call",
+  "critical",
+  "mcp_SM-SQL-001.py",
+  3,
+  "sql-injection"
+ ],
+ [
+  "SQL string concatenation in execute() call",
+  "critical",
+  "sql_injection.py",
+  3,
+  "sql-injection"
+ ],
+ [
+  "Sampling createMessage with injection payload",
+  "high",
+  "mcp_SM-SAMP-003.py",
+  1,
+  "sampling-injection"
+ ],
+ [
+  "Sampling createMessage with injection payload",
+  "high",
+  "mcp_SM-SAMP-003.py",
+  2,
+  "sampling-injection"
+ ],
+ [
+  "Sampling createMessage with injection payload",
+  "high",
+  "mcp_SM-SAMP-003.py",
+  3,
+  "sampling-injection"
+ ],
+ [
+  "StdioServerParameters args are sourced from a variable or request/env object",
+  "high",
+  "mcp_SM-STDIO-002.py",
+  1,
+  "mcp-stdio-command-risk"
+ ],
+ [
+  "StdioServerParameters args are sourced from a variable or request/env object",
+  "high",
+  "mcp_SM-STDIO-002.py",
+  2,
+  "mcp-stdio-command-risk"
+ ],
+ [
+  "StdioServerParameters args are sourced from a variable or request/env object",
+  "high",
+  "mcp_SM-STDIO-002.py",
+  3,
+  "mcp-stdio-command-risk"
+ ],
+ [
+  "StdioServerParameters command is sourced from a variable or request/env object",
+  "high",
+  "mcp_SM-STDIO-001.py",
+  1,
+  "mcp-stdio-command-risk"
+ ],
+ [
+  "StdioServerParameters command is sourced from a variable or request/env object",
+  "high",
+  "mcp_SM-STDIO-001.py",
+  2,
+  "mcp-stdio-command-risk"
+ ],
+ [
+  "StdioServerParameters command is sourced from a variable or request/env object",
+  "high",
+  "mcp_SM-STDIO-001.py",
+  3,
+  "mcp-stdio-command-risk"
+ ],
+ [
+  "Suspicious authorization_endpoint in mcp-remote OAuth config (CVE-2025-6514 vector)",
+  "critical",
+  "mcp_SM-CFG-006.py",
+  1,
+  "mcp-config-risk"
+ ],
+ [
+  "Suspicious authorization_endpoint in mcp-remote OAuth config (CVE-2025-6514 vector)",
+  "critical",
+  "mcp_SM-CFG-006.py",
+  2,
+  "mcp-config-risk"
+ ],
+ [
+  "Suspicious authorization_endpoint in mcp-remote OAuth config (CVE-2025-6514 vector)",
+  "critical",
+  "mcp_SM-CFG-006.py",
+  3,
+  "mcp-config-risk"
+ ],
+ [
+  "Tool Shadowing: Tool shadowing: hijack instruction targeting another tool action",
+  "critical",
+  "mcp_SM-TSH-001.py",
+  1,
+  "tool-shadowing"
+ ],
+ [
+  "Tool Shadowing: Tool shadowing: hijack instruction targeting another tool action",
+  "critical",
+  "mcp_SM-TSH-001.py",
+  2,
+  "tool-shadowing"
+ ],
+ [
+  "Tool Shadowing: Tool shadowing: hijack instruction targeting another tool action",
+  "critical",
+  "mcp_SM-TSH-001.py",
+  3,
+  "tool-shadowing"
+ ],
+ [
+  "Tool Shadowing: Tool shadowing: intercept and reroute",
+  "critical",
+  "mcp_SM-TSH-003.py",
+  1,
+  "tool-shadowing"
+ ],
+ [
+  "Tool Shadowing: Tool shadowing: intercept and reroute",
+  "critical",
+  "mcp_SM-TSH-003.py",
+  2,
+  "tool-shadowing"
+ ],
+ [
+  "Tool Shadowing: Tool shadowing: intercept and reroute",
+  "critical",
+  "mcp_SM-TSH-003.py",
+  3,
+  "tool-shadowing"
+ ],
+ [
+  "Tool Shadowing: Tool shadowing: redirect all output",
+  "critical",
+  "mcp_SM-TSH-002.py",
+  1,
+  "tool-shadowing"
+ ],
+ [
+  "Tool Shadowing: Tool shadowing: redirect all output",
+  "critical",
+  "mcp_SM-TSH-002.py",
+  2,
+  "tool-shadowing"
+ ],
+ [
+  "Tool Shadowing: Tool shadowing: redirect all output",
+  "critical",
+  "mcp_SM-TSH-002.py",
+  3,
+  "tool-shadowing"
+ ],
+ [
+  "Tool Shadowing: Tool shadowing: silent BCC/forward pattern",
+  "critical",
+  "mcp_SM-TSH-004.py",
+  1,
+  "tool-shadowing"
+ ],
+ [
+  "Tool Shadowing: Tool shadowing: silent BCC/forward pattern",
+  "critical",
+  "mcp_SM-TSH-004.py",
+  2,
+  "tool-shadowing"
+ ],
+ [
+  "Tool Shadowing: Tool shadowing: silent BCC/forward pattern",
+  "critical",
+  "mcp_SM-TSH-004.py",
+  3,
+  "tool-shadowing"
+ ],
+ [
+  "Tool call data sent via HTTP POST",
+  "high",
+  "mcp_SM-LOG-003.py",
+  1,
+  "log-to-leak"
+ ],
+ [
+  "Tool call data sent via HTTP POST",
+  "high",
+  "mcp_SM-LOG-003.py",
+  2,
+  "log-to-leak"
+ ],
+ [
+  "Tool call data sent via HTTP POST",
+  "high",
+  "mcp_SM-LOG-003.py",
+  3,
+  "log-to-leak"
+ ],
+ [
+  "Wildcard CORS in MCP server (CSRF/DNS rebinding risk)",
+  "critical",
+  "mcp_SM-CFG-004.py",
+  1,
+  "mcp-config-risk"
+ ],
+ [
+  "Wildcard CORS in MCP server (CSRF/DNS rebinding risk)",
+  "critical",
+  "mcp_SM-CFG-004.py",
+  2,
+  "mcp-config-risk"
+ ],
+ [
+  "Wildcard CORS in MCP server (CSRF/DNS rebinding risk)",
+  "critical",
+  "mcp_SM-CFG-004.py",
+  3,
+  "mcp-config-risk"
+ ],
+ [
+  "Zero-token sampling with cross-server context",
+  "high",
+  "mcp_SM-SAMP-004.py",
+  1,
+  "sampling-injection"
+ ],
+ [
+  "Zero-token sampling with cross-server context",
+  "high",
+  "mcp_SM-SAMP-004.py",
+  2,
+  "sampling-injection"
+ ],
+ [
+  "Zero-token sampling with cross-server context",
+  "high",
+  "mcp_SM-SAMP-004.py",
+  3,
+  "sampling-injection"
+ ],
+ [
+  "enableAllProjectMcpServers:true (CVE-2025-59536 consent bypass)",
+  "critical",
+  "mcp_SM-CFG-001.py",
+  1,
+  "mcp-config-risk"
+ ],
+ [
+  "enableAllProjectMcpServers:true (CVE-2025-59536 consent bypass)",
+  "critical",
+  "mcp_SM-CFG-001.py",
+  2,
+  "mcp-config-risk"
+ ],
+ [
+  "enableAllProjectMcpServers:true (CVE-2025-59536 consent bypass)",
+  "critical",
+  "mcp_SM-CFG-001.py",
+  3,
+  "mcp-config-risk"
+ ]
+]

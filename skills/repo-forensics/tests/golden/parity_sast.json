@@ -2158,6 +2158,83 @@
  [
   "SQL Injection Pattern",
   "high",
+  "mcp_SM-SQL-001.py",
+  1,
+  "injection"
+ ],
+ [
+  "SQL Injection Pattern",
+  "high",
+  "mcp_SM-SQL-001.py",
+  2,
+  "injection"
+ ],
+ [
+  "SQL Injection Pattern",
+  "high",
+  "mcp_SM-SQL-001.py",
+  3,
+  "injection"
+ ],
+ [
+  "SQL Injection Pattern",
+  "high",
+  "mcp_SM-SQL-002.py",
+  1,
+  "injection"
+ ],
+ [
+  "SQL Injection Pattern",
+  "high",
+  "mcp_SM-SQL-002.py",
+  2,
+  "injection"
+ ],
+ [
+  "SQL Injection Pattern",
+  "high",
+  "mcp_SM-SQL-002.py",
+  3,
+  "injection"
+ ],
+ [
+  "SQL Injection Pattern",
+  "high",
+  "mcp_SM-SQL-003.py",
+  1,
+  "injection"
+ ],
+ [
+  "SQL Injection Pattern",
+  "high",
+  "mcp_SM-SQL-003.py",
+  2,
+  "injection"
+ ],
+ [
+  "SQL Injection Pattern",
+  "high",
+  "mcp_SM-SQL-004.py",
+  1,
+  "injection"
+ ],
+ [
+  "SQL Injection Pattern",
+  "high",
+  "mcp_SM-SQL-004.py",
+  2,
+  "injection"
+ ],
+ [
+  "SQL Injection Pattern",
+  "high",
+  "mcp_SM-SQL-004.py",
+  3,
+  "injection"
+ ],
+ [
+  "SQL Injection Pattern",
+  "high",
   "sql_injection.py",
   3,
   "injection"
@@ -2376,6 +2453,13 @@
   "Unsafe Deserialization",
   "critical",
   "SA-PY-005.py",
+  3,
+  "deserialization"
+ ],
+ [
+  "Unsafe Deserialization",
+  "critical",
+  "mcp_SM-RUG-004.py",
   3,
   "deserialization"
  ],

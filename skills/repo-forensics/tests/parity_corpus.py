@@ -28,6 +28,15 @@ import os
 PACK_EXTS = {
     "secrets": ".txt",
     "sast": None,  # per-rule extension comes from rule.extensions
+    # U4 packs. skill_threats and mcp_security regex rules are mostly
+    # extension-agnostic at the rule level (the scanner gates by ext at the
+    # call site), so their example files land in extensions the scanner
+    # actually scans. We write skill_threats examples into a code-and-text mix
+    # via .md (broadest skill_threats gate) and mcp_security into .py (its
+    # primary code gate). shared keyword examples go into .md.
+    "skill_threats": ".md",
+    "mcp_security": ".py",
+    "shared": ".md",
 }
 
 
@@ -82,7 +91,17 @@ def _load_pack(name):
     return rule_loader.load_pack(name)
 
 
-def build_corpus(root, pack_names=("secrets", "sast")):
+# Per-pack filename prefix. mcp_security gates many categories behind
+# is_mcp_related() (basename contains mcp/server/tool/handler), so its example
+# files need an mcp-flavored name to actually exercise those rules. skill_threats
+# rules are gated only by extension, so a plain rule-id name is enough.
+PACK_FNAME_PREFIX = {
+    "mcp_security": "mcp_",
+}
+
+
+def build_corpus(root, pack_names=("secrets", "sast", "skill_threats",
+                                   "mcp_security", "shared")):
     """Materialize the parity corpus under `root`.
 
     Returns the list of relative file paths written. Idempotent for a fresh
@@ -97,6 +116,7 @@ def build_corpus(root, pack_names=("secrets", "sast")):
         if pack is None:
             continue
         default_ext = PACK_EXTS.get(pack_name, ".txt")
+        prefix = PACK_FNAME_PREFIX.get(pack_name, "")
         for rule in pack.all_rules:
             # Pick the extension this rule is actually gated to (first one),
             # else the pack default. Extension-agnostic regex rules use default.
@@ -109,7 +129,7 @@ def build_corpus(root, pack_names=("secrets", "sast")):
             lines.extend(rule.examples.get("no_match", []))
             if not lines:
                 continue
-            fname = f"{rule.id}{ext}"
+            fname = f"{prefix}{rule.id}{ext}"
             path = os.path.join(root, fname)
             with open(path, "w", encoding="utf-8") as f:
                 f.write("\n".join(lines) + "\n")
