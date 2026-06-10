@@ -1,5 +1,10 @@
 # Internal notes — never commit
 FIELD_NOTES.md
+.private/
+LICENSING_RESEARCH.md
+docs/DISTRIBUTION.md
+docs/plans/
+docs/brainstorms/
 
 # OS / IDE
 .DS_Store

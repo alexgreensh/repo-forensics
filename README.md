@@ -108,10 +108,6 @@ Works standalone on any machine with Python 3.8+. No pip install, no API keys, n
 
 Then run `/repo-forensics /path/to/repo` before installing a new skill, plugin, MCP server, or dependency.
 
-For directory maintainers, awesome-list PRs, launch posts, and social assets, see the [distribution kit](docs/DISTRIBUTION.md).
-
----
-
 That npm package Cursor added to your lockfile. The GitHub Actions workflow someone contributed in a PR. The MCP server with 500 downloads. The Claude Code skill someone linked in Discord. The ClawHub extension your OpenClaw agent auto-installed. The Codex plugin you grabbed from GitHub.
 
 Did you vet any of them?
