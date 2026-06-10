@@ -7,7 +7,7 @@
 <h3 align="center">npm audit for AI-agent plugins, skills, and MCP servers.</h3>
 
 <p align="center">
-Audit untrusted repos before they touch your agent. Fully local, zero dependencies, zero telemetry.
+Audit untrusted repos before they touch your agent. Fully local, self-updating detection, zero dependencies, zero telemetry.
 </p>
 
 <p align="center">
@@ -19,10 +19,11 @@ Audit untrusted repos before they touch your agent. Fully local, zero dependenci
 <p align="center">
   <img src="https://img.shields.io/badge/scanners-20-blue.svg" alt="20 Scanners">
   <img src="https://img.shields.io/badge/patterns-800%2B-orange.svg" alt="800+ Patterns">
-  <img src="https://img.shields.io/badge/tests-1%2C350-brightgreen.svg" alt="1,350 Tests">
+  <img src="https://img.shields.io/badge/tests-1%2C551-brightgreen.svg" alt="1,551 Tests">
   <img src="https://img.shields.io/badge/CVE%20%2B%20CISA%20KEV-live%20scanning-critical.svg" alt="Live CVE + CISA KEV scanning">
   <img src="https://img.shields.io/badge/correlation%20rules-41-purple.svg" alt="41 Correlation Rules">
   <img src="https://img.shields.io/badge/package%20IOCs-190%2B-red.svg" alt="190+ Package IOCs">
+  <img src="https://img.shields.io/badge/rule%20feed-Ed25519%20signed-blueviolet.svg" alt="Ed25519 signed rule feed">
 </p>
 <p align="center">
   <img src="https://img.shields.io/badge/Claude%20Code-auto--scan-5436DA.svg?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZD0iTTEyIDJDNi40OCAyIDIgNi40OCAyIDEyczQuNDggMTAgMTAgMTAgMTAtNC40OCAxMC0xMFMxNy41MiAyIDEyIDJ6IiBmaWxsPSIjZmZmIi8+PC9zdmc+" alt="Claude Code">
@@ -218,13 +219,25 @@ $ ./run_forensics.sh ./trusted-library
 
 Point it at any repository. 20 scanners run in parallel, each checking a different attack surface: prompt injection, supply chain, credential theft, runtime behavior, infrastructure misconfiguration, and more. The correlation engine then cross-references findings across 41 rules to detect compound threats that no single scanner would catch. A dynamic import paired with a network fetch becomes a deferred payload loading finding. An environment variable read combined with an outbound POST becomes a data exfiltration finding.
 
+Every finding carries a confidence score alongside severity, surfaced through four verdict tiers: BLOCK, WARN, INFO, and SUPPRESSED. Ambiguous WARN-tier findings can be adjudicated by the host agent (Claude Code, Codex, etc.) under a prompt-injection-safe protocol -- sanitized snippets, metadata-first, no code fences -- so context that the scanner can't infer is factored in without creating a new attack surface.
+
 The result is a severity-ranked verdict with exit codes designed for CI/CD gating.
+
+---
+
+## Detection That Stays Fresh
+
+The pattern-heavy scanners (secrets, SAST, skill threats, MCP security, runtime dynamism, and shared patterns) are backed by 6 signed JSON rule packs totaling ~545 rules. Rules-as-data means the detection logic is versioned, auditable, and independently updatable -- not baked into the Python interpreter loop.
+
+Those rule packs refresh daily through an Ed25519-signed feed. New behavioral detection rules reach every install without a code release or reinstall. The feed is cryptographically verified on every load, rollback-protected with a version floor, and degrades safely to the shipped packs if unreachable. IOC intel (IPs, domains, package names) has always refreshed this way; as of v2.10.0 the detection logic itself does too.
+
+Scanning never requires network access. The feed is a freshness layer on top of a fully offline-first foundation. And because the Ed25519 verifier is vendored pure-Python, adding cryptographic signing didn't add a single dependency -- zero non-stdlib imports, same as always.
 
 ---
 
 ## Battle-Tested Against Real Attacks
 
-1,350 tests across 38 test files. Not synthetic toy examples: detection patterns built from real supply chain campaigns that hit production systems.
+1,551 tests across 40+ test files. Not synthetic toy examples: detection patterns built from real supply chain campaigns that hit production systems.
 
 **Named attack campaigns in the IOC database:**
 
@@ -250,7 +263,7 @@ The result is a severity-ranked verdict with exit codes designed for CI/CD gatin
 
 Every campaign above has version-pinned IOCs in `compromised_versions.json`, detection rules in the lifecycle and dependency scanners, and correlation rules for compound attack patterns.
 
-**The tests are safe to run.** All 1,350 tests use synthetic fixtures in temporary directories. No real malware is downloaded or executed. Pattern matching runs against fake package.json files containing attack signatures, the same way antivirus software tests against EICAR strings.
+**The tests are safe to run.** All 1,551 tests use synthetic fixtures in temporary directories. No real malware is downloaded or executed. Pattern matching runs against fake package.json files containing attack signatures, the same way antivirus software tests against EICAR strings.
 
 ---
 
@@ -540,7 +553,7 @@ Exit codes: `0` = clean, `1` = warn, `2` = block merge.
 | **IOC auto-update** | `--update-iocs` pulls latest C2 IPs, malicious domains, known-bad packages |
 | **Installation verification** | `--verify-install` checks repo-forensics itself for tampering |
 | **Manifest drift** | Declared vs actual imports, phantom deps, runtime installs |
-| **1,350 pytest tests** | Full coverage across 38 test files |
+| **1,551 pytest tests** | Full coverage across 40+ test files |
 
 </details>
 
