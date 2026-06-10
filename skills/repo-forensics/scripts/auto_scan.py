@@ -330,14 +330,24 @@ def format_output(findings, command='', pattern_type='', scanned_target=''):
     if pattern_type:
         lines.append(f"Triggered by: {pattern_type} command")
 
+    # Sanitize the scanner-authored title/description (defense in depth) and do
+    # NOT echo the raw `snippet` here. The snippet is the attacker-controlled
+    # payload; the only place it appears is inside the injection-safe
+    # adjudication block below, behind the `> SNIPPET: ` prefix. Echoing it
+    # unprefixed in this summary list would reintroduce the exact prompt-injection
+    # surface U8 closes ("no unprefixed attacker text anywhere in the output").
+    try:
+        import adjudication as _adj
+        _clean = _adj.sanitize_snippet
+    except ImportError:
+        def _clean(text, max_len=160):
+            return (text or '').replace('\n', ' ').replace('`', '')[:max_len]
+
     for f in findings[:15]:
         sev = f.get('severity', 'low').upper()
-        title = f.get('title', 'Unknown').replace('\n', ' ')
-        desc = f.get('description', '').replace('\n', ' ')
+        title = _clean(f.get('title', 'Unknown'), max_len=160)
+        desc = _clean(f.get('description', ''), max_len=300)
         lines.append(f"[{sev}] {title}: {desc}")
-        if f.get('snippet'):
-            snippet = f['snippet'][:120].replace('\n', ' ')
-            lines.append(f"  {snippet}")
 
     if len(findings) > 15:
         lines.append(f"... and {len(findings) - 15} more findings. Run full scan for details.")
@@ -346,6 +356,18 @@ def format_output(findings, command='', pattern_type='', scanned_target=''):
         lines.append(f"VERDICT: {critical_count} CRITICAL finding(s). Do not proceed without review.")
     elif high_count > 0:
         lines.append(f"VERDICT: {high_count} HIGH finding(s). Review before proceeding.")
+
+    # Adjudication block (U8): WARN-tier findings get an injection-safe block
+    # the host agent reads as tool output. auto_scan does not run aggregate_json,
+    # so needs_adjudication is not pre-set; the helper falls back to the WARN
+    # confidence band and excludes correlation-synthesized findings itself.
+    try:
+        import adjudication
+        block = adjudication.build_adjudication_block(findings)
+        if block:
+            lines.append(block)
+    except ImportError:
+        pass
 
     return '\n'.join(lines)
 

@@ -244,6 +244,28 @@ def apply_suppressions(all_findings, repo_path):
     return active, suppressed
 
 
+def mark_adjudication(active_findings):
+    """Set needs_adjudication=true on WARN-tier, non-correlation findings (U8).
+
+    Only WARN-tier findings (VERDICT_WARN_MIN <= conf < VERDICT_BLOCK_MIN) are
+    marked. BLOCK / INFO / SUPPRESSED are NOT marked (BLOCK acts on its own,
+    INFO/SUPPRESSED never reach the adjudicator). Correlation-synthesized
+    findings (scanner == "correlation") are excluded: their "[compound: ...]"
+    snippets carry nothing quotable.
+
+    needs_adjudication is an ADDITIVE per-finding key — it never affects severity
+    counts, verdict tiers, or the 0/1/2/99 exit-code contract. Mutates findings
+    in place and returns the same list.
+    """
+    for finding in active_findings:
+        if finding.get("scanner") == "correlation":
+            continue
+        tier = verdict_tier(_finding_confidence(finding))
+        if tier == "warn":
+            finding["needs_adjudication"] = True
+    return active_findings
+
+
 def build_summary(findings):
     summary = {"critical": 0, "high": 0, "medium": 0, "low": 0, "total": 0}
 
@@ -370,6 +392,10 @@ def build_report(tmpdir, repo_path, skill_scan):
     # (critical-rule suppression, mass suppression) are added to the active set.
     all_findings, suppressed_findings = apply_suppressions(all_findings, repo_path)
 
+    # Mark WARN-tier (non-correlation) findings for LLM adjudication (U8).
+    # Additive per-finding flag; does not touch severity counts or exit code.
+    mark_adjudication(all_findings)
+
     all_findings.sort(key=lambda item: -SEVERITY_ORDER.get(item.get("severity", "low"), 0))
     summary = build_summary(all_findings)
     verdicts = build_verdicts(all_findings, suppressed_findings)
@@ -435,6 +461,17 @@ def format_report_as_text(report):
         lines.append("  EXIT CODE: 0 (clean)")
     else:
         lines.append(f"  EXIT CODE: {exit_code}")
+
+    # Adjudication block (U8) — emitted AFTER the verdict line, in the text
+    # output path only (never in the JSON schema). Empty on a clean scan.
+    try:
+        import adjudication
+        block = adjudication.build_adjudication_block(report.get("findings", []))
+        if block:
+            lines.append(block)
+    except ImportError:
+        pass
+
     return "\n".join(lines)
 
 

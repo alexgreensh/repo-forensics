@@ -1,10 +1,10 @@
 {
   "version": "2",
   "generator": "repo-forensics/verify_install",
-  "file_count": 53,
+  "file_count": 54,
   "files": {
     ".gitignore": "8b2598a3359a556874b8069d42dea2686f07d46c3ca1b540c4025788b258180a",
-    "SKILL.md": "4b8089cffa847bfd2764df585dd7f19e23953801ed9b5a2a69180e657d7c29fd",
+    "SKILL.md": "1f44afb98732ed8f4dbae06f84dda782908cefcc571a783a67a9f544018dd208",
     "data/README.md": "3980ad873dbef332e0db2d209cd22287d8a0d146930b40bafc8ab774166a8bc4",
     "data/compromised_versions.json": "ee676136d6b5f35d596487f91cbf0ceb25a6dcc0951c31ab6aa6e3fd8cd2586d",
     "data/rule_ids.csv": "61f3c5105accb77ca8096c734c1ee4abdf82c7364a3519404d69353bc27481de",
@@ -20,8 +20,9 @@
     "references/threat_patterns.md": "ae24833171b787a7aedca7e1d1baee278ac58c84a6446c89c6cbf70bd1f5152e",
     "scripts/_ed25519.py": "55edcc5316e7b032da19c4fd1328d724e88602b9eb81c983cb068e373fa5c64c",
     "scripts/_shared_patterns.py": "4f4769b43be4cefcec53311faed899a96886f635cf2b3c2f78de84ee7cb53c93",
-    "scripts/aggregate_json.py": "d7575e89d37b4770bb01edad60215355e6538a77e124474b99c519a418e7c869",
-    "scripts/auto_scan.py": "0e8af4ccccadd150256767b6984aac1d790481f3cf8d97df382c81fcd30fdbda",
+    "scripts/adjudication.py": "b1e587ea7b5e2b8c91854414eed165309ff09c09f369f891e81af3318a55eb78",
+    "scripts/aggregate_json.py": "7d673b4f3836b4c2a171d67da82b35220a5053dd1e7a63926a554abfff898e6d",
+    "scripts/auto_scan.py": "9e0588a2c8b97d7d19f5857a998f228bd0507e8b0c51f70108e5c6da0991d947",
     "scripts/corpus_sync.py": "7feb0e2de6ede9ac909da8b5f8335cfd9e0181f97dc2b4b355b751e8ddb3234e",
     "scripts/dast_sandbox.sb": "6f6e9571a73aa8a9d07e7e4c5c0e6ae49fb6447c5f34a446154d301c6c4e8875",
     "scripts/forensics_core.py": "680d0fdf8fbcffeea9b64f98aaad0dddc9e485366eb411d94d8a124c9e16e7dd",
@@ -53,7 +54,7 @@
     "scripts/scan_sast.py": "6ae157a5326c2cdf2b28db471509cc9fdaba606588d98f5712ec4f8860174159",
     "scripts/scan_secrets.py": "20b1f3e6ffb29696d56a5e056a5ce93a605d8167dda0ec553584dd5d643edb22",
     "scripts/scan_skill_threats.py": "32e1caf7cd4478113e16ab2bbde3da830e55eef7470113b445f034987e81c849",
-    "scripts/session_scan.py": "19e11a04975d1fbab40fbfac431c9b8da54ce9a0c1210b0ea2947f3337926abd",
+    "scripts/session_scan.py": "f970d3f8e62b1e1df9a4bd0ed602eafe03fafcad4809ba79ba6db34b978a87ad",
     "scripts/verify_install.py": "deac3cd2726bec4a85ddf95a2e1f31d4cc5701213514cd46701efe7df8a92b73",
     "scripts/vuln_feed.py": "122677cd023347862cf1e7e5ae020f698d371fe700f68d49db5df44c9f9cd7ea"
   },
