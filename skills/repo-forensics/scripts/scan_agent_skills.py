@@ -16,6 +16,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import forensics_core as core
+import rule_loader
 from _shared_patterns import (
     AUTO_EXEC_PATHS_RE, GIT_UPDATABLE, REF_FILE_EXTS_RE,
     REF_VERBS_RE, SEED_FILES, WRITE_VERBS_RE,
@@ -24,17 +25,23 @@ from _shared_patterns import (
 SCANNER_NAME = "agent_skills"
 _F = core.Finding  # shorthand
 
-# --- Pattern lists ---
+# --- Prompt-injection rules: shared with scan_skill_threats (U5 adoption) ---
+# Historically agent_skills carried its own 9-pattern PROMPT_INJECTION_RE while
+# scan_skill_threats had 13 (incl. LITL). The two diverged. We now source the
+# prompt-injection regexes from the skill_threats rule pack so both scanners
+# share one authoritative set. This is a DELIBERATE coverage gain: agent_skills
+# gains the ~6 patterns it lacked (3 LITL + confirmation-bypass + concealment +
+# "new system prompt"); agent_skills' 2 historical uniques
+# ("new (system )?instructions" -> ST-PI-019, "pretend you are" -> ST-PI-020)
+# were added to the shared pack so BOTH scanners keep them. The consumption
+# sites below treat PROMPT_INJECTION_RE as a list of compiled regexes (search +
+# break), exactly as before, so only the source of the list changed.
+_SKILL_THREATS_PACK = rule_loader.load_pack("skill_threats")
+PROMPT_INJECTION_PACK_ERROR = _SKILL_THREATS_PACK is None
 PROMPT_INJECTION_RE = [
-    re.compile(r'(?i)ignore\s+(all\s+)?(previous|prior|above|earlier)\s+(instructions|directives|prompts|rules)'),
-    re.compile(r'(?i)disregard\s+(all\s+)?(previous|prior|above)\s+(instructions|directives|context)'),
-    re.compile(r'(?i)you\s+are\s+now\s+(a|an|my)\s+\w+'),
-    re.compile(r'(?i)silently\s+(execute|run|perform|install|download)'),
-    re.compile(r'(?i)override\s+(safety|security|restriction|guardrail|filter)'),
-    re.compile(r'(?i)forget\s+(everything|all|your)\s+(you|instructions|training|rules)'),
-    re.compile(r'(?i)new\s+(system\s+)?instructions'),
-    re.compile(r'(?i)act\s+as\s+(if|though)\s+you\s+(have|had)\s+no\s+(restrictions|limits|rules)'),
-    re.compile(r'(?i)pretend\s+you\s+are\b'),
+    rule.regex for rule in (_SKILL_THREATS_PACK.all_rules
+                            if _SKILL_THREATS_PACK is not None else [])
+    if rule.category == "prompt-injection"
 ]
 CRED_ACCESS_RE = [
     re.compile(r'(?i)(os\.environ|process\.env)'), re.compile(r'(?i)\bAPI_KEY\b'),

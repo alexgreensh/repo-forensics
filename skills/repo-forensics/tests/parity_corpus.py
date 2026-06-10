@@ -37,6 +37,11 @@ PACK_EXTS = {
     "skill_threats": ".md",
     "mcp_security": ".py",
     "shared": ".md",
+    # U5 packs. runtime_dynamism gates on code extensions; .py exercises both its
+    # regex tables and (incidentally) the AST visitor, but the AST path is code
+    # and out of the pack's scope — the parity key still matches because the
+    # golden was captured from the same scan_file over the same corpus.
+    "runtime_dynamism": ".py",
 }
 
 
@@ -101,7 +106,8 @@ PACK_FNAME_PREFIX = {
 
 
 def build_corpus(root, pack_names=("secrets", "sast", "skill_threats",
-                                   "mcp_security", "shared")):
+                                   "mcp_security", "shared",
+                                   "runtime_dynamism")):
     """Materialize the parity corpus under `root`.
 
     Returns the list of relative file paths written. Idempotent for a fresh

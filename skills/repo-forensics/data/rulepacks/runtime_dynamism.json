@@ -1,0 +1,1274 @@
+{
+  "schema_version": "1.0",
+  "generated": "2026-06-10",
+  "pack": "runtime_dynamism",
+  "pack_version": 1,
+  "rules": [
+    {
+      "id": "RD-DYN-001",
+      "type": "regex",
+      "pattern": "importlib\\.import_module\\s*\\(\\s*[^\"\\']",
+      "title": "importlib.import_module() with variable argument",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "dynamic-import",
+      "explanation": "importlib.import_module() with variable argument.",
+      "examples": {
+        "match": [
+          "importlib.import_module(mod_name)",
+          "importlib.import_module( user_input )",
+          "x = importlib.import_module(plugin)"
+        ],
+        "no_match": [
+          "importlib.import_module('os')",
+          "# importlib.import_module documentation"
+        ]
+      }
+    },
+    {
+      "id": "RD-DYN-002",
+      "type": "regex",
+      "pattern": "__import__\\s*\\(\\s*(os\\.environ|os\\.getenv|config|settings|variable|getattr|input)",
+      "title": "__import__() with dynamic source",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "dynamic-import",
+      "explanation": "__import__() with dynamic source.",
+      "examples": {
+        "match": [
+          "__import__(os.environ['MOD'])",
+          "__import__(os.getenv('X'))",
+          "__import__(config)"
+        ],
+        "no_match": [
+          "__import__('json')",
+          "from os import getenv"
+        ]
+      }
+    },
+    {
+      "id": "RD-DYN-003",
+      "type": "regex",
+      "pattern": "__import__\\s*\\(\\s*[a-zA-Z_]\\w*\\s*[\\)\\[]",
+      "title": "__import__() with variable argument",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "dynamic-import",
+      "explanation": "__import__() with variable argument.",
+      "examples": {
+        "match": [
+          "__import__(modname)",
+          "__import__(x)",
+          "__import__(plugin[idx])"
+        ],
+        "no_match": [
+          "__import__('sys')",
+          "print('import done')"
+        ]
+      }
+    },
+    {
+      "id": "RD-DYN-004",
+      "type": "regex",
+      "pattern": "__import__\\s*\\(\\s*[\"\\'][a-zA-Z_]",
+      "title": "__import__() call (dynamic import evasion)",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "dynamic-import",
+      "explanation": "__import__() call (dynamic import evasion).",
+      "examples": {
+        "match": [
+          "__import__(\"os\")",
+          "__import__('subprocess')",
+          "__import__(\"socket\")"
+        ],
+        "no_match": [
+          "x = __import__",
+          "# __import__ doc comment"
+        ]
+      }
+    },
+    {
+      "id": "RD-DYN-005",
+      "type": "regex",
+      "pattern": "require\\s*\\(\\s*[a-zA-Z_]\\w*\\s*\\)",
+      "title": "require() with variable argument (JS)",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "dynamic-import",
+      "explanation": "require() with variable argument (JS).",
+      "examples": {
+        "match": [
+          "require(modName)",
+          "require(pluginPath)",
+          "const m = require(name)"
+        ],
+        "no_match": [
+          "require('express')",
+          "require(\"lodash\")"
+        ]
+      }
+    },
+    {
+      "id": "RD-DYN-006",
+      "type": "regex",
+      "pattern": "import\\s*\\(\\s*[a-zA-Z_]\\w*\\s*\\)",
+      "title": "dynamic import() with variable argument (ES)",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "dynamic-import",
+      "explanation": "dynamic import() with variable argument (ES).",
+      "examples": {
+        "match": [
+          "import(modName)",
+          "await import(pluginPath)",
+          "import(name)"
+        ],
+        "no_match": [
+          "import('./local.js')",
+          "import defaultExport from 'mod'"
+        ]
+      }
+    },
+    {
+      "id": "RD-DYN-007",
+      "type": "regex",
+      "pattern": "require\\s*\\(\\s*(process\\.env|config|options)",
+      "title": "require() from config/env (JS)",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "dynamic-import",
+      "explanation": "require() from config/env (JS).",
+      "examples": {
+        "match": [
+          "require(process.env.MODULE)",
+          "require(config.plugin)",
+          "require(options.path)"
+        ],
+        "no_match": [
+          "require('react')",
+          "const cfg = process.env.CONFIG"
+        ]
+      }
+    },
+    {
+      "id": "RD-DYN-008",
+      "type": "regex",
+      "pattern": "import\\s*\\(\\s*(process\\.env|config|options)",
+      "title": "dynamic import() from config/env (ES)",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "dynamic-import",
+      "explanation": "dynamic import() from config/env (ES).",
+      "examples": {
+        "match": [
+          "import(process.env.MODULE)",
+          "import(config.entry)",
+          "import(options.lib)"
+        ],
+        "no_match": [
+          "import('./static.js')",
+          "const x = process.env.PORT"
+        ]
+      }
+    },
+    {
+      "id": "RD-FEX-001",
+      "type": "regex",
+      "pattern": "eval\\s*\\(\\s*(requests\\.(get|post)|urllib)",
+      "title": "eval() of HTTP response content",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "fetch-execute",
+      "explanation": "eval() of HTTP response content.",
+      "examples": {
+        "match": [
+          "eval(requests.get(url).text)",
+          "eval( requests.post(u) )",
+          "eval(urllib.request.urlopen(u))"
+        ],
+        "no_match": [
+          "eval('1+1')",
+          "data = requests.get(url)"
+        ]
+      }
+    },
+    {
+      "id": "RD-FEX-002",
+      "type": "regex",
+      "pattern": "exec\\s*\\(\\s*(requests\\.(get|post)|urllib)",
+      "title": "exec() of HTTP response content",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "fetch-execute",
+      "explanation": "exec() of HTTP response content.",
+      "examples": {
+        "match": [
+          "exec(requests.get(url).text)",
+          "exec( requests.post(u) )",
+          "exec(urllib.urlopen(u))"
+        ],
+        "no_match": [
+          "exec('print(1)')",
+          "r = requests.get(url)"
+        ]
+      }
+    },
+    {
+      "id": "RD-FEX-003",
+      "type": "regex",
+      "pattern": "(requests\\.(get|post)|urllib\\w*\\.urlopen)\\s*\\(.*\\)\\s*\\.\\s*(text|read|content|decode).*\\beval\\b",
+      "title": "HTTP fetch piped to eval()",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "fetch-execute",
+      "explanation": "HTTP fetch piped to eval().",
+      "examples": {
+        "match": [
+          "requests.get(u).text and then eval(x)",
+          "urllib.urlopen(u).read() ; eval(blob)",
+          "requests.post(u).content.decode() then eval(c)"
+        ],
+        "no_match": [
+          "requests.get(u).text only",
+          "eval(local_var)"
+        ]
+      }
+    },
+    {
+      "id": "RD-FEX-004",
+      "type": "regex",
+      "pattern": "(requests\\.(get|post)|urllib\\w*\\.urlopen)\\s*\\(.*\\)\\s*\\.\\s*(text|read|content|decode).*\\bexec\\b",
+      "title": "HTTP fetch piped to exec()",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "fetch-execute",
+      "explanation": "HTTP fetch piped to exec().",
+      "examples": {
+        "match": [
+          "requests.get(u).text and then exec(x)",
+          "urllib.urlopen(u).read() ; exec(blob)",
+          "requests.post(u).content.decode() then exec(c)"
+        ],
+        "no_match": [
+          "requests.get(u).text only",
+          "exec(local_var)"
+        ]
+      }
+    },
+    {
+      "id": "RD-FEX-005",
+      "type": "regex",
+      "pattern": "(requests\\.get|urllib\\w*\\.urlopen)\\s*\\(.*\\).*\\.(write|save).*\\.(sh|py|ps1|bat)",
+      "title": "Download and save executable script",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "fetch-execute",
+      "explanation": "Download and save executable script.",
+      "examples": {
+        "match": [
+          "requests.get(u).write('a.sh')",
+          "urllib.urlopen(u).save('payload.py')",
+          "requests.get(u).write('run.ps1')"
+        ],
+        "no_match": [
+          "requests.get(u).json()",
+          "open('a.sh').read()"
+        ]
+      }
+    },
+    {
+      "id": "RD-FEX-006",
+      "type": "regex",
+      "pattern": "subprocess\\.\\w+\\s*\\(\\s*\\[?\\s*[\"\\']curl[\"\\'].*\\|\\s*[\"\\']?bash",
+      "title": "curl piped to bash via subprocess",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "fetch-execute",
+      "explanation": "curl piped to bash via subprocess.",
+      "examples": {
+        "match": [
+          "subprocess.run([\"curl\", u]) | bash",
+          "subprocess.call(['curl',x]).pipe|'bash",
+          "subprocess.Popen(['curl',u])|\"bash"
+        ],
+        "no_match": [
+          "subprocess.run(['ls'])",
+          "curl example in docs"
+        ]
+      }
+    },
+    {
+      "id": "RD-FEX-007",
+      "type": "regex",
+      "pattern": "=\\s*(requests\\.(get|post)|urllib\\w*\\.urlopen)\\s*\\(.*https?://",
+      "title": "HTTP response stored to variable (check for subsequent exec)",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "fetch-execute",
+      "explanation": "HTTP response stored to variable (check for subsequent exec).",
+      "examples": {
+        "match": [
+          "x = requests.get('https://evil.test')",
+          "y = requests.post('http://drop.test/x')",
+          "blob = urllib.urlopen('https://a.test')"
+        ],
+        "no_match": [
+          "x = requests.get(localfile)",
+          "x = compute()"
+        ]
+      }
+    },
+    {
+      "id": "RD-FEX-008",
+      "type": "regex",
+      "pattern": "eval\\s*\\(\\s*await\\s+fetch",
+      "title": "eval() of fetched content (JS)",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "fetch-execute",
+      "explanation": "eval() of fetched content (JS).",
+      "examples": {
+        "match": [
+          "eval(await fetch(url))",
+          "eval( await fetch(u))",
+          "const r = eval(await fetch(x))"
+        ],
+        "no_match": [
+          "eval('2+2')",
+          "await fetch(url)"
+        ]
+      }
+    },
+    {
+      "id": "RD-FEX-009",
+      "type": "regex",
+      "pattern": "new\\s+Function\\s*\\(\\s*await\\s+fetch",
+      "title": "new Function() from fetched content (JS)",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "fetch-execute",
+      "explanation": "new Function() from fetched content (JS).",
+      "examples": {
+        "match": [
+          "new Function(await fetch(url))",
+          "new Function( await fetch(u))",
+          "f = new Function(await fetch(x))"
+        ],
+        "no_match": [
+          "new Function('return 1')",
+          "await fetch(url)"
+        ]
+      }
+    },
+    {
+      "id": "RD-SMOD-001",
+      "type": "regex",
+      "pattern": "SourcelessFileLoader",
+      "title": "SourcelessFileLoader - bytecode loading bypass (CVE-2026-2297)",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "self-modification",
+      "explanation": "SourcelessFileLoader - bytecode loading bypass (CVE-2026-2297).",
+      "examples": {
+        "match": [
+          "loader = SourcelessFileLoader('m', p)",
+          "SourcelessFileLoader(name, path)",
+          "from importlib import SourcelessFileLoader"
+        ],
+        "no_match": [
+          "SourceFileLoader('m', p)",
+          "# loads source normally"
+        ]
+      }
+    },
+    {
+      "id": "RD-SMOD-002",
+      "type": "regex",
+      "pattern": "spec_from_file_location\\s*\\(.*\\.pyc",
+      "title": "spec_from_file_location loading .pyc (CVE-2026-2297 variant)",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "self-modification",
+      "explanation": "spec_from_file_location loading .pyc (CVE-2026-2297 variant).",
+      "examples": {
+        "match": [
+          "spec_from_file_location('m', 'x.pyc')",
+          "spec_from_file_location(name, 'mod.pyc')",
+          "s = spec_from_file_location('a','b.pyc')"
+        ],
+        "no_match": [
+          "spec_from_file_location('m', 'x.py')",
+          "load source module"
+        ]
+      }
+    },
+    {
+      "id": "RD-SMOD-003",
+      "type": "regex",
+      "pattern": "module_from_spec\\s*\\(",
+      "title": "module_from_spec() - runtime module loading from spec",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "self-modification",
+      "explanation": "module_from_spec() - runtime module loading from spec.",
+      "examples": {
+        "match": [
+          "mod = module_from_spec(spec)",
+          "module_from_spec( s )",
+          "m = module_from_spec(spec2)"
+        ],
+        "no_match": [
+          "import importlib.util",
+          "# module from spec docs"
+        ]
+      }
+    },
+    {
+      "id": "RD-SMOD-004",
+      "type": "regex",
+      "pattern": "compile\\s*\\(\\s*[a-zA-Z_]\\w*\\s*,\\s*[\"\\']",
+      "title": "compile() with variable source - runtime code generation",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "self-modification",
+      "explanation": "compile() with variable source - runtime code generation.",
+      "examples": {
+        "match": [
+          "compile(src, \"<string>\", 'exec')",
+          "compile(code, '<s>', 'eval')",
+          "compile(text, \"f\", 'exec')"
+        ],
+        "no_match": [
+          "compile('a', 'b', 'c')",
+          "# compile the project"
+        ]
+      }
+    },
+    {
+      "id": "RD-SMOD-005",
+      "type": "regex",
+      "pattern": "new\\s+Function\\s*\\(\\s*[a-zA-Z_]",
+      "title": "new Function() with variable body (JS)",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "self-modification",
+      "explanation": "new Function() with variable body (JS).",
+      "examples": {
+        "match": [
+          "new Function(body)",
+          "new Function(userCode)",
+          "f = new Function(src)"
+        ],
+        "no_match": [
+          "new Function('return 2')",
+          "function foo() {}"
+        ]
+      }
+    },
+    {
+      "id": "RD-SMOD-006",
+      "type": "regex",
+      "pattern": "eval\\s*\\(\\s*atob\\s*\\(",
+      "title": "eval(atob()) - base64 decode and execute (JS)",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "self-modification",
+      "explanation": "eval(atob()) - base64 decode and execute (JS).",
+      "examples": {
+        "match": [
+          "eval(atob(payload))",
+          "eval( atob(b64))",
+          "eval(atob('aGk='))"
+        ],
+        "no_match": [
+          "eval('1')",
+          "atob('aGk=')"
+        ]
+      }
+    },
+    {
+      "id": "RD-TB-001",
+      "type": "regex",
+      "pattern": "datetime\\.\\w*\\(\\s*\\d{4}\\s*,",
+      "title": "Hardcoded future datetime comparison (potential time bomb)",
+      "severity": "medium",
+      "confidence": 0.55,
+      "category": "time-bomb",
+      "explanation": "Hardcoded future datetime comparison (potential time bomb).",
+      "examples": {
+        "match": [
+          "if now > datetime.datetime(2027, 1, 1):",
+          "datetime.datetime(2030, 6, 1)",
+          "t = datetime.date(2026, 12, 31)"
+        ],
+        "no_match": [
+          "datetime.now()",
+          "# datetime module"
+        ]
+      }
+    },
+    {
+      "id": "RD-TB-002",
+      "type": "regex",
+      "pattern": "datetime\\.now\\(\\)\\s*[><=]+",
+      "title": "datetime.now() comparison (potential activation trigger)",
+      "severity": "medium",
+      "confidence": 0.55,
+      "category": "time-bomb",
+      "explanation": "datetime.now() comparison (potential activation trigger).",
+      "examples": {
+        "match": [
+          "if datetime.now() > target:",
+          "datetime.now() >= cutoff",
+          "datetime.now() == x"
+        ],
+        "no_match": [
+          "x = datetime.now()",
+          "print(datetime.now())"
+        ]
+      }
+    },
+    {
+      "id": "RD-TB-003",
+      "type": "regex",
+      "pattern": "date\\.today\\(\\)\\s*[><=]+",
+      "title": "date.today() comparison (potential activation trigger)",
+      "severity": "medium",
+      "confidence": 0.55,
+      "category": "time-bomb",
+      "explanation": "date.today() comparison (potential activation trigger).",
+      "examples": {
+        "match": [
+          "if date.today() > d:",
+          "date.today() >= cutoff",
+          "date.today() == x"
+        ],
+        "no_match": [
+          "x = date.today()",
+          "print(date.today())"
+        ]
+      }
+    },
+    {
+      "id": "RD-TB-004",
+      "type": "regex",
+      "pattern": "time\\.time\\(\\)\\s*[><=]+\\s*\\d{9,}",
+      "title": "time.time() compared to hardcoded unix timestamp",
+      "severity": "medium",
+      "confidence": 0.55,
+      "category": "time-bomb",
+      "explanation": "time.time() compared to hardcoded unix timestamp.",
+      "examples": {
+        "match": [
+          "if time.time() > 1900000000:",
+          "time.time() >= 1893456000",
+          "time.time() == 2000000000"
+        ],
+        "no_match": [
+          "time.time() > x",
+          "t = time.time()"
+        ]
+      }
+    },
+    {
+      "id": "RD-TB-005",
+      "type": "regex",
+      "pattern": "time\\.time\\(\\)\\s*[><=]+\\s*\\w",
+      "title": "time.time() compared to variable (potential time bomb)",
+      "severity": "medium",
+      "confidence": 0.55,
+      "category": "time-bomb",
+      "explanation": "time.time() compared to variable (potential time bomb).",
+      "examples": {
+        "match": [
+          "if time.time() > cutoff:",
+          "time.time() >= deadline",
+          "time.time() == trigger"
+        ],
+        "no_match": [
+          "t = time.time()",
+          "print(time.time())"
+        ]
+      }
+    },
+    {
+      "id": "RD-TB-006",
+      "type": "regex",
+      "pattern": "int\\(time\\.time\\(\\)\\)\\s*[><=]+\\s*\\d{9,}",
+      "title": "Unix timestamp comparison (potential time bomb)",
+      "severity": "medium",
+      "confidence": 0.55,
+      "category": "time-bomb",
+      "explanation": "Unix timestamp comparison (potential time bomb).",
+      "examples": {
+        "match": [
+          "int(time.time()) > 1900000000",
+          "int(time.time()) >= 1893456000",
+          "int(time.time()) == 2000000000"
+        ],
+        "no_match": [
+          "int(time.time())",
+          "int(x) > 5"
+        ]
+      }
+    },
+    {
+      "id": "RD-TB-007",
+      "type": "regex",
+      "pattern": "(?:count|counter|attempts?|calls?|invocations?)\\s*[><=]+\\s*\\d{2,}",
+      "title": "Counter-based activation threshold",
+      "severity": "medium",
+      "confidence": 0.55,
+      "category": "time-bomb",
+      "explanation": "Counter-based activation threshold.",
+      "examples": {
+        "match": [
+          "if count > 50:",
+          "attempts >= 10",
+          "invocations == 99"
+        ],
+        "no_match": [
+          "count > 5",
+          "x = counter"
+        ]
+      }
+    },
+    {
+      "id": "RD-TB-008",
+      "type": "regex",
+      "pattern": "random\\.\\w+\\(\\)\\s*[<>=]+\\s*0\\.\\d+.*(?:exec|eval|system|subprocess|import)",
+      "title": "Probabilistic trigger with code execution",
+      "severity": "medium",
+      "confidence": 0.55,
+      "category": "time-bomb",
+      "explanation": "Probabilistic trigger with code execution.",
+      "examples": {
+        "match": [
+          "random.random() < 0.1 and exec(p)",
+          "random.uniform() > 0.5 and system(c)",
+          "random.random() < 0.05 and subprocess.run(x)"
+        ],
+        "no_match": [
+          "random.random() < 0.5",
+          "x = random.random()"
+        ]
+      }
+    },
+    {
+      "id": "RD-TB-009",
+      "type": "regex",
+      "pattern": "Date\\.now\\(\\)\\s*[><=]+\\s*\\d{12,}",
+      "title": "Date.now() compared to hardcoded timestamp (JS)",
+      "severity": "medium",
+      "confidence": 0.55,
+      "category": "time-bomb",
+      "explanation": "Date.now() compared to hardcoded timestamp (JS).",
+      "examples": {
+        "match": [
+          "Date.now() > 1700000000000",
+          "Date.now() >= 1893456000000",
+          "Date.now() == 2000000000000"
+        ],
+        "no_match": [
+          "Date.now() > x",
+          "t = Date.now()"
+        ]
+      }
+    },
+    {
+      "id": "RD-TB-010",
+      "type": "regex",
+      "pattern": "new\\s+Date\\(\\)\\s*[><=]+\\s*new\\s+Date\\s*\\(\\s*[\"\\']",
+      "title": "Date comparison with hardcoded date (JS)",
+      "severity": "medium",
+      "confidence": 0.55,
+      "category": "time-bomb",
+      "explanation": "Date comparison with hardcoded date (JS).",
+      "examples": {
+        "match": [
+          "new Date() > new Date(\"2027-01-01\")",
+          "new Date() >= new Date('2030-06-01')",
+          "new Date() == new Date(\"2026-12-31\")"
+        ],
+        "no_match": [
+          "new Date() > other",
+          "d = new Date()"
+        ]
+      }
+    },
+    {
+      "id": "RD-WORM-001",
+      "type": "regex",
+      "pattern": "fs\\.(writeFileSync|writeFile)\\s*\\([^)]*node_modules",
+      "title": "Self-propagating worm: fs.write targeting node_modules",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "worm-propagation",
+      "explanation": "Self-propagating worm: fs.write targeting node_modules.",
+      "examples": {
+        "match": [
+          "fs.writeFileSync('node_modules/x/i.js', p)",
+          "fs.writeFile('node_modules/a', d)",
+          "fs.writeFileSync('./node_modules/m', c)"
+        ],
+        "no_match": [
+          "fs.writeFileSync('out.txt', d)",
+          "fs.readFileSync('node_modules/x')"
+        ]
+      }
+    },
+    {
+      "id": "RD-WORM-002",
+      "type": "regex",
+      "pattern": "fs\\.(writeFileSync|writeFile)\\s*\\([^)]*site.packages",
+      "title": "Self-propagating worm: fs.write targeting site-packages",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "worm-propagation",
+      "explanation": "Self-propagating worm: fs.write targeting site-packages.",
+      "examples": {
+        "match": [
+          "fs.writeFileSync('site-packages/x.py', p)",
+          "fs.writeFile('site_packages/a', d)",
+          "fs.writeFileSync('lib/site-packages/m', c)"
+        ],
+        "no_match": [
+          "fs.writeFileSync('out.txt', d)",
+          "fs.readFileSync('site-packages/x')"
+        ]
+      }
+    },
+    {
+      "id": "RD-WORM-003",
+      "type": "regex",
+      "pattern": "open\\s*\\([^)]*(?:node_modules|site.packages)[^)]*,\\s*[\"\\']w",
+      "title": "Self-propagating worm: open() write to package directory",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "worm-propagation",
+      "explanation": "Self-propagating worm: open() write to package directory.",
+      "examples": {
+        "match": [
+          "open('node_modules/x', 'w')",
+          "open('site-packages/m.py', \"w\")",
+          "open('./node_modules/a','w')"
+        ],
+        "no_match": [
+          "open('node_modules/x', 'r')",
+          "open('out.txt', 'w')"
+        ]
+      }
+    },
+    {
+      "id": "RD-WORM-004",
+      "type": "regex",
+      "pattern": "open\\s*\\([^)]*(?:node_modules|site.packages)[^)]*,\\s*[\"\\']a",
+      "title": "Self-propagating worm: open() append to package directory",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "worm-propagation",
+      "explanation": "Self-propagating worm: open() append to package directory.",
+      "examples": {
+        "match": [
+          "open('node_modules/x', 'a')",
+          "open('site-packages/m.py', \"a\")",
+          "open('./node_modules/a','a')"
+        ],
+        "no_match": [
+          "open('node_modules/x', 'r')",
+          "open('out.txt', 'a')"
+        ]
+      }
+    },
+    {
+      "id": "RD-WORM-005",
+      "type": "regex",
+      "pattern": "shutil\\.copy\\w*\\s*\\([^)]*(?:node_modules|site.packages)",
+      "title": "Self-propagating worm: shutil.copy to package directory",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "worm-propagation",
+      "explanation": "Self-propagating worm: shutil.copy to package directory.",
+      "examples": {
+        "match": [
+          "shutil.copy('p', 'node_modules/x')",
+          "shutil.copyfile('a','site-packages/b')",
+          "shutil.copy2('s','node_modules/d')"
+        ],
+        "no_match": [
+          "shutil.copy('a', 'out/')",
+          "shutil.rmtree('x')"
+        ]
+      }
+    },
+    {
+      "id": "RD-WORM-006",
+      "type": "regex",
+      "pattern": "os\\.rename\\s*\\([^)]*(?:node_modules|site.packages)",
+      "title": "Self-propagating worm: os.rename in package directory",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "worm-propagation",
+      "explanation": "Self-propagating worm: os.rename in package directory.",
+      "examples": {
+        "match": [
+          "os.rename('a', 'node_modules/x')",
+          "os.rename('b','site-packages/y')",
+          "os.rename('c', './node_modules/z')"
+        ],
+        "no_match": [
+          "os.rename('a', 'b')",
+          "os.remove('node_modules/x')"
+        ]
+      }
+    },
+    {
+      "id": "RD-WORM-007",
+      "type": "regex",
+      "pattern": "require\\.resolve\\s*\\([^)]*\\).*fs\\.(write|writeFile|writeFileSync)",
+      "title": "Self-propagating worm: require.resolve + fs.write (sibling package modification)",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "worm-propagation",
+      "explanation": "Self-propagating worm: require.resolve + fs.write (sibling package modification).",
+      "examples": {
+        "match": [
+          "require.resolve('m') and fs.writeFileSync(p, c)",
+          "require.resolve(x); fs.write(p,c)",
+          "require.resolve('a').then fs.writeFile(b,d)"
+        ],
+        "no_match": [
+          "require.resolve('m')",
+          "fs.writeFileSync(p, c)"
+        ]
+      }
+    },
+    {
+      "id": "RD-WORM-008",
+      "type": "regex",
+      "pattern": "path\\.(join|resolve)\\s*\\([^)]*node_modules[^)]*\\).*fs\\.(write|writeFile|writeFileSync)",
+      "title": "Self-propagating worm: path into node_modules + write",
+      "severity": "critical",
+      "confidence": 0.85,
+      "category": "worm-propagation",
+      "explanation": "Self-propagating worm: path into node_modules + write.",
+      "examples": {
+        "match": [
+          "path.join(dir, 'node_modules', x) ... fs.writeFileSync(p, c)",
+          "path.resolve('node_modules', m) and fs.write(p, c)",
+          "path.join('node_modules', a) then fs.writeFile(b, d)"
+        ],
+        "no_match": [
+          "path.join('a', 'b')",
+          "fs.writeFileSync(p, c)"
+        ]
+      }
+    },
+    {
+      "id": "RD-LOC-001",
+      "type": "regex",
+      "pattern": "locale\\.getdefaultlocale\\s*\\(",
+      "title": "Locale gating: locale.getdefaultlocale()",
+      "severity": "medium",
+      "confidence": 0.55,
+      "category": "locale-gating",
+      "explanation": "Locale gating: locale.getdefaultlocale().",
+      "examples": {
+        "match": [
+          "locale.getdefaultlocale()",
+          "lc = locale.getdefaultlocale( )",
+          "if locale.getdefaultlocale()[0]:"
+        ],
+        "no_match": [
+          "import locale",
+          "locale.setlocale(x)"
+        ]
+      }
+    },
+    {
+      "id": "RD-LOC-002",
+      "type": "regex",
+      "pattern": "locale\\.getlocale\\s*\\(",
+      "title": "Locale gating: locale.getlocale()",
+      "severity": "medium",
+      "confidence": 0.55,
+      "category": "locale-gating",
+      "explanation": "Locale gating: locale.getlocale().",
+      "examples": {
+        "match": [
+          "locale.getlocale()",
+          "lc = locale.getlocale( )",
+          "if locale.getlocale()[0]:"
+        ],
+        "no_match": [
+          "import locale",
+          "locale.setlocale(x)"
+        ]
+      }
+    },
+    {
+      "id": "RD-LOC-003",
+      "type": "regex",
+      "pattern": "os\\.environ\\s*\\[\\s*[\"\\'](?:LANG|LC_ALL|LC_CTYPE|LANGUAGE)[\"\\']",
+      "title": "Locale gating: os.environ LANG/LC variable",
+      "severity": "medium",
+      "confidence": 0.55,
+      "category": "locale-gating",
+      "explanation": "Locale gating: os.environ LANG/LC variable.",
+      "examples": {
+        "match": [
+          "os.environ['LANG']",
+          "os.environ[\"LC_ALL\"]",
+          "os.environ['LC_CTYPE']"
+        ],
+        "no_match": [
+          "os.environ['PATH']",
+          "os.environ['HOME']"
+        ]
+      }
+    },
+    {
+      "id": "RD-LOC-004",
+      "type": "regex",
+      "pattern": "os\\.(?:getenv|environ\\.get)\\s*\\(\\s*[\"\\'](?:LANG|LC_ALL|LC_CTYPE|LANGUAGE)[\"\\']",
+      "title": "Locale gating: os.getenv LANG/LC variable",
+      "severity": "medium",
+      "confidence": 0.55,
+      "category": "locale-gating",
+      "explanation": "Locale gating: os.getenv LANG/LC variable.",
+      "examples": {
+        "match": [
+          "os.getenv('LANG')",
+          "os.environ.get('LC_ALL')",
+          "os.getenv(\"LANGUAGE\")"
+        ],
+        "no_match": [
+          "os.getenv('PATH')",
+          "os.environ.get('HOME')"
+        ]
+      }
+    },
+    {
+      "id": "RD-LOC-005",
+      "type": "regex",
+      "pattern": "navigator\\.language\\b",
+      "title": "Locale gating: navigator.language",
+      "severity": "medium",
+      "confidence": 0.55,
+      "category": "locale-gating",
+      "explanation": "Locale gating: navigator.language.",
+      "examples": {
+        "match": [
+          "navigator.language",
+          "const l = navigator.language;",
+          "if (navigator.language) {}"
+        ],
+        "no_match": [
+          "navigator.userAgent",
+          "window.location"
+        ]
+      }
+    },
+    {
+      "id": "RD-LOC-006",
+      "type": "regex",
+      "pattern": "navigator\\.languages\\b",
+      "title": "Locale gating: navigator.languages",
+      "severity": "medium",
+      "confidence": 0.55,
+      "category": "locale-gating",
+      "explanation": "Locale gating: navigator.languages.",
+      "examples": {
+        "match": [
+          "navigator.languages",
+          "const l = navigator.languages;",
+          "if (navigator.languages) {}"
+        ],
+        "no_match": [
+          "navigator.userAgent",
+          "window.location"
+        ]
+      }
+    },
+    {
+      "id": "RD-LOC-007",
+      "type": "regex",
+      "pattern": "Intl\\.DateTimeFormat\\(\\)\\.resolvedOptions\\(\\)\\.locale",
+      "title": "Locale gating: Intl locale resolution",
+      "severity": "medium",
+      "confidence": 0.55,
+      "category": "locale-gating",
+      "explanation": "Locale gating: Intl locale resolution.",
+      "examples": {
+        "match": [
+          "Intl.DateTimeFormat().resolvedOptions().locale",
+          "const tz = Intl.DateTimeFormat().resolvedOptions().locale",
+          "x = Intl.DateTimeFormat().resolvedOptions().locale"
+        ],
+        "no_match": [
+          "Intl.NumberFormat()",
+          "new Date()"
+        ]
+      }
+    },
+    {
+      "id": "RD-LOC-008",
+      "type": "regex",
+      "pattern": "\\$(?:LANG|LC_ALL|LC_CTYPE|LANGUAGE)\\b",
+      "title": "Locale gating: $LANG/$LC shell variable",
+      "severity": "medium",
+      "confidence": 0.55,
+      "category": "locale-gating",
+      "explanation": "Locale gating: $LANG/$LC shell variable.",
+      "examples": {
+        "match": [
+          "echo $LANG",
+          "if [ \"$LC_ALL\" ]; then",
+          "case $LANGUAGE in"
+        ],
+        "no_match": [
+          "echo $PATH",
+          "echo $HOME"
+        ]
+      }
+    },
+    {
+      "id": "RD-LOC-009",
+      "type": "regex",
+      "pattern": "geoip|geo_ip|maxmind|GeoLite|geolocation\\.country",
+      "title": "Locale gating: GeoIP lookup",
+      "severity": "medium",
+      "confidence": 0.55,
+      "category": "locale-gating",
+      "explanation": "Locale gating: GeoIP lookup.",
+      "examples": {
+        "match": [
+          "geoip lookup here",
+          "use maxmind GeoLite db",
+          "GeoLite2 database"
+        ],
+        "no_match": [
+          "normal text here",
+          "geometry of shapes"
+        ]
+      },
+      "flags": [
+        "IGNORECASE"
+      ]
+    },
+    {
+      "id": "RD-LOC-010",
+      "type": "regex",
+      "pattern": "country_code|countryCode|country_name",
+      "title": "Locale gating: country code reference",
+      "severity": "medium",
+      "confidence": 0.55,
+      "category": "locale-gating",
+      "explanation": "Locale gating: country code reference.",
+      "examples": {
+        "match": [
+          "country_code = 'US'",
+          "const countryCode = 'GB'",
+          "country_name lookup"
+        ],
+        "no_match": [
+          "my country home",
+          "code review"
+        ]
+      },
+      "flags": [
+        "IGNORECASE"
+      ]
+    },
+    {
+      "id": "RD-CP-001",
+      "type": "regex",
+      "pattern": "Math\\.random\\(\\)\\s*[<>]=?\\s*0\\.\\d+.*(?:exec|eval|fetch|require|import)",
+      "title": "Probabilistic activation: Math.random() threshold with code execution",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "probabilistic-activation",
+      "explanation": "Probabilistic activation: Math.random() threshold with code execution.",
+      "examples": {
+        "match": [
+          "Math.random() < 0.1 && exec(c)",
+          "Math.random() > 0.5 && eval(x)",
+          "Math.random() <= 0.2 && fetch(u)"
+        ],
+        "no_match": [
+          "Math.random() < 0.5",
+          "x = Math.random()"
+        ]
+      }
+    },
+    {
+      "id": "RD-CP-002",
+      "type": "regex",
+      "pattern": "Math\\.random\\(\\)\\s*[<>]=?\\s*0\\.\\d+",
+      "title": "Probabilistic activation: Math.random() threshold gate",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "probabilistic-activation",
+      "explanation": "Probabilistic activation: Math.random() threshold gate.",
+      "examples": {
+        "match": [
+          "Math.random() < 0.1",
+          "Math.random() > 0.5",
+          "if (Math.random() <= 0.2) {}"
+        ],
+        "no_match": [
+          "Math.floor(x)",
+          "x = Math.random; nope"
+        ]
+      }
+    },
+    {
+      "id": "RD-CP-003",
+      "type": "regex",
+      "pattern": "random\\.random\\(\\)\\s*[<>]=?\\s*0\\.\\d+",
+      "title": "Probabilistic activation: random.random() threshold gate",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "probabilistic-activation",
+      "explanation": "Probabilistic activation: random.random() threshold gate.",
+      "examples": {
+        "match": [
+          "random.random() < 0.1",
+          "random.random() > 0.5",
+          "if random.random() <= 0.2:"
+        ],
+        "no_match": [
+          "random.randint(1, 5)",
+          "x = random.random; nope"
+        ]
+      }
+    },
+    {
+      "id": "RD-CP-004",
+      "type": "regex",
+      "pattern": "process\\.env\\.CI\\b.*(?:if|&&|\\?|\\|\\|)",
+      "title": "Environment-aware activation: process.env.CI conditional",
+      "severity": "medium",
+      "confidence": 0.55,
+      "category": "environment-detection",
+      "explanation": "Environment-aware activation: process.env.CI conditional.",
+      "examples": {
+        "match": [
+          "process.env.CI && doThing()",
+          "process.env.CI || fallback()",
+          "process.env.CI ? a : b"
+        ],
+        "no_match": [
+          "process.env.PORT",
+          "const ci = readCi()"
+        ]
+      }
+    },
+    {
+      "id": "RD-CP-005",
+      "type": "regex",
+      "pattern": "process\\.env\\.GITHUB_ACTIONS\\b.*(?:if|&&|\\?|\\|\\|)",
+      "title": "Environment-aware activation: process.env.GITHUB_ACTIONS conditional",
+      "severity": "medium",
+      "confidence": 0.55,
+      "category": "environment-detection",
+      "explanation": "Environment-aware activation: process.env.GITHUB_ACTIONS conditional.",
+      "examples": {
+        "match": [
+          "process.env.GITHUB_ACTIONS && run()",
+          "process.env.GITHUB_ACTIONS || skip()",
+          "process.env.GITHUB_ACTIONS ? a : b"
+        ],
+        "no_match": [
+          "process.env.PORT",
+          "const x = getGha()"
+        ]
+      }
+    },
+    {
+      "id": "RD-CP-006",
+      "type": "regex",
+      "pattern": "os\\.environ\\.get\\s*\\(\\s*[\"\\']CI[\"\\']",
+      "title": "Environment-aware activation: os.environ.get('CI')",
+      "severity": "medium",
+      "confidence": 0.55,
+      "category": "environment-detection",
+      "explanation": "Environment-aware activation: os.environ.get('CI').",
+      "examples": {
+        "match": [
+          "os.environ.get('CI')",
+          "x = os.environ.get('CI')",
+          "if os.environ.get('CI'):"
+        ],
+        "no_match": [
+          "os.environ.get('PATH')",
+          "os.getenv('CI')"
+        ]
+      }
+    },
+    {
+      "id": "RD-CP-007",
+      "type": "regex",
+      "pattern": "os\\.getenv\\s*\\(\\s*[\"\\']CI[\"\\']",
+      "title": "Environment-aware activation: os.getenv('CI')",
+      "severity": "medium",
+      "confidence": 0.55,
+      "category": "environment-detection",
+      "explanation": "Environment-aware activation: os.getenv('CI').",
+      "examples": {
+        "match": [
+          "os.getenv('CI')",
+          "x = os.getenv('CI')",
+          "if os.getenv('CI'):"
+        ],
+        "no_match": [
+          "os.getenv('PATH')",
+          "os.environ.get('CI')"
+        ]
+      }
+    },
+    {
+      "id": "RD-CP-008",
+      "type": "regex",
+      "pattern": "os\\.environ\\.get\\s*\\(\\s*[\"\\']GITHUB_ACTIONS[\"\\']",
+      "title": "Environment-aware activation: os.environ.get('GITHUB_ACTIONS')",
+      "severity": "medium",
+      "confidence": 0.55,
+      "category": "environment-detection",
+      "explanation": "Environment-aware activation: os.environ.get('GITHUB_ACTIONS').",
+      "examples": {
+        "match": [
+          "os.environ.get('GITHUB_ACTIONS')",
+          "x = os.environ.get('GITHUB_ACTIONS')",
+          "if os.environ.get('GITHUB_ACTIONS'):"
+        ],
+        "no_match": [
+          "os.environ.get('PATH')",
+          "os.getenv('GITHUB_ACTIONS')"
+        ]
+      }
+    },
+    {
+      "id": "RD-CP-009",
+      "type": "regex",
+      "pattern": "os\\.getenv\\s*\\(\\s*[\"\\']GITHUB_ACTIONS[\"\\']",
+      "title": "Environment-aware activation: os.getenv('GITHUB_ACTIONS')",
+      "severity": "medium",
+      "confidence": 0.55,
+      "category": "environment-detection",
+      "explanation": "Environment-aware activation: os.getenv('GITHUB_ACTIONS').",
+      "examples": {
+        "match": [
+          "os.getenv('GITHUB_ACTIONS')",
+          "x = os.getenv('GITHUB_ACTIONS')",
+          "if os.getenv('GITHUB_ACTIONS'):"
+        ],
+        "no_match": [
+          "os.getenv('PATH')",
+          "os.environ.get('GITHUB_ACTIONS')"
+        ]
+      }
+    }
+  ]
+}

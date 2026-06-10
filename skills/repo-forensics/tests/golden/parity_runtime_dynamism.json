@@ -1,0 +1,1472 @@
+[
+ [
+  "Counter-based activation threshold",
+  "medium",
+  "RD-TB-007.py",
+  1,
+  "time-bomb"
+ ],
+ [
+  "Counter-based activation threshold",
+  "medium",
+  "RD-TB-007.py",
+  2,
+  "time-bomb"
+ ],
+ [
+  "Counter-based activation threshold",
+  "medium",
+  "RD-TB-007.py",
+  3,
+  "time-bomb"
+ ],
+ [
+  "Date comparison with hardcoded date (JS)",
+  "medium",
+  "RD-TB-010.py",
+  1,
+  "time-bomb"
+ ],
+ [
+  "Date comparison with hardcoded date (JS)",
+  "medium",
+  "RD-TB-010.py",
+  2,
+  "time-bomb"
+ ],
+ [
+  "Date comparison with hardcoded date (JS)",
+  "medium",
+  "RD-TB-010.py",
+  3,
+  "time-bomb"
+ ],
+ [
+  "Date.now() compared to hardcoded timestamp (JS)",
+  "medium",
+  "RD-TB-009.py",
+  1,
+  "time-bomb"
+ ],
+ [
+  "Date.now() compared to hardcoded timestamp (JS)",
+  "medium",
+  "RD-TB-009.py",
+  2,
+  "time-bomb"
+ ],
+ [
+  "Date.now() compared to hardcoded timestamp (JS)",
+  "medium",
+  "RD-TB-009.py",
+  3,
+  "time-bomb"
+ ],
+ [
+  "Download and save executable script",
+  "critical",
+  "RD-FEX-005.py",
+  1,
+  "fetch-execute"
+ ],
+ [
+  "Download and save executable script",
+  "critical",
+  "RD-FEX-005.py",
+  2,
+  "fetch-execute"
+ ],
+ [
+  "Download and save executable script",
+  "critical",
+  "RD-FEX-005.py",
+  3,
+  "fetch-execute"
+ ],
+ [
+  "Environment-aware activation: os.environ.get('CI')",
+  "medium",
+  "RD-CP-006.py",
+  1,
+  "environment-detection"
+ ],
+ [
+  "Environment-aware activation: os.environ.get('CI')",
+  "medium",
+  "RD-CP-006.py",
+  2,
+  "environment-detection"
+ ],
+ [
+  "Environment-aware activation: os.environ.get('CI')",
+  "medium",
+  "RD-CP-006.py",
+  3,
+  "environment-detection"
+ ],
+ [
+  "Environment-aware activation: os.environ.get('CI')",
+  "medium",
+  "RD-CP-007.py",
+  5,
+  "environment-detection"
+ ],
+ [
+  "Environment-aware activation: os.environ.get('GITHUB_ACTIONS')",
+  "medium",
+  "RD-CP-008.py",
+  1,
+  "environment-detection"
+ ],
+ [
+  "Environment-aware activation: os.environ.get('GITHUB_ACTIONS')",
+  "medium",
+  "RD-CP-008.py",
+  2,
+  "environment-detection"
+ ],
+ [
+  "Environment-aware activation: os.environ.get('GITHUB_ACTIONS')",
+  "medium",
+  "RD-CP-008.py",
+  3,
+  "environment-detection"
+ ],
+ [
+  "Environment-aware activation: os.environ.get('GITHUB_ACTIONS')",
+  "medium",
+  "RD-CP-009.py",
+  5,
+  "environment-detection"
+ ],
+ [
+  "Environment-aware activation: os.getenv('CI')",
+  "medium",
+  "RD-CP-006.py",
+  5,
+  "environment-detection"
+ ],
+ [
+  "Environment-aware activation: os.getenv('CI')",
+  "medium",
+  "RD-CP-007.py",
+  1,
+  "environment-detection"
+ ],
+ [
+  "Environment-aware activation: os.getenv('CI')",
+  "medium",
+  "RD-CP-007.py",
+  2,
+  "environment-detection"
+ ],
+ [
+  "Environment-aware activation: os.getenv('CI')",
+  "medium",
+  "RD-CP-007.py",
+  3,
+  "environment-detection"
+ ],
+ [
+  "Environment-aware activation: os.getenv('GITHUB_ACTIONS')",
+  "medium",
+  "RD-CP-008.py",
+  5,
+  "environment-detection"
+ ],
+ [
+  "Environment-aware activation: os.getenv('GITHUB_ACTIONS')",
+  "medium",
+  "RD-CP-009.py",
+  1,
+  "environment-detection"
+ ],
+ [
+  "Environment-aware activation: os.getenv('GITHUB_ACTIONS')",
+  "medium",
+  "RD-CP-009.py",
+  2,
+  "environment-detection"
+ ],
+ [
+  "Environment-aware activation: os.getenv('GITHUB_ACTIONS')",
+  "medium",
+  "RD-CP-009.py",
+  3,
+  "environment-detection"
+ ],
+ [
+  "Environment-aware activation: process.env.CI conditional",
+  "medium",
+  "RD-CP-004.py",
+  1,
+  "environment-detection"
+ ],
+ [
+  "Environment-aware activation: process.env.CI conditional",
+  "medium",
+  "RD-CP-004.py",
+  2,
+  "environment-detection"
+ ],
+ [
+  "Environment-aware activation: process.env.CI conditional",
+  "medium",
+  "RD-CP-004.py",
+  3,
+  "environment-detection"
+ ],
+ [
+  "Environment-aware activation: process.env.GITHUB_ACTIONS conditional",
+  "medium",
+  "RD-CP-005.py",
+  1,
+  "environment-detection"
+ ],
+ [
+  "Environment-aware activation: process.env.GITHUB_ACTIONS conditional",
+  "medium",
+  "RD-CP-005.py",
+  2,
+  "environment-detection"
+ ],
+ [
+  "Environment-aware activation: process.env.GITHUB_ACTIONS conditional",
+  "medium",
+  "RD-CP-005.py",
+  3,
+  "environment-detection"
+ ],
+ [
+  "HTTP fetch piped to eval()",
+  "critical",
+  "RD-FEX-003.py",
+  1,
+  "fetch-execute"
+ ],
+ [
+  "HTTP fetch piped to eval()",
+  "critical",
+  "RD-FEX-003.py",
+  2,
+  "fetch-execute"
+ ],
+ [
+  "HTTP fetch piped to eval()",
+  "critical",
+  "RD-FEX-003.py",
+  3,
+  "fetch-execute"
+ ],
+ [
+  "HTTP fetch piped to exec()",
+  "critical",
+  "RD-FEX-004.py",
+  1,
+  "fetch-execute"
+ ],
+ [
+  "HTTP fetch piped to exec()",
+  "critical",
+  "RD-FEX-004.py",
+  2,
+  "fetch-execute"
+ ],
+ [
+  "HTTP fetch piped to exec()",
+  "critical",
+  "RD-FEX-004.py",
+  3,
+  "fetch-execute"
+ ],
+ [
+  "HTTP response stored to variable (check for subsequent exec)",
+  "critical",
+  "RD-FEX-007.py",
+  1,
+  "fetch-execute"
+ ],
+ [
+  "HTTP response stored to variable (check for subsequent exec)",
+  "critical",
+  "RD-FEX-007.py",
+  2,
+  "fetch-execute"
+ ],
+ [
+  "HTTP response stored to variable (check for subsequent exec)",
+  "critical",
+  "RD-FEX-007.py",
+  3,
+  "fetch-execute"
+ ],
+ [
+  "Hardcoded future datetime comparison (potential time bomb)",
+  "medium",
+  "RD-TB-001.py",
+  1,
+  "time-bomb"
+ ],
+ [
+  "Hardcoded future datetime comparison (potential time bomb)",
+  "medium",
+  "RD-TB-001.py",
+  2,
+  "time-bomb"
+ ],
+ [
+  "Hardcoded future datetime comparison (potential time bomb)",
+  "medium",
+  "RD-TB-001.py",
+  3,
+  "time-bomb"
+ ],
+ [
+  "Locale gating: $LANG/$LC shell variable",
+  "medium",
+  "RD-LOC-008.py",
+  1,
+  "locale-gating"
+ ],
+ [
+  "Locale gating: $LANG/$LC shell variable",
+  "medium",
+  "RD-LOC-008.py",
+  2,
+  "locale-gating"
+ ],
+ [
+  "Locale gating: $LANG/$LC shell variable",
+  "medium",
+  "RD-LOC-008.py",
+  3,
+  "locale-gating"
+ ],
+ [
+  "Locale gating: GeoIP lookup",
+  "medium",
+  "RD-LOC-009.py",
+  1,
+  "locale-gating"
+ ],
+ [
+  "Locale gating: GeoIP lookup",
+  "medium",
+  "RD-LOC-009.py",
+  2,
+  "locale-gating"
+ ],
+ [
+  "Locale gating: GeoIP lookup",
+  "medium",
+  "RD-LOC-009.py",
+  3,
+  "locale-gating"
+ ],
+ [
+  "Locale gating: Intl locale resolution",
+  "medium",
+  "RD-LOC-007.py",
+  1,
+  "locale-gating"
+ ],
+ [
+  "Locale gating: Intl locale resolution",
+  "medium",
+  "RD-LOC-007.py",
+  2,
+  "locale-gating"
+ ],
+ [
+  "Locale gating: Intl locale resolution",
+  "medium",
+  "RD-LOC-007.py",
+  3,
+  "locale-gating"
+ ],
+ [
+  "Locale gating: country code reference",
+  "medium",
+  "RD-LOC-010.py",
+  1,
+  "locale-gating"
+ ],
+ [
+  "Locale gating: country code reference",
+  "medium",
+  "RD-LOC-010.py",
+  2,
+  "locale-gating"
+ ],
+ [
+  "Locale gating: country code reference",
+  "medium",
+  "RD-LOC-010.py",
+  3,
+  "locale-gating"
+ ],
+ [
+  "Locale gating: locale.getdefaultlocale()",
+  "medium",
+  "RD-LOC-001.py",
+  1,
+  "locale-gating"
+ ],
+ [
+  "Locale gating: locale.getdefaultlocale()",
+  "medium",
+  "RD-LOC-001.py",
+  2,
+  "locale-gating"
+ ],
+ [
+  "Locale gating: locale.getdefaultlocale()",
+  "medium",
+  "RD-LOC-001.py",
+  3,
+  "locale-gating"
+ ],
+ [
+  "Locale gating: locale.getlocale()",
+  "medium",
+  "RD-LOC-002.py",
+  1,
+  "locale-gating"
+ ],
+ [
+  "Locale gating: locale.getlocale()",
+  "medium",
+  "RD-LOC-002.py",
+  2,
+  "locale-gating"
+ ],
+ [
+  "Locale gating: locale.getlocale()",
+  "medium",
+  "RD-LOC-002.py",
+  3,
+  "locale-gating"
+ ],
+ [
+  "Locale gating: navigator.language",
+  "medium",
+  "RD-LOC-005.py",
+  1,
+  "locale-gating"
+ ],
+ [
+  "Locale gating: navigator.language",
+  "medium",
+  "RD-LOC-005.py",
+  2,
+  "locale-gating"
+ ],
+ [
+  "Locale gating: navigator.language",
+  "medium",
+  "RD-LOC-005.py",
+  3,
+  "locale-gating"
+ ],
+ [
+  "Locale gating: navigator.languages",
+  "medium",
+  "RD-LOC-006.py",
+  1,
+  "locale-gating"
+ ],
+ [
+  "Locale gating: navigator.languages",
+  "medium",
+  "RD-LOC-006.py",
+  2,
+  "locale-gating"
+ ],
+ [
+  "Locale gating: navigator.languages",
+  "medium",
+  "RD-LOC-006.py",
+  3,
+  "locale-gating"
+ ],
+ [
+  "Locale gating: os.environ LANG/LC variable",
+  "medium",
+  "RD-LOC-003.py",
+  1,
+  "locale-gating"
+ ],
+ [
+  "Locale gating: os.environ LANG/LC variable",
+  "medium",
+  "RD-LOC-003.py",
+  2,
+  "locale-gating"
+ ],
+ [
+  "Locale gating: os.environ LANG/LC variable",
+  "medium",
+  "RD-LOC-003.py",
+  3,
+  "locale-gating"
+ ],
+ [
+  "Locale gating: os.getenv LANG/LC variable",
+  "medium",
+  "RD-LOC-004.py",
+  1,
+  "locale-gating"
+ ],
+ [
+  "Locale gating: os.getenv LANG/LC variable",
+  "medium",
+  "RD-LOC-004.py",
+  2,
+  "locale-gating"
+ ],
+ [
+  "Locale gating: os.getenv LANG/LC variable",
+  "medium",
+  "RD-LOC-004.py",
+  3,
+  "locale-gating"
+ ],
+ [
+  "Probabilistic activation: Math.random() threshold gate",
+  "high",
+  "RD-CP-001.py",
+  4,
+  "probabilistic-activation"
+ ],
+ [
+  "Probabilistic activation: Math.random() threshold gate",
+  "high",
+  "RD-CP-002.py",
+  1,
+  "probabilistic-activation"
+ ],
+ [
+  "Probabilistic activation: Math.random() threshold gate",
+  "high",
+  "RD-CP-002.py",
+  2,
+  "probabilistic-activation"
+ ],
+ [
+  "Probabilistic activation: Math.random() threshold gate",
+  "high",
+  "RD-CP-002.py",
+  3,
+  "probabilistic-activation"
+ ],
+ [
+  "Probabilistic activation: Math.random() threshold with code execution",
+  "high",
+  "RD-CP-001.py",
+  1,
+  "probabilistic-activation"
+ ],
+ [
+  "Probabilistic activation: Math.random() threshold with code execution",
+  "high",
+  "RD-CP-001.py",
+  2,
+  "probabilistic-activation"
+ ],
+ [
+  "Probabilistic activation: Math.random() threshold with code execution",
+  "high",
+  "RD-CP-001.py",
+  3,
+  "probabilistic-activation"
+ ],
+ [
+  "Probabilistic activation: random.random() threshold gate",
+  "high",
+  "RD-CP-003.py",
+  1,
+  "probabilistic-activation"
+ ],
+ [
+  "Probabilistic activation: random.random() threshold gate",
+  "high",
+  "RD-CP-003.py",
+  2,
+  "probabilistic-activation"
+ ],
+ [
+  "Probabilistic activation: random.random() threshold gate",
+  "high",
+  "RD-CP-003.py",
+  3,
+  "probabilistic-activation"
+ ],
+ [
+  "Probabilistic activation: random.random() threshold gate",
+  "high",
+  "RD-TB-008.py",
+  1,
+  "probabilistic-activation"
+ ],
+ [
+  "Probabilistic activation: random.random() threshold gate",
+  "high",
+  "RD-TB-008.py",
+  3,
+  "probabilistic-activation"
+ ],
+ [
+  "Probabilistic activation: random.random() threshold gate",
+  "high",
+  "RD-TB-008.py",
+  4,
+  "probabilistic-activation"
+ ],
+ [
+  "Probabilistic trigger with code execution",
+  "medium",
+  "RD-TB-008.py",
+  1,
+  "time-bomb"
+ ],
+ [
+  "Probabilistic trigger with code execution",
+  "medium",
+  "RD-TB-008.py",
+  2,
+  "time-bomb"
+ ],
+ [
+  "Probabilistic trigger with code execution",
+  "medium",
+  "RD-TB-008.py",
+  3,
+  "time-bomb"
+ ],
+ [
+  "Self-propagating worm: fs.write targeting node_modules",
+  "critical",
+  "RD-WORM-001.py",
+  1,
+  "worm-propagation"
+ ],
+ [
+  "Self-propagating worm: fs.write targeting node_modules",
+  "critical",
+  "RD-WORM-001.py",
+  2,
+  "worm-propagation"
+ ],
+ [
+  "Self-propagating worm: fs.write targeting node_modules",
+  "critical",
+  "RD-WORM-001.py",
+  3,
+  "worm-propagation"
+ ],
+ [
+  "Self-propagating worm: fs.write targeting site-packages",
+  "critical",
+  "RD-WORM-002.py",
+  1,
+  "worm-propagation"
+ ],
+ [
+  "Self-propagating worm: fs.write targeting site-packages",
+  "critical",
+  "RD-WORM-002.py",
+  2,
+  "worm-propagation"
+ ],
+ [
+  "Self-propagating worm: fs.write targeting site-packages",
+  "critical",
+  "RD-WORM-002.py",
+  3,
+  "worm-propagation"
+ ],
+ [
+  "Self-propagating worm: open() append to package directory",
+  "critical",
+  "RD-WORM-004.py",
+  1,
+  "worm-propagation"
+ ],
+ [
+  "Self-propagating worm: open() append to package directory",
+  "critical",
+  "RD-WORM-004.py",
+  2,
+  "worm-propagation"
+ ],
+ [
+  "Self-propagating worm: open() append to package directory",
+  "critical",
+  "RD-WORM-004.py",
+  3,
+  "worm-propagation"
+ ],
+ [
+  "Self-propagating worm: open() write to package directory",
+  "critical",
+  "RD-WORM-003.py",
+  1,
+  "worm-propagation"
+ ],
+ [
+  "Self-propagating worm: open() write to package directory",
+  "critical",
+  "RD-WORM-003.py",
+  2,
+  "worm-propagation"
+ ],
+ [
+  "Self-propagating worm: open() write to package directory",
+  "critical",
+  "RD-WORM-003.py",
+  3,
+  "worm-propagation"
+ ],
+ [
+  "Self-propagating worm: os.rename in package directory",
+  "critical",
+  "RD-WORM-006.py",
+  1,
+  "worm-propagation"
+ ],
+ [
+  "Self-propagating worm: os.rename in package directory",
+  "critical",
+  "RD-WORM-006.py",
+  2,
+  "worm-propagation"
+ ],
+ [
+  "Self-propagating worm: os.rename in package directory",
+  "critical",
+  "RD-WORM-006.py",
+  3,
+  "worm-propagation"
+ ],
+ [
+  "Self-propagating worm: path into node_modules + write",
+  "critical",
+  "RD-WORM-008.py",
+  1,
+  "worm-propagation"
+ ],
+ [
+  "Self-propagating worm: path into node_modules + write",
+  "critical",
+  "RD-WORM-008.py",
+  2,
+  "worm-propagation"
+ ],
+ [
+  "Self-propagating worm: path into node_modules + write",
+  "critical",
+  "RD-WORM-008.py",
+  3,
+  "worm-propagation"
+ ],
+ [
+  "Self-propagating worm: require.resolve + fs.write (sibling package modification)",
+  "critical",
+  "RD-WORM-007.py",
+  1,
+  "worm-propagation"
+ ],
+ [
+  "Self-propagating worm: require.resolve + fs.write (sibling package modification)",
+  "critical",
+  "RD-WORM-007.py",
+  2,
+  "worm-propagation"
+ ],
+ [
+  "Self-propagating worm: require.resolve + fs.write (sibling package modification)",
+  "critical",
+  "RD-WORM-007.py",
+  3,
+  "worm-propagation"
+ ],
+ [
+  "Self-propagating worm: shutil.copy to package directory",
+  "critical",
+  "RD-WORM-005.py",
+  1,
+  "worm-propagation"
+ ],
+ [
+  "Self-propagating worm: shutil.copy to package directory",
+  "critical",
+  "RD-WORM-005.py",
+  2,
+  "worm-propagation"
+ ],
+ [
+  "Self-propagating worm: shutil.copy to package directory",
+  "critical",
+  "RD-WORM-005.py",
+  3,
+  "worm-propagation"
+ ],
+ [
+  "SourcelessFileLoader - bytecode loading bypass (CVE-2026-2297)",
+  "critical",
+  "RD-SMOD-001.py",
+  1,
+  "self-modification"
+ ],
+ [
+  "SourcelessFileLoader - bytecode loading bypass (CVE-2026-2297)",
+  "critical",
+  "RD-SMOD-001.py",
+  2,
+  "self-modification"
+ ],
+ [
+  "SourcelessFileLoader - bytecode loading bypass (CVE-2026-2297)",
+  "critical",
+  "RD-SMOD-001.py",
+  3,
+  "self-modification"
+ ],
+ [
+  "Unix timestamp comparison (potential time bomb)",
+  "medium",
+  "RD-TB-006.py",
+  1,
+  "time-bomb"
+ ],
+ [
+  "Unix timestamp comparison (potential time bomb)",
+  "medium",
+  "RD-TB-006.py",
+  2,
+  "time-bomb"
+ ],
+ [
+  "Unix timestamp comparison (potential time bomb)",
+  "medium",
+  "RD-TB-006.py",
+  3,
+  "time-bomb"
+ ],
+ [
+  "__import__() call (dynamic import evasion)",
+  "high",
+  "RD-DYN-002.py",
+  4,
+  "dynamic-import"
+ ],
+ [
+  "__import__() call (dynamic import evasion)",
+  "high",
+  "RD-DYN-003.py",
+  4,
+  "dynamic-import"
+ ],
+ [
+  "__import__() call (dynamic import evasion)",
+  "high",
+  "RD-DYN-004.py",
+  1,
+  "dynamic-import"
+ ],
+ [
+  "__import__() call (dynamic import evasion)",
+  "high",
+  "RD-DYN-004.py",
+  2,
+  "dynamic-import"
+ ],
+ [
+  "__import__() call (dynamic import evasion)",
+  "high",
+  "RD-DYN-004.py",
+  3,
+  "dynamic-import"
+ ],
+ [
+  "__import__() call (dynamic import evasion)",
+  "high",
+  "SA-PY-003.py",
+  1,
+  "dynamic-import"
+ ],
+ [
+  "__import__() call (dynamic import evasion)",
+  "high",
+  "SA-PY-003.py",
+  3,
+  "dynamic-import"
+ ],
+ [
+  "__import__() call (dynamic import evasion)",
+  "high",
+  "SA-PY-019.py",
+  1,
+  "dynamic-import"
+ ],
+ [
+  "__import__() call (dynamic import evasion)",
+  "high",
+  "SA-PY-019.py",
+  2,
+  "dynamic-import"
+ ],
+ [
+  "__import__() call (dynamic import evasion)",
+  "high",
+  "SA-PY-019.py",
+  3,
+  "dynamic-import"
+ ],
+ [
+  "__import__() call (dynamic import evasion)",
+  "high",
+  "SA-PY-019.py",
+  5,
+  "dynamic-import"
+ ],
+ [
+  "__import__() call (dynamic import evasion)",
+  "high",
+  "obfuscation.py",
+  3,
+  "dynamic-import"
+ ],
+ [
+  "__import__() with dynamic source",
+  "high",
+  "RD-DYN-002.py",
+  1,
+  "dynamic-import"
+ ],
+ [
+  "__import__() with dynamic source",
+  "high",
+  "RD-DYN-002.py",
+  2,
+  "dynamic-import"
+ ],
+ [
+  "__import__() with dynamic source",
+  "high",
+  "RD-DYN-002.py",
+  3,
+  "dynamic-import"
+ ],
+ [
+  "__import__() with variable argument",
+  "high",
+  "RD-DYN-003.py",
+  1,
+  "dynamic-import"
+ ],
+ [
+  "__import__() with variable argument",
+  "high",
+  "RD-DYN-003.py",
+  2,
+  "dynamic-import"
+ ],
+ [
+  "__import__() with variable argument",
+  "high",
+  "RD-DYN-003.py",
+  3,
+  "dynamic-import"
+ ],
+ [
+  "__import__() with variable argument",
+  "high",
+  "SA-PY-003.py",
+  2,
+  "dynamic-import"
+ ],
+ [
+  "compile() with variable source - runtime code generation",
+  "critical",
+  "RD-SMOD-004.py",
+  1,
+  "self-modification"
+ ],
+ [
+  "compile() with variable source - runtime code generation",
+  "critical",
+  "RD-SMOD-004.py",
+  2,
+  "self-modification"
+ ],
+ [
+  "compile() with variable source - runtime code generation",
+  "critical",
+  "RD-SMOD-004.py",
+  3,
+  "self-modification"
+ ],
+ [
+  "compile() with variable source - runtime code generation",
+  "critical",
+  "SA-PY-004.py",
+  1,
+  "self-modification"
+ ],
+ [
+  "compile() with variable source - runtime code generation",
+  "critical",
+  "SA-PY-004.py",
+  2,
+  "self-modification"
+ ],
+ [
+  "compile() with variable source - runtime code generation",
+  "critical",
+  "SA-PY-004.py",
+  3,
+  "self-modification"
+ ],
+ [
+  "compile() with variable source - runtime code generation",
+  "critical",
+  "SA-PY-004.py",
+  4,
+  "self-modification"
+ ],
+ [
+  "curl piped to bash via subprocess",
+  "critical",
+  "RD-FEX-006.py",
+  1,
+  "fetch-execute"
+ ],
+ [
+  "curl piped to bash via subprocess",
+  "critical",
+  "RD-FEX-006.py",
+  2,
+  "fetch-execute"
+ ],
+ [
+  "curl piped to bash via subprocess",
+  "critical",
+  "RD-FEX-006.py",
+  3,
+  "fetch-execute"
+ ],
+ [
+  "date.today() comparison (potential activation trigger)",
+  "medium",
+  "RD-TB-003.py",
+  1,
+  "time-bomb"
+ ],
+ [
+  "date.today() comparison (potential activation trigger)",
+  "medium",
+  "RD-TB-003.py",
+  2,
+  "time-bomb"
+ ],
+ [
+  "date.today() comparison (potential activation trigger)",
+  "medium",
+  "RD-TB-003.py",
+  3,
+  "time-bomb"
+ ],
+ [
+  "datetime.now() comparison (potential activation trigger)",
+  "medium",
+  "RD-TB-002.py",
+  1,
+  "time-bomb"
+ ],
+ [
+  "datetime.now() comparison (potential activation trigger)",
+  "medium",
+  "RD-TB-002.py",
+  2,
+  "time-bomb"
+ ],
+ [
+  "datetime.now() comparison (potential activation trigger)",
+  "medium",
+  "RD-TB-002.py",
+  3,
+  "time-bomb"
+ ],
+ [
+  "dynamic import() from config/env (ES)",
+  "high",
+  "RD-DYN-008.py",
+  1,
+  "dynamic-import"
+ ],
+ [
+  "dynamic import() from config/env (ES)",
+  "high",
+  "RD-DYN-008.py",
+  2,
+  "dynamic-import"
+ ],
+ [
+  "dynamic import() from config/env (ES)",
+  "high",
+  "RD-DYN-008.py",
+  3,
+  "dynamic-import"
+ ],
+ [
+  "dynamic import() with variable argument (ES)",
+  "high",
+  "RD-DYN-006.py",
+  1,
+  "dynamic-import"
+ ],
+ [
+  "dynamic import() with variable argument (ES)",
+  "high",
+  "RD-DYN-006.py",
+  2,
+  "dynamic-import"
+ ],
+ [
+  "dynamic import() with variable argument (ES)",
+  "high",
+  "RD-DYN-006.py",
+  3,
+  "dynamic-import"
+ ],
+ [
+  "eval() of HTTP response content",
+  "critical",
+  "RD-FEX-001.py",
+  1,
+  "fetch-execute"
+ ],
+ [
+  "eval() of HTTP response content",
+  "critical",
+  "RD-FEX-001.py",
+  2,
+  "fetch-execute"
+ ],
+ [
+  "eval() of HTTP response content",
+  "critical",
+  "RD-FEX-001.py",
+  3,
+  "fetch-execute"
+ ],
+ [
+  "eval() of fetched content (JS)",
+  "critical",
+  "RD-FEX-008.py",
+  1,
+  "fetch-execute"
+ ],
+ [
+  "eval() of fetched content (JS)",
+  "critical",
+  "RD-FEX-008.py",
+  2,
+  "fetch-execute"
+ ],
+ [
+  "eval() of fetched content (JS)",
+  "critical",
+  "RD-FEX-008.py",
+  3,
+  "fetch-execute"
+ ],
+ [
+  "eval(atob()) - base64 decode and execute (JS)",
+  "critical",
+  "RD-SMOD-006.py",
+  1,
+  "self-modification"
+ ],
+ [
+  "eval(atob()) - base64 decode and execute (JS)",
+  "critical",
+  "RD-SMOD-006.py",
+  2,
+  "self-modification"
+ ],
+ [
+  "eval(atob()) - base64 decode and execute (JS)",
+  "critical",
+  "RD-SMOD-006.py",
+  3,
+  "self-modification"
+ ],
+ [
+  "exec() of HTTP response content",
+  "critical",
+  "RD-FEX-002.py",
+  1,
+  "fetch-execute"
+ ],
+ [
+  "exec() of HTTP response content",
+  "critical",
+  "RD-FEX-002.py",
+  2,
+  "fetch-execute"
+ ],
+ [
+  "exec() of HTTP response content",
+  "critical",
+  "RD-FEX-002.py",
+  3,
+  "fetch-execute"
+ ],
+ [
+  "importlib.import_module() with variable argument",
+  "high",
+  "RD-DYN-001.py",
+  1,
+  "dynamic-import"
+ ],
+ [
+  "importlib.import_module() with variable argument",
+  "high",
+  "RD-DYN-001.py",
+  2,
+  "dynamic-import"
+ ],
+ [
+  "importlib.import_module() with variable argument",
+  "high",
+  "RD-DYN-001.py",
+  3,
+  "dynamic-import"
+ ],
+ [
+  "module_from_spec() - runtime module loading from spec",
+  "critical",
+  "RD-SMOD-003.py",
+  1,
+  "self-modification"
+ ],
+ [
+  "module_from_spec() - runtime module loading from spec",
+  "critical",
+  "RD-SMOD-003.py",
+  2,
+  "self-modification"
+ ],
+ [
+  "module_from_spec() - runtime module loading from spec",
+  "critical",
+  "RD-SMOD-003.py",
+  3,
+  "self-modification"
+ ],
+ [
+  "new Function() from fetched content (JS)",
+  "critical",
+  "RD-FEX-009.py",
+  1,
+  "fetch-execute"
+ ],
+ [
+  "new Function() from fetched content (JS)",
+  "critical",
+  "RD-FEX-009.py",
+  2,
+  "fetch-execute"
+ ],
+ [
+  "new Function() from fetched content (JS)",
+  "critical",
+  "RD-FEX-009.py",
+  3,
+  "fetch-execute"
+ ],
+ [
+  "new Function() with variable body (JS)",
+  "critical",
+  "RD-FEX-009.py",
+  1,
+  "self-modification"
+ ],
+ [
+  "new Function() with variable body (JS)",
+  "critical",
+  "RD-FEX-009.py",
+  2,
+  "self-modification"
+ ],
+ [
+  "new Function() with variable body (JS)",
+  "critical",
+  "RD-FEX-009.py",
+  3,
+  "self-modification"
+ ],
+ [
+  "new Function() with variable body (JS)",
+  "critical",
+  "RD-SMOD-005.py",
+  1,
+  "self-modification"
+ ],
+ [
+  "new Function() with variable body (JS)",
+  "critical",
+  "RD-SMOD-005.py",
+  2,
+  "self-modification"
+ ],
+ [
+  "new Function() with variable body (JS)",
+  "critical",
+  "RD-SMOD-005.py",
+  3,
+  "self-modification"
+ ],
+ [
+  "new Function() with variable body (JS)",
+  "critical",
+  "SA-JS-002.js",
+  2,
+  "self-modification"
+ ],
+ [
+  "new Function() with variable body (JS)",
+  "critical",
+  "SA-JS-002.js",
+  3,
+  "self-modification"
+ ],
+ [
+  "new Function() with variable body (JS)",
+  "critical",
+  "SA-TS-002.ts",
+  2,
+  "self-modification"
+ ],
+ [
+  "new Function() with variable body (JS)",
+  "critical",
+  "SA-TS-002.ts",
+  3,
+  "self-modification"
+ ],
+ [
+  "require() from config/env (JS)",
+  "high",
+  "RD-DYN-007.py",
+  1,
+  "dynamic-import"
+ ],
+ [
+  "require() from config/env (JS)",
+  "high",
+  "RD-DYN-007.py",
+  2,
+  "dynamic-import"
+ ],
+ [
+  "require() from config/env (JS)",
+  "high",
+  "RD-DYN-007.py",
+  3,
+  "dynamic-import"
+ ],
+ [
+  "require() with variable argument (JS)",
+  "high",
+  "RD-DYN-005.py",
+  1,
+  "dynamic-import"
+ ],
+ [
+  "require() with variable argument (JS)",
+  "high",
+  "RD-DYN-005.py",
+  2,
+  "dynamic-import"
+ ],
+ [
+  "require() with variable argument (JS)",
+  "high",
+  "RD-DYN-005.py",
+  3,
+  "dynamic-import"
+ ],
+ [
+  "spec_from_file_location loading .pyc (CVE-2026-2297 variant)",
+  "critical",
+  "RD-SMOD-002.py",
+  1,
+  "self-modification"
+ ],
+ [
+  "spec_from_file_location loading .pyc (CVE-2026-2297 variant)",
+  "critical",
+  "RD-SMOD-002.py",
+  2,
+  "self-modification"
+ ],
+ [
+  "spec_from_file_location loading .pyc (CVE-2026-2297 variant)",
+  "critical",
+  "RD-SMOD-002.py",
+  3,
+  "self-modification"
+ ],
+ [
+  "time.time() compared to hardcoded unix timestamp",
+  "medium",
+  "RD-TB-004.py",
+  1,
+  "time-bomb"
+ ],
+ [
+  "time.time() compared to hardcoded unix timestamp",
+  "medium",
+  "RD-TB-004.py",
+  2,
+  "time-bomb"
+ ],
+ [
+  "time.time() compared to hardcoded unix timestamp",
+  "medium",
+  "RD-TB-004.py",
+  3,
+  "time-bomb"
+ ],
+ [
+  "time.time() compared to variable (potential time bomb)",
+  "medium",
+  "RD-TB-004.py",
+  4,
+  "time-bomb"
+ ],
+ [
+  "time.time() compared to variable (potential time bomb)",
+  "medium",
+  "RD-TB-005.py",
+  1,
+  "time-bomb"
+ ],
+ [
+  "time.time() compared to variable (potential time bomb)",
+  "medium",
+  "RD-TB-005.py",
+  2,
+  "time-bomb"
+ ],
+ [
+  "time.time() compared to variable (potential time bomb)",
+  "medium",
+  "RD-TB-005.py",
+  3,
+  "time-bomb"
+ ]
+]

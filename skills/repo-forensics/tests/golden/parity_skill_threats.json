@@ -436,6 +436,132 @@
  [
   "Environment variable access",
   "medium",
+  "RD-CP-006.py",
+  1,
+  "credential-exfiltration"
+ ],
+ [
+  "Environment variable access",
+  "medium",
+  "RD-CP-006.py",
+  2,
+  "credential-exfiltration"
+ ],
+ [
+  "Environment variable access",
+  "medium",
+  "RD-CP-006.py",
+  3,
+  "credential-exfiltration"
+ ],
+ [
+  "Environment variable access",
+  "medium",
+  "RD-CP-006.py",
+  4,
+  "credential-exfiltration"
+ ],
+ [
+  "Environment variable access",
+  "medium",
+  "RD-CP-007.py",
+  5,
+  "credential-exfiltration"
+ ],
+ [
+  "Environment variable access",
+  "medium",
+  "RD-CP-008.py",
+  1,
+  "credential-exfiltration"
+ ],
+ [
+  "Environment variable access",
+  "medium",
+  "RD-CP-008.py",
+  2,
+  "credential-exfiltration"
+ ],
+ [
+  "Environment variable access",
+  "medium",
+  "RD-CP-008.py",
+  3,
+  "credential-exfiltration"
+ ],
+ [
+  "Environment variable access",
+  "medium",
+  "RD-CP-008.py",
+  4,
+  "credential-exfiltration"
+ ],
+ [
+  "Environment variable access",
+  "medium",
+  "RD-CP-009.py",
+  5,
+  "credential-exfiltration"
+ ],
+ [
+  "Environment variable access",
+  "medium",
+  "RD-DYN-002.py",
+  1,
+  "credential-exfiltration"
+ ],
+ [
+  "Environment variable access",
+  "medium",
+  "RD-LOC-003.py",
+  1,
+  "credential-exfiltration"
+ ],
+ [
+  "Environment variable access",
+  "medium",
+  "RD-LOC-003.py",
+  2,
+  "credential-exfiltration"
+ ],
+ [
+  "Environment variable access",
+  "medium",
+  "RD-LOC-003.py",
+  3,
+  "credential-exfiltration"
+ ],
+ [
+  "Environment variable access",
+  "medium",
+  "RD-LOC-003.py",
+  4,
+  "credential-exfiltration"
+ ],
+ [
+  "Environment variable access",
+  "medium",
+  "RD-LOC-003.py",
+  5,
+  "credential-exfiltration"
+ ],
+ [
+  "Environment variable access",
+  "medium",
+  "RD-LOC-004.py",
+  2,
+  "credential-exfiltration"
+ ],
+ [
+  "Environment variable access",
+  "medium",
+  "RD-LOC-004.py",
+  5,
+  "credential-exfiltration"
+ ],
+ [
+  "Environment variable access",
+  "medium",
   "SA-PY-014.py",
   2,
   "credential-exfiltration"
@@ -701,6 +827,41 @@
   "Instruction override directive",
   "critical",
   "mcp_SM-KW-001.py",
+  1,
+  "prompt-injection"
+ ],
+ [
+  "Instruction-replacement directive",
+  "critical",
+  "ST-PI-019.md",
+  1,
+  "prompt-injection"
+ ],
+ [
+  "Instruction-replacement directive",
+  "critical",
+  "ST-PI-019.md",
+  2,
+  "prompt-injection"
+ ],
+ [
+  "Instruction-replacement directive",
+  "critical",
+  "ST-PI-019.md",
+  3,
+  "prompt-injection"
+ ],
+ [
+  "Instruction-replacement directive",
+  "critical",
+  "ST-UC-001.md",
+  2,
+  "prompt-injection"
+ ],
+ [
+  "Instruction-replacement directive",
+  "critical",
+  "ST-UC-004.md",
   1,
   "prompt-injection"
  ],
@@ -1184,6 +1345,27 @@
   "Restriction bypass directive",
   "critical",
   "ST-PI-008.md",
+  3,
+  "prompt-injection"
+ ],
+ [
+  "Role-play impersonation directive",
+  "critical",
+  "ST-PI-020.md",
+  1,
+  "prompt-injection"
+ ],
+ [
+  "Role-play impersonation directive",
+  "critical",
+  "ST-PI-020.md",
+  2,
+  "prompt-injection"
+ ],
+ [
+  "Role-play impersonation directive",
+  "critical",
+  "ST-PI-020.md",
   3,
   "prompt-injection"
  ],
@@ -1924,6 +2106,27 @@
   "Zero-Width Character Cluster",
   "ST-ZW-001.md",
   "unicode-smuggling"
+ ],
+ [
+  "eval(decode(...)) pattern",
+  "critical",
+  "RD-SMOD-006.py",
+  1,
+  "clickfix-sleeper"
+ ],
+ [
+  "eval(decode(...)) pattern",
+  "critical",
+  "RD-SMOD-006.py",
+  2,
+  "clickfix-sleeper"
+ ],
+ [
+  "eval(decode(...)) pattern",
+  "critical",
+  "RD-SMOD-006.py",
+  3,
+  "clickfix-sleeper"
  ],
  [
   "eval(decode(...)) pattern",

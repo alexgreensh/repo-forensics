@@ -19,156 +19,68 @@ Created by Alex Greenshpun
 """
 
 import os
-import re
 import ast
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import forensics_core as core
+import rule_loader
 
 SCANNER_NAME = "runtime_dynamism"
 
 # ============================================================
-# Category 1: Dynamic Imports (medium-high)
-# Code that loads modules at runtime based on variables/config.
+# Detection rules load from the shipped pack at import time (rule_loader
+# memoizes, so this parses once per process). The 8 categories below preserve
+# the pre-extraction severity-per-category mapping (severity drives the parity
+# key). The AST visitor, two-stage scan, and dedup are scanning *algorithm* and
+# stay in code (KTD-3). load_pack returns None only on a missing/tampered
+# install -> PACK_LOAD_ERROR, one loud diagnostic, no hardcoded fallback.
 # ============================================================
-DYNAMIC_IMPORT_PATTERNS = [
-    (re.compile(r'importlib\.import_module\s*\(\s*[^"\']'), "importlib.import_module() with variable argument"),
-    (re.compile(r'__import__\s*\(\s*(os\.environ|os\.getenv|config|settings|variable|getattr|input)'), "__import__() with dynamic source"),
-    (re.compile(r'__import__\s*\(\s*[a-zA-Z_]\w*\s*[\)\[]'), "__import__() with variable argument"),
-    (re.compile(r'__import__\s*\(\s*["\'][a-zA-Z_]'), "__import__() call (dynamic import evasion)"),
-    # JavaScript/TypeScript dynamic imports
-    (re.compile(r'require\s*\(\s*[a-zA-Z_]\w*\s*\)'), "require() with variable argument (JS)"),
-    (re.compile(r'import\s*\(\s*[a-zA-Z_]\w*\s*\)'), "dynamic import() with variable argument (ES)"),
-    (re.compile(r'require\s*\(\s*(process\.env|config|options)'), "require() from config/env (JS)"),
-    (re.compile(r'import\s*\(\s*(process\.env|config|options)'), "dynamic import() from config/env (ES)"),
-]
+_PACK = rule_loader.load_pack(SCANNER_NAME)
+PACK_LOAD_ERROR = _PACK is None
 
-# ============================================================
-# Category 2: Fetch-then-Execute (critical)
-# Downloads content from network, then executes it.
-# ============================================================
-FETCH_EXECUTE_PATTERNS = [
-    # Python: requests/urllib -> eval/exec
-    (re.compile(r'eval\s*\(\s*(requests\.(get|post)|urllib)'), "eval() of HTTP response content"),
-    (re.compile(r'exec\s*\(\s*(requests\.(get|post)|urllib)'), "exec() of HTTP response content"),
-    (re.compile(r'(requests\.(get|post)|urllib\w*\.urlopen)\s*\(.*\)\s*\.\s*(text|read|content|decode).*\beval\b'), "HTTP fetch piped to eval()"),
-    (re.compile(r'(requests\.(get|post)|urllib\w*\.urlopen)\s*\(.*\)\s*\.\s*(text|read|content|decode).*\bexec\b'), "HTTP fetch piped to exec()"),
-    # NOTE: Runtime pip/npm install patterns are owned by scan_manifest_drift.py
-    # Download then run shell scripts
-    (re.compile(r'(requests\.get|urllib\w*\.urlopen)\s*\(.*\).*\.(write|save).*\.(sh|py|ps1|bat)'), "Download and save executable script"),
-    (re.compile(r'subprocess\.\w+\s*\(\s*\[?\s*["\']curl["\'].*\|\s*["\']?bash'), "curl piped to bash via subprocess"),
-    # Two-line patterns: download to variable, then exec/eval the variable
-    (re.compile(r'=\s*(requests\.(get|post)|urllib\w*\.urlopen)\s*\(.*https?://'), "HTTP response stored to variable (check for subsequent exec)"),
-    # JavaScript: fetch -> eval
-    (re.compile(r'eval\s*\(\s*await\s+fetch'), "eval() of fetched content (JS)"),
-    (re.compile(r'new\s+Function\s*\(\s*await\s+fetch'), "new Function() from fetched content (JS)"),
-]
+# Output category -> emitted severity (the pre-extraction call-site default).
+# Rules carry their category in the pack; we group by it so each category emits
+# at its historical severity, preserving the (title, severity, ...) parity key.
+_CATEGORY_SEVERITY = {
+    "dynamic-import": "high",
+    "fetch-execute": "critical",
+    "self-modification": "critical",
+    "time-bomb": "medium",
+    "worm-propagation": "critical",
+    "probabilistic-activation": "high",
+    "environment-detection": "medium",
+    "locale-gating": "medium",
+}
 
-# ============================================================
-# Category 3: Self-Modification (critical)
-# Code that constructs or mutates its own behavior at runtime.
-# ============================================================
-SELF_MOD_PATTERNS = [
-    # NOTE: types.FunctionType, types.CodeType, marshal.loads/load, bytes([int_list]).decode(),
-    # sys.addaudithook, and open(__file__,'w') are detected by scan_ast.py (patterns 6-12).
-    # This scanner only covers patterns NOT in scan_ast.py.
-    (re.compile(r'SourcelessFileLoader'), "SourcelessFileLoader - bytecode loading bypass (CVE-2026-2297)"),
-    (re.compile(r'spec_from_file_location\s*\(.*\.pyc'), "spec_from_file_location loading .pyc (CVE-2026-2297 variant)"),
-    (re.compile(r'module_from_spec\s*\('), "module_from_spec() - runtime module loading from spec"),
-    (re.compile(r'compile\s*\(\s*[a-zA-Z_]\w*\s*,\s*["\']'), "compile() with variable source - runtime code generation"),
-    # JavaScript self-modification (scan_ast.py is Python-only)
-    (re.compile(r'new\s+Function\s*\(\s*[a-zA-Z_]'), "new Function() with variable body (JS)"),
-    (re.compile(r'eval\s*\(\s*atob\s*\('), "eval(atob()) - base64 decode and execute (JS)"),
-]
 
-# ============================================================
-# Category 4: Time Bombs (high)
-# Conditional logic triggered by date, time, or counter.
-# ============================================================
-TIME_BOMB_PATTERNS = [
-    # Python datetime comparisons
-    (re.compile(r'datetime\.\w*\(\s*\d{4}\s*,'), "Hardcoded future datetime comparison (potential time bomb)"),
-    (re.compile(r'datetime\.now\(\)\s*[><=]+'), "datetime.now() comparison (potential activation trigger)"),
-    (re.compile(r'date\.today\(\)\s*[><=]+'), "date.today() comparison (potential activation trigger)"),
-    # Unix timestamp comparisons
-    (re.compile(r'time\.time\(\)\s*[><=]+\s*\d{9,}'), "time.time() compared to hardcoded unix timestamp"),
-    (re.compile(r'time\.time\(\)\s*[><=]+\s*\w'), "time.time() compared to variable (potential time bomb)"),
-    (re.compile(r'int\(time\.time\(\)\)\s*[><=]+\s*\d{9,}'), "Unix timestamp comparison (potential time bomb)"),
-    # Counter/attempt-based activation
-    (re.compile(r'(?:count|counter|attempts?|calls?|invocations?)\s*[><=]+\s*\d{2,}'), "Counter-based activation threshold"),
-    # Random/probabilistic triggers
-    (re.compile(r'random\.\w+\(\)\s*[<>=]+\s*0\.\d+.*(?:exec|eval|system|subprocess|import)'), "Probabilistic trigger with code execution"),
-    # JavaScript time comparisons
-    (re.compile(r'Date\.now\(\)\s*[><=]+\s*\d{12,}'), "Date.now() compared to hardcoded timestamp (JS)"),
-    (re.compile(r'new\s+Date\(\)\s*[><=]+\s*new\s+Date\s*\(\s*["\']'), "Date comparison with hardcoded date (JS)"),
-]
+def _rules_by_category():
+    """Group the loaded pack's rules by output category (stable order)."""
+    grouped = {}
+    if _PACK is not None:
+        for rule in _PACK.all_rules:
+            grouped.setdefault(rule.category, []).append(rule)
+    return grouped
 
-# NOTE: Dynamic Tool Description patterns (Category 5) are now owned by
-# scan_mcp_security.py (RUG_PULL_PATTERNS). Removed from here to avoid
-# duplicate findings on MCP server files.
 
-# ============================================================
-# Category 6: Self-Propagating Worm (critical)
-# Code that modifies files in node_modules or site-packages.
-# Source: Sonatype "Self-Propagating NPM Worm" report (April 2026)
-# ============================================================
-WORM_PROPAGATION_PATTERNS = [
-    # JavaScript: fs.writeFileSync / fs.writeFile targeting node_modules
-    (re.compile(r'fs\.(writeFileSync|writeFile)\s*\([^)]*node_modules'), "Self-propagating worm: fs.write targeting node_modules"),
-    (re.compile(r'fs\.(writeFileSync|writeFile)\s*\([^)]*site.packages'), "Self-propagating worm: fs.write targeting site-packages"),
-    # Python: open(..., 'w') with path containing node_modules or site-packages
-    (re.compile(r'open\s*\([^)]*(?:node_modules|site.packages)[^)]*,\s*["\']w'), "Self-propagating worm: open() write to package directory"),
-    (re.compile(r'open\s*\([^)]*(?:node_modules|site.packages)[^)]*,\s*["\']a'), "Self-propagating worm: open() append to package directory"),
-    # Python: shutil.copy / os.rename targeting package dirs
-    (re.compile(r'shutil\.copy\w*\s*\([^)]*(?:node_modules|site.packages)'), "Self-propagating worm: shutil.copy to package directory"),
-    (re.compile(r'os\.rename\s*\([^)]*(?:node_modules|site.packages)'), "Self-propagating worm: os.rename in package directory"),
-    # JavaScript: require.resolve + fs.write combo (resolve sibling then modify)
-    (re.compile(r'require\.resolve\s*\([^)]*\).*fs\.(write|writeFile|writeFileSync)'), "Self-propagating worm: require.resolve + fs.write (sibling package modification)"),
-    # JavaScript: path resolution into node_modules then write
-    (re.compile(r'path\.(join|resolve)\s*\([^)]*node_modules[^)]*\).*fs\.(write|writeFile|writeFileSync)'), "Self-propagating worm: path into node_modules + write"),
-]
+_RULES_BY_CATEGORY = _rules_by_category()
 
-# ============================================================
-# Category 7: Counter/Probabilistic Activation (medium-high)
-# Activation triggers that don't use time references.
-# ============================================================
-COUNTER_PROBABILISTIC_PATTERNS = [
-    # Random activation with code execution
-    (re.compile(r'Math\.random\(\)\s*[<>]=?\s*0\.\d+.*(?:exec|eval|fetch|require|import)'), "Probabilistic activation: Math.random() threshold with code execution"),
-    (re.compile(r'Math\.random\(\)\s*[<>]=?\s*0\.\d+'), "Probabilistic activation: Math.random() threshold gate"),
-    (re.compile(r'random\.random\(\)\s*[<>]=?\s*0\.\d+'), "Probabilistic activation: random.random() threshold gate"),
-    # CI/CD environment detection — different behavior in CI vs local
-    (re.compile(r'process\.env\.CI\b.*(?:if|&&|\?|\|\|)'), "Environment-aware activation: process.env.CI conditional"),
-    (re.compile(r'process\.env\.GITHUB_ACTIONS\b.*(?:if|&&|\?|\|\|)'), "Environment-aware activation: process.env.GITHUB_ACTIONS conditional"),
-    (re.compile(r'os\.environ\.get\s*\(\s*["\']CI["\']'), "Environment-aware activation: os.environ.get('CI')"),
-    (re.compile(r'os\.getenv\s*\(\s*["\']CI["\']'), "Environment-aware activation: os.getenv('CI')"),
-    (re.compile(r'os\.environ\.get\s*\(\s*["\']GITHUB_ACTIONS["\']'), "Environment-aware activation: os.environ.get('GITHUB_ACTIONS')"),
-    (re.compile(r'os\.getenv\s*\(\s*["\']GITHUB_ACTIONS["\']'), "Environment-aware activation: os.getenv('GITHUB_ACTIONS')"),
-]
 
-# ============================================================
-# Category 8: Locale/Geofence Gating (medium)
-# Checks locale, language, or country before choosing a code path.
-# Benign alone (i18n). CRITICAL when correlated with destructive
-# commands (Rule 37) -- exact pattern from mistralai v2.4.6 backdoor.
-# ============================================================
-LOCALE_GATING_PATTERNS = [
-    # Python locale checks
-    (re.compile(r'locale\.getdefaultlocale\s*\('), "Locale gating: locale.getdefaultlocale()"),
-    (re.compile(r'locale\.getlocale\s*\('), "Locale gating: locale.getlocale()"),
-    (re.compile(r'os\.environ\s*\[\s*["\'](?:LANG|LC_ALL|LC_CTYPE|LANGUAGE)["\']'), "Locale gating: os.environ LANG/LC variable"),
-    (re.compile(r'os\.(?:getenv|environ\.get)\s*\(\s*["\'](?:LANG|LC_ALL|LC_CTYPE|LANGUAGE)["\']'), "Locale gating: os.getenv LANG/LC variable"),
-    # JavaScript/browser locale checks
-    (re.compile(r'navigator\.language\b'), "Locale gating: navigator.language"),
-    (re.compile(r'navigator\.languages\b'), "Locale gating: navigator.languages"),
-    (re.compile(r'Intl\.DateTimeFormat\(\)\.resolvedOptions\(\)\.locale'), "Locale gating: Intl locale resolution"),
-    # Shell locale checks
-    (re.compile(r'\$(?:LANG|LC_ALL|LC_CTYPE|LANGUAGE)\b'), "Locale gating: $LANG/$LC shell variable"),
-    # GeoIP / country detection
-    (re.compile(r'geoip|geo_ip|maxmind|GeoLite|geolocation\.country', re.IGNORECASE), "Locale gating: GeoIP lookup"),
-    (re.compile(r'country_code|countryCode|country_name', re.IGNORECASE), "Locale gating: country code reference"),
-]
+def _pack_load_finding(rel_path):
+    """One loud diagnostic emitted when the rule pack failed to load. We do NOT
+    fall back to a hardcoded copy (a corrupted install is caught independently
+    by the integrity scanner)."""
+    return core.Finding(
+        scanner=SCANNER_NAME, severity="critical",
+        title="Runtime-dynamism rule pack failed to load",
+        description=("data/rulepacks/runtime_dynamism.json is missing or "
+                     "schema-incompatible; regex-based runtime-dynamism "
+                     "detection is disabled. Reinstall repo-forensics to "
+                     "restore detection."),
+        file=rel_path, line=0,
+        snippet="rule pack failed to load",
+        category="scanner-integrity",
+    )
 
 
 class RuntimeDynamismASTVisitor(ast.NodeVisitor):
@@ -293,63 +205,24 @@ def scan_file_regex(file_path, rel_path):
     if not content.strip():
         return []
 
+    if PACK_LOAD_ERROR:
+        return [_pack_load_finding(rel_path)]
+
     findings = []
 
-    # Category 1: Dynamic imports
-    findings.extend(core.scan_patterns(
-        content, rel_path, DYNAMIC_IMPORT_PATTERNS,
-        "dynamic-import", "high", SCANNER_NAME
-    ))
-
-    # Category 2: Fetch-then-execute
-    findings.extend(core.scan_patterns(
-        content, rel_path, FETCH_EXECUTE_PATTERNS,
-        "fetch-execute", "critical", SCANNER_NAME
-    ))
-
-    # Category 3: Self-modification
-    findings.extend(core.scan_patterns(
-        content, rel_path, SELF_MOD_PATTERNS,
-        "self-modification", "critical", SCANNER_NAME
-    ))
-
-    # Category 4: Time bombs (medium severity alone; escalated via correlation rule 10)
-    findings.extend(core.scan_patterns(
-        content, rel_path, TIME_BOMB_PATTERNS,
-        "time-bomb", "medium", SCANNER_NAME
-    ))
-
-    # NOTE: Category 5 (Dynamic Tool Descriptions) moved to scan_mcp_security.py
-
-    # Category 6: Self-propagating worm (critical)
-    findings.extend(core.scan_patterns(
-        content, rel_path, WORM_PROPAGATION_PATTERNS,
-        "worm-propagation", "critical", SCANNER_NAME
-    ))
-
-    # Category 7: Counter/probabilistic activation
-    # Environment detection is MEDIUM; random/counter with exec is HIGH
-    env_findings = core.scan_patterns(
-        content, rel_path, COUNTER_PROBABILISTIC_PATTERNS[:2],
-        "probabilistic-activation", "high", SCANNER_NAME
-    )
-    findings.extend(env_findings)
-    # random.random() threshold
-    findings.extend(core.scan_patterns(
-        content, rel_path, COUNTER_PROBABILISTIC_PATTERNS[2:3],
-        "probabilistic-activation", "high", SCANNER_NAME
-    ))
-    # CI environment detection patterns (medium severity)
-    findings.extend(core.scan_patterns(
-        content, rel_path, COUNTER_PROBABILISTIC_PATTERNS[3:],
-        "environment-detection", "medium", SCANNER_NAME
-    ))
-
-    # Category 8: Locale/geofence gating (medium alone; CRITICAL via Rule 37)
-    findings.extend(core.scan_patterns(
-        content, rel_path, LOCALE_GATING_PATTERNS,
-        "locale-gating", "medium", SCANNER_NAME
-    ))
+    # Each pack rule carries its output category; emit per category at the
+    # historical severity (preserves the (title, severity, file, line, category)
+    # parity key). scan_rule_patterns stamps rule_id + confidence onto every
+    # finding. The two probabilistic-activation tiers and the environment vs
+    # locale split that used to be slice-based are now expressed by the rule's
+    # own category, so the call-site no longer needs slice arithmetic.
+    for category, severity in _CATEGORY_SEVERITY.items():
+        rules = _RULES_BY_CATEGORY.get(category)
+        if not rules:
+            continue
+        findings.extend(core.scan_rule_patterns(
+            content, rel_path, rules, category, severity, SCANNER_NAME
+        ))
 
     return findings
 

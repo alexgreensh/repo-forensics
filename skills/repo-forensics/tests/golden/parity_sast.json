@@ -177,6 +177,125 @@
  [
   "Dangerous Eval",
   "high",
+  "RD-CP-001.py",
+  2,
+  "code-execution"
+ ],
+ [
+  "Dangerous Eval",
+  "high",
+  "RD-FEX-001.py",
+  1,
+  "code-execution"
+ ],
+ [
+  "Dangerous Eval",
+  "high",
+  "RD-FEX-001.py",
+  2,
+  "code-execution"
+ ],
+ [
+  "Dangerous Eval",
+  "high",
+  "RD-FEX-001.py",
+  3,
+  "code-execution"
+ ],
+ [
+  "Dangerous Eval",
+  "high",
+  "RD-FEX-001.py",
+  4,
+  "code-execution"
+ ],
+ [
+  "Dangerous Eval",
+  "high",
+  "RD-FEX-003.py",
+  1,
+  "code-execution"
+ ],
+ [
+  "Dangerous Eval",
+  "high",
+  "RD-FEX-003.py",
+  2,
+  "code-execution"
+ ],
+ [
+  "Dangerous Eval",
+  "high",
+  "RD-FEX-003.py",
+  3,
+  "code-execution"
+ ],
+ [
+  "Dangerous Eval",
+  "high",
+  "RD-FEX-003.py",
+  5,
+  "code-execution"
+ ],
+ [
+  "Dangerous Eval",
+  "high",
+  "RD-FEX-008.py",
+  1,
+  "code-execution"
+ ],
+ [
+  "Dangerous Eval",
+  "high",
+  "RD-FEX-008.py",
+  2,
+  "code-execution"
+ ],
+ [
+  "Dangerous Eval",
+  "high",
+  "RD-FEX-008.py",
+  3,
+  "code-execution"
+ ],
+ [
+  "Dangerous Eval",
+  "high",
+  "RD-FEX-008.py",
+  4,
+  "code-execution"
+ ],
+ [
+  "Dangerous Eval",
+  "high",
+  "RD-SMOD-006.py",
+  1,
+  "code-execution"
+ ],
+ [
+  "Dangerous Eval",
+  "high",
+  "RD-SMOD-006.py",
+  2,
+  "code-execution"
+ ],
+ [
+  "Dangerous Eval",
+  "high",
+  "RD-SMOD-006.py",
+  3,
+  "code-execution"
+ ],
+ [
+  "Dangerous Eval",
+  "high",
+  "RD-SMOD-006.py",
+  4,
+  "code-execution"
+ ],
+ [
+  "Dangerous Eval",
+  "high",
   "SA-JS-001.js",
   1,
   "code-execution"
@@ -277,6 +396,76 @@
   "high",
   "SA-TSX-001.tsx",
   3,
+  "code-execution"
+ ],
+ [
+  "Dangerous Exec",
+  "high",
+  "RD-CP-001.py",
+  1,
+  "code-execution"
+ ],
+ [
+  "Dangerous Exec",
+  "high",
+  "RD-FEX-002.py",
+  1,
+  "code-execution"
+ ],
+ [
+  "Dangerous Exec",
+  "high",
+  "RD-FEX-002.py",
+  2,
+  "code-execution"
+ ],
+ [
+  "Dangerous Exec",
+  "high",
+  "RD-FEX-002.py",
+  3,
+  "code-execution"
+ ],
+ [
+  "Dangerous Exec",
+  "high",
+  "RD-FEX-002.py",
+  4,
+  "code-execution"
+ ],
+ [
+  "Dangerous Exec",
+  "high",
+  "RD-FEX-004.py",
+  1,
+  "code-execution"
+ ],
+ [
+  "Dangerous Exec",
+  "high",
+  "RD-FEX-004.py",
+  2,
+  "code-execution"
+ ],
+ [
+  "Dangerous Exec",
+  "high",
+  "RD-FEX-004.py",
+  3,
+  "code-execution"
+ ],
+ [
+  "Dangerous Exec",
+  "high",
+  "RD-FEX-004.py",
+  5,
+  "code-execution"
+ ],
+ [
+  "Dangerous Exec",
+  "high",
+  "RD-TB-008.py",
+  1,
   "code-execution"
  ],
  [
@@ -499,6 +688,20 @@
  [
   "Dynamic Compile",
   "medium",
+  "RD-SMOD-004.py",
+  1,
+  "code-execution"
+ ],
+ [
+  "Dynamic Compile",
+  "medium",
+  "RD-SMOD-004.py",
+  3,
+  "code-execution"
+ ],
+ [
+  "Dynamic Compile",
+  "medium",
   "SA-PY-004.py",
   1,
   "code-execution"
@@ -514,6 +717,83 @@
   "Dynamic Compile",
   "medium",
   "SA-PY-004.py",
+  3,
+  "code-execution"
+ ],
+ [
+  "Dynamic Import",
+  "high",
+  "RD-DYN-002.py",
+  1,
+  "code-execution"
+ ],
+ [
+  "Dynamic Import",
+  "high",
+  "RD-DYN-002.py",
+  2,
+  "code-execution"
+ ],
+ [
+  "Dynamic Import",
+  "high",
+  "RD-DYN-002.py",
+  3,
+  "code-execution"
+ ],
+ [
+  "Dynamic Import",
+  "high",
+  "RD-DYN-002.py",
+  4,
+  "code-execution"
+ ],
+ [
+  "Dynamic Import",
+  "high",
+  "RD-DYN-003.py",
+  1,
+  "code-execution"
+ ],
+ [
+  "Dynamic Import",
+  "high",
+  "RD-DYN-003.py",
+  2,
+  "code-execution"
+ ],
+ [
+  "Dynamic Import",
+  "high",
+  "RD-DYN-003.py",
+  3,
+  "code-execution"
+ ],
+ [
+  "Dynamic Import",
+  "high",
+  "RD-DYN-003.py",
+  4,
+  "code-execution"
+ ],
+ [
+  "Dynamic Import",
+  "high",
+  "RD-DYN-004.py",
+  1,
+  "code-execution"
+ ],
+ [
+  "Dynamic Import",
+  "high",
+  "RD-DYN-004.py",
+  2,
+  "code-execution"
+ ],
+ [
+  "Dynamic Import",
+  "high",
+  "RD-DYN-004.py",
   3,
   "code-execution"
  ],
