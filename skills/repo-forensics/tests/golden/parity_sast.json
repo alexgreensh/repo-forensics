@@ -1,0 +1,2676 @@
+[
+ [
+  "AI Tool Config Theft",
+  "critical",
+  "SA-JS-028.js",
+  1,
+  "credential-theft"
+ ],
+ [
+  "AI Tool Config Theft",
+  "critical",
+  "SA-JS-028.js",
+  2,
+  "credential-theft"
+ ],
+ [
+  "AI Tool Config Theft",
+  "critical",
+  "SA-JS-028.js",
+  3,
+  "credential-theft"
+ ],
+ [
+  "AWS STS Credential Validation",
+  "high",
+  "SA-JS-026.js",
+  1,
+  "credential-validation"
+ ],
+ [
+  "AWS STS Credential Validation",
+  "high",
+  "SA-JS-026.js",
+  2,
+  "credential-validation"
+ ],
+ [
+  "AWS STS Credential Validation",
+  "high",
+  "SA-JS-026.js",
+  3,
+  "credential-validation"
+ ],
+ [
+  "Child Process Exec",
+  "critical",
+  "SA-JS-005.js",
+  1,
+  "shell-injection"
+ ],
+ [
+  "Child Process Exec",
+  "critical",
+  "SA-JS-005.js",
+  2,
+  "shell-injection"
+ ],
+ [
+  "Child Process Exec",
+  "critical",
+  "SA-JS-005.js",
+  3,
+  "shell-injection"
+ ],
+ [
+  "Child Process Exec",
+  "critical",
+  "SA-JS-016.js",
+  2,
+  "shell-injection"
+ ],
+ [
+  "Child Process Exec",
+  "critical",
+  "SA-TS-004.ts",
+  1,
+  "shell-injection"
+ ],
+ [
+  "Child Process Exec",
+  "critical",
+  "SA-TS-004.ts",
+  2,
+  "shell-injection"
+ ],
+ [
+  "Child Process Exec",
+  "critical",
+  "SA-TS-004.ts",
+  3,
+  "shell-injection"
+ ],
+ [
+  "Cloud Secrets Manager Enumeration",
+  "high",
+  "SA-JS-027.js",
+  1,
+  "credential-theft"
+ ],
+ [
+  "Cloud Secrets Manager Enumeration",
+  "high",
+  "SA-JS-027.js",
+  2,
+  "credential-theft"
+ ],
+ [
+  "Cloud Secrets Manager Enumeration",
+  "high",
+  "SA-JS-027.js",
+  3,
+  "credential-theft"
+ ],
+ [
+  "Command Execution",
+  "critical",
+  "SA-JAVA-001.java",
+  1,
+  "shell-injection"
+ ],
+ [
+  "Command Execution",
+  "critical",
+  "SA-JAVA-001.java",
+  2,
+  "shell-injection"
+ ],
+ [
+  "Command Execution",
+  "critical",
+  "SA-JAVA-001.java",
+  3,
+  "shell-injection"
+ ],
+ [
+  "Command Execution",
+  "high",
+  "SA-GO-001.go",
+  1,
+  "shell-injection"
+ ],
+ [
+  "Command Execution",
+  "high",
+  "SA-GO-001.go",
+  2,
+  "shell-injection"
+ ],
+ [
+  "Command Execution",
+  "high",
+  "SA-GO-001.go",
+  3,
+  "shell-injection"
+ ],
+ [
+  "Curl Pipe Bash",
+  "critical",
+  "SA-SH-002.sh",
+  1,
+  "shell-injection"
+ ],
+ [
+  "Curl Pipe Bash",
+  "critical",
+  "SA-SH-002.sh",
+  2,
+  "shell-injection"
+ ],
+ [
+  "Curl Pipe Bash",
+  "critical",
+  "SA-SH-002.sh",
+  3,
+  "shell-injection"
+ ],
+ [
+  "Dangerous Eval",
+  "high",
+  "SA-JS-001.js",
+  1,
+  "code-execution"
+ ],
+ [
+  "Dangerous Eval",
+  "high",
+  "SA-JS-001.js",
+  2,
+  "code-execution"
+ ],
+ [
+  "Dangerous Eval",
+  "high",
+  "SA-JS-001.js",
+  3,
+  "code-execution"
+ ],
+ [
+  "Dangerous Eval",
+  "high",
+  "SA-JSX-001.jsx",
+  1,
+  "code-execution"
+ ],
+ [
+  "Dangerous Eval",
+  "high",
+  "SA-JSX-001.jsx",
+  2,
+  "code-execution"
+ ],
+ [
+  "Dangerous Eval",
+  "high",
+  "SA-JSX-001.jsx",
+  3,
+  "code-execution"
+ ],
+ [
+  "Dangerous Eval",
+  "high",
+  "SA-PY-001.py",
+  1,
+  "code-execution"
+ ],
+ [
+  "Dangerous Eval",
+  "high",
+  "SA-PY-001.py",
+  2,
+  "code-execution"
+ ],
+ [
+  "Dangerous Eval",
+  "high",
+  "SA-PY-001.py",
+  3,
+  "code-execution"
+ ],
+ [
+  "Dangerous Eval",
+  "high",
+  "SA-TS-001.ts",
+  1,
+  "code-execution"
+ ],
+ [
+  "Dangerous Eval",
+  "high",
+  "SA-TS-001.ts",
+  2,
+  "code-execution"
+ ],
+ [
+  "Dangerous Eval",
+  "high",
+  "SA-TS-001.ts",
+  3,
+  "code-execution"
+ ],
+ [
+  "Dangerous Eval",
+  "high",
+  "SA-TSX-001.tsx",
+  1,
+  "code-execution"
+ ],
+ [
+  "Dangerous Eval",
+  "high",
+  "SA-TSX-001.tsx",
+  2,
+  "code-execution"
+ ],
+ [
+  "Dangerous Eval",
+  "high",
+  "SA-TSX-001.tsx",
+  3,
+  "code-execution"
+ ],
+ [
+  "Dangerous Exec",
+  "high",
+  "SA-PY-002.py",
+  1,
+  "code-execution"
+ ],
+ [
+  "Dangerous Exec",
+  "high",
+  "SA-PY-002.py",
+  2,
+  "code-execution"
+ ],
+ [
+  "Dangerous Exec",
+  "high",
+  "SA-PY-002.py",
+  3,
+  "code-execution"
+ ],
+ [
+  "Dangerous Exec",
+  "high",
+  "obfuscation.py",
+  2,
+  "code-execution"
+ ],
+ [
+  "Dead-Man Wiper (JS)",
+  "critical",
+  "SA-JS-034.js",
+  1,
+  "destructive-command"
+ ],
+ [
+  "Dead-Man Wiper (JS)",
+  "critical",
+  "SA-JS-034.js",
+  2,
+  "destructive-command"
+ ],
+ [
+  "Dead-Man Wiper (JS)",
+  "critical",
+  "SA-JS-034.js",
+  3,
+  "destructive-command"
+ ],
+ [
+  "Destructive: Disk Overwrite",
+  "critical",
+  "SA-SH-011.sh",
+  1,
+  "destructive-command"
+ ],
+ [
+  "Destructive: Disk Overwrite",
+  "critical",
+  "SA-SH-011.sh",
+  2,
+  "destructive-command"
+ ],
+ [
+  "Destructive: Disk Overwrite",
+  "critical",
+  "SA-SH-011.sh",
+  3,
+  "destructive-command"
+ ],
+ [
+  "Destructive: File Shredding",
+  "critical",
+  "SA-SH-009.sh",
+  1,
+  "destructive-command"
+ ],
+ [
+  "Destructive: File Shredding",
+  "critical",
+  "SA-SH-009.sh",
+  2,
+  "destructive-command"
+ ],
+ [
+  "Destructive: File Shredding",
+  "critical",
+  "SA-SH-009.sh",
+  3,
+  "destructive-command"
+ ],
+ [
+  "Destructive: Home Directory Wipe",
+  "critical",
+  "SA-SH-010.sh",
+  1,
+  "destructive-command"
+ ],
+ [
+  "Destructive: Home Directory Wipe",
+  "critical",
+  "SA-SH-010.sh",
+  2,
+  "destructive-command"
+ ],
+ [
+  "Destructive: Home Directory Wipe",
+  "critical",
+  "SA-SH-010.sh",
+  3,
+  "destructive-command"
+ ],
+ [
+  "Destructive: Windows Cipher Wipe",
+  "critical",
+  "SA-SH-012.sh",
+  1,
+  "destructive-command"
+ ],
+ [
+  "Destructive: Windows Cipher Wipe",
+  "critical",
+  "SA-SH-012.sh",
+  2,
+  "destructive-command"
+ ],
+ [
+  "Destructive: Windows Cipher Wipe",
+  "critical",
+  "SA-SH-012.sh",
+  3,
+  "destructive-command"
+ ],
+ [
+  "Destructive: shutil.rmtree on Home",
+  "critical",
+  "SA-PY-014.py",
+  1,
+  "destructive-command"
+ ],
+ [
+  "Destructive: shutil.rmtree on Home",
+  "critical",
+  "SA-PY-014.py",
+  2,
+  "destructive-command"
+ ],
+ [
+  "Destructive: shutil.rmtree on Home",
+  "critical",
+  "SA-PY-014.py",
+  3,
+  "destructive-command"
+ ],
+ [
+  "Direct /proc Filesystem Access",
+  "high",
+  "SA-JS-014.js",
+  1,
+  "path-traversal"
+ ],
+ [
+  "Direct /proc Filesystem Access",
+  "high",
+  "SA-JS-014.js",
+  2,
+  "path-traversal"
+ ],
+ [
+  "Direct /proc Filesystem Access",
+  "high",
+  "SA-JS-014.js",
+  3,
+  "path-traversal"
+ ],
+ [
+  "Direct /proc Filesystem Access",
+  "high",
+  "SA-TS-009.ts",
+  1,
+  "path-traversal"
+ ],
+ [
+  "Direct /proc Filesystem Access",
+  "high",
+  "SA-TS-009.ts",
+  2,
+  "path-traversal"
+ ],
+ [
+  "Direct /proc Filesystem Access",
+  "high",
+  "SA-TS-009.ts",
+  3,
+  "path-traversal"
+ ],
+ [
+  "Double Base64 Encoding",
+  "high",
+  "SA-JS-025.js",
+  1,
+  "obfuscation"
+ ],
+ [
+  "Double Base64 Encoding",
+  "high",
+  "SA-JS-025.js",
+  2,
+  "obfuscation"
+ ],
+ [
+  "Double Base64 Encoding",
+  "high",
+  "SA-JS-025.js",
+  3,
+  "obfuscation"
+ ],
+ [
+  "Dynamic Compile",
+  "medium",
+  "SA-PY-004.py",
+  1,
+  "code-execution"
+ ],
+ [
+  "Dynamic Compile",
+  "medium",
+  "SA-PY-004.py",
+  2,
+  "code-execution"
+ ],
+ [
+  "Dynamic Compile",
+  "medium",
+  "SA-PY-004.py",
+  3,
+  "code-execution"
+ ],
+ [
+  "Dynamic Import",
+  "high",
+  "SA-PY-003.py",
+  1,
+  "code-execution"
+ ],
+ [
+  "Dynamic Import",
+  "high",
+  "SA-PY-003.py",
+  2,
+  "code-execution"
+ ],
+ [
+  "Dynamic Import",
+  "high",
+  "SA-PY-003.py",
+  3,
+  "code-execution"
+ ],
+ [
+  "Dynamic Import",
+  "high",
+  "SA-PY-019.py",
+  1,
+  "code-execution"
+ ],
+ [
+  "Dynamic Import",
+  "high",
+  "SA-PY-019.py",
+  2,
+  "code-execution"
+ ],
+ [
+  "Dynamic Import",
+  "high",
+  "SA-PY-019.py",
+  3,
+  "code-execution"
+ ],
+ [
+  "Dynamic Import",
+  "high",
+  "SA-PY-019.py",
+  5,
+  "code-execution"
+ ],
+ [
+  "Dynamic Import",
+  "high",
+  "obfuscation.py",
+  3,
+  "code-execution"
+ ],
+ [
+  "Eval",
+  "high",
+  "SA-PHP-002.php",
+  1,
+  "code-execution"
+ ],
+ [
+  "Eval",
+  "high",
+  "SA-PHP-002.php",
+  2,
+  "code-execution"
+ ],
+ [
+  "Eval",
+  "high",
+  "SA-PHP-002.php",
+  3,
+  "code-execution"
+ ],
+ [
+  "Eval",
+  "high",
+  "SA-RB-001.rb",
+  1,
+  "code-execution"
+ ],
+ [
+  "Eval",
+  "high",
+  "SA-RB-001.rb",
+  2,
+  "code-execution"
+ ],
+ [
+  "Eval",
+  "high",
+  "SA-RB-001.rb",
+  3,
+  "code-execution"
+ ],
+ [
+  "Eval in Shell",
+  "high",
+  "SA-SH-001.sh",
+  1,
+  "code-execution"
+ ],
+ [
+  "Eval in Shell",
+  "high",
+  "SA-SH-001.sh",
+  2,
+  "code-execution"
+ ],
+ [
+  "Eval in Shell",
+  "high",
+  "SA-SH-001.sh",
+  3,
+  "code-execution"
+ ],
+ [
+  "File Inclusion",
+  "critical",
+  "SA-PHP-004.php",
+  1,
+  "injection"
+ ],
+ [
+  "File Inclusion",
+  "critical",
+  "SA-PHP-004.php",
+  2,
+  "injection"
+ ],
+ [
+  "File Inclusion",
+  "critical",
+  "SA-PHP-004.php",
+  3,
+  "injection"
+ ],
+ [
+  "Function Constructor",
+  "high",
+  "SA-JS-002.js",
+  1,
+  "code-execution"
+ ],
+ [
+  "Function Constructor",
+  "high",
+  "SA-JS-002.js",
+  2,
+  "code-execution"
+ ],
+ [
+  "Function Constructor",
+  "high",
+  "SA-JS-002.js",
+  3,
+  "code-execution"
+ ],
+ [
+  "Function Constructor",
+  "high",
+  "SA-TS-002.ts",
+  1,
+  "code-execution"
+ ],
+ [
+  "Function Constructor",
+  "high",
+  "SA-TS-002.ts",
+  2,
+  "code-execution"
+ ],
+ [
+  "Function Constructor",
+  "high",
+  "SA-TS-002.ts",
+  3,
+  "code-execution"
+ ],
+ [
+  "GHA Runner Backdoor: Config Script",
+  "critical",
+  "SA-SH-013.sh",
+  1,
+  "runner-backdoor"
+ ],
+ [
+  "GHA Runner Backdoor: Config Script",
+  "critical",
+  "SA-SH-013.sh",
+  2,
+  "runner-backdoor"
+ ],
+ [
+  "GHA Runner Backdoor: Config Script",
+  "critical",
+  "SA-SH-013.sh",
+  3,
+  "runner-backdoor"
+ ],
+ [
+  "GHA Runner Backdoor: Service Install",
+  "high",
+  "SA-SH-014.sh",
+  1,
+  "runner-backdoor"
+ ],
+ [
+  "GHA Runner Backdoor: Service Install",
+  "high",
+  "SA-SH-014.sh",
+  2,
+  "runner-backdoor"
+ ],
+ [
+  "GHA Runner Backdoor: Service Install",
+  "high",
+  "SA-SH-014.sh",
+  3,
+  "runner-backdoor"
+ ],
+ [
+  "Git-Based Exfiltration: Commit Search C2",
+  "critical",
+  "SA-JS-020.js",
+  1,
+  "git-exfiltration"
+ ],
+ [
+  "Git-Based Exfiltration: Commit Search C2",
+  "critical",
+  "SA-JS-020.js",
+  2,
+  "git-exfiltration"
+ ],
+ [
+  "Git-Based Exfiltration: Commit Search C2",
+  "critical",
+  "SA-JS-020.js",
+  3,
+  "git-exfiltration"
+ ],
+ [
+  "Git-Based Exfiltration: Content Push",
+  "high",
+  "SA-JS-019.js",
+  1,
+  "git-exfiltration"
+ ],
+ [
+  "Git-Based Exfiltration: Content Push",
+  "high",
+  "SA-JS-019.js",
+  2,
+  "git-exfiltration"
+ ],
+ [
+  "Git-Based Exfiltration: Content Push",
+  "high",
+  "SA-JS-019.js",
+  3,
+  "git-exfiltration"
+ ],
+ [
+  "Git-Based Exfiltration: Repo Creation",
+  "critical",
+  "SA-JS-018.js",
+  1,
+  "git-exfiltration"
+ ],
+ [
+  "Git-Based Exfiltration: Repo Creation",
+  "critical",
+  "SA-JS-018.js",
+  2,
+  "git-exfiltration"
+ ],
+ [
+  "Git-Based Exfiltration: Repo Creation",
+  "critical",
+  "SA-JS-018.js",
+  3,
+  "git-exfiltration"
+ ],
+ [
+  "Git-Based Exfiltration: Repo Creation",
+  "critical",
+  "SA-JS-019.js",
+  2,
+  "git-exfiltration"
+ ],
+ [
+  "Hardcoded IP",
+  "low",
+  "SA-PY-009.py",
+  1,
+  "hardcoded"
+ ],
+ [
+  "Hardcoded IP",
+  "low",
+  "SA-PY-009.py",
+  2,
+  "hardcoded"
+ ],
+ [
+  "Hardcoded IP",
+  "low",
+  "SA-PY-009.py",
+  3,
+  "hardcoded"
+ ],
+ [
+  "Hardcoded IP",
+  "low",
+  "SA-PY-017.py",
+  4,
+  "hardcoded"
+ ],
+ [
+  "Implied Eval (setTimeout)",
+  "medium",
+  "SA-JS-006.js",
+  1,
+  "code-execution"
+ ],
+ [
+  "Implied Eval (setTimeout)",
+  "medium",
+  "SA-JS-006.js",
+  2,
+  "code-execution"
+ ],
+ [
+  "Implied Eval (setTimeout)",
+  "medium",
+  "SA-JS-006.js",
+  3,
+  "code-execution"
+ ],
+ [
+  "Kernel Exploit: AF_ALG Socket",
+  "critical",
+  "SA-PY-016.py",
+  1,
+  "kernel-exploit"
+ ],
+ [
+  "Kernel Exploit: AF_ALG Socket",
+  "critical",
+  "SA-PY-016.py",
+  2,
+  "kernel-exploit"
+ ],
+ [
+  "Kernel Exploit: AF_ALG Socket",
+  "critical",
+  "SA-PY-016.py",
+  3,
+  "kernel-exploit"
+ ],
+ [
+  "Kernel Exploit: Crypto Template Bind",
+  "critical",
+  "SA-PY-017.py",
+  1,
+  "kernel-exploit"
+ ],
+ [
+  "Kernel Exploit: Crypto Template Bind",
+  "critical",
+  "SA-PY-017.py",
+  2,
+  "kernel-exploit"
+ ],
+ [
+  "Kernel Exploit: Crypto Template Bind",
+  "critical",
+  "SA-PY-017.py",
+  3,
+  "kernel-exploit"
+ ],
+ [
+  "Kernel Exploit: algif_aead Module Load",
+  "high",
+  "SA-SH-015.sh",
+  1,
+  "kernel-exploit"
+ ],
+ [
+  "Kernel Exploit: algif_aead Module Load",
+  "high",
+  "SA-SH-015.sh",
+  2,
+  "kernel-exploit"
+ ],
+ [
+  "Kernel Exploit: algif_aead Module Load",
+  "high",
+  "SA-SH-015.sh",
+  3,
+  "kernel-exploit"
+ ],
+ [
+  "Kernel Exploit: authencesn Reference",
+  "high",
+  "SA-PY-018.py",
+  1,
+  "kernel-exploit"
+ ],
+ [
+  "Kernel Exploit: authencesn Reference",
+  "high",
+  "SA-PY-018.py",
+  2,
+  "kernel-exploit"
+ ],
+ [
+  "Kernel Exploit: authencesn Reference",
+  "high",
+  "SA-PY-018.py",
+  3,
+  "kernel-exploit"
+ ],
+ [
+  "Mass Encrypted String Obfuscation (beautify)",
+  "high",
+  "SA-JS-033.js",
+  1,
+  "obfuscation"
+ ],
+ [
+  "Mass Encrypted String Obfuscation (beautify)",
+  "high",
+  "SA-JS-033.js",
+  2,
+  "obfuscation"
+ ],
+ [
+  "Mass Encrypted String Obfuscation (beautify)",
+  "high",
+  "SA-JS-033.js",
+  3,
+  "obfuscation"
+ ],
+ [
+  "Model Confusion: Bare from_pretrained Path",
+  "high",
+  "SA-PY-010.py",
+  1,
+  "model-confusion"
+ ],
+ [
+  "Model Confusion: Bare from_pretrained Path",
+  "high",
+  "SA-PY-010.py",
+  2,
+  "model-confusion"
+ ],
+ [
+  "Model Confusion: Bare from_pretrained Path",
+  "high",
+  "SA-PY-010.py",
+  3,
+  "model-confusion"
+ ],
+ [
+  "Model Confusion: trust_remote_code=True",
+  "critical",
+  "SA-PY-011.py",
+  1,
+  "model-confusion"
+ ],
+ [
+  "Model Confusion: trust_remote_code=True",
+  "critical",
+  "SA-PY-011.py",
+  2,
+  "model-confusion"
+ ],
+ [
+  "Model Confusion: trust_remote_code=True",
+  "critical",
+  "SA-PY-011.py",
+  3,
+  "model-confusion"
+ ],
+ [
+  "NPM Tarball Manipulation",
+  "critical",
+  "SA-JS-032.js",
+  1,
+  "worm-propagation"
+ ],
+ [
+  "NPM Tarball Manipulation",
+  "critical",
+  "SA-JS-032.js",
+  2,
+  "worm-propagation"
+ ],
+ [
+  "NPM Tarball Manipulation",
+  "critical",
+  "SA-JS-032.js",
+  3,
+  "worm-propagation"
+ ],
+ [
+  "NPM Token Theft",
+  "critical",
+  "SA-JS-017.js",
+  1,
+  "credential-theft"
+ ],
+ [
+  "NPM Token Theft",
+  "critical",
+  "SA-JS-017.js",
+  2,
+  "credential-theft"
+ ],
+ [
+  "NPM Token Theft",
+  "critical",
+  "SA-JS-017.js",
+  3,
+  "credential-theft"
+ ],
+ [
+  "NPM Worm: Package Enumeration",
+  "critical",
+  "SA-JS-015.js",
+  1,
+  "worm-propagation"
+ ],
+ [
+  "NPM Worm: Package Enumeration",
+  "critical",
+  "SA-JS-015.js",
+  2,
+  "worm-propagation"
+ ],
+ [
+  "NPM Worm: Package Enumeration",
+  "critical",
+  "SA-JS-015.js",
+  3,
+  "worm-propagation"
+ ],
+ [
+  "NPM Worm: Programmatic Publish",
+  "critical",
+  "SA-JS-016.js",
+  1,
+  "worm-propagation"
+ ],
+ [
+  "NPM Worm: Programmatic Publish",
+  "critical",
+  "SA-JS-016.js",
+  2,
+  "worm-propagation"
+ ],
+ [
+  "NPM Worm: Programmatic Publish",
+  "critical",
+  "SA-JS-016.js",
+  3,
+  "worm-propagation"
+ ],
+ [
+  "Nested Command Substitution",
+  "high",
+  "SA-SH-004.sh",
+  1,
+  "code-execution"
+ ],
+ [
+  "Nested Command Substitution",
+  "high",
+  "SA-SH-004.sh",
+  2,
+  "code-execution"
+ ],
+ [
+  "Nested Command Substitution",
+  "high",
+  "SA-SH-004.sh",
+  3,
+  "code-execution"
+ ],
+ [
+  "OIDC Token Exchange",
+  "critical",
+  "SA-GO-008.go",
+  1,
+  "ci-token-abuse"
+ ],
+ [
+  "OIDC Token Exchange",
+  "critical",
+  "SA-GO-008.go",
+  2,
+  "ci-token-abuse"
+ ],
+ [
+  "OIDC Token Exchange",
+  "critical",
+  "SA-GO-008.go",
+  3,
+  "ci-token-abuse"
+ ],
+ [
+  "OIDC Token Exchange",
+  "critical",
+  "SA-JS-021.js",
+  1,
+  "ci-token-abuse"
+ ],
+ [
+  "OIDC Token Exchange",
+  "critical",
+  "SA-JS-021.js",
+  2,
+  "ci-token-abuse"
+ ],
+ [
+  "OIDC Token Exchange",
+  "critical",
+  "SA-JS-021.js",
+  3,
+  "ci-token-abuse"
+ ],
+ [
+  "OIDC Token Exchange",
+  "critical",
+  "SA-PY-023.py",
+  1,
+  "ci-token-abuse"
+ ],
+ [
+  "OIDC Token Exchange",
+  "critical",
+  "SA-PY-023.py",
+  2,
+  "ci-token-abuse"
+ ],
+ [
+  "OIDC Token Exchange",
+  "critical",
+  "SA-PY-023.py",
+  3,
+  "ci-token-abuse"
+ ],
+ [
+  "OIDC Token Exchange",
+  "critical",
+  "SA-SH-019.sh",
+  1,
+  "ci-token-abuse"
+ ],
+ [
+  "OIDC Token Exchange",
+  "critical",
+  "SA-SH-019.sh",
+  2,
+  "ci-token-abuse"
+ ],
+ [
+  "OIDC Token Exchange",
+  "critical",
+  "SA-SH-019.sh",
+  3,
+  "ci-token-abuse"
+ ],
+ [
+  "OIDC Token Exchange",
+  "critical",
+  "SA-TS-014.ts",
+  1,
+  "ci-token-abuse"
+ ],
+ [
+  "OIDC Token Exchange",
+  "critical",
+  "SA-TS-014.ts",
+  2,
+  "ci-token-abuse"
+ ],
+ [
+  "OIDC Token Exchange",
+  "critical",
+  "SA-TS-014.ts",
+  3,
+  "ci-token-abuse"
+ ],
+ [
+  "Path Traversal: Unsanitized File Serve",
+  "high",
+  "SA-JS-012.js",
+  1,
+  "path-traversal"
+ ],
+ [
+  "Path Traversal: Unsanitized File Serve",
+  "high",
+  "SA-JS-012.js",
+  2,
+  "path-traversal"
+ ],
+ [
+  "Path Traversal: Unsanitized File Serve",
+  "high",
+  "SA-JS-012.js",
+  3,
+  "path-traversal"
+ ],
+ [
+  "Path Traversal: Unsanitized File Serve",
+  "high",
+  "SA-TS-007.ts",
+  1,
+  "path-traversal"
+ ],
+ [
+  "Path Traversal: Unsanitized File Serve",
+  "high",
+  "SA-TS-007.ts",
+  2,
+  "path-traversal"
+ ],
+ [
+  "Path Traversal: Unsanitized File Serve",
+  "high",
+  "SA-TS-007.ts",
+  3,
+  "path-traversal"
+ ],
+ [
+  "Path Traversal: Unsanitized path.join",
+  "high",
+  "SA-JS-013.js",
+  1,
+  "path-traversal"
+ ],
+ [
+  "Path Traversal: Unsanitized path.join",
+  "high",
+  "SA-JS-013.js",
+  2,
+  "path-traversal"
+ ],
+ [
+  "Path Traversal: Unsanitized path.join",
+  "high",
+  "SA-JS-013.js",
+  3,
+  "path-traversal"
+ ],
+ [
+  "Path Traversal: Unsanitized path.join",
+  "high",
+  "SA-TS-008.ts",
+  1,
+  "path-traversal"
+ ],
+ [
+  "Path Traversal: Unsanitized path.join",
+  "high",
+  "SA-TS-008.ts",
+  2,
+  "path-traversal"
+ ],
+ [
+  "Path Traversal: Unsanitized path.join",
+  "high",
+  "SA-TS-008.ts",
+  3,
+  "path-traversal"
+ ],
+ [
+  "Pipe Exfiltration: env to network",
+  "critical",
+  "SA-SH-005.sh",
+  1,
+  "exfiltration"
+ ],
+ [
+  "Pipe Exfiltration: env to network",
+  "critical",
+  "SA-SH-005.sh",
+  2,
+  "exfiltration"
+ ],
+ [
+  "Pipe Exfiltration: env to network",
+  "critical",
+  "SA-SH-005.sh",
+  3,
+  "exfiltration"
+ ],
+ [
+  "Pipe Exfiltration: sensitive file to network",
+  "critical",
+  "SA-SH-005.sh",
+  3,
+  "exfiltration"
+ ],
+ [
+  "Pipe Exfiltration: sensitive file to network",
+  "critical",
+  "SA-SH-006.sh",
+  1,
+  "exfiltration"
+ ],
+ [
+  "Pipe Exfiltration: sensitive file to network",
+  "critical",
+  "SA-SH-006.sh",
+  2,
+  "exfiltration"
+ ],
+ [
+  "Pipe Exfiltration: sensitive file to network",
+  "critical",
+  "SA-SH-006.sh",
+  3,
+  "exfiltration"
+ ],
+ [
+  "Pipe to Shell Interpreter",
+  "critical",
+  "SA-SH-002.sh",
+  1,
+  "shell-injection"
+ ],
+ [
+  "Pipe to Shell Interpreter",
+  "critical",
+  "SA-SH-002.sh",
+  2,
+  "shell-injection"
+ ],
+ [
+  "Pipe to Shell Interpreter",
+  "critical",
+  "SA-SH-002.sh",
+  3,
+  "shell-injection"
+ ],
+ [
+  "Pipe to Shell Interpreter",
+  "critical",
+  "SA-SH-003.sh",
+  1,
+  "shell-injection"
+ ],
+ [
+  "Pipe to Shell Interpreter",
+  "critical",
+  "SA-SH-003.sh",
+  2,
+  "shell-injection"
+ ],
+ [
+  "Pipe to Shell Interpreter",
+  "critical",
+  "SA-SH-003.sh",
+  3,
+  "shell-injection"
+ ],
+ [
+  "Process Enumeration (/proc)",
+  "high",
+  "SA-GO-006.go",
+  1,
+  "process-enumeration"
+ ],
+ [
+  "Process Enumeration (/proc)",
+  "high",
+  "SA-GO-006.go",
+  2,
+  "process-enumeration"
+ ],
+ [
+  "Process Enumeration (/proc)",
+  "high",
+  "SA-GO-006.go",
+  3,
+  "process-enumeration"
+ ],
+ [
+  "Process Enumeration (/proc)",
+  "high",
+  "SA-JS-023.js",
+  1,
+  "process-enumeration"
+ ],
+ [
+  "Process Enumeration (/proc)",
+  "high",
+  "SA-JS-023.js",
+  2,
+  "process-enumeration"
+ ],
+ [
+  "Process Enumeration (/proc)",
+  "high",
+  "SA-JS-023.js",
+  3,
+  "process-enumeration"
+ ],
+ [
+  "Process Enumeration (/proc)",
+  "high",
+  "SA-PY-021.py",
+  1,
+  "process-enumeration"
+ ],
+ [
+  "Process Enumeration (/proc)",
+  "high",
+  "SA-PY-021.py",
+  2,
+  "process-enumeration"
+ ],
+ [
+  "Process Enumeration (/proc)",
+  "high",
+  "SA-PY-021.py",
+  3,
+  "process-enumeration"
+ ],
+ [
+  "Process Enumeration (/proc)",
+  "high",
+  "SA-SH-017.sh",
+  1,
+  "process-enumeration"
+ ],
+ [
+  "Process Enumeration (/proc)",
+  "high",
+  "SA-SH-017.sh",
+  2,
+  "process-enumeration"
+ ],
+ [
+  "Process Enumeration (/proc)",
+  "high",
+  "SA-SH-017.sh",
+  3,
+  "process-enumeration"
+ ],
+ [
+  "Process Enumeration (/proc)",
+  "high",
+  "SA-TS-012.ts",
+  1,
+  "process-enumeration"
+ ],
+ [
+  "Process Enumeration (/proc)",
+  "high",
+  "SA-TS-012.ts",
+  2,
+  "process-enumeration"
+ ],
+ [
+  "Process Enumeration (/proc)",
+  "high",
+  "SA-TS-012.ts",
+  3,
+  "process-enumeration"
+ ],
+ [
+  "Process Memory Read (/proc)",
+  "critical",
+  "SA-GO-005.go",
+  1,
+  "memory-forensics"
+ ],
+ [
+  "Process Memory Read (/proc)",
+  "critical",
+  "SA-GO-005.go",
+  2,
+  "memory-forensics"
+ ],
+ [
+  "Process Memory Read (/proc)",
+  "critical",
+  "SA-GO-005.go",
+  3,
+  "memory-forensics"
+ ],
+ [
+  "Process Memory Read (/proc)",
+  "critical",
+  "SA-JS-022.js",
+  1,
+  "memory-forensics"
+ ],
+ [
+  "Process Memory Read (/proc)",
+  "critical",
+  "SA-JS-022.js",
+  2,
+  "memory-forensics"
+ ],
+ [
+  "Process Memory Read (/proc)",
+  "critical",
+  "SA-JS-022.js",
+  3,
+  "memory-forensics"
+ ],
+ [
+  "Process Memory Read (/proc)",
+  "critical",
+  "SA-PY-020.py",
+  1,
+  "memory-forensics"
+ ],
+ [
+  "Process Memory Read (/proc)",
+  "critical",
+  "SA-PY-020.py",
+  2,
+  "memory-forensics"
+ ],
+ [
+  "Process Memory Read (/proc)",
+  "critical",
+  "SA-PY-020.py",
+  3,
+  "memory-forensics"
+ ],
+ [
+  "Process Memory Read (/proc)",
+  "critical",
+  "SA-SH-016.sh",
+  1,
+  "memory-forensics"
+ ],
+ [
+  "Process Memory Read (/proc)",
+  "critical",
+  "SA-SH-016.sh",
+  2,
+  "memory-forensics"
+ ],
+ [
+  "Process Memory Read (/proc)",
+  "critical",
+  "SA-SH-016.sh",
+  3,
+  "memory-forensics"
+ ],
+ [
+  "Process Memory Read (/proc)",
+  "critical",
+  "SA-TS-011.ts",
+  1,
+  "memory-forensics"
+ ],
+ [
+  "Process Memory Read (/proc)",
+  "critical",
+  "SA-TS-011.ts",
+  2,
+  "memory-forensics"
+ ],
+ [
+  "Process Memory Read (/proc)",
+  "critical",
+  "SA-TS-011.ts",
+  3,
+  "memory-forensics"
+ ],
+ [
+  "ProcessBuilder",
+  "high",
+  "SA-JAVA-002.java",
+  1,
+  "shell-injection"
+ ],
+ [
+  "ProcessBuilder",
+  "high",
+  "SA-JAVA-002.java",
+  2,
+  "shell-injection"
+ ],
+ [
+  "ProcessBuilder",
+  "high",
+  "SA-JAVA-002.java",
+  3,
+  "shell-injection"
+ ],
+ [
+  "Provenance Forging: Crypto Key + Sign",
+  "critical",
+  "SA-JS-030.js",
+  1,
+  "provenance-forging"
+ ],
+ [
+  "Provenance Forging: Crypto Key + Sign",
+  "critical",
+  "SA-JS-030.js",
+  2,
+  "provenance-forging"
+ ],
+ [
+  "Provenance Forging: Crypto Key + Sign",
+  "critical",
+  "SA-JS-030.js",
+  3,
+  "provenance-forging"
+ ],
+ [
+  "Provenance Forging: in-toto/SLSA Attestation",
+  "high",
+  "SA-JS-031.js",
+  1,
+  "provenance-forging"
+ ],
+ [
+  "Provenance Forging: in-toto/SLSA Attestation",
+  "high",
+  "SA-JS-031.js",
+  2,
+  "provenance-forging"
+ ],
+ [
+  "Provenance Forging: in-toto/SLSA Attestation",
+  "high",
+  "SA-JS-031.js",
+  3,
+  "provenance-forging"
+ ],
+ [
+  "PyPI Worm: Programmatic Publish",
+  "critical",
+  "SA-PY-015.py",
+  1,
+  "worm-propagation"
+ ],
+ [
+  "PyPI Worm: Programmatic Publish",
+  "critical",
+  "SA-PY-015.py",
+  2,
+  "worm-propagation"
+ ],
+ [
+  "PyPI Worm: Programmatic Publish",
+  "critical",
+  "SA-PY-015.py",
+  3,
+  "worm-propagation"
+ ],
+ [
+  "Redirect to /dev/tcp",
+  "critical",
+  "SA-SH-007.sh",
+  1,
+  "exfiltration"
+ ],
+ [
+  "Redirect to /dev/tcp",
+  "critical",
+  "SA-SH-007.sh",
+  2,
+  "exfiltration"
+ ],
+ [
+  "Redirect to /dev/tcp",
+  "critical",
+  "SA-SH-007.sh",
+  3,
+  "exfiltration"
+ ],
+ [
+  "Reflection RCE: Activator.CreateInstance",
+  "high",
+  "SA-CS-003.cs",
+  1,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: Activator.CreateInstance",
+  "high",
+  "SA-CS-003.cs",
+  2,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: Activator.CreateInstance",
+  "high",
+  "SA-CS-003.cs",
+  3,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: Assembly.Load",
+  "high",
+  "SA-CS-002.cs",
+  1,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: Assembly.Load",
+  "high",
+  "SA-CS-002.cs",
+  2,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: Assembly.Load",
+  "high",
+  "SA-CS-002.cs",
+  3,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: Class.forName",
+  "high",
+  "SA-JAVA-005.java",
+  1,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: Class.forName",
+  "high",
+  "SA-JAVA-005.java",
+  2,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: Class.forName",
+  "high",
+  "SA-JAVA-005.java",
+  3,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: Method.invoke",
+  "high",
+  "SA-JAVA-004.java",
+  1,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: Method.invoke",
+  "high",
+  "SA-JAVA-004.java",
+  2,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: Method.invoke",
+  "high",
+  "SA-JAVA-004.java",
+  3,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: MethodInfo.Invoke",
+  "high",
+  "SA-CS-001.cs",
+  1,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: MethodInfo.Invoke",
+  "high",
+  "SA-CS-001.cs",
+  2,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: MethodInfo.Invoke",
+  "high",
+  "SA-CS-001.cs",
+  3,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: getDeclaredMethod",
+  "high",
+  "SA-JAVA-007.java",
+  1,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: getDeclaredMethod",
+  "high",
+  "SA-JAVA-007.java",
+  2,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: getDeclaredMethod",
+  "high",
+  "SA-JAVA-007.java",
+  3,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: getMethod",
+  "high",
+  "SA-JAVA-006.java",
+  1,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: getMethod",
+  "high",
+  "SA-JAVA-006.java",
+  2,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: getMethod",
+  "high",
+  "SA-JAVA-006.java",
+  3,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: getattr + __import__ combo",
+  "high",
+  "SA-PY-019.py",
+  1,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: getattr + __import__ combo",
+  "high",
+  "SA-PY-019.py",
+  2,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: getattr + __import__ combo",
+  "high",
+  "SA-PY-019.py",
+  3,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: getattr + __import__ combo",
+  "high",
+  "obfuscation.py",
+  3,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: method() with variable",
+  "high",
+  "SA-RB-005.rb",
+  1,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: method() with variable",
+  "high",
+  "SA-RB-005.rb",
+  2,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: method() with variable",
+  "high",
+  "SA-RB-005.rb",
+  3,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: reflect.Call",
+  "high",
+  "SA-GO-004.go",
+  1,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: reflect.Call",
+  "high",
+  "SA-GO-004.go",
+  2,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: reflect.Call",
+  "high",
+  "SA-GO-004.go",
+  3,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: reflect.ValueOf",
+  "high",
+  "SA-GO-003.go",
+  1,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: reflect.ValueOf",
+  "high",
+  "SA-GO-003.go",
+  2,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: reflect.ValueOf",
+  "high",
+  "SA-GO-003.go",
+  3,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: send with variable",
+  "high",
+  "SA-RB-003.rb",
+  1,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: send with variable",
+  "high",
+  "SA-RB-003.rb",
+  2,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: send with variable",
+  "high",
+  "SA-RB-003.rb",
+  3,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: send with variable",
+  "high",
+  "SA-RB-004.rb",
+  1,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: send with variable",
+  "high",
+  "SA-RB-004.rb",
+  2,
+  "reflection-rce"
+ ],
+ [
+  "Reflection RCE: send with variable",
+  "high",
+  "SA-RB-004.rb",
+  3,
+  "reflection-rce"
+ ],
+ [
+  "Reverse shell pattern",
+  "critical",
+  "SA-SH-008.sh",
+  1,
+  "exfiltration"
+ ],
+ [
+  "Reverse shell pattern",
+  "critical",
+  "SA-SH-008.sh",
+  2,
+  "exfiltration"
+ ],
+ [
+  "Reverse shell pattern",
+  "critical",
+  "SA-SH-008.sh",
+  3,
+  "exfiltration"
+ ],
+ [
+  "Runner.Worker Process Hunt",
+  "critical",
+  "SA-GO-007.go",
+  1,
+  "process-enumeration"
+ ],
+ [
+  "Runner.Worker Process Hunt",
+  "critical",
+  "SA-GO-007.go",
+  2,
+  "process-enumeration"
+ ],
+ [
+  "Runner.Worker Process Hunt",
+  "critical",
+  "SA-GO-007.go",
+  3,
+  "process-enumeration"
+ ],
+ [
+  "Runner.Worker Process Hunt",
+  "critical",
+  "SA-JS-024.js",
+  1,
+  "process-enumeration"
+ ],
+ [
+  "Runner.Worker Process Hunt",
+  "critical",
+  "SA-JS-024.js",
+  2,
+  "process-enumeration"
+ ],
+ [
+  "Runner.Worker Process Hunt",
+  "critical",
+  "SA-JS-024.js",
+  3,
+  "process-enumeration"
+ ],
+ [
+  "Runner.Worker Process Hunt",
+  "critical",
+  "SA-PY-022.py",
+  1,
+  "process-enumeration"
+ ],
+ [
+  "Runner.Worker Process Hunt",
+  "critical",
+  "SA-PY-022.py",
+  2,
+  "process-enumeration"
+ ],
+ [
+  "Runner.Worker Process Hunt",
+  "critical",
+  "SA-PY-022.py",
+  3,
+  "process-enumeration"
+ ],
+ [
+  "Runner.Worker Process Hunt",
+  "critical",
+  "SA-SH-018.sh",
+  1,
+  "process-enumeration"
+ ],
+ [
+  "Runner.Worker Process Hunt",
+  "critical",
+  "SA-SH-018.sh",
+  2,
+  "process-enumeration"
+ ],
+ [
+  "Runner.Worker Process Hunt",
+  "critical",
+  "SA-SH-018.sh",
+  3,
+  "process-enumeration"
+ ],
+ [
+  "Runner.Worker Process Hunt",
+  "critical",
+  "SA-TS-013.ts",
+  1,
+  "process-enumeration"
+ ],
+ [
+  "Runner.Worker Process Hunt",
+  "critical",
+  "SA-TS-013.ts",
+  2,
+  "process-enumeration"
+ ],
+ [
+  "Runner.Worker Process Hunt",
+  "critical",
+  "SA-TS-013.ts",
+  3,
+  "process-enumeration"
+ ],
+ [
+  "SQL Injection",
+  "high",
+  "SA-PHP-003.php",
+  1,
+  "injection"
+ ],
+ [
+  "SQL Injection",
+  "high",
+  "SA-PHP-003.php",
+  2,
+  "injection"
+ ],
+ [
+  "SQL Injection",
+  "high",
+  "SA-PHP-003.php",
+  3,
+  "injection"
+ ],
+ [
+  "SQL Injection Pattern",
+  "high",
+  "SA-PY-008.py",
+  1,
+  "injection"
+ ],
+ [
+  "SQL Injection Pattern",
+  "high",
+  "SA-PY-008.py",
+  2,
+  "injection"
+ ],
+ [
+  "SQL Injection Pattern",
+  "high",
+  "SA-PY-008.py",
+  3,
+  "injection"
+ ],
+ [
+  "SQL Injection Pattern",
+  "high",
+  "sql_injection.py",
+  3,
+  "injection"
+ ],
+ [
+  "SQL Injection Pattern",
+  "high",
+  "sql_injection.py",
+  4,
+  "injection"
+ ],
+ [
+  "SQL String Concat",
+  "high",
+  "SA-JS-008.js",
+  1,
+  "injection"
+ ],
+ [
+  "SQL String Concat",
+  "high",
+  "SA-JS-008.js",
+  2,
+  "injection"
+ ],
+ [
+  "SQL String Concat",
+  "high",
+  "SA-JS-008.js",
+  3,
+  "injection"
+ ],
+ [
+  "Send Method",
+  "medium",
+  "SA-RB-003.rb",
+  1,
+  "code-execution"
+ ],
+ [
+  "Send Method",
+  "medium",
+  "SA-RB-003.rb",
+  2,
+  "code-execution"
+ ],
+ [
+  "Send Method",
+  "medium",
+  "SA-RB-003.rb",
+  3,
+  "code-execution"
+ ],
+ [
+  "Session P2P Exfiltration",
+  "critical",
+  "SA-JS-029.js",
+  1,
+  "exfiltration"
+ ],
+ [
+  "Session P2P Exfiltration",
+  "critical",
+  "SA-JS-029.js",
+  2,
+  "exfiltration"
+ ],
+ [
+  "Session P2P Exfiltration",
+  "critical",
+  "SA-JS-029.js",
+  3,
+  "exfiltration"
+ ],
+ [
+  "Session P2P Exfiltration",
+  "critical",
+  "SA-TS-010.ts",
+  1,
+  "exfiltration"
+ ],
+ [
+  "Session P2P Exfiltration",
+  "critical",
+  "SA-TS-010.ts",
+  2,
+  "exfiltration"
+ ],
+ [
+  "Session P2P Exfiltration",
+  "critical",
+  "SA-TS-010.ts",
+  3,
+  "exfiltration"
+ ],
+ [
+  "Shell Execution",
+  "critical",
+  "SA-PHP-001.php",
+  1,
+  "shell-injection"
+ ],
+ [
+  "Shell Execution",
+  "critical",
+  "SA-PHP-001.php",
+  2,
+  "shell-injection"
+ ],
+ [
+  "Shell Execution",
+  "critical",
+  "SA-PHP-001.php",
+  3,
+  "shell-injection"
+ ],
+ [
+  "Shell Injection (os)",
+  "critical",
+  "SA-PY-007.py",
+  1,
+  "shell-injection"
+ ],
+ [
+  "Shell Injection (os)",
+  "critical",
+  "SA-PY-007.py",
+  2,
+  "shell-injection"
+ ],
+ [
+  "Shell Injection (os)",
+  "critical",
+  "SA-PY-007.py",
+  3,
+  "shell-injection"
+ ],
+ [
+  "Shell Injection (subprocess)",
+  "critical",
+  "SA-PY-006.py",
+  1,
+  "shell-injection"
+ ],
+ [
+  "Shell Injection (subprocess)",
+  "critical",
+  "SA-PY-006.py",
+  2,
+  "shell-injection"
+ ],
+ [
+  "Shell Injection (subprocess)",
+  "critical",
+  "SA-PY-006.py",
+  3,
+  "shell-injection"
+ ],
+ [
+  "System Call",
+  "critical",
+  "SA-RB-002.rb",
+  1,
+  "shell-injection"
+ ],
+ [
+  "System Call",
+  "critical",
+  "SA-RB-002.rb",
+  2,
+  "shell-injection"
+ ],
+ [
+  "System Call",
+  "critical",
+  "SA-RB-002.rb",
+  3,
+  "shell-injection"
+ ],
+ [
+  "Unsafe Deserialization",
+  "critical",
+  "SA-JAVA-003.java",
+  1,
+  "deserialization"
+ ],
+ [
+  "Unsafe Deserialization",
+  "critical",
+  "SA-JAVA-003.java",
+  2,
+  "deserialization"
+ ],
+ [
+  "Unsafe Deserialization",
+  "critical",
+  "SA-JAVA-003.java",
+  3,
+  "deserialization"
+ ],
+ [
+  "Unsafe Deserialization",
+  "critical",
+  "SA-PY-005.py",
+  1,
+  "deserialization"
+ ],
+ [
+  "Unsafe Deserialization",
+  "critical",
+  "SA-PY-005.py",
+  2,
+  "deserialization"
+ ],
+ [
+  "Unsafe Deserialization",
+  "critical",
+  "SA-PY-005.py",
+  3,
+  "deserialization"
+ ],
+ [
+  "Unsafe HTML",
+  "high",
+  "SA-JS-003.js",
+  1,
+  "xss"
+ ],
+ [
+  "Unsafe HTML",
+  "high",
+  "SA-JS-003.js",
+  2,
+  "xss"
+ ],
+ [
+  "Unsafe HTML",
+  "high",
+  "SA-JS-003.js",
+  3,
+  "xss"
+ ],
+ [
+  "Unsafe HTML",
+  "high",
+  "SA-JSX-002.jsx",
+  1,
+  "xss"
+ ],
+ [
+  "Unsafe HTML",
+  "high",
+  "SA-JSX-002.jsx",
+  2,
+  "xss"
+ ],
+ [
+  "Unsafe HTML",
+  "high",
+  "SA-JSX-002.jsx",
+  3,
+  "xss"
+ ],
+ [
+  "Unsafe HTML",
+  "high",
+  "SA-TS-003.ts",
+  1,
+  "xss"
+ ],
+ [
+  "Unsafe HTML",
+  "high",
+  "SA-TS-003.ts",
+  2,
+  "xss"
+ ],
+ [
+  "Unsafe HTML",
+  "high",
+  "SA-TS-003.ts",
+  3,
+  "xss"
+ ],
+ [
+  "Unsafe HTML",
+  "high",
+  "SA-TSX-002.tsx",
+  1,
+  "xss"
+ ],
+ [
+  "Unsafe HTML",
+  "high",
+  "SA-TSX-002.tsx",
+  2,
+  "xss"
+ ],
+ [
+  "Unsafe HTML",
+  "high",
+  "SA-TSX-002.tsx",
+  3,
+  "xss"
+ ],
+ [
+  "Unsafe Model Load: torch.load weights_only=False",
+  "critical",
+  "SA-PY-012.py",
+  1,
+  "model-confusion"
+ ],
+ [
+  "Unsafe Model Load: torch.load weights_only=False",
+  "critical",
+  "SA-PY-012.py",
+  2,
+  "model-confusion"
+ ],
+ [
+  "Unsafe Model Load: torch.load weights_only=False",
+  "critical",
+  "SA-PY-012.py",
+  3,
+  "model-confusion"
+ ],
+ [
+  "Unsafe Pickle Model Load",
+  "high",
+  "SA-PY-013.py",
+  1,
+  "model-confusion"
+ ],
+ [
+  "Unsafe Pickle Model Load",
+  "high",
+  "SA-PY-013.py",
+  2,
+  "model-confusion"
+ ],
+ [
+  "Unsafe Pickle Model Load",
+  "high",
+  "SA-PY-013.py",
+  3,
+  "model-confusion"
+ ],
+ [
+  "Unsafe Pointer",
+  "medium",
+  "SA-GO-002.go",
+  1,
+  "memory-safety"
+ ],
+ [
+  "Unsafe Pointer",
+  "medium",
+  "SA-GO-002.go",
+  2,
+  "memory-safety"
+ ],
+ [
+  "Unsafe Pointer",
+  "medium",
+  "SA-GO-002.go",
+  3,
+  "memory-safety"
+ ],
+ [
+  "document.write",
+  "medium",
+  "SA-JS-007.js",
+  1,
+  "xss"
+ ],
+ [
+  "document.write",
+  "medium",
+  "SA-JS-007.js",
+  2,
+  "xss"
+ ],
+ [
+  "document.write",
+  "medium",
+  "SA-JS-007.js",
+  3,
+  "xss"
+ ],
+ [
+  "innerHTML Assignment",
+  "medium",
+  "SA-JS-004.js",
+  1,
+  "xss"
+ ],
+ [
+  "innerHTML Assignment",
+  "medium",
+  "SA-JS-004.js",
+  2,
+  "xss"
+ ],
+ [
+  "innerHTML Assignment",
+  "medium",
+  "SA-JS-004.js",
+  3,
+  "xss"
+ ],
+ [
+  "process.env Logged to Console",
+  "high",
+  "SA-JS-009.js",
+  1,
+  "secret-exposure"
+ ],
+ [
+  "process.env Logged to Console",
+  "high",
+  "SA-JS-009.js",
+  2,
+  "secret-exposure"
+ ],
+ [
+  "process.env Logged to Console",
+  "high",
+  "SA-JS-009.js",
+  3,
+  "secret-exposure"
+ ],
+ [
+  "process.env Logged to Console",
+  "high",
+  "SA-TS-005.ts",
+  1,
+  "secret-exposure"
+ ],
+ [
+  "process.env Logged to Console",
+  "high",
+  "SA-TS-005.ts",
+  2,
+  "secret-exposure"
+ ],
+ [
+  "process.env Logged to Console",
+  "high",
+  "SA-TS-005.ts",
+  3,
+  "secret-exposure"
+ ],
+ [
+  "process.env Serialized (JSON.stringify)",
+  "high",
+  "SA-JS-010.js",
+  1,
+  "secret-exposure"
+ ],
+ [
+  "process.env Serialized (JSON.stringify)",
+  "high",
+  "SA-JS-010.js",
+  2,
+  "secret-exposure"
+ ],
+ [
+  "process.env Serialized (JSON.stringify)",
+  "high",
+  "SA-JS-010.js",
+  3,
+  "secret-exposure"
+ ],
+ [
+  "process.env Serialized (JSON.stringify)",
+  "high",
+  "SA-TS-006.ts",
+  1,
+  "secret-exposure"
+ ],
+ [
+  "process.env Serialized (JSON.stringify)",
+  "high",
+  "SA-TS-006.ts",
+  2,
+  "secret-exposure"
+ ],
+ [
+  "process.env Serialized (JSON.stringify)",
+  "high",
+  "SA-TS-006.ts",
+  3,
+  "secret-exposure"
+ ],
+ [
+  "process.env in Crash Report",
+  "high",
+  "SA-JS-011.js",
+  1,
+  "secret-exposure"
+ ],
+ [
+  "process.env in Crash Report",
+  "high",
+  "SA-JS-011.js",
+  2,
+  "secret-exposure"
+ ],
+ [
+  "process.env in Crash Report",
+  "high",
+  "SA-JS-011.js",
+  3,
+  "secret-exposure"
+ ]
+]
