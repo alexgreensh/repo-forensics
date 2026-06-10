@@ -1,7 +1,6 @@
 """Tests for scan_lifecycle.py - Lifecycle Script Scanner."""
 
 import json
-import pytest
 import scan_lifecycle as scanner
 
 

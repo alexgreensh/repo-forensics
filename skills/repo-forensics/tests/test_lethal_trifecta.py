@@ -10,7 +10,6 @@ Rule 16 in the source comments).
 Created 2026-04-05 as part of PR#A.
 """
 
-import pytest
 import forensics_core as core
 from forensics_core import Finding
 

@@ -1,8 +1,6 @@
 """Tests for scan_manifest_drift.py - Manifest Drift Scanner."""
 
-import os
 import json
-import pytest
 import scan_manifest_drift as scanner
 
 

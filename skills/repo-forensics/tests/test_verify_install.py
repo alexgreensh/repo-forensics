@@ -17,9 +17,7 @@ checksums, tamper the symlink, and assert verification fails.
 import json
 import os
 import shutil
-import sys
 
-import pytest
 
 # The scripts dir is on sys.path via conftest.
 import verify_install
@@ -115,7 +113,7 @@ class TestSymlinkTracking:
         skill_root = _build_fake_repo(tmp_path)
         verify_install.generate_checksums(skill_root)
         passed, report = verify_install.verify_checksums(skill_root)
-        assert passed, f"Verification should pass. Report:\n" + "\n".join(report)
+        assert passed, "Verification should pass. Report:\n" + "\n".join(report)
 
     def test_verify_fails_when_symlink_target_tampered(self, tmp_path):
         """Tamper attack: attacker replaces skill symlink target."""
@@ -203,7 +201,7 @@ class TestHookFileTracking:
         return str(skill_root)
 
     def test_get_tracked_hook_files_enumerates_hooks_dir(self, tmp_path):
-        skill_root = self._build_repo_with_hooks(tmp_path, {
+        self._build_repo_with_hooks(tmp_path, {
             "run_auto_scan.sh": "#!/bin/bash\nexec python3\n",
             "first-run-nudge.sh": "#!/bin/bash\necho hi\n",
             "hooks.json": '{"hooks": {}}',
@@ -216,7 +214,7 @@ class TestHookFileTracking:
         assert len(tracked) == 3
 
     def test_get_tracked_hook_files_returns_empty_without_hooks_dir(self, tmp_path):
-        skill_root = self._build_repo_with_hooks(tmp_path, hook_files=None)
+        self._build_repo_with_hooks(tmp_path, hook_files=None)
         repo_root = str(tmp_path)
         tracked = verify_install.get_tracked_hook_files(repo_root)
         assert tracked == []

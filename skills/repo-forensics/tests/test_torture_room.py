@@ -18,9 +18,6 @@ trying to bypass it. If these tests pass, the scanners catch the evasion.
 - Multi-file rug pull coordination
 """
 
-import os
-import json
-import pytest
 import forensics_core as core
 import scan_runtime_dynamism as rt_scanner
 import scan_manifest_drift as md_scanner

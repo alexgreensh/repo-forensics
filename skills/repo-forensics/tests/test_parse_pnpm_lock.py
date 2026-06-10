@@ -6,7 +6,6 @@ content, unsupported versions, and integration with check_compromised_versions.
 Created 2026-04-05 as part of PR#A.
 """
 
-import pytest
 import parse_pnpm_lock
 import scan_dependencies as scanner
 

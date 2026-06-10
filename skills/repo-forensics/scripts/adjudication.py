@@ -76,6 +76,13 @@ _ANSI_CSI_RE = re.compile(
     r"|\x1b[@-Z\\-_]"                 # two-char escapes
 )
 
+# B3 fix: secondary pass for orphan SGR/cursor sequences that survive after
+# the ESC byte has been removed by the ANSI pass above (e.g. "[31m" without
+# leading ESC).  Scope is intentionally narrow: only classic SGR color/style
+# params (\d+;...\d*m) and common cursor/erase finals (K, H, J, A-D).
+# This avoids mangling legitimate "[0]" index notation in code snippets.
+_ORPHAN_SGR_RE = re.compile(r"\[[\d;]*[mKHJABCD]")
+
 
 def sanitize_snippet(text, max_len=200):
     """Neutralize a snippet for safe inclusion in the adjudication block.
@@ -94,6 +101,10 @@ def sanitize_snippet(text, max_len=200):
     # leaves orphan parameter text behind.
     cleaned = _ANSI_CSI_RE.sub("", text)
 
+    # B3 fix: secondary pass for orphan SGR/cursor params that survive when the
+    # ESC byte was already removed (e.g. "[31m" with no leading ESC).
+    cleaned = _ORPHAN_SGR_RE.sub("", cleaned)
+
     # Base pass: control chars + BIDI overrides/isolates (vuln_feed helper).
     try:
         import vuln_feed
@@ -101,8 +112,9 @@ def sanitize_snippet(text, max_len=200):
     except (ImportError, AttributeError):
         # Inline fallback mirrors vuln_feed._CTRL_AND_BIDI_RE so this module
         # never silently emits raw control bytes if vuln_feed is unavailable.
+        # B2 fix: include C1 range \x80-\x9f (U+009B is single-byte C1 CSI).
         cleaned = re.sub(
-            r"[\x00-\x08\x0b-\x1f\x7f‪-‮⁦-⁩]", "", cleaned
+            r"[\x00-\x08\x0b-\x1f\x7f\x80-\x9f‪-‮⁦-⁩]", "", cleaned
         )
 
     # Extension pass: fence/backtick lookalikes + zero-width controls.
@@ -146,6 +158,10 @@ def select_warn_findings(findings):
             continue
         if finding.get("needs_adjudication") is True:
             out.append(finding)
+            continue
+        # B5 fix: an explicit needs_adjudication=False is an opt-out that must
+        # be respected even when confidence falls in the WARN band.
+        if finding.get("needs_adjudication") is False:
             continue
         conf = _confidence(finding)
         if VERDICT_WARN_MIN <= conf < VERDICT_BLOCK_MIN:

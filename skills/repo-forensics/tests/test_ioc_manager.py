@@ -395,18 +395,21 @@ _IOC_TEST_PRIV, _IOC_TEST_PUB = _ed25519_sign.keypair(_IOC_TEST_SEED)
 
 
 def _write_signed_cache(cache_dir, feed_dict, priv=_IOC_TEST_PRIV,
-                        pub=_IOC_TEST_PUB, sign=True, tamper=False):
-    """Write a fresh IOC cache (.json) plus the raw bytes + detached signature
-    so verify-on-load can re-check it. Returns the raw bytes used."""
-    # Fresh JSON cache (passes TTL).
+                        pub=_IOC_TEST_PUB, sign=True, tamper=False,
+                        mark_seen=None):
+    """Write a fresh IOC cache (.json) whose EXACT bytes are what the detached
+    signature covers — mirroring the production single-file collapse. The .json
+    that gets parsed and trusted IS the signed byte stream. Returns those bytes.
+
+    `mark_seen` defaults to True whenever a signature is written (so the strip-
+    detection sentinel is armed, matching production). Set it explicitly to
+    simulate a genuinely-legacy install that has never seen a signature.
+    """
     cache = os.path.join(cache_dir, ioc_manager.CACHE_FILENAME)
-    to_save = dict(feed_dict)
-    to_save["_cached_at"] = time.time()
-    with open(cache, "w", encoding="utf-8") as f:
-        json.dump(to_save, f)
-    # Raw signed bytes = the feed body WITHOUT the _cached_at wrapper.
+    # The signed cache carries NO _cached_at wrapper (can't sign a post-hoc
+    # field); freshness comes from the file mtime, which is "now" on write.
     raw = json.dumps(feed_dict).encode("utf-8")
-    with open(os.path.join(cache_dir, ioc_manager.RAW_CACHE_FILENAME), "wb") as f:
+    with open(cache, "wb") as f:
         f.write(raw)
     if sign:
         sig = _ed25519_sign.sign(raw, priv, pub)
@@ -416,6 +419,11 @@ def _write_signed_cache(cache_dir, feed_dict, priv=_IOC_TEST_PRIV,
             sig = bytes(sig)
         with open(os.path.join(cache_dir, ioc_manager.SIG_CACHE_FILENAME), "wb") as f:
             f.write(sig)
+    if mark_seen is None:
+        mark_seen = sign
+    if mark_seen:
+        with open(os.path.join(cache_dir, ioc_manager.SIGNED_SEEN_FILENAME), "wb") as f:
+            f.write(b"1")
     return raw
 
 
@@ -473,3 +481,72 @@ class TestIocSignatureVerifyOnLoad:
         cached = ioc_manager._load_cache(cache_dir=str(tmp_path))
         assert cached is not None
         assert "extra-evil" in cached.get("malicious_npm_packages", [])
+
+
+# ---------------------------------------------------------------------------
+# Torture-room regressions: signature must protect the TRUSTED bytes (FIX 3)
+# ---------------------------------------------------------------------------
+
+class TestIocSignatureBindsTrustedBytes:
+    """The .sig must verify over the SAME .json bytes that get parsed and
+    trusted. A same-user attacker editing the .json must be caught, and a
+    previously-signed install whose .sig is later stripped must degrade."""
+
+    def test_editing_trusted_json_is_caught(self, tmp_path, monkeypatch):
+        """Edit the .json that get_iocs actually parses; signature now covers
+        those very bytes, so verification fails and the poisoned edit is NOT
+        trusted (the old dual-file scheme verified a different file)."""
+        monkeypatch.setattr(ioc_manager, "IOC_FEED_PUBKEY_HEX", _IOC_TEST_PUB.hex())
+        feed = {"version": "v", "malicious_domains": ["real-evil.com"]}
+        _write_signed_cache(str(tmp_path), feed)
+        # Attacker edits the TRUSTED .json in place: removes a known-malicious
+        # domain (defanging) and injects a benign-looking allowlist entry.
+        cache = os.path.join(str(tmp_path), ioc_manager.CACHE_FILENAME)
+        with open(cache, "wb") as f:
+            f.write(json.dumps({"version": "v", "malicious_domains": []}).encode())
+        # Signature no longer matches the edited bytes -> invalid -> degraded.
+        assert ioc_manager._verify_ioc_cache_signature(str(tmp_path)) is False
+        iocs = ioc_manager.get_iocs(cache_dir=str(tmp_path))
+        assert iocs["_ioc_signature_invalid"] is True
+        assert iocs["_ioc_degraded"] is True
+        # The attacker-edited (untrusted) feed contents are not merged; only the
+        # hardcoded fallback survives.
+        assert "real-evil.com" not in iocs["malicious_domains"]
+        assert "claud-code" in iocs["malicious_npm"]
+
+    def test_stripped_signature_on_signed_install_degrades(self, tmp_path, monkeypatch):
+        """A .sig that USED to be present and is now gone must degrade rather
+        than silently trust the unsigned cache."""
+        monkeypatch.setattr(ioc_manager, "IOC_FEED_PUBKEY_HEX", _IOC_TEST_PUB.hex())
+        feed = {"version": "v", "malicious_domains": ["was-signed.com"]}
+        _write_signed_cache(str(tmp_path), feed)  # arms the signed-seen sentinel
+        # Attacker strips the signature, leaving the (now unsigned) cache.
+        os.unlink(os.path.join(str(tmp_path), ioc_manager.SIG_CACHE_FILENAME))
+        assert ioc_manager._has_seen_signed(str(tmp_path)) is True
+        iocs = ioc_manager.get_iocs(cache_dir=str(tmp_path))
+        assert iocs["_ioc_signature_invalid"] is True
+        assert iocs["_ioc_degraded"] is True
+        assert "was-signed.com" not in iocs["malicious_domains"]
+
+    def test_genuinely_legacy_unsigned_install_still_trusts(self, tmp_path, monkeypatch):
+        """An install that has NEVER seen a signature (no sentinel) keeps the
+        backward-compatible merge for a plain unsigned cache."""
+        monkeypatch.setattr(ioc_manager, "IOC_FEED_PUBKEY_HEX", _IOC_TEST_PUB.hex())
+        feed = {"version": "v", "malicious_domains": ["legacy.com"]}
+        _write_signed_cache(str(tmp_path), feed, sign=False, mark_seen=False)
+        assert ioc_manager._has_seen_signed(str(tmp_path)) is False
+        iocs = ioc_manager.get_iocs(cache_dir=str(tmp_path))
+        assert iocs["_ioc_signature_invalid"] is False
+        assert iocs["_ioc_degraded"] is False
+        assert "legacy.com" in iocs["malicious_domains"]
+
+    def test_valid_signature_arms_sentinel_on_read(self, tmp_path, monkeypatch):
+        """First valid verification during a read arms the strip-detection
+        sentinel even if it was not pre-written."""
+        monkeypatch.setattr(ioc_manager, "IOC_FEED_PUBKEY_HEX", _IOC_TEST_PUB.hex())
+        feed = {"version": "v", "malicious_domains": ["e.com"]}
+        _write_signed_cache(str(tmp_path), feed, mark_seen=False)
+        assert ioc_manager._has_seen_signed(str(tmp_path)) is False
+        iocs = ioc_manager.get_iocs(cache_dir=str(tmp_path))
+        assert iocs["_ioc_signature_invalid"] is False
+        assert ioc_manager._has_seen_signed(str(tmp_path)) is True

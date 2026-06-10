@@ -1,6 +1,5 @@
 """Tests for scan_dataflow.py - Source-to-Sink Taint Tracker."""
 
-import pytest
 import scan_dataflow as scanner
 
 

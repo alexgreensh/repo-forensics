@@ -13,7 +13,6 @@ Focus areas:
 No real network calls — everything is stubbed via monkeypatch.
 """
 
-import io
 import json
 import os
 import sys

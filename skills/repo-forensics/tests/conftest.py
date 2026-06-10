@@ -6,8 +6,6 @@ Creates temporary repos with known vulnerabilities for scanner testing.
 import os
 import sys
 import json
-import tempfile
-import shutil
 import pytest
 
 # Add scripts dir to path so scanners can be imported

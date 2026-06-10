@@ -46,10 +46,21 @@ def _sign(raw_bytes):
     return _ed25519_sign.sign(raw_bytes, TEST_PRIV, TEST_PUB)
 
 
-def _make_bundle(packs=None, generated="2099-01-01", schema="1.0",
+def _today_iso():
+    import datetime
+    return datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+
+
+def _make_bundle(packs=None, generated=None, schema="1.0",
                  bundle_version=1):
     """Build a minimal valid bundle dict. Default carries one tiny pack with a
-    self-consistent regex rule."""
+    self-consistent regex rule.
+
+    `generated` defaults to today (UTC): the freshness gate rejects both stale
+    AND future-dated bundles, so a realistic recent date is the only one that
+    passes cleanly."""
+    if generated is None:
+        generated = _today_iso()
     if packs is None:
         packs = {
             "demo": {
@@ -255,6 +266,90 @@ class TestAcceptanceChain:
         assert not ok
         assert "self-test" in msg.lower()
         assert not (tmp_path / "bundle.json").exists()
+
+
+# ---------------------------------------------------------------------------
+# Torture-room regressions: byte-exact cache, future-date gate, floor survival
+# ---------------------------------------------------------------------------
+
+class TestSignedBytesAndFreshness:
+    def test_cached_bundle_is_byte_identical_and_verifies_on_load(self, tmp_path):
+        """FIX 2: the cache must hold the EXACT signed bytes (binary write, no
+        text-mode \\n->\\r\\n rewrite), so the detached sig re-verifies on load."""
+        raw = _serialize(_make_bundle())
+        sig = _sign(raw)
+        ok, _, _ = _accept(raw, sig, tmp_path)
+        assert ok
+        cached = (tmp_path / "bundle.json").read_bytes()
+        assert cached == raw  # byte-for-byte, no CRLF translation
+        cached_sig = (tmp_path / "bundle.json.sig").read_bytes()
+        # Verify-on-load: signature checks against the cached bytes.
+        assert rulepack_feed.verify_raw_bundle(cached, cached_sig, pubkey=TEST_PUB) is True
+
+    def test_future_dated_bundle_rejected(self, tmp_path):
+        """FIX 5: a bundle generated well in the future must be rejected, not
+        sail through the 'too old' gate via a negative age."""
+        import datetime
+        future = (datetime.datetime.now(datetime.timezone.utc).date()
+                  + datetime.timedelta(days=10)).isoformat()
+        raw = _serialize(_make_bundle(generated=future))
+        ok, msg, _ = _accept(raw, _sign(raw), tmp_path)
+        assert not ok
+        assert "future" in msg.lower()
+        assert not (tmp_path / "bundle.json").exists()
+
+    def test_malformed_generated_time_rejected(self, tmp_path):
+        """FIX 5: a malformed time component must reject (not be silently
+        truncated to the date prefix)."""
+        raw = _serialize(_make_bundle(generated="2026-06-10T99:99:99"))
+        ok, msg, _ = _accept(raw, _sign(raw), tmp_path)
+        assert not ok
+        assert "unparseable" in msg.lower()
+
+    def test_one_day_future_skew_tolerated(self, tmp_path):
+        """FIX 5: a tiny clock skew (<= 1 day ahead) is tolerated."""
+        import datetime
+        tomorrow = (datetime.datetime.now(datetime.timezone.utc).date()
+                    + datetime.timedelta(days=1)).isoformat()
+        raw = _serialize(_make_bundle(generated=tomorrow))
+        ok, msg, _ = _accept(raw, _sign(raw), tmp_path)
+        assert ok, msg
+
+    def test_floor_survives_cache_clear(self, tmp_path):
+        """FIX 4 (KTD-13): accept v10, then `rm -rf` the CACHE dir (not the
+        floor's state dir); a replay of a validly-signed v3 must still be
+        rejected by the persisted floor."""
+        import shutil
+        cache = tmp_path / "cache"
+        b10 = _make_bundle(packs={"demo": {
+            "pack_version": 10, "schema_version": "1.0",
+            "rules": [{"id": "DEMO-001", "type": "regex", "pattern": "x",
+                       "examples": {"match": ["x"], "no_match": ["y"]}}],
+        }})
+        raw10 = _serialize(b10)
+        ok, _, _ = _accept(raw10, _sign(raw10), cache)
+        assert ok
+        assert rulepack_feed.load_floor(str(cache))["demo"] == 10
+        # The floor lives OUTSIDE the cache dir (sibling state dir).
+        floor_path = rulepack_feed._floor_path(str(cache))
+        assert not floor_path.startswith(str(cache) + os.sep)
+        assert os.path.exists(floor_path)
+        # Wipe the ENTIRE cache dir, as a `rm -rf ~/.cache/repo-forensics` would.
+        shutil.rmtree(str(cache))
+        assert not os.path.exists(str(cache))
+        # Floor file untouched.
+        assert os.path.exists(rulepack_feed._floor_path(str(cache)))
+        assert rulepack_feed.load_floor(str(cache))["demo"] == 10
+        # Replay an older validly-signed v3 -> rejected by the surviving floor.
+        b3 = _make_bundle(packs={"demo": {
+            "pack_version": 3, "schema_version": "1.0",
+            "rules": [{"id": "DEMO-001", "type": "regex", "pattern": "x",
+                       "examples": {"match": ["x"], "no_match": ["y"]}}],
+        }})
+        raw3 = _serialize(b3)
+        ok, msg, _ = _accept(raw3, _sign(raw3), cache)
+        assert not ok
+        assert "rollback" in msg.lower() or "floor" in msg.lower()
 
 
 # ---------------------------------------------------------------------------

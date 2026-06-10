@@ -1,8 +1,8 @@
 """Tests for forensics_core.py - shared infrastructure."""
 
+import math
 import os
 import json
-import tempfile
 import pytest
 import forensics_core as core
 
@@ -57,10 +57,24 @@ class TestScanPatterns:
         findings = core.scan_patterns("x = print('safe')\n", "test.py", patterns, "sast", "high", "test")
         assert len(findings) == 0
 
-    def test_long_line_skip(self):
+    def test_long_line_truncated_not_skipped(self):
+        # C3: a pattern match within the first MAX_LINE_LENGTH chars of a very
+        # long line MUST still be detected (truncate, not skip).  The old behavior
+        # silently skipped long lines, creating a detection-evasion hole.
         import re
         patterns = [(re.compile(r'secret'), "secret found")]
         long_line = "secret " + "x" * (core.MAX_LINE_LENGTH + 1)
+        findings = core.scan_patterns(long_line, "test.py", patterns, "sast", "high", "test")
+        # The secret is in the first 7 chars — well within MAX_LINE_LENGTH prefix.
+        assert len(findings) == 1
+        assert findings[0].title == "secret found"
+
+    def test_long_line_past_truncation_not_detected(self):
+        # A pattern that only appears AFTER the MAX_LINE_LENGTH boundary is NOT
+        # detected — this is the accepted tradeoff that bounds regex input length.
+        import re
+        patterns = [(re.compile(r'BOUNDARY'), "boundary match")]
+        long_line = "x" * (core.MAX_LINE_LENGTH + 1) + "BOUNDARY"
         findings = core.scan_patterns(long_line, "test.py", patterns, "sast", "high", "test")
         assert len(findings) == 0
 
@@ -69,6 +83,78 @@ class TestScanPatterns:
         patterns = [(re.compile(r'test'), "match")]
         findings = core.scan_patterns("test\n", "f.py", patterns, "c", "low", "my_scanner")
         assert findings[0].scanner == "my_scanner"
+
+    # --- C3: scan_rule_patterns also truncates long lines ---
+
+    def test_c3_rule_patterns_long_line_truncated_not_skipped(self):
+        """C3: scan_rule_patterns must truncate, not skip, lines longer than
+        MAX_LINE_LENGTH — same contract as scan_patterns (closing the evasion
+        hole where a secret hidden on a 10001-char line was invisible)."""
+        import re
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))), "scripts"))
+        # Build a minimal CompiledRule-like object without importing rule_loader
+        # (KTD-14: forensics_core does not import rule_loader).
+        class _FakeRule:
+            def __init__(self):
+                self.regex = re.compile(r'SECRET')
+                self.title = "fake secret"
+                self.id = "FAKE-001"
+                self.confidence = 0.9
+        long_line = "SECRET " + "x" * (core.MAX_LINE_LENGTH + 1)
+        findings = core.scan_rule_patterns(
+            long_line, "test.py", [_FakeRule()],
+            "test-cat", "high", "test_scanner",
+        )
+        assert len(findings) == 1, (
+            "scan_rule_patterns skipped a long line instead of truncating it "
+            "(C3: detection-evasion hole)"
+        )
+
+    # --- C2: coarse per-file scan budget aborting runaway scan ---
+
+    def test_c2_per_file_budget_aborts_overlong_scan(self, monkeypatch, capsys):
+        """C2: if a scan takes longer than _SCAN_FILE_BUDGET_SEC the loop aborts
+        and emits a diagnostic to stderr.  We simulate a slow regex by monkeypatching
+        time.monotonic to advance by 1 second per budget-check interval so the
+        budget appears exhausted immediately after the first interval check."""
+        import re
+        import time
+
+        call_count = [0]
+        real_monotonic = time.monotonic
+        base_t = real_monotonic()
+
+        def _fast_forward():
+            call_count[0] += 1
+            # First call (loop start _t0) returns base; every subsequent call
+            # returns a value well past _SCAN_FILE_BUDGET_SEC so the budget
+            # check fires after the first interval.
+            if call_count[0] == 1:
+                return base_t
+            return base_t + core._SCAN_FILE_BUDGET_SEC + 1.0
+
+        monkeypatch.setattr(time, "monotonic", _fast_forward)
+
+        # Build content with enough lines to trigger the interval check (interval + 1).
+        n = core._SCAN_BUDGET_CHECK_INTERVAL + 1
+        content = ("target\n" * n)
+        patterns = [(re.compile(r"target"), "found")]
+        findings = core.scan_patterns(
+            content, "big.py", patterns, "sast", "high", "test"
+        )
+        err = capsys.readouterr().err
+        # The scan must have emitted a budget-exceeded diagnostic.
+        assert "budget exceeded" in err, (
+            "Expected per-file budget diagnostic on stderr, got nothing.  "
+            "C2 coarse scan budget may not be wired up."
+        )
+        # And it must have aborted before finding everything (fewer than n matches).
+        assert len(findings) < n, (
+            "scan_patterns found all lines even after budget exceeded — "
+            "the break statement may be missing."
+        )
 
 
 class TestForensicsIgnore:
@@ -768,10 +854,10 @@ class TestTagsPrecomputation:
         lazy = list(core.findings_from_dicts_iter(dicts))
 
         assert len(lazy) == len(eager)
-        for e, l in zip(eager, lazy):
-            assert e.title == l.title
-            assert e.file == l.file
-            assert e._tags == l._tags
+        for e, lz in zip(eager, lazy):
+            assert e.title == lz.title
+            assert e.file == lz.file
+            assert e._tags == lz._tags
 
     def test_run_correlation_pass_via_iter(self):
         """run_correlation_pass produces the same correlated titles via lazy streaming."""
@@ -824,6 +910,47 @@ class TestFindingConfidence:
     def test_non_numeric_confidence_falls_back(self):
         f = core.Finding("s", "high", "t", "d", "f", 0, "", "c", confidence="oops")
         assert f.confidence == 0.80
+
+    # --- C4: NaN / ±inf / string / None confidence coercion (Finding side) ---
+
+    def test_c4_nan_confidence_coerced(self):
+        """C4: NaN confidence must NOT survive __post_init__; NaN compares False
+        to all numeric tests so the old < / > clamp was bypassed."""
+        f = core.Finding("s", "high", "t", "d", "f", 0, "", "c",
+                         confidence=float("nan"))
+        assert math.isfinite(f.confidence), (
+            f"NaN survived __post_init__: {f.confidence}"
+        )
+        assert 0.0 <= f.confidence <= 1.0
+
+    def test_c4_pos_inf_confidence_coerced(self):
+        f = core.Finding("s", "medium", "t", "d", "f", 0, "", "c",
+                         confidence=float("inf"))
+        assert math.isfinite(f.confidence)
+        assert 0.0 <= f.confidence <= 1.0
+
+    def test_c4_neg_inf_confidence_coerced(self):
+        f = core.Finding("s", "low", "t", "d", "f", 0, "", "c",
+                         confidence=float("-inf"))
+        assert math.isfinite(f.confidence)
+        assert 0.0 <= f.confidence <= 1.0
+
+    def test_c4_string_confidence_falls_back(self):
+        """C4: a string like 'high' must fall back to severity-derived default."""
+        f = core.Finding("s", "critical", "t", "d", "f", 0, "", "c",
+                         confidence="high")
+        assert math.isfinite(f.confidence)
+        assert f.confidence == 0.95  # severity-derived fallback for "critical"
+
+    def test_c4_nan_confidence_produces_valid_json(self):
+        """C4: a Finding built with NaN confidence must serialise to valid JSON
+        (no non-standard NaN literal that breaks strict JSON consumers)."""
+        f = core.Finding("s", "high", "t", "d", "f", 0, "", "c",
+                         confidence=float("nan"))
+        serialised = json.dumps(f.to_dict())   # must not raise
+        parsed = json.loads(serialised)        # must round-trip
+        assert math.isfinite(parsed["confidence"])
+        assert 0.0 <= parsed["confidence"] <= 1.0
 
     def test_rule_id_default_empty(self):
         f = core.Finding("s", "high", "t", "d", "f", 0, "", "c")
@@ -885,3 +1012,73 @@ class TestRuleSuppressionParsing:
     def test_suppression_no_match_when_rule_id_empty(self):
         supp = {"rule_id": "SC-KEY-001", "glob": None}
         assert not core.suppression_matches(supp, "", "tests/x.py")
+
+
+class TestAtomicWrite:
+    """Cross-platform hardening of the shared atomic-write engine."""
+
+    def test_json_round_trip(self, tmp_path):
+        p = str(tmp_path / "x.json")
+        core.atomic_write_json(p, {"a": 1, "b": [2, 3]})
+        with open(p, encoding="utf-8") as f:
+            assert json.load(f) == {"a": 1, "b": [2, 3]}
+
+    def test_text_round_trip(self, tmp_path):
+        p = str(tmp_path / "x.txt")
+        core.atomic_write_text(p, "hello\nworld\n")
+        with open(p, encoding="utf-8") as f:
+            assert f.read() == "hello\nworld\n"
+
+    def test_newline_not_translated(self, tmp_path):
+        """newline='' must keep \\n exactly as written (no CRLF rewrite), so a
+        byte-exact / signature-verified payload survives even on Windows."""
+        p = str(tmp_path / "exact.bin")
+        core.atomic_write_text(p, "a\nb\nc\n")
+        with open(p, "rb") as f:
+            assert f.read() == b"a\nb\nc\n"  # never b"a\r\nb\r\nc\r\n"
+
+    def test_succeeds_without_os_fchmod(self, tmp_path, monkeypatch):
+        """Simulate Windows (no os.fchmod): the write must still succeed, not
+        crash with AttributeError escaping to the outer handler."""
+        import forensics_core as fc
+        real_os = fc.os
+        monkeypatch.delattr(real_os, "fchmod", raising=False)
+        p = str(tmp_path / "winsafe.json")
+        core.atomic_write_json(p, {"ok": True})
+        with open(p, encoding="utf-8") as f:
+            assert json.load(f) == {"ok": True}
+
+    def test_no_fd_leak_on_fdopen_failure(self, tmp_path, monkeypatch):
+        """If fdopen raises (e.g. EMFILE), the raw fd must be closed and the
+        temp file unlinked — no leaked descriptor, no stray temp."""
+        import forensics_core as fc
+
+        opened = {}
+        real_open = fc.os.open
+        real_close = fc.os.close
+        closed = []
+
+        def tracking_open(path, flags, *a, **k):
+            fd = real_open(path, flags, *a, **k)
+            opened["fd"] = fd
+            return fd
+
+        def tracking_close(fd):
+            closed.append(fd)
+            return real_close(fd)
+
+        def boom_fdopen(*a, **k):
+            raise OSError(24, "Too many open files")
+
+        monkeypatch.setattr(fc.os, "open", tracking_open)
+        monkeypatch.setattr(fc.os, "close", tracking_close)
+        monkeypatch.setattr(fc.os, "fdopen", boom_fdopen)
+
+        p = str(tmp_path / "leak.json")
+        with pytest.raises(OSError):
+            core.atomic_write_json(p, {"x": 1})
+        # The fd we opened got explicitly closed (not leaked to fdopen).
+        assert opened["fd"] in closed
+        # No final file and no stray temp left behind.
+        assert not os.path.exists(p)
+        assert list(tmp_path.glob("*.tmp.*")) == []

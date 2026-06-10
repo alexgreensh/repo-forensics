@@ -2,7 +2,6 @@
 
 import json
 
-import pytest
 import scan_mcp_security as scanner
 
 
@@ -340,8 +339,8 @@ class TestExfilVerbUrlPattern:
             f"as HIGH severity finding. Silent bypass is a regression."
         )
         assert all(f.severity == "high" for f in exfil), (
-            f"Exfil pattern severity must be HIGH, not CRITICAL, to preserve "
-            f"signal/noise ratio on legitimate HTTPS upload targets."
+            "Exfil pattern severity must be HIGH, not CRITICAL, to preserve "
+            "signal/noise ratio on legitimate HTTPS upload targets."
         )
 
     def test_upload_to_http_flagged(self, tmp_path):

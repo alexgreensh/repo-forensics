@@ -2,7 +2,6 @@
 
 import json
 import os
-import pytest
 import scan_devcontainer as scanner
 
 

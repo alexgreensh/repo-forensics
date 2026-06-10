@@ -13,6 +13,7 @@ documented `base_dir` seam — they are NEVER shipped in data/rulepacks/ (U3
 ships the first real packs).
 """
 
+import math as _math
 import os
 import sys
 import json
@@ -468,3 +469,117 @@ def test_module_importable_without_sigalrm(monkeypatch):
     finally:
         # Restore a clean module for subsequent tests.
         importlib.reload(rule_loader)
+
+
+# ---------------------------------------------------------------------------
+# C1: sequential-overlap quantifier heuristic (fix for _SEQ_QUANT_RE bug)
+# ---------------------------------------------------------------------------
+
+# The 5 canonical evil patterns from the fix spec.  Each causes
+# superpolynomial backtracking when the trailing literal fails.
+_SEQ_EVIL_PATTERNS = [
+    r"\w*\w*\w*\w*x",       # same backslash-class ×4 then failing suffix
+    r"[a-z]*[a-z]*[a-z]*c", # same char-class ×3
+    r".*.*.*end",            # dot ×3
+    r"[^\n]*[^\n]*[^\n]*end", # negated class repeated ×3 (same body)
+    r"\w*\w+\w*x",           # mixed * and + on same class ×3
+]
+
+# Patterns that must NOT be flagged (linear / bounded / single-occurrence).
+_SEQ_SAFE_PATTERNS = [
+    r"[^)]*shell=True",      # single negated class, no repetition
+    r"[^.\n]{0,80}",         # bounded quantifier — always polynomial
+    r"AKIA[A-Z0-9]{16}",     # literal + bounded class
+    r"\beval\(",             # word boundary + literal paren
+    r"sk-[a-zA-Z0-9]{20}",  # literal prefix + bounded class
+    r"\w+",                  # single \w, not 3+ consecutive
+    r"\w*foo\w*",            # \w separated by required literal 'foo'
+    r"\w*\d*\s*end",         # different classes, not the same one ×3+
+]
+
+
+@pytest.mark.parametrize("pattern", _SEQ_EVIL_PATTERNS)
+def test_c1_sequential_overlap_evil_flagged(pattern):
+    """C1: all 5 known-evil sequential-overlap patterns are caught."""
+    reason = rule_loader._looks_catastrophic(pattern)
+    assert reason, (
+        f"_looks_catastrophic({pattern!r}) returned empty — evil pattern not caught. "
+        "Check _SEQ_QUANT_RE backslash count (r\"\\\\\" = one literal backslash needed)."
+    )
+    assert "sequential" in reason
+
+
+@pytest.mark.parametrize("pattern", _SEQ_SAFE_PATTERNS)
+def test_c1_sequential_overlap_safe_not_flagged(pattern):
+    """C1: linear/bounded patterns that ship in real packs must NOT be flagged."""
+    reason = rule_loader._looks_catastrophic(pattern)
+    assert not reason, (
+        f"_looks_catastrophic({pattern!r}) incorrectly flagged {reason!r} — "
+        "false-positive in C1 heuristic."
+    )
+
+
+def test_c1_all_shipped_packs_load_fully():
+    """C1 post-condition: every shipped rule pack loads without any rule rejected
+    by the updated sequential-overlap heuristic.  The expected rule counts are
+    the frozen baseline; a mismatch means the heuristic regressed on real patterns."""
+    rule_loader._reset_pack_cache()
+    expected = {
+        "secrets": 46,
+        "sast": 121,
+        "skill_threats": 119,
+        "mcp_security": 44,
+        "shared": 5,
+        "runtime_dynamism": 60,
+    }
+    for name, count in expected.items():
+        pack = rule_loader.load_pack(name)
+        assert pack is not None, f"pack {name!r} failed to load (returned None)"
+        assert len(pack.all_rules) == count, (
+            f"pack {name!r}: expected {count} rules, got {len(pack.all_rules)} — "
+            "C1 heuristic may be false-positiving on a shipped pattern"
+        )
+
+
+# ---------------------------------------------------------------------------
+# C4: NaN / ±inf / non-numeric confidence in _compile_rule (rule_loader side)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("bad_confidence,label", [
+    (float("nan"),  "NaN"),
+    (float("inf"),  "+inf"),
+    (float("-inf"), "-inf"),
+    ("high",        "string 'high'"),
+    (None,          "None"),
+    ({},            "dict"),
+])
+def test_c4_compile_rule_bad_confidence_yields_finite(tmp_path, bad_confidence, label):
+    """C4: non-numeric or non-finite confidence in a rule dict is coerced to a
+    finite fallback by _compile_rule; the rule is accepted (not rejected)."""
+    raw = _regex_rule(id="SC-C4-001", confidence=bad_confidence)
+    rule, reason = rule_loader._compile_rule(raw)
+    assert rule is not None, (
+        f"_compile_rule rejected a rule with confidence={label!r}: {reason}"
+    )
+    assert _math.isfinite(rule.confidence), (
+        f"rule.confidence is not finite after coercion for input {label!r}: "
+        f"{rule.confidence}"
+    )
+    assert 0.0 <= rule.confidence <= 1.0, (
+        f"rule.confidence {rule.confidence} out of [0, 1] for input {label!r}"
+    )
+
+
+def test_c4_compile_rule_nan_confidence_produces_valid_json(tmp_path):
+    """C4: a rule compiled with a NaN confidence must produce valid JSON when
+    its findings are serialised — no non-standard NaN literal in the output."""
+    import json
+    raw = _regex_rule(id="SC-C4-JSON", confidence=float("nan"))
+    rule, reason = rule_loader._compile_rule(raw)
+    assert rule is not None
+    # Simulate the serialisation path used by format_findings / output_findings.
+    data = {"confidence": rule.confidence, "id": rule.id}
+    serialised = json.dumps(data)        # must not raise
+    parsed = json.loads(serialised)      # must round-trip
+    assert _math.isfinite(parsed["confidence"])

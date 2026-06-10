@@ -1,7 +1,6 @@
 """Tests for scan_dependencies.py - Dependency Scanner."""
 
 import json
-import pytest
 import scan_dependencies as scanner
 
 

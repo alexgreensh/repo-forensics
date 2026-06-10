@@ -6,8 +6,6 @@ frontmatter validation, tools.json poisoning, agent config injection,
 """
 
 import json
-import os
-import pytest
 import scan_agent_skills as scanner
 
 

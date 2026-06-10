@@ -2,7 +2,6 @@
 
 import json
 import os
-import sys
 
 import aggregate_json as module
 

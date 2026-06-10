@@ -1,7 +1,6 @@
 """Tests for scan_infra.py - Infrastructure Security Scanner."""
 
 import os
-import pytest
 import scan_infra as scanner
 
 
@@ -338,6 +337,18 @@ class TestNpmrc:
     def test_detects_missing_ignore_scripts(self, tmp_path):
         npmrc = tmp_path / ".npmrc"
         npmrc.write_text("registry=https://registry.npmjs.org/\n")
+        findings = scanner.scan_npmrc(str(npmrc), ".npmrc")
+        assert any("ignore-scripts" in f.title.lower() for f in findings)
+
+    def test_non_utf8_package_json_does_not_crash(self, tmp_path):
+        """A non-UTF8 sibling package.json must NOT abort the npmrc scan with a
+        UnicodeDecodeError (a ValueError subclass that the old narrow except did
+        not catch). The scan should still surface the missing-ignore-scripts
+        finding."""
+        npmrc = tmp_path / ".npmrc"
+        npmrc.write_text("registry=https://registry.npmjs.org/\n")
+        # Invalid UTF-8 bytes that decode-replace can tolerate but utf-8 cannot.
+        (tmp_path / "package.json").write_bytes(b'{"scripts": {"\xff\xfe": "x"}}')
         findings = scanner.scan_npmrc(str(npmrc), ".npmrc")
         assert any("ignore-scripts" in f.title.lower() for f in findings)
 

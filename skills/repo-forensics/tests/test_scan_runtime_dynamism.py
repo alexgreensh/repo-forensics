@@ -7,9 +7,6 @@ NOTE: Patterns owned by other scanners are tested in their own test files:
 - Dynamic tool descriptions -> test_scan_mcp_security.py
 """
 
-import os
-import json
-import pytest
 import scan_runtime_dynamism as scanner
 
 

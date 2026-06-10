@@ -1,8 +1,6 @@
 """Tests for scan_binary.py - Binary Camouflage Scanner."""
 
-import os
 import struct
-import pytest
 import scan_binary as scanner
 
 

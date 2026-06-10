@@ -7,10 +7,12 @@ correlation engine, and .forensicsignore support.
 Created by Alex Greenshpun
 """
 
+import math
 import os
 import re
 import sys
 import json
+import time
 import hashlib
 import fnmatch
 from dataclasses import dataclass, asdict
@@ -80,8 +82,10 @@ class Finding:
         # Confidence dimension (KTD-7/8). When unset (None or exactly 0.0),
         # derive from the severity map so every finding carries a meaningful
         # confidence even on legacy code paths. Any explicitly-provided value
-        # is clamped to [0.0, 1.0]. A non-numeric value falls back to the
-        # severity-derived default rather than crashing the aggregator.
+        # is clamped to [0.0, 1.0]. A non-numeric value (e.g. "high") or a
+        # non-finite value (NaN / ±inf) falls back to the severity-derived
+        # default rather than crashing the aggregator or producing non-standard
+        # JSON (C4 fix: NaN compares False to every numeric test without isfinite).
         if self.confidence is None:
             self.confidence = SEVERITY_CONFIDENCE.get(self.severity, 0.40)
         else:
@@ -89,7 +93,8 @@ class Finding:
                 conf = float(self.confidence)
             except (TypeError, ValueError):
                 conf = 0.0
-            if conf == 0.0:
+            # NaN and ±inf must be caught before < / > comparisons (C4).
+            if not math.isfinite(conf) or conf == 0.0:
                 conf = SEVERITY_CONFIDENCE.get(self.severity, 0.40)
             elif conf < 0.0:
                 conf = 0.0
@@ -314,7 +319,17 @@ BINARY_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.ico', '.pdf', '.zip', '.
 LOCKFILES = {'pnpm-lock.yaml', 'package-lock.json', 'yarn.lock', 'go.sum', 'Cargo.lock',
              'Gemfile.lock', 'poetry.lock', 'Pipfile.lock', 'composer.lock'}
 MAX_FILE_SIZE_MB = 10
-MAX_LINE_LENGTH = 10000  # Skip/truncate lines longer than this to prevent ReDoS
+MAX_LINE_LENGTH = 10000  # Truncate lines longer than this to prevent ReDoS (C3)
+# C2: coarse per-call wall-clock budget for scan_patterns / scan_rule_patterns.
+# A regex that slips past the static heuristic + length cap still cannot wedge
+# an entire scan indefinitely. The check fires every _SCAN_BUDGET_CHECK_INTERVAL
+# lines; if elapsed > _SCAN_FILE_BUDGET_SEC the current file is aborted.
+# This is deliberately coarse (not per-call SIGALRM) to stay cross-platform and
+# keep overhead negligible on the hot loop (one time.monotonic() per N lines,
+# not per regex call). The static heuristic (C1) + length cap remain the primary
+# defence; this is defence-in-depth.
+_SCAN_FILE_BUDGET_SEC = 10.0
+_SCAN_BUDGET_CHECK_INTERVAL = 500  # lines between time checks
 
 
 def sha256_file(filepath):
@@ -1380,9 +1395,23 @@ def scan_patterns(content, rel_path, patterns, category, default_severity, scann
     """Generic line-based pattern scanner. Shared by scan_skill_threats and scan_mcp_security."""
     findings = []
     lines = content.split('\n')
+    _t0 = time.monotonic()
     for i, line in enumerate(lines):
+        # C2: coarse per-file budget check every N lines to abort runaway scans.
+        if i % _SCAN_BUDGET_CHECK_INTERVAL == 0 and i > 0:
+            if time.monotonic() - _t0 > _SCAN_FILE_BUDGET_SEC:
+                print(
+                    f"[forensics_core] scan_patterns: per-file budget exceeded "
+                    f"({_SCAN_FILE_BUDGET_SEC}s) scanning {rel_path!r} at line {i+1} "
+                    f"— aborting remainder of file",
+                    file=sys.stderr,
+                )
+                break
+        # C3: truncate instead of skip — prefix is still scanned (closes the
+        # detection-evasion hole where a secret on a >10000-char line was missed)
+        # while bounding regex input length (ReDoS surface reduction).
         if len(line) > MAX_LINE_LENGTH:
-            continue
+            line = line[:MAX_LINE_LENGTH]
         for pattern, title in patterns:
             if pattern.search(line):
                 findings.append(Finding(
@@ -1411,9 +1440,21 @@ def scan_rule_patterns(content, rel_path, rules, category, default_severity, sca
     """
     findings = []
     lines = content.split('\n')
+    _t0 = time.monotonic()
     for i, line in enumerate(lines):
+        # C2: coarse per-file budget check every N lines.
+        if i % _SCAN_BUDGET_CHECK_INTERVAL == 0 and i > 0:
+            if time.monotonic() - _t0 > _SCAN_FILE_BUDGET_SEC:
+                print(
+                    f"[forensics_core] scan_rule_patterns: per-file budget exceeded "
+                    f"({_SCAN_FILE_BUDGET_SEC}s) scanning {rel_path!r} at line {i+1} "
+                    f"— aborting remainder of file",
+                    file=sys.stderr,
+                )
+                break
+        # C3: truncate instead of skip (same rationale as scan_patterns above).
         if len(line) > MAX_LINE_LENGTH:
-            continue
+            line = line[:MAX_LINE_LENGTH]
         for rule in rules:
             if rule.regex.search(line):
                 findings.append(Finding(
@@ -1478,11 +1519,30 @@ def _atomic_write_via(path, mode, write_fn):
         fd = _os.open(tmp_path, _os.O_WRONLY | _os.O_CREAT | _os.O_EXCL, mode)
         try:
             # Explicit fchmod beats umask interference on shared systems.
+            # os.fchmod is absent on Windows (AttributeError, NOT an OSError
+            # subclass); the O_CREAT mode above already set the bits there.
+            if hasattr(_os, "fchmod"):
+                try:
+                    _os.fchmod(fd, mode)
+                except OSError:
+                    pass
+            # newline="" prevents the text-mode translation layer from
+            # rewriting \n -> \r\n on Windows, which would otherwise corrupt
+            # any byte-exact (e.g. signature-verified) payload.
+            f = _os.fdopen(fd, "w", encoding="utf-8", newline="")
+        except BaseException:
+            # fdopen never took ownership of fd here: close it ourselves.
             try:
-                _os.fchmod(fd, mode)
+                _os.close(fd)
             except OSError:
                 pass
-            with _os.fdopen(fd, "w", encoding="utf-8") as f:
+            try:
+                _os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
+        try:
+            with f:
                 write_fn(f)
                 f.flush()
                 _os.fsync(f.fileno())

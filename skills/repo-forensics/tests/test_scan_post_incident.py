@@ -1,8 +1,5 @@
 """Tests for scan_post_incident.py - Post-Incident Artifact Scanner."""
 
-import os
-import json
-import pytest
 import scan_post_incident as scanner
 
 

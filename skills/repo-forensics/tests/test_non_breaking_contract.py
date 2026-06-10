@@ -21,7 +21,6 @@ import json
 import os
 import subprocess
 
-import pytest
 
 
 REQUIRED_TOP_LEVEL_KEYS = {

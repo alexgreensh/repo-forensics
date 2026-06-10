@@ -1,7 +1,5 @@
 """Tests for scan_skill_threats.py - AI Agent Skill Threat Scanner."""
 
-import os
-import pytest
 import scan_skill_threats as scanner
 
 

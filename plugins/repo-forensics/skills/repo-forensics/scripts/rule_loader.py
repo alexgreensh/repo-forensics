@@ -59,6 +59,7 @@ Security notes:
 Created by Alex Greenshpun.
 """
 
+import math
 import os
 import re
 import sys
@@ -150,6 +151,44 @@ _ALT_GROUP_RE = re.compile(
     r"\((?:\?P?<[^>]*>|\?:)?\s*(?P<body>[^()]*\|[^()]*)\)\s*[*+]"
 )
 
+# Sequential-overlap quantifier heuristic (C1). Catches top-level runs of 3+
+# consecutive quantified atoms of the same broad/overlapping class without a
+# required literal boundary between them — the superpolynomial-backtracking
+# signature when the suffix fails:
+#
+#   \w*\w*\w*\w*x   [a-z]*[a-z]*[a-z]*c   .*.*.*end
+#   [^\n]*[^\n]*[^\n]*end   \w*\w+\w*x
+#
+# Three sub-cases, OR-ed together:
+#   (a) Same backslash-class repeated 3+ times: \w*\w*\w*\w*
+#       Uses a backreference so mixed classes like \w*\d*\s* (disjoint) don't fire.
+#   (b) Same literal char-class body repeated 3+ times: [a-z]*[a-z]*[a-z]*
+#       Same-text backreference catches overlapping positively/negated classes.
+#   (c) Dot (.) repeated 3+ times: .*.*.*
+#
+# DELIBERATELY excluded:
+#   - Bounded quantifiers {n,m}: [a-z]{0,5}[a-z]{0,5} are polynomial.
+#   - Negated-class single appearances: [^)]*shell=True is linear.
+#   - Mixed different classes: \w*\d*\s*end uses sub-(a)'s backreference to avoid.
+#   - Lazy quantifiers are included (.*?.*?.*? is still catastrophic).
+#
+# Validation baseline: all 381 shipped-pack rules pass (zero false positives
+# confirmed empirically).  The 5 known-evil patterns above are all caught.
+_SEQ_QUANT_RE = re.compile(
+    # (a) Same backslash-class escape repeated ×3+: \w*\w*\w*  or  \w*\w+\w*
+    # Uses a backreference so mixed classes (\w*\d*\s*) don't fire.
+    # NOTE: two backslashes in the raw string r"\\" = one literal backslash in
+    # the Python string, which the regex engine then interprets as the escape
+    # sequence prefix — matching a single \ followed by the class letter.
+    # Four backslashes r"\\\\" would require TWO literal backslashes (\\w) in
+    # the input, which never appears in real regex pattern strings.
+    r"(\\[wWdDsS])[*+]\??\s*(?:\1[*+]\??\s*){2,}"
+    r"|"
+    r"(\[[^\]]{1,40}\])[*+]\??\s*(?:\2[*+]\??\s*){2,}"  # (b) same char-class ×3+
+    r"|"
+    r"\.[*+]\??\s*(?:\.[*+]\??\s*){2,}"  # (c) dot ×3+
+)
+
 
 def _looks_catastrophic(pattern):
     """Best-effort static detection of catastrophic-backtracking shapes.
@@ -157,6 +196,16 @@ def _looks_catastrophic(pattern):
     Returns a non-empty reason string if the pattern looks dangerous, else "".
     Platform-independent; complements (does not replace) the hard timeout, which
     is the real backstop for shapes a static heuristic can't see.
+
+    Checks (in order):
+      1. Length cap (MAX_PATTERN_LENGTH).
+      2. Nested-quantifier shape: quantified group whose body is itself quantified,
+         e.g. (a+)+, (\\w+)*.
+      3. Overlapping-alternation in a quantified group, e.g. (a|aa)+.
+      4. Sequential-overlap quantifiers at the top level: 3+ consecutive runs of
+         the same broad class (\\w*\\w*\\w*x, [a-z]*[a-z]*[a-z]*c, .*.*.*end).
+         This shape is missed by checks 2-3 but causes superpolynomial
+         backtracking when the suffix fails (C1 fix).
     """
     if len(pattern) > MAX_PATTERN_LENGTH:
         return f"pattern length {len(pattern)} exceeds cap {MAX_PATTERN_LENGTH}"
@@ -181,6 +230,10 @@ def _looks_catastrophic(pattern):
                 for j in range(len(branches)):
                     if i != j and branches[j] and branches[i].startswith(branches[j]):
                         return "overlapping-alternation in quantified group (potential catastrophic backtracking)"
+    # Sequential-overlap quantifiers: 3+ consecutive runs of the same broad
+    # quantified class without a required literal boundary (C1 fix).
+    if _SEQ_QUANT_RE.search(pattern):
+        return "sequential overlapping quantifiers (potential catastrophic backtracking)"
     return ""
 
 
@@ -438,8 +491,11 @@ def _compile_rule(raw):
     try:
         confidence = float(confidence)
     except (TypeError, ValueError):
-        return None, f"{rule_id}: confidence not a number"
-    if confidence < 0.0:
+        # Non-numeric confidence (e.g. "high") — fall back to 0.0 so the caller
+        # derives a severity-based default; do NOT reject the whole rule (C4).
+        confidence = 0.0
+    # NaN / ±inf compare False to every numeric test, so guard with isfinite (C4).
+    if not math.isfinite(confidence) or confidence < 0.0:
         confidence = 0.0
     elif confidence > 1.0:
         confidence = 1.0

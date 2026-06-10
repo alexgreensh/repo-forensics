@@ -42,9 +42,14 @@ PACK_LOAD_ERROR = _PACK is None
 # applies to every text line).
 _RULES = _PACK.all_rules if _PACK is not None else []
 
+# B6 fix: emit the pack-load-failure diagnostic exactly ONCE per scanner run,
+# not once per scanned file (which could flood a large repo with thousands of
+# duplicate criticals and cause OOM in the aggregator).
+_pack_error_emitted = False
+
 
 def _pack_load_finding(rel_path):
-    """The single loud diagnostic emitted (once per file scanned) when the
+    """The single loud diagnostic emitted (once per scanner run) when the
     rule pack failed to load. Critical so it cannot be missed; the operator is
     told to reinstall. We deliberately do NOT fall back to a hardcoded copy."""
     return core.Finding(
@@ -60,10 +65,16 @@ def _pack_load_finding(rel_path):
 
 
 def scan_file(file_path, rel_path):
+    global _pack_error_emitted
     findings = []
 
     if PACK_LOAD_ERROR:
-        return [_pack_load_finding(rel_path)]
+        # B6: emit the diagnostic only on the first call; subsequent files get
+        # an empty list so the aggregator is not flooded with duplicates.
+        if not _pack_error_emitted:
+            _pack_error_emitted = True
+            return [_pack_load_finding(rel_path)]
+        return []
 
     basename = os.path.basename(file_path)
     if basename in ENV_FILE_VARIANTS and basename not in ENV_FILE_SAFE:

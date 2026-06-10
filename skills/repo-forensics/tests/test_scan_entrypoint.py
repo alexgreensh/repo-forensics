@@ -1,7 +1,6 @@
 """Tests for scan_entrypoint.py - Entrypoint Payload Injection Scanner."""
 
 import json
-import pytest
 import scan_entrypoint as scanner
 
 

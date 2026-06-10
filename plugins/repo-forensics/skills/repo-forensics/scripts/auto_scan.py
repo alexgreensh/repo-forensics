@@ -340,8 +340,20 @@ def format_output(findings, command='', pattern_type='', scanned_target=''):
         import adjudication as _adj
         _clean = _adj.sanitize_snippet
     except ImportError:
+        # B4 fix: inline fallback must cover \r, U+2028/2029, BIDI, C1 range,
+        # and collapse all whitespace/line-separator chars to a single space.
+        # Kept self-contained since the import failed.
+        import re as _re
+        _FALLBACK_CTRL_RE = _re.compile(
+            r"[\x00-\x1f\x7f\x80-\x9f  ‪-‮⁦-⁩⁠-⁤﻿]"
+        )
+
         def _clean(text, max_len=160):
-            return (text or '').replace('\n', ' ').replace('`', '')[:max_len]
+            if not isinstance(text, str):
+                return ""
+            cleaned = _FALLBACK_CTRL_RE.sub("", text or "")
+            cleaned = _re.sub(r"\s+", " ", cleaned).strip()
+            return cleaned[:max_len]
 
     for f in findings[:15]:
         sev = f.get('severity', 'low').upper()

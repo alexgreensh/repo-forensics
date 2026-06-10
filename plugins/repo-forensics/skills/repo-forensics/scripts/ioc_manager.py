@@ -41,11 +41,16 @@ if _SCRIPTS_DIR not in sys.path:
 IOC_FEED_URL = "https://raw.githubusercontent.com/alexgreensh/repo-forensics/main/iocs/latest.json"
 
 CACHE_FILENAME = ".forensics-iocs.json"
-# Raw signed feed bytes + detached signature for verify-on-load (KTD-11). Stored
-# separately from the reserialized JSON cache so signature verification runs over
-# the EXACT bytes that were signed (never a parse-and-reserialize round-trip).
-RAW_CACHE_FILENAME = ".forensics-iocs.raw"
+# Detached signature for verify-on-load (KTD-11). The signature is verified over
+# the EXACT bytes of the .json cache that get parsed and trusted — NOT a separate
+# .raw file. Verifying a sibling file that nobody parses leaves the trusted bytes
+# unprotected (a same-user attacker could edit the .json and slip past the gate),
+# so the two are deliberately one and the same byte stream now.
 SIG_CACHE_FILENAME = ".forensics-iocs.sig"
+# Sentinel recording that this install has seen a signed feed at least once. Its
+# presence means "a signature USED to be here": if the .sig later goes missing,
+# we degrade rather than silently trusting an unsigned (possibly stripped) cache.
+SIGNED_SEEN_FILENAME = ".forensics-iocs.signed-seen"
 CACHE_MAX_AGE_HOURS = 24
 
 # Pinned Ed25519 public key for the signed IOC feed (KTD-11). SAME keypair that
@@ -265,16 +270,30 @@ def _cache_path(cache_dir=None):
     return os.path.join(os.path.expanduser("~"), ".cache", "repo-forensics", CACHE_FILENAME)
 
 
-def _raw_cache_path(cache_dir=None):
-    base = cache_dir if cache_dir else os.path.join(
-        os.path.expanduser("~"), ".cache", "repo-forensics")
-    return os.path.join(base, RAW_CACHE_FILENAME)
-
-
 def _sig_cache_path(cache_dir=None):
     base = cache_dir if cache_dir else os.path.join(
         os.path.expanduser("~"), ".cache", "repo-forensics")
     return os.path.join(base, SIG_CACHE_FILENAME)
+
+
+def _signed_seen_path(cache_dir=None):
+    base = cache_dir if cache_dir else os.path.join(
+        os.path.expanduser("~"), ".cache", "repo-forensics")
+    return os.path.join(base, SIGNED_SEEN_FILENAME)
+
+
+def _mark_signed_seen(cache_dir=None):
+    """Record that a valid signed feed was observed here at least once."""
+    try:
+        path = _signed_seen_path(cache_dir)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        _atomic_write_bytes(path, b"1", mode=0o600)
+    except OSError:
+        pass
+
+
+def _has_seen_signed(cache_dir=None):
+    return os.path.isfile(_signed_seen_path(cache_dir))
 
 
 def _atomic_write_bytes(path, data, mode=0o600):
@@ -283,7 +302,20 @@ def _atomic_write_bytes(path, data, mode=0o600):
     os.makedirs(d, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=d, prefix=".tmp-", suffix=".sig")
     try:
-        with os.fdopen(fd, "wb") as f:
+        f = os.fdopen(fd, "wb")
+    except BaseException:
+        # fdopen never took ownership of fd: close it ourselves before unlink.
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    try:
+        with f:
             f.write(data)
             f.flush()
             os.fsync(f.fileno())
@@ -298,22 +330,24 @@ def _atomic_write_bytes(path, data, mode=0o600):
 
 
 def _verify_ioc_cache_signature(cache_dir=None):
-    """Verify the cached IOC feed's detached signature over its EXACT raw bytes
-    (KTD-11 verify-on-load). Returns:
-        True  -> a valid signature is present (trusted)
-        False -> a .sig is present but verification failed (tampered/invalid)
-        None  -> no raw/sig pair present (old-client / unsigned feed)
+    """Verify the cached IOC feed's detached signature over the EXACT bytes of
+    the .json cache that get parsed and trusted (KTD-11 verify-on-load). The
+    signature now protects the SAME byte stream the read path loads, closing the
+    gap where a separate .raw was signed but the .json was the file trusted.
 
-    A False result means the new client should treat the IOC channel as degraded
-    while STILL applying hardcoded fallback IOCs. A None result is the legacy
-    path: no signature material exists, behavior unchanged for old feeds.
+    Returns:
+        True  -> a valid signature is present over the .json cache (trusted)
+        False -> a .sig is present but verification over the .json bytes failed
+                 (tampered/invalid)
+        None  -> no .sig present (genuinely-legacy unsigned feed; caller decides
+                 whether that is acceptable via the signed-seen sentinel)
     """
-    raw_path = _raw_cache_path(cache_dir)
+    cache_path = _cache_path(cache_dir)
     sig_path = _sig_cache_path(cache_dir)
-    if not (os.path.isfile(raw_path) and os.path.isfile(sig_path)):
+    if not (os.path.isfile(cache_path) and os.path.isfile(sig_path)):
         return None
     try:
-        with open(raw_path, "rb") as f:
+        with open(cache_path, "rb") as f:
             raw = f.read()
         with open(sig_path, "rb") as f:
             sig = f.read()
@@ -331,6 +365,11 @@ def _load_cache(cache_dir=None, ttl_hours=None):
 
     ttl_hours overrides the module-level _IOC_CACHE_TTL_HOURS default.
     Returns None when the cache is absent, unreadable, or stale.
+
+    Freshness source: the embedded `_cached_at` when present (legacy/unsigned
+    caches), else the file mtime. Signed caches persist the EXACT signed bytes,
+    which cannot carry a post-hoc `_cached_at` wrapper, so mtime is authoritative
+    there.
     """
     path = _cache_path(cache_dir)
     if not os.path.exists(path):
@@ -341,7 +380,12 @@ def _load_cache(cache_dir=None, ttl_hours=None):
         if not isinstance(data, dict):
             return None
         # Check freshness
-        cached_at = data.get('_cached_at', 0)
+        cached_at = data.get('_cached_at')
+        if cached_at is None:
+            try:
+                cached_at = os.path.getmtime(path)
+            except OSError:
+                return None
         age_hours = (time.time() - cached_at) / 3600
         max_age = ttl_hours if ttl_hours is not None else _IOC_CACHE_TTL_HOURS
         if age_hours > max_age:
@@ -428,17 +472,22 @@ def fetch_remote_iocs(feed_url=None, _return_raw=False):
     return (data, raw) if _return_raw else data
 
 
-def _save_raw_and_sig(raw_bytes, sig_bytes, cache_dir=None):
-    """Persist the exact signed feed bytes + detached signature atomically so
-    verify-on-load can re-check the signature over the literal bytes."""
-    import forensics_core
-    if raw_bytes is not None:
-        forensics_core.atomic_write_text(
-            _raw_cache_path(cache_dir), raw_bytes.decode('utf-8', 'replace'),
-            mode=0o600,
-        )
-    if sig_bytes is not None:
-        _atomic_write_bytes(_sig_cache_path(cache_dir), sig_bytes, mode=0o600)
+def _save_signed_cache(raw_bytes, sig_bytes, cache_dir=None):
+    """Persist the EXACT signed feed bytes AS the .json cache (binary write, no
+    decode/encode round-trip) plus the detached signature, so verify-on-load
+    re-checks the signature over the very bytes that get parsed and trusted.
+
+    The .json cache becomes byte-identical to the signed payload — this is the
+    single-file collapse that closes the "sign one file, trust another" gap.
+    """
+    if raw_bytes is None or sig_bytes is None:
+        return
+    # Write the sig FIRST, then the cache, then the signed-seen sentinel: if we
+    # crash mid-write a stale sig over a new cache simply verifies False (safe
+    # degrade), never a false-trusted state.
+    _atomic_write_bytes(_sig_cache_path(cache_dir), sig_bytes, mode=0o600)
+    _atomic_write_bytes(_cache_path(cache_dir), bytes(raw_bytes), mode=0o600)
+    _mark_signed_seen(cache_dir)
 
 
 def update_iocs(feed_url=None, cache_dir=None, sig_url=None):
@@ -454,12 +503,17 @@ def update_iocs(feed_url=None, cache_dir=None, sig_url=None):
     if data is None:
         return False, "Failed to fetch IOCs from remote feed (using hardcoded fallback)"
 
-    _save_cache(data, cache_dir)
-    # Fetch + persist the detached signature alongside the raw bytes. Best
-    # effort: absence is tolerated (old feeds), verification happens on load.
+    # Fetch the detached signature. When present, persist the EXACT signed bytes
+    # AS the .json cache so verify-on-load checks the same bytes it parses.
     sig = _fetch_url_bytes(sig_url or (feed_url or IOC_FEED_URL) + ".sig",
                            _SIG_MAX_BYTES)
-    _save_raw_and_sig(raw, sig, cache_dir)
+    if sig is not None and raw is not None:
+        _save_signed_cache(raw, sig, cache_dir)
+    else:
+        # Genuinely-legacy unsigned feed: fall back to the _cached_at-wrapped
+        # cache. (If this install has previously seen a signature, get_iocs will
+        # still degrade because the .sig is now absent — see _has_seen_signed.)
+        _save_cache(data, cache_dir)
     version = data.get('version', 'unknown')
     c2_count = len(data.get('c2_ips', []))
     domain_count = len(data.get('malicious_domains', []))
@@ -491,15 +545,29 @@ def get_iocs(cache_dir=None):
     # successful update will not be detected.
     ioc_degraded = cached is None
 
-    # KTD-11 verify-on-load: a cached feed whose detached .sig FAILS verification
-    # is treated as degraded (intelligence channel may be poisoned, e.g. an
-    # attacker deleting a malicious domain). The hardcoded fallback IOCs still
-    # apply regardless. A signature that is simply absent (None) is the legacy
-    # path — behavior unchanged, no degraded escalation from signing.
+    # KTD-11 verify-on-load: the detached .sig is verified over the EXACT bytes
+    # of the .json cache that get parsed below (single byte stream — no separate
+    # .raw). A cached feed whose .sig FAILS verification, OR whose .sig is MISSING
+    # on an install that has previously seen a signature, is treated as degraded
+    # (the intelligence channel may be poisoned or the .sig stripped, e.g. an
+    # attacker editing the .json or deleting a malicious domain). Hardcoded
+    # fallback IOCs still apply regardless.
+    #
+    # A sig that is simply absent on a genuinely-legacy install (one that has
+    # NEVER seen a signature) is the backward-compat path — the cache still
+    # merges. But a sig that USED to be present and is now gone must degrade.
     sig_state = _verify_ioc_cache_signature(cache_dir) if cached else None
-    ioc_signature_invalid = sig_state is False
+    if sig_state is True and not _has_seen_signed(cache_dir):
+        # First valid verification on this install: arm the strip-detection
+        # sentinel so a later .sig removal degrades instead of silently trusting.
+        _mark_signed_seen(cache_dir)
+    sig_stripped = (sig_state is None and cached is not None
+                    and _has_seen_signed(cache_dir))
+    ioc_signature_invalid = (sig_state is False) or sig_stripped
     if ioc_signature_invalid:
-        print("[!] Cached IOC feed signature INVALID — intelligence channel "
+        why = ("signature MISSING (previously signed; .sig stripped)"
+               if sig_stripped else "signature INVALID")
+        print(f"[!] Cached IOC feed {why} — intelligence channel "
               "untrusted (using hardcoded fallback IOCs).", file=sys.stderr)
 
     # Start with hardcoded

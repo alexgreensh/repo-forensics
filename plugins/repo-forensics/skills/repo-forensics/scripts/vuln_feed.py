@@ -84,10 +84,13 @@ _VERSION_RE = re.compile(r"^[A-Za-z0-9._+\-:~^]{1,64}$")
 _CVE_ID_RE = re.compile(r"^CVE-\d{4}-\d{4,19}$", re.IGNORECASE)
 
 # Strip control chars (0x00-0x1F except \t, plus 0x7F) and BIDI overrides.
+# B2 fix: also strip C1 control range (0x80-0x9F); U+009B is the single-byte
+# C1 CSI that acts as \x1b[ in terminals processing 8-bit controls, and
+# U+0090/009D/009E/009F are string-mode C1 controls.
 # Prevents log/terminal injection when OSV summaries or package names are
 # embedded in Finding titles/descriptions printed by the scanner.
 _CTRL_AND_BIDI_RE = re.compile(
-    r"[\x00-\x08\x0b-\x1f\x7f\u202a-\u202e\u2066-\u2069]"
+    r"[\x00-\x08\x0b-\x1f\x7f\x80-\x9f\u202a-\u202e\u2066-\u2069]"
 )
 
 

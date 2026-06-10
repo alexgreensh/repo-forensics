@@ -2,7 +2,6 @@
 
 import os
 import subprocess
-import pytest
 import scan_git_forensics as scanner
 
 

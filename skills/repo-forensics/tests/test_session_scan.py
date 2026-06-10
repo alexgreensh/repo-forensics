@@ -15,7 +15,7 @@ import pytest
 SCRIPTS_DIR = os.path.join(os.path.dirname(__file__), '..', 'scripts')
 sys.path.insert(0, os.path.abspath(SCRIPTS_DIR))
 
-import session_scan
+import session_scan  # noqa: E402
 
 
 # ========================================================================

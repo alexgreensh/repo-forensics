@@ -1,7 +1,5 @@
 """Tests for scan_ast.py - Python AST Obfuscation Detector (new patterns 6-12)."""
 
-import os
-import pytest
 import scan_ast as scanner
 
 

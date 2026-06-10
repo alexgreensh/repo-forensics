@@ -7,14 +7,13 @@ edge cases (empty stdin, malformed JSON, non-Bash tools).
 import json
 import sys
 import os
-import importlib
 import pytest
 
 # Ensure scripts dir is importable
 SCRIPTS_DIR = os.path.join(os.path.dirname(__file__), '..', 'scripts')
 sys.path.insert(0, os.path.abspath(SCRIPTS_DIR))
 
-import pre_scan
+import pre_scan  # noqa: E402
 
 
 # --- Helpers ---

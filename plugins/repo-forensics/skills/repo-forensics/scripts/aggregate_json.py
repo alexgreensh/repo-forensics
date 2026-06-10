@@ -419,6 +419,24 @@ def format_report_as_text(report):
     forensics_core.format_findings() and the existing run_forensics.sh
     output. Used when the caller asked for text output but we still need
     the JSON-internal pipeline to run correlation."""
+
+    # B1 fix: all finding-derived text must be sanitized before embedding in the
+    # text report.  adjudication.sanitize_snippet strips control chars, BIDI,
+    # ANSI sequences, and collapses line-breaks so attacker content in snippets,
+    # titles, or descriptions cannot produce an unprefixed top-level line above
+    # the adjudication block.
+    try:
+        import adjudication as _adj
+        _sanitize = _adj.sanitize_snippet
+    except ImportError:
+        import re as _re
+        def _sanitize(text, max_len=300):
+            if not isinstance(text, str):
+                return ""
+            cleaned = _re.sub(r"[\x00-\x1f\x7f\x80-\x9f\r\n‪-‮⁦-⁩]", "", text)
+            cleaned = _re.sub(r"\s+", " ", cleaned).strip()
+            return cleaned[:max_len]
+
     lines = []
     lines.append("")
     lines.append("==========================================")
@@ -438,12 +456,14 @@ def format_report_as_text(report):
                 sev = f.get("severity", "low")
                 color = SEVERITY_COLORS.get(sev, "")
                 loc = f"{f.get('file', '')}:{f.get('line', 0)}" if f.get('line', 0) > 0 else f.get('file', '')
-                lines.append(f"  {color}[{sev.upper()}]{RESET} {f.get('title', '')}")
+                title = _sanitize(f.get('title', '') or '', max_len=160)
+                desc = _sanitize(f.get('description', '') or '', max_len=300)
+                lines.append(f"  {color}[{sev.upper()}]{RESET} {title}")
                 lines.append(f"         {loc}")
-                lines.append(f"         {f.get('description', '')}")
+                lines.append(f"         {desc}")
                 snip = f.get("snippet", "")
                 if snip:
-                    lines.append(f"         {snip[:120]}")
+                    lines.append(f"         {_sanitize(snip, max_len=120)}")
     summary = report["summary"]
     lines.append("")
     lines.append("==========================================")

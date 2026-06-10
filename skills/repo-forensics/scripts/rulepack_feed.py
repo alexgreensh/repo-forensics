@@ -21,7 +21,9 @@ Acceptance chain (EXACT ORDER, KTD-6/13):
   3. schema major-version gate.
   4. `generated` freshness gate: reject (degraded) if older than 30 days.
   5. pack_version vs PERSISTED FLOOR: strictly-increasing integer per pack;
-     floor persisted on first successful overlay so a cache-clear cannot reset it.
+     floor persisted OUTSIDE the cache (under ~/.local/state/repo-forensics/, a
+     sibling of the cache dir) so `rm -rf ~/.cache/repo-forensics` cannot reset
+     it and re-admit a replayed older bundle (KTD-13).
   6. per-pack example self-tests (reuse rule_loader.self_test_pack incl. ReDoS timeout).
   7. atomic cache write (dir mode 0700) + floor update.
 Any link fails -> reject WHOLE bundle (no partial acceptance), keep prior cache,
@@ -69,6 +71,12 @@ _SIG_MAX_BYTES = 256  # an Ed25519 sig is 64 bytes; cap generously but tightly
 # --- Cache layout -----------------------------------------------------------
 _CACHE_ROOT = os.path.join(os.path.expanduser("~"), ".cache", "repo-forensics")
 CACHE_RULEPACK_DIR = os.path.join(_CACHE_ROOT, "rulepacks")
+# The version floor (rollback guard, KTD-13) lives in a STATE dir that is a
+# sibling of the cache, NOT inside it: `rm -rf ~/.cache/repo-forensics` (the
+# canonical "clear my cache" gesture) must NOT reset the floor, otherwise a
+# replay of an older validly-signed bundle would be re-accepted.
+_STATE_ROOT = os.path.join(os.path.expanduser("~"), ".local", "state", "repo-forensics")
+STATE_RULEPACK_DIR = os.path.join(_STATE_ROOT, "rulepacks")
 BUNDLE_FILENAME = "bundle.json"
 BUNDLE_SIG_FILENAME = "bundle.json.sig"
 FLOOR_FILENAME = "floor.json"
@@ -91,8 +99,25 @@ def _sig_path(cache_dir=None):
     return os.path.join(_cache_dir(cache_dir), BUNDLE_SIG_FILENAME)
 
 
+def _state_dir(cache_dir=None):
+    """Directory that holds the rollback floor. It must survive a cache wipe, so
+    it is NEVER the cache dir itself.
+
+    - Production (cache_dir=None): the dedicated state dir under
+      ~/.local/state/repo-forensics/rulepacks/.
+    - Tests / explicit cache_dir: a SIBLING dir (`<cache_dir>-state`) so that
+      removing `cache_dir` (the bundle's directory) leaves the floor intact,
+      while still being deterministically resolvable from cache_dir.
+    """
+    if cache_dir:
+        parent = os.path.dirname(os.path.normpath(cache_dir)) or "."
+        base = os.path.basename(os.path.normpath(cache_dir))
+        return os.path.join(parent, base + "-state")
+    return STATE_RULEPACK_DIR
+
+
 def _floor_path(cache_dir=None):
-    return os.path.join(_cache_dir(cache_dir), FLOOR_FILENAME)
+    return os.path.join(_state_dir(cache_dir), FLOOR_FILENAME)
 
 
 def _pubkey_bytes():
@@ -130,9 +155,20 @@ def load_floor(cache_dir=None):
     return out
 
 
+def _ensure_state_dir(cache_dir=None):
+    """Create the floor's state dir (mode 0700 where supported)."""
+    d = _state_dir(cache_dir)
+    os.makedirs(d, exist_ok=True)
+    try:
+        os.chmod(d, 0o700)
+    except OSError:
+        pass
+    return d
+
+
 def _save_floor(floor, cache_dir=None):
     import forensics_core
-    _ensure_cache_dir(cache_dir)
+    _ensure_state_dir(cache_dir)
     forensics_core.atomic_write_json(_floor_path(cache_dir), floor, mode=0o600)
 
 
@@ -206,13 +242,26 @@ def _check_freshness(bundle, now=None):
     if not isinstance(gen, str) or not gen:
         return False, "missing 'generated' timestamp"
     import datetime
+    # Validate the WHOLE timestamp parses, not just the leading date slice: a
+    # malformed time component must reject (not be silently truncated away).
+    # Accept a trailing 'Z' (UTC) which date/datetime.fromisoformat rejects on
+    # older Pythons.
+    iso = gen[:-1] + "+00:00" if gen.endswith("Z") else gen
     try:
-        gen_date = datetime.date.fromisoformat(gen[:10])
+        if len(gen) <= 10:
+            gen_date = datetime.date.fromisoformat(gen)
+        else:
+            gen_date = datetime.datetime.fromisoformat(iso).date()
     except ValueError:
         return False, f"unparseable 'generated' {gen!r}"
-    today = (datetime.date.fromtimestamp(now) if now is not None
-             else datetime.date.today())
+    today = (datetime.datetime.fromtimestamp(now, datetime.timezone.utc).date()
+             if now is not None
+             else datetime.datetime.now(datetime.timezone.utc).date())
     age_days = (today - gen_date).days
+    # Reject future-dated bundles beyond a tiny clock-skew tolerance: a negative
+    # age would otherwise sail through the "too old" check unchallenged.
+    if age_days < -1:
+        return False, f"bundle dated {-age_days}d in the future (clock skew or forgery)"
     if age_days > FRESHNESS_MAX_DAYS:
         return False, f"bundle {age_days}d old (> {FRESHNESS_MAX_DAYS}d)"
     return True, ""
@@ -308,11 +357,12 @@ def accept_bundle(raw_bytes, sig_bytes, cache_dir=None, pubkey=None, now=None):
     if not ok:
         return False, why, None
     # 7. atomic cache write + floor update.
-    import forensics_core
     _ensure_cache_dir(cache_dir)
-    forensics_core.atomic_write_text(
-        _bundle_path(cache_dir), bytes(raw_bytes).decode("utf-8"), mode=0o600
-    )
+    # Persist the EXACT signed bytes (binary write, no decode/encode round-trip)
+    # so rule_loader's verify-on-load sees byte-identical content. Routing these
+    # through a text-mode writer would let Windows rewrite \n -> \r\n and break
+    # the detached-signature check on a legitimate bundle.
+    _atomic_write_bytes(_bundle_path(cache_dir), bytes(raw_bytes), mode=0o600)
     # signature is binary: write atomically via temp+rename ourselves.
     _atomic_write_bytes(_sig_path(cache_dir), bytes(sig_bytes), mode=0o600)
     _save_floor(_new_floor(bundle, floor), cache_dir)
@@ -326,7 +376,20 @@ def _atomic_write_bytes(path, data, mode=0o600):
     os.makedirs(d, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=d, prefix=".tmp-", suffix=".sig")
     try:
-        with os.fdopen(fd, "wb") as f:
+        f = os.fdopen(fd, "wb")
+    except BaseException:
+        # fdopen never took ownership of fd: close it ourselves.
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    try:
+        with f:
             f.write(data)
             f.flush()
             os.fsync(f.fileno())

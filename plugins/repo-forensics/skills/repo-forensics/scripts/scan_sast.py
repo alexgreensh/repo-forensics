@@ -41,6 +41,11 @@ _PACK_EXTENSIONS = (
     {e for e in _PACK.by_extension if e} if _PACK is not None else set()
 )
 
+# B6 fix: emit the pack-load-failure diagnostic exactly ONCE per scanner run,
+# not once per scanned file (which could flood a large repo with thousands of
+# duplicate criticals and cause OOM in the aggregator).
+_pack_error_emitted = False
+
 
 def _pack_load_finding(rel_path):
     """The single loud diagnostic emitted when the SAST rule pack failed to
@@ -101,8 +106,15 @@ def scan_css_steganography(file_path, rel_path):
 
 
 def scan_file(file_path, rel_path):
+    global _pack_error_emitted
+
     if PACK_LOAD_ERROR:
-        return [_pack_load_finding(rel_path)]
+        # B6: emit the diagnostic only on the first call; subsequent files get
+        # an empty list so the aggregator is not flooded with duplicates.
+        if not _pack_error_emitted:
+            _pack_error_emitted = True
+            return [_pack_load_finding(rel_path)]
+        return []
 
     ext = os.path.splitext(file_path)[1].lower()
     if ext not in _PACK_EXTENSIONS:

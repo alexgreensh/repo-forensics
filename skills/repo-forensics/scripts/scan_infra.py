@@ -671,12 +671,12 @@ def scan_npmrc(file_path, rel_path):
             has_hooks = False
             if os.path.exists(pkg_json):
                 try:
-                    with open(pkg_json, 'r') as pf:
+                    with open(pkg_json, 'r', encoding='utf-8', errors='replace') as pf:
                         pkg_data = json.load(pf)
                     scripts = pkg_data.get('scripts', {})
                     hook_names = {'preinstall', 'postinstall', 'install', 'prepare', 'prepublish'}
                     has_hooks = bool(hook_names & set(scripts.keys()))
-                except (json.JSONDecodeError, OSError):
+                except (json.JSONDecodeError, ValueError, OSError):
                     pass
 
             sev = "high" if has_hooks else "medium"
