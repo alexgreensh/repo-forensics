@@ -1,0 +1,3 @@
+# Rule packs land here starting in U3 (secrets.json, sast.json, ...).
+# This directory ships with the skill; rule_loader.py resolves packs from here
+# via realpath(__file__)-anchored paths only (never CWD / scan target).
