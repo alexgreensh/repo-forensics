@@ -29,6 +29,30 @@ if [ -z "${1:-}" ]; then
     exit 1
 fi
 
+# --- Cross-platform Python 3 resolver (Linux / macOS / Windows git-bash) ---
+# Mirrors hooks/python-launcher.sh precedence so the CLI runs wherever a
+# Python 3 exists: `python3` (Linux/macOS), `python` or the `py -3` launcher
+# (Windows). Each candidate is *executed*, not just detected: Windows ships a
+# fake `python3`/`python` "App execution alias" that exists on PATH but only
+# prints a Microsoft Store nag and exits non-zero, so command -v alone is not
+# enough. Stored as an array so the `py -3` two-token form works.
+PYTHON=()
+for _cand in python3 python; do
+    if command -v "$_cand" >/dev/null 2>&1 \
+        && "$_cand" -c 'import sys; sys.exit(0 if sys.version_info[0] >= 3 else 1)' >/dev/null 2>&1; then
+        PYTHON=("$_cand")
+        break
+    fi
+done
+if [ ${#PYTHON[@]} -eq 0 ] && command -v py >/dev/null 2>&1 \
+    && py -3 -c 'import sys; sys.exit(0)' >/dev/null 2>&1; then
+    PYTHON=(py -3)
+fi
+if [ ${#PYTHON[@]} -eq 0 ]; then
+    echo "[repo-forensics] ERROR: no working Python 3 interpreter found (tried: python3, python, py -3)" >&2
+    exit 127
+fi
+
 # Check for --inventory before consuming positional arg
 if [ "$1" = "--inventory" ]; then
     shift
@@ -46,7 +70,7 @@ if [ "$1" = "--inventory" ]; then
         echo "Error: forensify scripts not found at $SCRIPT_DIR/../../forensify/scripts" >&2
         exit 1
     }
-    exec python3 "$FORENSIFY_DIR/build_inventory.py" "${INVENTORY_ARGS[@]}"
+    exec "${PYTHON[@]}" "$FORENSIFY_DIR/build_inventory.py" "${INVENTORY_ARGS[@]}"
 fi
 
 REPO_PATH=$(realpath "$1")
@@ -113,20 +137,20 @@ fi
 
 # Handle --verify-install (standalone, exits after)
 if $VERIFY_INSTALL; then
-    python3 "$SKILL_DIR/verify_install.py" --verify
+    "${PYTHON[@]}" "$SKILL_DIR/verify_install.py" --verify
     exit $?
 fi
 
 # Handle --update-iocs before scanning
 if $UPDATE_IOCS; then
     echo "[*] Updating IOC database..."
-    python3 "$SKILL_DIR/ioc_manager.py" --update || echo "[!] IOC update failed, scanning with cached data" >&2
+    "${PYTHON[@]}" "$SKILL_DIR/ioc_manager.py" --update || echo "[!] IOC update failed, scanning with cached data" >&2
 fi
 
 # Handle --update-vulns (CISA KEV) before scanning
 if $UPDATE_VULNS && ! $OFFLINE; then
     echo "[*] Updating CISA KEV catalog..."
-    python3 "$SKILL_DIR/vuln_feed.py" --update || true
+    "${PYTHON[@]}" "$SKILL_DIR/vuln_feed.py" --update || true
 fi
 TMPDIR=$(mktemp -d)
 # shellcheck disable=SC2329  # invoked indirectly via trap
@@ -224,9 +248,9 @@ run_scanner() {
     fi
 
     if [ -n "$TIMEOUT_CMD" ]; then
-        $TIMEOUT_CMD "$SCANNER_TIMEOUT" python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$internal_format" ${scanner_args[@]+"${scanner_args[@]}"} 3>&- > "$output_file" 2>> "$error_file"
+        $TIMEOUT_CMD "$SCANNER_TIMEOUT" "${PYTHON[@]}" "$SKILL_DIR/$script" "$REPO_PATH" --format "$internal_format" ${scanner_args[@]+"${scanner_args[@]}"} 3>&- > "$output_file" 2>> "$error_file"
     else
-        python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$internal_format" ${scanner_args[@]+"${scanner_args[@]}"} 3>&- > "$output_file" 2>> "$error_file"
+        "${PYTHON[@]}" "$SKILL_DIR/$script" "$REPO_PATH" --format "$internal_format" ${scanner_args[@]+"${scanner_args[@]}"} 3>&- > "$output_file" 2>> "$error_file"
     fi
     local exit_code=$?
     echo "$exit_code" > "$exit_file"
@@ -236,7 +260,7 @@ run_scanner() {
         local elapsed=$(( $(date +%s) - start_time ))
         local findings=0
         if [ -f "$output_file" ] && [ -s "$output_file" ]; then
-            findings=$(python3 -c "
+            findings=$("${PYTHON[@]}" -c "
 import json, sys
 try:
     d = json.load(open('$output_file'))
@@ -314,12 +338,12 @@ EXIT_CODE_FILE="$TMPDIR/aggregate.exit"
 echo "99" > "$EXIT_CODE_FILE"
 
 if [ "$FORMAT" = "json" ]; then
-    if ! python3 "$SKILL_DIR/aggregate_json.py" "$TMPDIR" "$REPO_PATH" "$SKILL_SCAN" "$EXIT_CODE_FILE"; then
+    if ! "${PYTHON[@]}" "$SKILL_DIR/aggregate_json.py" "$TMPDIR" "$REPO_PATH" "$SKILL_SCAN" "$EXIT_CODE_FILE"; then
         :
     fi
 else
     # text and summary modes both use text output from the aggregator
-    if ! python3 "$SKILL_DIR/aggregate_json.py" --text "$TMPDIR" "$REPO_PATH" "$SKILL_SCAN" "$EXIT_CODE_FILE"; then
+    if ! "${PYTHON[@]}" "$SKILL_DIR/aggregate_json.py" --text "$TMPDIR" "$REPO_PATH" "$SKILL_SCAN" "$EXIT_CODE_FILE"; then
         :
     fi
 fi

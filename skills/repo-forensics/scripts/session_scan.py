@@ -98,6 +98,18 @@ def check_threat_db_freshness():
     ioc_path = os.path.join(BASELINE_DIR, ".forensics-iocs.json")
     kev_path = os.path.join(BASELINE_DIR, "kev.json")
 
+    # Platform-aware remediation: the scheduled refresh uses launchd on macOS,
+    # Windows Task Scheduler on Windows, and a manual run elsewhere.
+    if sys.platform == "win32":
+        refresh_check = "schtasks /Query /TN repo-forensics-refresh"
+        refresh_install = "powershell -ExecutionPolicy Bypass -File hooks/install_refresh_task.ps1"
+    elif sys.platform == "darwin":
+        refresh_check = "launchctl list | grep repo-forensics-refresh"
+        refresh_install = "bash hooks/install_refresh_daemon.sh"
+    else:
+        refresh_check = "ls -l ~/.cache/repo-forensics/.last-refresh"
+        refresh_install = "python3 skills/repo-forensics/scripts/refresh_threat_dbs.py"
+
     try:
         last_ts = os.path.getmtime(LAST_RUN_MARKER)
         age_days = (time.time() - last_ts) / 86400.0
@@ -106,15 +118,15 @@ def check_threat_db_freshness():
             warnings.append(ThreatDBWarning(
                 kind="stale_marker",
                 detail=f"{age_days:.0f} days since last refresh",
-                remediation="launchctl list | grep repo-forensics-refresh",
+                remediation=refresh_check,
             ))
     except OSError:
-        # Marker missing — first run, OR daemon never installed.
+        # Marker missing — first run, OR scheduled refresh never installed.
         if os.path.isfile(ioc_path) or os.path.isfile(kev_path):
             warnings.append(ThreatDBWarning(
                 kind="daemon_missing",
                 detail="caches exist but no refresh marker found",
-                remediation="bash hooks/install_refresh_daemon.sh",
+                remediation=refresh_install,
             ))
     return warnings
 

@@ -2,19 +2,24 @@
 """
 refresh_threat_dbs.py - Daily background refresher for repo-forensics threat DBs.
 
-Designed to be invoked by launchd once per day, NEVER from inside a Claude Code
-session. Refreshes IOC + KEV caches in the background so SessionStart hooks can
-run in milliseconds instead of waiting on network calls.
+Designed to be invoked once per day by a per-platform scheduler (launchd on
+macOS, Task Scheduler on Windows, cron/systemd on Linux), NEVER from inside a
+Claude Code session. Refreshes IOC + KEV caches in the background so
+SessionStart hooks can run in milliseconds instead of waiting on network calls.
 
 Safety properties (post-review hardening):
   - Lock file in ~/.cache (NOT /tmp) with O_NOFOLLOW (no symlink follow).
-  - Single-instance via fcntl.flock (LOCK_EX | LOCK_NB).
-  - Hard wall-clock cap via SIGALRM + socket.setdefaulttimeout (defense-in-depth).
+  - Single-instance via fcntl.flock (LOCK_EX | LOCK_NB) on POSIX; on Windows
+    fcntl is absent, so the scheduler enforces single-instance instead
+    (Task Scheduler -MultipleInstances IgnoreNew).
+  - Hard wall-clock cap via SIGALRM (POSIX) + socket.setdefaulttimeout
+    (defense-in-depth). On Windows SIGALRM is absent; the socket timeout and
+    the task's ExecutionTimeLimit provide the cap.
   - Atomic writes: ioc_manager and vuln_feed must use temp+rename internally.
   - Modules loaded by absolute path via importlib (sys.path NOT polluted).
   - Log inputs sanitized (no CR/LF injection from remote feed).
   - Log rotation at 256KB.
-  - Always exits 0 (no launchd retry storms).
+  - Always exits 0 (no scheduler retry storms).
   - Kill switch: REPO_FORENSICS_DISABLE_REFRESH=1.
   - No tool calls, no scanner invocation = no recursion path.
 
@@ -29,11 +34,15 @@ import socket
 import sys
 import time
 
-# macOS-only by design (launchd-invoked). Bail cleanly elsewhere.
-if sys.platform != "darwin":
+# Invoked by a per-platform scheduler: launchd (macOS), Task Scheduler
+# (Windows), or cron/systemd (Linux). Bail cleanly on anything exotic.
+if sys.platform not in ("darwin", "linux", "win32"):
     sys.exit(0)
 
-import fcntl  # POSIX-only; macOS guaranteed by guard above
+try:
+    import fcntl  # POSIX advisory file locking; not available on Windows
+except ImportError:
+    fcntl = None
 
 # ---------------------------------------------------------------------------
 # Hard limits
@@ -134,6 +143,13 @@ def _acquire_lock():
         except OSError:
             pass
         return None
+
+    if fcntl is None:
+        # Windows: no POSIX advisory locking. Single-instance is enforced by the
+        # scheduler instead (the task is registered with -MultipleInstances
+        # IgnoreNew), and all cache writes are atomic, so we proceed without an
+        # OS-level lock. (The POSIX path below keeps strict flock behavior.)
+        return fd
 
     try:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -272,8 +288,7 @@ def _refresh_rulepacks(scripts_dir):
     """Fetch + verify + cache the signed rule-pack bundle (U6). Returns True on
     success. Runs WITHIN the existing 60s SIGALRM hard cap and the single-
     instance lock — its self-test step reuses rule_loader's save/restore SIGALRM
-    so it never clobbers our cap. Cross-platform updater (no macOS assumptions),
-    though this refresher itself is macOS-launchd-only."""
+    so it never clobbers our cap. Cross-platform updater (no macOS assumptions)."""
     try:
         feed_path = os.path.join(scripts_dir, "rulepack_feed.py")
         rulepack_feed = _import_module_by_path("rulepack_feed", feed_path)
@@ -328,7 +343,8 @@ def main():
         _log(f"refresh done (ioc={ok_ioc}, kev={ok_kev}, rulepacks={ok_rulepacks})")
     finally:
         try:
-            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            if fcntl is not None:
+                fcntl.flock(lock_fd, fcntl.LOCK_UN)
         except OSError:
             pass
         try:
