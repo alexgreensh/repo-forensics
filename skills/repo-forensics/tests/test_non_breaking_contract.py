@@ -64,6 +64,12 @@ EXPECTED_BASE_SCANNER_NAMES = {
     "secrets",
     "skill_threats",
     "entrypoint",
+    # 2026-06 scanner-bypass gap closure (CSA / Trail of Bits): reach the file
+    # classes the text scanners skip (oversized/padded files, .pyc bytecode,
+    # archive/document indirection).
+    "oversize",
+    "bytecode",
+    "archive",
 }
 
 # Synthetic scanner entries injected by aggregate_json.py AFTER the real

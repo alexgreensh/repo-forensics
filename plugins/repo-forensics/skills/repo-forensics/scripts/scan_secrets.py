@@ -120,6 +120,55 @@ def scan_file(file_path, rel_path):
     return findings
 
 
+def scan_text(text, rel_path):
+    """Secret-detection over an in-memory text blob — an extracted archive
+    member. KTD7 in-memory entry point scan_archive recurses. Mirrors
+    scan_file's per-rule emission; the env-file basename check is applied from
+    rel_path's basename so a `.env` packed inside an archive is still flagged."""
+    global _pack_error_emitted
+    findings = []
+    if PACK_LOAD_ERROR:
+        if not _pack_error_emitted:
+            _pack_error_emitted = True
+            return [_pack_load_finding(rel_path)]
+        return []
+
+    basename = os.path.basename(rel_path)
+    if basename in ENV_FILE_VARIANTS and basename not in ENV_FILE_SAFE:
+        findings.append(core.Finding(
+            scanner=SCANNER_NAME, severity="high",
+            title=f"Unencrypted {basename} File in Repository",
+            description=f"{basename} likely contains plaintext secrets and should be in .gitignore",
+            file=rel_path, line=0,
+            snippet=f"{basename} found in repo (should never be committed)",
+            category="secret-storage",
+        ))
+
+    # split('\n') for parity with scan_file's readlines().
+    for i, line in enumerate(text.split('\n')):
+        if len(line) > core.MAX_LINE_LENGTH:
+            continue
+        for rule in _RULES:
+            match = rule.regex.search(line)
+            if match:
+                snippet = match.group(0)
+                if len(snippet) > 80:
+                    snippet = snippet[:77] + "..."
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME,
+                    severity=rule.severity,
+                    title=rule.title,
+                    description="Potential hardcoded secret detected",
+                    file=rel_path,
+                    line=i + 1,
+                    snippet=snippet,
+                    category="secret",
+                    rule_id=rule.id,
+                    confidence=rule.confidence,
+                ))
+    return findings
+
+
 def main():
     args = core.parse_common_args(sys.argv, "Secret Scanner")
     repo_path = args.repo_path

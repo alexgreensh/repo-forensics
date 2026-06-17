@@ -255,6 +255,7 @@ def run_targeted_scan(repo_path):
         'scan_mcp_security.py',
         'scan_infra.py',
         'scan_entrypoint.py',
+        'scan_oversize.py',
     ]
 
     from concurrent.futures import ThreadPoolExecutor, as_completed
