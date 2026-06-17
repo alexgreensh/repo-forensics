@@ -10,8 +10,8 @@ if [ -z "${1:-}" ]; then
     echo "Usage: $0 <repo_path> [options]"
     echo ""
     echo "Modes:"
-    echo "  (default)              Full audit - all 20 scanners"
-    echo "  --skill-scan           Focused on AI skill threats (10 scanners, faster)"
+    echo "  (default)              Full audit - all 25 scanners"
+    echo "  --skill-scan           Focused on AI skill threats (15 scanners, faster)"
     echo "  --inventory            Enumerate installed AI-agent stacks (zero-LLM, JSON output)"
     echo ""
     echo "Options:"
@@ -256,7 +256,7 @@ if $SKILL_SCAN; then
     # Focused mode: 10 scanners most relevant to vetting skills
     if [ "$FORMAT" != "json" ]; then
         echo ""
-        echo "[*] Running focused skill scan (13 scanners)..."
+        echo "[*] Running focused skill scan (15 scanners)..."
     fi
 
     throttled_run run_scanner "skill_threats" "scan_skill_threats.py" &
@@ -272,13 +272,15 @@ if $SKILL_SCAN; then
     throttled_run run_scanner "oversize" "scan_oversize.py" &
     throttled_run run_scanner "bytecode" "scan_bytecode.py" &
     throttled_run run_scanner "archive" "scan_archive.py" &
+    throttled_run run_scanner "splitstream" "scan_splitstream.py" &
+    throttled_run run_scanner "provenance" "scan_provenance.py" &
     wait
 
 else
     # Full audit: all scanners in parallel
     if [ "$FORMAT" != "json" ]; then
         echo ""
-        echo "[*] Running all 23 scanners in parallel..."
+        echo "[*] Running all 25 scanners in parallel..."
     fi
     throttled_run run_scanner "entropy" "scan_entropy.py" &
     throttled_run run_scanner "binary" "scan_binary.py" &
@@ -307,6 +309,8 @@ else
     throttled_run run_scanner "oversize" "scan_oversize.py" &
     throttled_run run_scanner "bytecode" "scan_bytecode.py" &
     throttled_run run_scanner "archive" "scan_archive.py" &
+    throttled_run run_scanner "splitstream" "scan_splitstream.py" &
+    throttled_run run_scanner "provenance" "scan_provenance.py" &
     wait
 fi
 

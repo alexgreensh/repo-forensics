@@ -18,9 +18,14 @@ import forensics_core as core
 
 SCANNER_NAME = "entropy"
 
-# Base64 block pattern (50+ chars of base64 alphabet)
+# Base64 block pattern (50+ chars of base64 alphabet). Kept LOCAL because the
+# visible ">=80 Base64 Encoded Block" display finding iterates these matches with
+# per-line positioning + data-URI suppression. The full encoded-blob DETECTION
+# that feeds scan_decode (base64/base85/base32/hex, incl. the CORRECTED base85
+# charset) is the hoisted scan_decode.detect_encoded_blobs — single source of
+# truth, used for routing below.
 BASE64_PATTERN = re.compile(r'[A-Za-z0-9+/]{50,}={0,2}')
-# Long hex string pattern
+# Long hex string pattern (display finding only; floor 64 to mirror prior FP gate).
 HEX_PATTERN = re.compile(r'(?:0x)?[a-fA-F0-9]{64,}')
 
 
@@ -56,12 +61,22 @@ SECRET_FORMAT_PATTERNS = [
 ]
 
 
-def scan_file(file_path, rel_path, threshold=5.8):
+def scan_file(file_path, rel_path, threshold=5.8, budget=None):
     """Scan for high-entropy strings with per-string distribution (TruffleHog v3 approach).
     Threshold raised to 5.8 to reduce false positives on cryptographic constants.
     Combo detection: HIGH if entropy > 5.8 AND matches known secret format.
-    """
+
+    `budget`: optional shared scan_decode budget (see main()). When None a fresh
+    per-file budget is minted (still correct for a single-file caller / tests),
+    but main() threads ONE budget across every file so the decode deadline + byte
+    cap are shared, never re-armed."""
     findings = []
+    try:
+        import scan_decode
+    except Exception:
+        scan_decode = None
+    if budget is None and scan_decode is not None:
+        budget = scan_decode.host_budget()
 
     # Skip minified files
     if is_minified(file_path):
@@ -72,26 +87,43 @@ def scan_file(file_path, rel_path, threshold=5.8):
     if basename in core.LOCKFILES:
         return findings
 
+    # Track blobs already handed to scan_decode (per file) so a blob repeated
+    # across lines is decoded only once (dedup).
+    decoded_seen = set()
+
     try:
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             lines = f.readlines()
+
+        # Decode-and-rescan routing (additive; Gap 4(a) / torture H1). The full
+        # encoded-blob DETECTION (base64/base85/base32/hex, with the CORRECTED
+        # base85 charset and ONE reconciled floor) is the hoisted helper — so a
+        # real base85 payload using v-z/{|}~ is now matched whole and routed,
+        # instead of being split into sub-floor fragments and dropped.
+        if scan_decode is not None:
+            blobs = scan_decode.detect_encoded_blobs("\n".join(lines))
+            scan_decode.feed_blobs(blobs, rel_path, decoded_seen, findings, budget)
 
         for i, line in enumerate(lines):
             stripped = line.strip()
             if len(stripped) < 50:
                 continue
 
-            # Check for base64 blocks
+            # Visible "Base64 Encoded Block" DISPLAY finding (>=80 chars). The
+            # actual decode routing for EVERY encoded blob (base64/85/32/hex,
+            # incl. sub-80 payloads) happens once-per-file above via the hoisted
+            # detect_encoded_blobs, so a short os.system(...) one base64 layer
+            # deep is still routed even though it never trips this display gate.
             for m in BASE64_PATTERN.finditer(stripped):
                 matched = m.group(0)
+                # Skip data-URI payloads (e.g. CSS url("data:image/png;base64,...")
+                # or HTML/SVG src="data:..."). Standard web practice for inline
+                # assets; a base64 image in a data URI cannot self-execute, so
+                # flagging it is a false positive (benign-corpus styles.css).
+                prefix = stripped[:m.start()]
+                if 'data:' in prefix and prefix.rstrip().endswith(';base64,'):
+                    continue
                 if len(matched) >= 80:
-                    # Skip data-URI payloads (e.g. CSS url("data:image/png;base64,...")
-                    # or HTML/SVG src="data:..."). Standard web practice for inline
-                    # assets; a base64 image in a data URI cannot self-execute, so
-                    # flagging it is a false positive (benign-corpus styles.css).
-                    prefix = stripped[:m.start()]
-                    if 'data:' in prefix and prefix.rstrip().endswith(';base64,'):
-                        continue
                     findings.append(core.Finding(
                         scanner=SCANNER_NAME, severity="high",
                         title="Base64 Encoded Block",
@@ -100,9 +132,10 @@ def scan_file(file_path, rel_path, threshold=5.8):
                         snippet=matched[:120],
                         category="encoding"
                     ))
-                    break  # One finding per line
+                break  # One finding per line
 
-            # Check for long hex strings
+            # Check for long hex strings (display finding; decode routing is the
+            # once-per-file detect_encoded_blobs pass above).
             for m in HEX_PATTERN.finditer(stripped):
                 matched = m.group(0)
                 findings.append(core.Finding(
@@ -148,8 +181,18 @@ def main():
     ignore_patterns = core.load_ignore_patterns(repo_path)
     all_findings = []
 
+    # Mint ONE shared decode budget for the whole scan and thread it into every
+    # file, so the scan_decode wall-clock deadline AND cumulative byte cap span
+    # all blobs across all files instead of being re-armed per call (re-arming is
+    # what let N blobs blow the 15s auto_scan SIGKILL into a silent zero).
+    try:
+        import scan_decode
+        budget = scan_decode.host_budget()
+    except Exception:
+        budget = None
+
     for file_path, rel_path in core.walk_repo(repo_path, ignore_patterns, skip_binary=True):
-        findings = scan_file(file_path, rel_path)
+        findings = scan_file(file_path, rel_path, budget=budget)
         all_findings.extend(findings)
 
     core.output_findings(all_findings, args.format, SCANNER_NAME)

@@ -116,7 +116,7 @@ Nobody does. The vetting step doesn't exist. [1,184 malicious skills](https://ww
 
 You won't feel it. There are no symptoms.
 
-**Repo Forensics is the vetting step.** Audit any repo, skill, MCP server, or plugin before it touches your machine. Works across the AI agent ecosystem: Claude Code, OpenClaw, Codex, Cursor, NanoClaw, or anything that installs third-party code. 23 scanners, runtime behavior prediction, ClawHavoc campaign detection. Runs in seconds.
+**Repo Forensics is the vetting step.** Audit any repo, skill, MCP server, or plugin before it touches your machine. Works across the AI agent ecosystem: Claude Code, OpenClaw, Codex, Cursor, NanoClaw, or anything that installs third-party code. 25 scanners, runtime behavior prediction, ClawHavoc campaign detection. Runs in seconds.
 
 **Your code never leaves your machine.** Zero dependencies. No cloud API. No telemetry. Unlike mcp-scan, nothing is uploaded anywhere.
 
@@ -210,10 +210,10 @@ $ ./run_forensics.sh ./trusted-library
 ## How It Works
 
 <p align="center">
-  <img src="diagrams/pipeline.svg" alt="Scanning pipeline: input to 23 scanners to correlation to verdict" width="900"/>
+  <img src="diagrams/pipeline.svg" alt="Scanning pipeline: input to 25 scanners to correlation to verdict" width="900"/>
 </p>
 
-Point it at any repository. 23 scanners run in parallel, each checking a different attack surface: prompt injection, supply chain, credential theft, runtime behavior, infrastructure misconfiguration, and more. The correlation engine then cross-references findings across 41 rules to detect compound threats that no single scanner would catch. A dynamic import paired with a network fetch becomes a deferred payload loading finding. An environment variable read combined with an outbound POST becomes a data exfiltration finding.
+Point it at any repository. 25 scanners run in parallel, each checking a different attack surface: prompt injection, supply chain, credential theft, runtime behavior, infrastructure misconfiguration, and more. The correlation engine then cross-references findings across 41 rules to detect compound threats that no single scanner would catch. A dynamic import paired with a network fetch becomes a deferred payload loading finding. An environment variable read combined with an outbound POST becomes a data exfiltration finding.
 
 Every finding carries a confidence score alongside severity, surfaced through four verdict tiers: BLOCK, WARN, INFO, and SUPPRESSED. Ambiguous WARN-tier findings can be adjudicated by the host agent (Claude Code, Codex, etc.) under a prompt-injection-safe protocol -- sanitized snippets, metadata-first, no code fences -- so context that the scanner can't infer is factored in without creating a new attack surface.
 
@@ -275,7 +275,7 @@ Every campaign above has version-pinned IOCs in `compromised_versions.json`, det
 | VirusTotal + ClawHub | ClawHub signature scanning | Surface-level. Signature-based, not structural. No prompt injection detection, no taint tracking. |
 | Manual review | Reading code | Misses zero-width unicode, cross-file taint flows, tool description injection. |
 
-**repo-forensics:** 23 scanners. Zero dependencies. Fully offline. Runtime behavior prediction. Post-incident forensics. Built for the AI agent ecosystem.
+**repo-forensics:** 25 scanners. Zero dependencies. Fully offline. Runtime behavior prediction. Post-incident forensics. Built for the AI agent ecosystem.
 
 ---
 
@@ -287,12 +287,12 @@ Every campaign above has version-pinned IOCs in `compromised_versions.json`, det
 
 ---
 
-## The 23 Scanners
+## The 25 Scanners
 
 Each scanner targets a distinct attack surface. Together they cover the full threat landscape for AI agent code.
 
 <p align="center">
-  <img src="diagrams/scanner-map.svg" alt="23-scanner attack surface map showing all scanners organized by threat category" width="900"/>
+  <img src="diagrams/scanner-map.svg" alt="25-scanner attack surface map showing all scanners organized by threat category" width="900"/>
 </p>
 
 | Scanner | What It Detects | Approach |
@@ -305,7 +305,7 @@ Each scanner targets a distinct attack surface. Together they cover the full thr
 | **binary** | Executables disguised as images/text/docs, **audio steganography** (executable payloads in WAV/MP3/FLAC), **embedded PE detection** (polyglot files with MZ+PE at non-zero offset) | Magic number detection, audio data section analysis, PE signature validation |
 
 <details>
-<summary>Show all 23 scanners</summary>
+<summary>Show all 25 scanners</summary>
 
 | Scanner | What It Detects | Approach |
 |---------|----------------|----------|
@@ -318,7 +318,7 @@ Each scanner targets a distinct attack surface. Together they cover the full thr
 | **secrets** | API keys, tokens, private keys, database URIs, JWTs, framework env prefix leaks (REACT_APP_, NEXT_PUBLIC_, VITE_, EXPO_PUBLIC_, GATSBY_, NX_PUBLIC_), 1Password/Vault tokens, .env variant files | 50+ patterns with entropy + format combo detection |
 | **sast** | Dangerous functions, injection, deserialization, shell execution, process.env exposure, path traversal, Model Confusion (HuggingFace), NPM worm propagation, destructive fallback commands | 8 languages: Python, JS, TS, Ruby, PHP, Java, Go, Bash |
 | **ast_analysis** | Obfuscated exec chains, `__reduce__` backdoors, marshal/types bytecode, audit hook abuse | Python AST walking, 12 detection patterns |
-| **entropy** | Hidden payloads in base64 blocks, hex strings, high-entropy content | Per-string Shannon entropy with format-aware thresholds |
+| **entropy** | Hidden payloads in base64 blocks, hex strings, high-entropy content -- now **decoded and re-scanned** so the plaintext inside an encoded blob is inspected, not just flagged | Per-string Shannon entropy with format-aware thresholds; flagged base64/85/32/hex blobs are decoded (depth- and size-bounded, never executed) and the existing heuristics re-run over the decoded content |
 | **infra** | Docker misconfig (ENV/ARG secrets, .env COPY), K8s breakouts, GHA expression injection, **known compromised GitHub Actions** (tj-actions, reviewdog, TeamPCP), Claude config CVEs | Dockerfile, YAML, workflow, and settings.json analysis |
 | **devcontainer** | Host secret mounts, privileged mode, docker.sock escape, remoteEnv localEnv interpolation, lifecycle command risks, untrusted features | JSON structure analysis of devcontainer.json |
 | **post_incident** | npm cache artifacts, RAT binaries, C2 persistence, install log traces, compromised node_modules | File existence checks, npm cache/log scanning, LaunchAgent grep |
@@ -326,6 +326,8 @@ Each scanner targets a distinct attack surface. Together they cover the full thr
 | **archive** | Payloads hidden inside `.zip/.docx/.xlsx/.pptx/.jar/.whl/.tar.*` and other archives that other scanners treat as opaque (the ClawHub document-archive bypass) | Members read **in memory, never written to disk**; streaming bomb guard, fan-out cap, tar symlink/hardlink/device/FIFO refusal, depth-bounded, fail-loud on every gap |
 | **bytecode** | Dangerous-call primitives, embedded URLs / credential paths, and orphan bytecode inside compiled Python `.pyc` that source-only scanners never read | `marshal.loads` quarantined in a disposable subprocess so hostile bytecode cannot crash the scan; magic-derived header, recursive `co_consts` walk |
 | **oversize** | Payloads padded past the 10 MB scan cap, and whitespace-inflation that pushes a payload past the cap or hides it after a long whitespace run | Head+tail window scan of oversized files, vectorized whitespace analysis, wall-clock bounded |
+| **splitstream** | Payloads split into inert base64/base85/base32/hex fragments scattered across unrelated files (no import edge) and concatenated at runtime -- evades per-file and cross-file taint checks | Single O(n) pass, fragments fingerprinted by alphabet + length-band and grouped, reassembled per group and decode-rescanned; member/size/wall-clock bounded |
+| **provenance** | Artifacts whose present signature/attestation **fails** verification -- the tampering signal (modified after signing, or signed by an untrusted key) | Shells out to cosign / gh / npm / pip when on PATH (zero added deps), timeout-bounded, never networks or hard-fails; the universal unsigned state is deliberately not alarmed -- only real tampering surfaces, as CRITICAL |
 
 </details>
 

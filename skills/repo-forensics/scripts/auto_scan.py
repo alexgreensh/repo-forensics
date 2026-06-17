@@ -218,8 +218,50 @@ def check_ioc_packages(package_names):
     return findings
 
 
+def _scan_incomplete_finding(scanner_script, reason):
+    """Build a LOUD synthetic finding for a scanner that failed to complete.
+
+    A scanner that times out, is killed by a signal (SIGKILL/OOM), exits with
+    an error code, or emits unparseable JSON used to return [] silently here —
+    meaning the user got a CLEAN verdict with NO indication the scan was
+    incomplete. That is a detection bypass: an attacker who pushes any scanner
+    past the 15s wall-clock (or OOMs it) thereby SUPPRESSES all of that
+    scanner's findings without a trace. Fail LOUD instead: emit a high-severity
+    finding so the verdict flips and the gap is visible. (Closes the
+    "SIGKILL -> silent zero" class; torture 2026-06-17.)
+    """
+    name = scanner_script[:-3] if scanner_script.endswith('.py') else scanner_script
+    return [{
+        'scanner': name,
+        'severity': 'high',
+        'title': 'Scanner did not complete — results may be incomplete',
+        'description': (
+            f"{name} {reason}; its findings are MISSING from this report. "
+            f"A repo can trigger this (e.g. by making the scanner overrun its "
+            f"time budget or exhaust memory) to suppress detection, so treat a "
+            f"clean verdict from this scan as UNTRUSTWORTHY for {name}'s surface. "
+            f"Re-run the scanner in isolation to obtain complete results."
+        ),
+        'file': '',
+        'line': 0,
+        'snippet': '',
+        'category': 'scan-incomplete',
+    }]
+
+
 def run_scanner(scanner_script, repo_path):
-    """Run a single scanner and return parsed findings."""
+    """Run a single scanner and return parsed findings.
+
+    On any failure mode that would otherwise yield a SILENT empty result
+    (timeout, signal-kill, scanner error, unparseable JSON on non-empty stdout,
+    or a NON-zero exit with empty stdout — the uncaught-exception crash door),
+    returns a LOUD synthetic 'scan-incomplete' finding instead of [] so the
+    incompleteness surfaces in the verdict. A clean [] is returned when rc==0
+    with empty stdout, or whenever stdout parses to valid JSON (including an
+    empty list) at rc<=2 — a scanner may exit non-zero while still emitting its
+    findings JSON, and that output is trusted. The crash door is specifically a
+    NON-zero exit with EMPTY or unparseable stdout, which now fails loud.
+    """
     import subprocess
     script_path = os.path.join(SCRIPTS_DIR, scanner_script)
     if not os.path.exists(script_path):
@@ -231,15 +273,49 @@ def run_scanner(scanner_script, repo_path):
             capture_output=True, text=True, timeout=15,
             cwd=SCRIPTS_DIR
         )
-        if result.returncode <= 2 and result.stdout.strip():
-            return json.loads(result.stdout)
-    except (subprocess.TimeoutExpired, json.JSONDecodeError, OSError):
-        pass
-    return []
+    except subprocess.TimeoutExpired:
+        return _scan_incomplete_finding(
+            scanner_script, "TIMED OUT (exceeded the 15s wall-clock budget)")
+    except OSError as e:
+        return _scan_incomplete_finding(
+            scanner_script, f"could not be launched (OSError: {e})")
+
+    rc = result.returncode
+    # Killed by a signal: subprocess returncode is negative (e.g. -9 = SIGKILL,
+    # the classic OOM / wall-clock kill). This is the core silent-zero vector.
+    if rc < 0:
+        return _scan_incomplete_finding(
+            scanner_script,
+            f"was KILLED by signal {-rc} (e.g. SIGKILL/OOM or wall-clock kill)")
+    # Scanner errored out (rc > 2 is outside the success/findings-present band).
+    if rc > 2:
+        return _scan_incomplete_finding(
+            scanner_script, f"exited with error code {rc}")
+
+    out = result.stdout.strip()
+    if not out:
+        # ONLY rc==0 with empty stdout is a legitimate "ran clean, found
+        # nothing" result. A NON-zero rc with EMPTY stdout means the scanner
+        # did NOT produce results — the classic uncaught-exception crash exits
+        # rc==1 (or 2) and writes its traceback to STDERR, leaving stdout empty.
+        # Treating that as "[] = benign" silently suppresses the whole scanner:
+        # the same silent-zero detection-bypass class as the timeout/SIGKILL
+        # doors, just via the crash door. Fail LOUD instead. (P1, CE review
+        # 2026-06-17.)
+        if rc == 0:
+            return []
+        return _scan_incomplete_finding(
+            scanner_script,
+            f"exited non-zero (rc {rc}) with no output — likely crashed")
+    try:
+        return json.loads(out)
+    except json.JSONDecodeError:
+        return _scan_incomplete_finding(
+            scanner_script, "produced UNPARSEABLE JSON output")
 
 
 def run_targeted_scan(repo_path):
-    """Run 10 targeted scanners in parallel on a cloned/installed repo."""
+    """Run 14 targeted scanners in parallel on a cloned/installed repo."""
     if not os.path.isdir(repo_path):
         return []
 
@@ -256,6 +332,8 @@ def run_targeted_scan(repo_path):
         'scan_infra.py',
         'scan_entrypoint.py',
         'scan_oversize.py',
+        'scan_splitstream.py',
+        'scan_provenance.py',
     ]
 
     from concurrent.futures import ThreadPoolExecutor, as_completed

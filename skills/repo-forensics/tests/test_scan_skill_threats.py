@@ -1,6 +1,12 @@
 """Tests for scan_skill_threats.py - AI Agent Skill Threat Scanner."""
 
+import base64
+
 import scan_skill_threats as scanner
+
+# Plaintext that trips the SAST/trifecta heuristics once decoded.
+# (chr(114) avoids embedding a literal shell pipe in the test source.)
+_DECODE_MALICIOUS = b'import os\nos.system(chr(114))\nimport socket\nsubprocess.Popen([])\n'
 
 
 class TestPromptInjection:
@@ -216,6 +222,105 @@ class TestProseImperative:
         f.write_text("Submit your PR to https://github.com/org/repo\n")
         findings = scanner.scan_file(str(f), "CHANGELOG.md")
         assert not any("Prose Imperative" in t.title for t in findings)
+
+
+class TestDecodeAndRescan:
+    """torture integ C1: the decode-and-rescan path in scan_skill_threats was
+    DEAD in the auto_scan targeted pipeline because (1) the gate category names
+    didn't match the emitters, (2) no base64 detector fed it, and (3) it fed the
+    120-char-truncated snippet, not the full blob. These tests prove the path
+    actually fires now."""
+
+    def _cats(self, findings):
+        return [f.category for f in findings]
+
+    def test_base64_payload_in_skill_md_decoded(self, tmp_path):
+        """A base64 payload in a SKILL.md is detected AND decoded (no base64
+        detector existed before, so this was 0)."""
+        enc = base64.b64encode(_DECODE_MALICIOUS).decode()
+        f = tmp_path / "SKILL.md"
+        f.write_text("---\nname: x\n---\npayload: %s\n" % enc)
+        findings = scanner.scan_file(str(f), "SKILL.md")
+        assert "decoded-payload" in self._cats(findings), \
+            "the skill_threats decode path must fire (not dead) for a base64 payload"
+
+    def test_base85_payload_decoded(self, tmp_path):
+        enc = base64.a85encode(_DECODE_MALICIOUS).decode()
+        f = tmp_path / "README.md"
+        f.write_text("# notes\nblob %s\n" % enc)
+        assert "decoded-payload" in self._cats(scanner.scan_file(str(f), "README.md"))
+
+    def test_base32_payload_decoded(self, tmp_path):
+        enc = base64.b32encode(_DECODE_MALICIOUS).decode()
+        f = tmp_path / "README.md"
+        f.write_text("# notes\nblob %s\n" % enc)
+        assert "decoded-payload" in self._cats(scanner.scan_file(str(f), "README.md"))
+
+    def test_payload_token_past_char_120_caught(self, tmp_path):
+        """torture H1: feeding the 120-char-truncated snippet missed a payload
+        whose malicious token sits past char 120. The FULL blob is fed now."""
+        benign = b"# " + b"A" * 130 + b"\n"
+        payload = benign + b"import os\nos.system(chr(114))\n"
+        enc = base64.b64encode(payload).decode()
+        assert len(enc) > 120
+        f = tmp_path / "SKILL.md"
+        f.write_text("---\nname: x\n---\nblob: %s\n" % enc)
+        findings = scanner.scan_file(str(f), "SKILL.md")
+        assert "decoded-payload" in self._cats(findings), \
+            "a payload token past char 120 must be caught (full blob, not snippet)"
+
+    def test_benign_base64_no_payload(self, tmp_path):
+        benign = base64.b64encode(
+            b"the quick brown fox jumps over the lazy dog repeatedly today tomorrow"
+        ).decode()
+        f = tmp_path / "SKILL.md"
+        f.write_text("---\nname: x\n---\nblob: %s\n" % benign)
+        assert "decoded-payload" not in self._cats(scanner.scan_file(str(f), "SKILL.md"))
+
+    def test_dead_backstop_removed(self):
+        """The dead morse/hex backstop (_full_blob_from_finding,
+        _ENCODED_BLOB_CATEGORIES) was deleted in the hoist. It must be gone."""
+        assert not hasattr(scanner, "_ENCODED_BLOB_CATEGORIES")
+        assert not hasattr(scanner, "_full_blob_from_finding")
+
+    def test_real_b85_payload_still_caught_after_backstop_removal(self, tmp_path):
+        """Removing the dead backstop must NOT lose real detection: a genuine
+        RFC1924 base85 payload (b85encode, uses v-z/{|}~) is still routed via the
+        hoisted detect_encoded_blobs and flagged."""
+        enc = base64.b85encode(_DECODE_MALICIOUS).decode()
+        f = tmp_path / "SKILL.md"
+        f.write_text("---\nname: x\n---\npayload: %s\n" % enc)
+        assert "decoded-payload" in self._cats(scanner.scan_file(str(f), "SKILL.md")), \
+            "b85 payload must still be caught after the dead backstop removal"
+
+    def test_main_threads_one_budget(self, tmp_path, monkeypatch):
+        import scan_decode
+        calls = {"n": 0}
+        real = scan_decode.new_budget
+
+        def counting(deadline=None):
+            calls["n"] += 1
+            return real(deadline=deadline)
+
+        monkeypatch.setattr(scan_decode, "new_budget", counting)
+        enc = base64.b64encode(_DECODE_MALICIOUS).decode()
+        for name in ("A.md", "B.md"):
+            (tmp_path / name).write_text("# x\nblob %s\n" % enc)
+        monkeypatch.setattr("sys.argv",
+                            ["scan_skill_threats.py", str(tmp_path), "--format", "json"])
+        scanner.main()
+        assert calls["n"] == 1, "main() must mint exactly one shared budget"
+
+    def test_many_blobs_one_file_bounded(self, tmp_path):
+        import time
+        enc = base64.b64encode(_DECODE_MALICIOUS).decode()
+        body = "\n".join("blob%d %s" % (i, enc + ("A" * (i % 4))) for i in range(40))
+        f = tmp_path / "README.md"
+        f.write_text("# notes\n" + body + "\n")
+        t0 = time.monotonic()
+        findings = scanner.scan_file(str(f), "README.md")
+        assert time.monotonic() - t0 < 11, "shared budget must keep the scan bounded"
+        assert "decoded-payload" in self._cats(findings)
 
 
 # Helper to walk a fixture repo

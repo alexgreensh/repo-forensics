@@ -70,6 +70,11 @@ EXPECTED_BASE_SCANNER_NAMES = {
     "oversize",
     "bytecode",
     "archive",
+    # 2026-06 final two bypass gaps (CSA / Trail of Bits): decode-and-rescan is
+    # a library invoked in-process by host scanners (not a standalone name).
+    # split-stream reassembly and artifact provenance are standalone scanners.
+    "splitstream",
+    "provenance",
 }
 
 # Synthetic scanner entries injected by aggregate_json.py AFTER the real

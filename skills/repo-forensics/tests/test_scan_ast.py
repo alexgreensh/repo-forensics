@@ -1,6 +1,13 @@
 """Tests for scan_ast.py - Python AST Obfuscation Detector (new patterns 6-12)."""
 
+import base64
+
 import scan_ast as scanner
+
+# Plaintext that trips the SAST/trifecta heuristics once decoded.
+# (chr(114) avoids embedding a literal shell pipe in the test source.)
+_DECODE_MALICIOUS = b'import os\nos.system(chr(114))\nimport socket\nsubprocess.Popen([])\n'
+_DECODE_ENCODED = base64.b64encode(_DECODE_MALICIOUS).decode()
 
 
 class TestExistingPatterns:
@@ -148,6 +155,101 @@ class TestNewPattern12SelfModification:
         f.write_text("f = open(__file__, 'a')\nf.write('# injected')\n")
         findings = scanner.scan_file(str(f), "evil.py")
         assert any("self-modification" in f.title.lower() or "__file__" in f.title for f in findings)
+
+
+class TestDecodeAndRescan:
+    """U2: exec(base64.b64decode('...')) is decoded and rescanned, surfacing the
+    hidden payload as an additive decoded-payload finding."""
+
+    def test_exec_base64_payload_flags_both(self, tmp_path):
+        f = tmp_path / "evil.py"
+        f.write_text('import base64\nexec(base64.b64decode("%s"))\n' % _DECODE_ENCODED)
+        findings = scanner.scan_file(str(f), "evil.py")
+        cats = [x.category for x in findings]
+        assert "obfuscated-exec" in cats, "existing Encoded Payload finding must remain"
+        assert "decoded-payload" in cats, "decoded os.system must be surfaced"
+        assert any("Encoded Payload" in x.title for x in findings)
+
+    def test_same_blob_twice_decodes_once(self, tmp_path):
+        """Same encoded literal used twice in one file decodes once (dedup)."""
+        src = (
+            'import base64\n'
+            'exec(base64.b64decode("%s"))\n'
+            'exec(base64.b64decode("%s"))\n'
+        ) % (_DECODE_ENCODED, _DECODE_ENCODED)
+        f = tmp_path / "evil.py"
+        f.write_text(src)
+        double = [c for c in (x.category for x in scanner.scan_file(str(f), "evil.py"))
+                  if c == "decoded-payload"]
+
+        single = tmp_path / "single.py"
+        single.write_text('import base64\nexec(base64.b64decode("%s"))\n' % _DECODE_ENCODED)
+        once = [c for c in (x.category for x in scanner.scan_file(str(single), "single.py"))
+                if c == "decoded-payload"]
+        assert len(double) == len(once), "repeated literal must decode once, not twice"
+
+    def test_benign_base64_no_payload(self, tmp_path):
+        """Regression: exec of benign base64 keeps the Encoded Payload finding but
+        adds NO decoded-payload finding (no severity inflation)."""
+        benign = base64.b64encode(
+            b'the quick brown fox jumps over the lazy dog repeatedly today and tomorrow'
+        ).decode()
+        f = tmp_path / "benign.py"
+        f.write_text('import base64\nexec(base64.b64decode("%s"))\n' % benign)
+        findings = scanner.scan_file(str(f), "benign.py")
+        cats = [x.category for x in findings]
+        assert "obfuscated-exec" in cats
+        assert "decoded-payload" not in cats
+
+
+class TestPlainDecodeLiteral:
+    """torture H2: a plain `base64.b64decode("...")` NOT wrapped in exec/eval used
+    to surface 0 decoded payloads (the decode branch was only reachable inside
+    exec(decode(...))). A bare decode-family call with a string literal must now
+    extract the literal and route it to scan_decode."""
+
+    def test_bare_b64decode_literal_surfaces_payload(self, tmp_path):
+        f = tmp_path / "evil.py"
+        f.write_text('import base64\nx = base64.b64decode("%s")\n' % _DECODE_ENCODED)
+        findings = scanner.scan_file(str(f), "evil.py")
+        assert "decoded-payload" in [x.category for x in findings], \
+            "a plain base64.b64decode literal must surface the decoded payload"
+
+    def test_bare_fromhex_literal_surfaces_payload(self, tmp_path):
+        payload = b'import os\nos.system(chr(114))\nimport socket\n'
+        hexed = payload.hex()
+        f = tmp_path / "evil.py"
+        f.write_text('x = bytes.fromhex("%s")\n' % hexed)
+        findings = scanner.scan_file(str(f), "evil.py")
+        assert "decoded-payload" in [x.category for x in findings], \
+            "a plain bytes.fromhex literal must surface the decoded payload"
+
+    def test_bare_benign_literal_no_payload(self, tmp_path):
+        benign = base64.b64encode(
+            b'the quick brown fox jumps over the lazy dog repeatedly today tomorrow'
+        ).decode()
+        f = tmp_path / "ok.py"
+        f.write_text('x = base64.b64decode("%s")\n' % benign)
+        findings = scanner.scan_file(str(f), "ok.py")
+        assert "decoded-payload" not in [x.category for x in findings], \
+            "a benign decode literal must not inflate into a decoded-payload finding"
+
+    def test_main_threads_one_budget(self, tmp_path, monkeypatch):
+        import scan_decode
+        calls = {"n": 0}
+        real = scan_decode.new_budget
+
+        def counting(deadline=None):
+            calls["n"] += 1
+            return real(deadline=deadline)
+
+        monkeypatch.setattr(scan_decode, "new_budget", counting)
+        for name in ("a.py", "b.py"):
+            (tmp_path / name).write_text(
+                'import base64\nx = base64.b64decode("%s")\n' % _DECODE_ENCODED)
+        monkeypatch.setattr("sys.argv", ["scan_ast.py", str(tmp_path), "--format", "json"])
+        scanner.main()
+        assert calls["n"] == 1, "main() must mint exactly one shared budget"
 
 
 class TestCleanCode:

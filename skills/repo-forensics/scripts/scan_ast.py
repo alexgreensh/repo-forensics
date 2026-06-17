@@ -32,10 +32,16 @@ DECODE_FUNCS = {'b64decode', 'decodebytes', 'decodestring',
 class ObfuscationVisitor(ast.NodeVisitor):
     """AST visitor detecting obfuscation and dangerous dynamic patterns."""
 
-    def __init__(self, rel_path, source_lines):
+    def __init__(self, rel_path, source_lines, budget=None):
         self.rel_path = rel_path
         self.source_lines = source_lines
         self.findings = []
+        # Encoded blobs already handed to scan_decode (per file), so the same
+        # literal blob is decoded only once (dedup).
+        self.decoded_seen = set()
+        # ONE shared scan_decode budget threaded from main() across every file so
+        # the decode deadline + byte cap span the whole scan, never re-armed.
+        self.budget = budget
 
     def _snippet(self, lineno):
         if lineno and 1 <= lineno <= len(self.source_lines):
@@ -51,6 +57,32 @@ class ObfuscationVisitor(ast.NodeVisitor):
             category=category
         ))
 
+    def _decode_and_rescan(self, blob):
+        """Hand an already-flagged encoded string literal to scan_decode and
+        extend findings with any decoded-payload hits (additive; the
+        Encoded Payload finding stays). Decodes each unique blob once per file
+        (dedup). Guarded so a scan_decode failure never breaks the AST scan.
+
+        The blob here is an AST string LITERAL (not a regex-detected run), so it
+        is fed directly via the hoisted scan_decode.feed_blobs plumbing rather
+        than detect_encoded_blobs."""
+        try:
+            import scan_decode
+        except Exception:
+            return
+        if self.budget is None:
+            self.budget = scan_decode.host_budget()
+        scan_decode.feed_blobs(
+            [blob], self.rel_path, self.decoded_seen, self.findings, self.budget
+        )
+
+    def _literal_str_args(self, node):
+        """Yield each string-literal argument of a Call node (the encoded blob
+        carried inline, e.g. base64.b64decode('....'))."""
+        for arg in getattr(node, 'args', []):
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                yield arg.value
+
     def _call_name(self, node):
         """Return string name of a call expression."""
         if isinstance(node.func, ast.Name):
@@ -62,6 +94,19 @@ class ObfuscationVisitor(ast.NodeVisitor):
 
     def visit_Call(self, node):
         lineno = getattr(node, 'lineno', None)
+
+        # Pattern 0 (torture H2): ANY decode-family call with a string-literal arg
+        # — e.g. base64.b64decode("<payload>"), bytes.fromhex("..."),
+        # codecs.decode("...") — even when NOT wrapped in exec/eval. Previously the
+        # decode-and-rescan branch only ran inside exec(decode(...)), so a plain
+        # literal `base64.b64decode("...os.system(chr(...))...")` assigned to a
+        # variable was extracted by nobody and surfaced 0 decoded payloads
+        # end-to-end. Extract the literal and route it to scan_decode directly.
+        # Findings are additive and scan_decode only emits when the DECODED
+        # plaintext trips a rule, so a benign decode literal stays silent.
+        if self._call_name(node).split('.')[-1] in DECODE_FUNCS:
+            for blob in self._literal_str_args(node):
+                self._decode_and_rescan(blob)
 
         # Pattern 1: exec(base64.b64decode(...)) or exec(codecs.decode(...)) etc.
         if isinstance(node.func, ast.Name) and node.func.id in ('exec', 'eval'):
@@ -77,6 +122,9 @@ class ObfuscationVisitor(ast.NodeVisitor):
                         lineno=lineno,
                         category="obfuscated-exec"
                     )
+                    # Decode-and-rescan the inline encoded literal (additive; Gap 4(a)).
+                    for blob in self._literal_str_args(node.args[0]):
+                        self._decode_and_rescan(blob)
 
         # Pattern 2: eval(compile(bytes(...), '', 'exec')) or eval(compile(...))
         if isinstance(node.func, ast.Name) and node.func.id == 'eval':
@@ -267,8 +315,12 @@ class ObfuscationVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
 
-def scan_file(file_path, rel_path):
-    """Run AST analysis on a single Python file."""
+def scan_file(file_path, rel_path, budget=None):
+    """Run AST analysis on a single Python file.
+
+    `budget`: optional shared scan_decode budget (see main()). When None the
+    visitor mints a fresh per-file budget on first decode (correct for a
+    single-file caller / tests); main() threads ONE budget across all files."""
     if not file_path.endswith('.py'):
         return []
 
@@ -298,7 +350,7 @@ def scan_file(file_path, rel_path):
         return []
 
     source_lines = source.split('\n')
-    visitor = ObfuscationVisitor(rel_path, source_lines)
+    visitor = ObfuscationVisitor(rel_path, source_lines, budget=budget)
     visitor.visit(tree)
     return visitor.findings
 
@@ -312,10 +364,18 @@ def main():
     ignore_patterns = core.load_ignore_patterns(repo_path)
     all_findings = []
 
+    # ONE shared decode budget across every file (see scan_decode.new_budget):
+    # the wall-clock deadline + byte cap span the whole scan, never re-armed.
+    try:
+        import scan_decode
+        budget = scan_decode.host_budget()
+    except Exception:
+        budget = None
+
     for file_path, rel_path in core.walk_repo(repo_path, ignore_patterns, skip_binary=True):
         if not file_path.endswith('.py'):
             continue
-        findings = scan_file(file_path, rel_path)
+        findings = scan_file(file_path, rel_path, budget=budget)
         all_findings.extend(findings)
 
     core.output_findings(all_findings, args.format, SCANNER_NAME)
