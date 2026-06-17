@@ -11,15 +11,15 @@ Audit untrusted repos before they touch your agent. Fully local, self-updating d
 </p>
 
 <p align="center">
-  <a href="https://github.com/alexgreensh/repo-forensics/releases"><img src="https://img.shields.io/badge/version-2.10.0-green.svg" alt="Version 2.10.0"></a>
+  <a href="https://github.com/alexgreensh/repo-forensics/releases"><img src="https://img.shields.io/badge/version-2.11.0-green.svg" alt="Version 2.11.0"></a>
   <a href="https://github.com/alexgreensh/repo-forensics/releases"><img src="https://img.shields.io/github/release-date/alexgreensh/repo-forensics?label=last%20release&color=blue" alt="Last Release"></a>
   <a href="https://github.com/alexgreensh/repo-forensics/stargazers"><img src="https://img.shields.io/badge/stars-98-yellow.svg?logo=github" alt="GitHub Stars: 98"></a>
   <a href="https://github.com/alexgreensh/repo-forensics/commits/main"><img src="https://img.shields.io/github/commit-activity/m/alexgreensh/repo-forensics" alt="Commit Activity"></a>
 </p>
 <p align="center">
-  <img src="https://img.shields.io/badge/scanners-20-blue.svg" alt="20 Scanners">
+  <img src="https://img.shields.io/badge/scanners-23-blue.svg" alt="23 Scanners">
   <img src="https://img.shields.io/badge/patterns-800%2B-orange.svg" alt="800+ Patterns">
-  <img src="https://img.shields.io/badge/tests-1%2C551-brightgreen.svg" alt="1,551 Tests">
+  <img src="https://img.shields.io/badge/tests-1%2C631-brightgreen.svg" alt="1,631 Tests">
   <img src="https://img.shields.io/badge/CVE%20%2B%20CISA%20KEV-live%20scanning-critical.svg" alt="Live CVE + CISA KEV scanning">
   <img src="https://img.shields.io/badge/correlation%20rules-41-purple.svg" alt="41 Correlation Rules">
   <img src="https://img.shields.io/badge/package%20IOCs-190%2B-red.svg" alt="190+ Package IOCs">
@@ -116,7 +116,7 @@ Nobody does. The vetting step doesn't exist. [1,184 malicious skills](https://ww
 
 You won't feel it. There are no symptoms.
 
-**Repo Forensics is the vetting step.** Audit any repo, skill, MCP server, or plugin before it touches your machine. Works across the AI agent ecosystem: Claude Code, OpenClaw, Codex, Cursor, NanoClaw, or anything that installs third-party code. 20 scanners, runtime behavior prediction, ClawHavoc campaign detection. Runs in seconds.
+**Repo Forensics is the vetting step.** Audit any repo, skill, MCP server, or plugin before it touches your machine. Works across the AI agent ecosystem: Claude Code, OpenClaw, Codex, Cursor, NanoClaw, or anything that installs third-party code. 23 scanners, runtime behavior prediction, ClawHavoc campaign detection. Runs in seconds.
 
 **Your code never leaves your machine.** Zero dependencies. No cloud API. No telemetry. Unlike mcp-scan, nothing is uploaded anywhere.
 
@@ -210,10 +210,10 @@ $ ./run_forensics.sh ./trusted-library
 ## How It Works
 
 <p align="center">
-  <img src="diagrams/pipeline.svg" alt="Scanning pipeline: input to 20 scanners to correlation to verdict" width="900"/>
+  <img src="diagrams/pipeline.svg" alt="Scanning pipeline: input to 23 scanners to correlation to verdict" width="900"/>
 </p>
 
-Point it at any repository. 20 scanners run in parallel, each checking a different attack surface: prompt injection, supply chain, credential theft, runtime behavior, infrastructure misconfiguration, and more. The correlation engine then cross-references findings across 41 rules to detect compound threats that no single scanner would catch. A dynamic import paired with a network fetch becomes a deferred payload loading finding. An environment variable read combined with an outbound POST becomes a data exfiltration finding.
+Point it at any repository. 23 scanners run in parallel, each checking a different attack surface: prompt injection, supply chain, credential theft, runtime behavior, infrastructure misconfiguration, and more. The correlation engine then cross-references findings across 41 rules to detect compound threats that no single scanner would catch. A dynamic import paired with a network fetch becomes a deferred payload loading finding. An environment variable read combined with an outbound POST becomes a data exfiltration finding.
 
 Every finding carries a confidence score alongside severity, surfaced through four verdict tiers: BLOCK, WARN, INFO, and SUPPRESSED. Ambiguous WARN-tier findings can be adjudicated by the host agent (Claude Code, Codex, etc.) under a prompt-injection-safe protocol -- sanitized snippets, metadata-first, no code fences -- so context that the scanner can't infer is factored in without creating a new attack surface.
 
@@ -233,7 +233,7 @@ Scanning never requires network access. The feed is a freshness layer on top of 
 
 ## Battle-Tested Against Real Attacks
 
-1,551 tests across 40+ test files. Not synthetic toy examples: detection patterns built from real supply chain campaigns that hit production systems.
+1,631 tests across 40+ test files. Not synthetic toy examples: detection patterns built from real supply chain campaigns that hit production systems.
 
 **Named attack campaigns in the IOC database:**
 
@@ -259,7 +259,7 @@ Scanning never requires network access. The feed is a freshness layer on top of 
 
 Every campaign above has version-pinned IOCs in `compromised_versions.json`, detection rules in the lifecycle and dependency scanners, and correlation rules for compound attack patterns.
 
-**The tests are safe to run.** All 1,551 tests use synthetic fixtures in temporary directories. No real malware is downloaded or executed. Pattern matching runs against fake package.json files containing attack signatures, the same way antivirus software tests against EICAR strings.
+**The tests are safe to run.** All 1,631 tests use synthetic fixtures in temporary directories. No real malware is downloaded or executed. Pattern matching runs against fake package.json files containing attack signatures, the same way antivirus software tests against EICAR strings.
 
 ---
 
@@ -275,7 +275,7 @@ Every campaign above has version-pinned IOCs in `compromised_versions.json`, det
 | VirusTotal + ClawHub | ClawHub signature scanning | Surface-level. Signature-based, not structural. No prompt injection detection, no taint tracking. |
 | Manual review | Reading code | Misses zero-width unicode, cross-file taint flows, tool description injection. |
 
-**repo-forensics:** 20 scanners. Zero dependencies. Fully offline. Runtime behavior prediction. Post-incident forensics. Built for the AI agent ecosystem.
+**repo-forensics:** 23 scanners. Zero dependencies. Fully offline. Runtime behavior prediction. Post-incident forensics. Built for the AI agent ecosystem.
 
 ---
 
@@ -287,12 +287,12 @@ Every campaign above has version-pinned IOCs in `compromised_versions.json`, det
 
 ---
 
-## The 20 Scanners
+## The 23 Scanners
 
 Each scanner targets a distinct attack surface. Together they cover the full threat landscape for AI agent code.
 
 <p align="center">
-  <img src="diagrams/scanner-map.svg" alt="20-scanner attack surface map showing all scanners organized by threat category" width="900"/>
+  <img src="diagrams/scanner-map.svg" alt="23-scanner attack surface map showing all scanners organized by threat category" width="900"/>
 </p>
 
 | Scanner | What It Detects | Approach |
@@ -305,7 +305,7 @@ Each scanner targets a distinct attack surface. Together they cover the full thr
 | **binary** | Executables disguised as images/text/docs, **audio steganography** (executable payloads in WAV/MP3/FLAC), **embedded PE detection** (polyglot files with MZ+PE at non-zero offset) | Magic number detection, audio data section analysis, PE signature validation |
 
 <details>
-<summary>Show all 20 scanners</summary>
+<summary>Show all 23 scanners</summary>
 
 | Scanner | What It Detects | Approach |
 |---------|----------------|----------|
@@ -323,6 +323,9 @@ Each scanner targets a distinct attack surface. Together they cover the full thr
 | **devcontainer** | Host secret mounts, privileged mode, docker.sock escape, remoteEnv localEnv interpolation, lifecycle command risks, untrusted features | JSON structure analysis of devcontainer.json |
 | **post_incident** | npm cache artifacts, RAT binaries, C2 persistence, install log traces, compromised node_modules | File existence checks, npm cache/log scanning, LaunchAgent grep |
 | **entrypoint** | IIFE injection at end of CJS entrypoints (node-ipc pattern), import-time execution in Python `__init__.py`/`setup.py` (durabletask pattern), high-entropy appended content | CJS structural analysis, Python AST top-level scope walking |
+| **archive** | Payloads hidden inside `.zip/.docx/.xlsx/.pptx/.jar/.whl/.tar.*` and other archives that other scanners treat as opaque (the ClawHub document-archive bypass) | Members read **in memory, never written to disk**; streaming bomb guard, fan-out cap, tar symlink/hardlink/device/FIFO refusal, depth-bounded, fail-loud on every gap |
+| **bytecode** | Dangerous-call primitives, embedded URLs / credential paths, and orphan bytecode inside compiled Python `.pyc` that source-only scanners never read | `marshal.loads` quarantined in a disposable subprocess so hostile bytecode cannot crash the scan; magic-derived header, recursive `co_consts` walk |
+| **oversize** | Payloads padded past the 10 MB scan cap, and whitespace-inflation that pushes a payload past the cap or hides it after a long whitespace run | Head+tail window scan of oversized files, vectorized whitespace analysis, wall-clock bounded |
 
 </details>
 
@@ -549,7 +552,7 @@ Exit codes: `0` = clean, `1` = warn, `2` = block merge.
 | **IOC auto-update** | `--update-iocs` pulls latest C2 IPs, malicious domains, known-bad packages |
 | **Installation verification** | `--verify-install` checks repo-forensics itself for tampering |
 | **Manifest drift** | Declared vs actual imports, phantom deps, runtime installs |
-| **1,551 pytest tests** | Full coverage across 40+ test files |
+| **1,631 pytest tests** | Full coverage across 40+ test files |
 
 </details>
 

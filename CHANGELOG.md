@@ -2,6 +2,40 @@
 
 All notable changes to repo-forensics. Versions follow semver.
 
+## [2.11.0] - 2026-06-17
+
+### Added — three scanner-bypass detection gaps closed
+
+Closes the "hide the payload where the text reader never looks" bypass class
+documented by CSA / Trail of Bits (June 2026). Three new standalone,
+standard-library scanners reach the file classes the ~20 text scanners skip:
+
+- **archive** (`scan_archive`): inspects payloads hidden inside
+  `.zip/.docx/.xlsx/.pptx/.jar/.whl/.tar.*` and other archives. Members are read
+  **in memory and scanned in process** — attacker-controlled bytes are never
+  written to disk. Streaming byte-counter bomb guard (decompressed size is
+  measured, never trusted from the header), cumulative fan-out cap, lazy tar
+  iteration, tar symlink/hardlink/device/FIFO refusal, depth cap, and fail-loud
+  findings (`unsupported-archive-type`, `opaque-archive`, `archive-scan-incomplete`).
+- **bytecode** (`scan_bytecode`): disassembles Python `.pyc` bytecode that
+  source-only scanners miss. `marshal.loads` runs in a disposable subprocess so
+  hostile bytecode cannot crash or hang the scan; magic-derived header length,
+  recursive `co_consts` walk, vendor-aware orphan handling.
+- **oversize** (`scan_oversize`): head+tail window scan of files padded past the
+  10 MB cap, plus whitespace-inflation detection — both wall-clock bounded.
+
+Shared additions: `walk_aux()` (size-cap-free / `__pycache__`-reaching traversal
+that leaves the shared `walk_repo` defaults untouched) and in-memory text
+detection entry points (`scan_text` / `scan_content` / `scan_text_trifecta`).
+
+### Security
+
+- Hardened against a five-agent adversarial review: corrupt-archive crash,
+  tar decompression bomb, scanner-timeout DoS, extension-gate bypass,
+  surrogate-constant crash, disassembly-blob forgery, and fan-out starvation are
+  all fixed and pinned by regression tests. Stdlib-only, cross-platform (POSIX
+  rlimits guarded, subprocess-timeout isolation backstop).
+
 ## [2.10.0] - 2026-06-10
 
 ### Architecture
