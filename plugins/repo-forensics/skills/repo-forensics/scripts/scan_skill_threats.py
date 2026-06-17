@@ -577,8 +577,12 @@ def scan_hex_encoding(content, rel_path):
     return findings
 
 
-def scan_file(file_path, rel_path):
-    """Run all categories on a single file (reads, then delegates to scan_content)."""
+def scan_file(file_path, rel_path, budget=None):
+    """Run all categories on a single file (reads, then delegates to scan_content).
+
+    `budget`: optional shared scan_decode budget (see main()). When None a fresh
+    per-file budget is minted inside the decode feed (correct for single-file
+    callers / tests); main() threads ONE budget across every file."""
     if PACK_LOAD_ERROR:
         return [_pack_load_finding(rel_path)]
     try:
@@ -586,10 +590,10 @@ def scan_file(file_path, rel_path):
             content = f.read()
     except (OSError, UnicodeDecodeError):
         return []
-    return scan_content(content, rel_path)
+    return scan_content(content, rel_path, budget=budget)
 
 
-def scan_content(content, rel_path):
+def scan_content(content, rel_path, budget=None):
     """Run all categories over already-loaded text — an extracted archive
     member, a decoded blob. The KTD7 in-memory entry point scan_archive recurses
     so prompt-injection / unicode-smuggling / exfil / IOC detection reaches
@@ -693,7 +697,42 @@ def scan_content(content, rel_path):
     # Cat 17: Hex-encoded strings in documentation
     findings.extend(scan_hex_encoding(content, rel_path))
 
+    # Cat 18: collect FULL base64/base85/base32/hex encoded blobs to FEED the
+    # decoder. scan_skill_threats had no base64 detector, so a base64 payload in
+    # a SKILL.md was never handed to scan_decode at all (torture C1.2). We do NOT
+    # emit a visible finding per encoded run — that floods the benign corpus
+    # (hashes, data-URIs) with false positives. The ONLY finding that surfaces is
+    # the additive, FP-safe decoded-payload one, emitted ONLY when the decoded
+    # plaintext actually trips a rule.
+    findings.extend(_decode_and_rescan_blobs(content, rel_path, budget))
+
     return findings
+
+
+def _decode_and_rescan_blobs(content, rel_path, budget):
+    """Detect every FULL encoded run (base64/base85/base32/hex) in `content` via
+    the hoisted scan_decode.detect_encoded_blobs (single source of truth, with the
+    CORRECTED base85 charset — a real RFC1924 b85 payload is now matched whole and
+    routed), hand each to scan_decode, and return any decoded-payload hits. The
+    FULL untruncated blob is fed (a payload token past char 120 is NOT lost). ONE
+    shared budget spans the scan, never re-armed. Fully guarded: a scan_decode
+    failure never breaks the scan. Emits NO finding of its own — the only surfaced
+    finding is the additive, FP-safe decoded-payload one.
+
+    NOTE: the old morse/hex "backstop" loop (`_full_blob_from_finding` +
+    `_ENCODED_BLOB_CATEGORIES`) was DEAD and is removed — hex blobs are already
+    collected in full by detect_encoded_blobs, and morse is none of the 4
+    alphabets scan_decode knows, so a morse snippet could never decode."""
+    extra = []
+    try:
+        import scan_decode
+    except Exception:
+        return extra
+    if budget is None:
+        budget = scan_decode.host_budget()
+    blobs = scan_decode.detect_encoded_blobs(content)
+    scan_decode.feed_blobs(blobs, rel_path, set(), extra, budget)
+    return extra
 
 
 def _scan_authority_framing(content, rel_path):
@@ -780,8 +819,18 @@ def main():
     ignore_patterns = core.load_ignore_patterns(repo_path)
     all_findings = []
 
+    # ONE shared decode budget across every file (see scan_decode.new_budget):
+    # the wall-clock deadline + byte cap span the whole scan, never re-armed —
+    # re-arming per blob is what let many blobs blow the 15s auto_scan SIGKILL
+    # into a silent zero.
+    try:
+        import scan_decode
+        budget = scan_decode.host_budget()
+    except Exception:
+        budget = None
+
     for file_path, rel_path in core.walk_repo(repo_path, ignore_patterns, skip_binary=True):
-        findings = scan_file(file_path, rel_path)
+        findings = scan_file(file_path, rel_path, budget=budget)
         all_findings.extend(findings)
 
     core.output_findings(all_findings, args.format, SCANNER_NAME)

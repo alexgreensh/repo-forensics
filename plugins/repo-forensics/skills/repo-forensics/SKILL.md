@@ -70,7 +70,7 @@ Deep security auditing for repositories, AI agent skills, and MCP servers.
 - **process.env exposure detection** (v2.6.5): Flags console.log(process.env), JSON.stringify(process.env), and crash report env dumps
 - **Docker ARG secret detection** (v2.6.5): Catches secrets passed via ARG directives (permanently visible in docker history)
 - **1Password/Vault token detection** (v2.6.5): OP_CONNECT_TOKEN, ops_ service account tokens, hvs. Vault tokens
-- **23 scanners** with 41 correlation rules
+- **25 scanners** with 41 correlation rules
 
 ## How Detection Stays Fresh
 
@@ -119,7 +119,7 @@ Detection runs in layers, each with its own update cadence:
 
 ## Quick Start
 
-Full audit (all 23 scanners):
+Full audit (all 25 scanners):
 ```bash
 ./scripts/run_forensics.sh /path/to/repo
 ```
