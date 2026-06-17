@@ -115,7 +115,7 @@
   <line x1="40" y1="330" x2="860" y2="330" stroke="#1c2940" stroke-width="0.5" opacity="0.5"/>
 
   <!-- Footer -->
-  <text x="450" y="393" font-family="'SF Mono','Fira Code',Consolas,monospace" font-size="11" fill="#b1bac4" text-anchor="middle" opacity="0.6">41 correlation rules cross-reference findings across all 20 scanners</text>
+  <text x="450" y="393" font-family="'SF Mono','Fira Code',Consolas,monospace" font-size="11" fill="#b1bac4" text-anchor="middle" opacity="0.6">41 correlation rules cross-reference findings across all 23 scanners</text>
 
   <!-- Border -->
   <rect width="900" height="400" rx="12" fill="none" stroke="#1c2940" stroke-width="1"/>

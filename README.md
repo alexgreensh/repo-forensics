@@ -11,15 +11,15 @@ Audit untrusted repos before they touch your agent. Fully local, self-updating d
 </p>
 
 <p align="center">
-  <a href="https://github.com/alexgreensh/repo-forensics/releases"><img src="https://img.shields.io/badge/version-2.11.0-green.svg" alt="Version 2.11.0"></a>
+  <a href="https://github.com/alexgreensh/repo-forensics/releases/latest"><img src="https://img.shields.io/github/v/release/alexgreensh/repo-forensics?label=version&color=green" alt="Latest release"></a>
   <a href="https://github.com/alexgreensh/repo-forensics/releases"><img src="https://img.shields.io/github/release-date/alexgreensh/repo-forensics?label=last%20release&color=blue" alt="Last Release"></a>
-  <a href="https://github.com/alexgreensh/repo-forensics/stargazers"><img src="https://img.shields.io/badge/stars-98-yellow.svg?logo=github" alt="GitHub Stars: 98"></a>
+  <a href="https://github.com/alexgreensh/repo-forensics/stargazers"><img src="https://img.shields.io/github/stars/alexgreensh/repo-forensics?logo=github&color=yellow&label=stars" alt="GitHub Stars"></a>
   <a href="https://github.com/alexgreensh/repo-forensics/commits/main"><img src="https://img.shields.io/github/commit-activity/m/alexgreensh/repo-forensics" alt="Commit Activity"></a>
 </p>
 <p align="center">
-  <img src="https://img.shields.io/badge/scanners-23-blue.svg" alt="23 Scanners">
+  <img src="https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/alexgreensh/repo-forensics/main/.github/badges/metrics.json&query=$.scanners&label=scanners&color=blue" alt="Scanners">
   <img src="https://img.shields.io/badge/patterns-800%2B-orange.svg" alt="800+ Patterns">
-  <img src="https://img.shields.io/badge/tests-1%2C631-brightgreen.svg" alt="1,631 Tests">
+  <img src="https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/alexgreensh/repo-forensics/main/.github/badges/metrics.json&query=$.tests&label=tests&color=brightgreen" alt="Tests">
   <img src="https://img.shields.io/badge/CVE%20%2B%20CISA%20KEV-live%20scanning-critical.svg" alt="Live CVE + CISA KEV scanning">
   <img src="https://img.shields.io/badge/correlation%20rules-41-purple.svg" alt="41 Correlation Rules">
   <img src="https://img.shields.io/badge/package%20IOCs-190%2B-red.svg" alt="190+ Package IOCs">
@@ -233,7 +233,7 @@ Scanning never requires network access. The feed is a freshness layer on top of 
 
 ## Battle-Tested Against Real Attacks
 
-1,631 tests across 40+ test files. Not synthetic toy examples: detection patterns built from real supply chain campaigns that hit production systems.
+1,633 tests across 40+ test files. Not synthetic toy examples: detection patterns built from real supply chain campaigns that hit production systems.
 
 **Named attack campaigns in the IOC database:**
 
@@ -259,7 +259,7 @@ Scanning never requires network access. The feed is a freshness layer on top of 
 
 Every campaign above has version-pinned IOCs in `compromised_versions.json`, detection rules in the lifecycle and dependency scanners, and correlation rules for compound attack patterns.
 
-**The tests are safe to run.** All 1,631 tests use synthetic fixtures in temporary directories. No real malware is downloaded or executed. Pattern matching runs against fake package.json files containing attack signatures, the same way antivirus software tests against EICAR strings.
+**The tests are safe to run.** All 1,633 tests use synthetic fixtures in temporary directories. No real malware is downloaded or executed. Pattern matching runs against fake package.json files containing attack signatures, the same way antivirus software tests against EICAR strings.
 
 ---
 
@@ -552,7 +552,7 @@ Exit codes: `0` = clean, `1` = warn, `2` = block merge.
 | **IOC auto-update** | `--update-iocs` pulls latest C2 IPs, malicious domains, known-bad packages |
 | **Installation verification** | `--verify-install` checks repo-forensics itself for tampering |
 | **Manifest drift** | Declared vs actual imports, phantom deps, runtime installs |
-| **1,631 pytest tests** | Full coverage across 40+ test files |
+| **1,633 pytest tests** | Full coverage across 40+ test files |
 
 </details>
 

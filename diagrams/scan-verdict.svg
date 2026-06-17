@@ -49,7 +49,7 @@
 
   <!-- Scanning progress indicator -->
   <text x="24" y="78" font-family="'SF Mono','Fira Code',Consolas,monospace" font-size="11" fill="#58a6ff" opacity="0">
-    [*] Running all 20 scanners in parallel...
+    [*] Running all 23 scanners in parallel...
     <animate attributeName="opacity" values="0;0;0.8;0.8" keyTimes="0;0.1;0.15;1" dur="6s" repeatCount="indefinite"/>
   </text>
 
