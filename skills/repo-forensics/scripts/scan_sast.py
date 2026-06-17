@@ -148,6 +148,54 @@ def scan_file(file_path, rel_path):
     return findings
 
 
+def scan_text(text, rel_path, ext=None):
+    """SAST scan over an in-memory text blob — an extracted archive member or a
+    disassembled .pyc listing — instead of a file on disk.
+
+    Mirrors scan_file's per-rule emission exactly (rule.severity, rule.category,
+    rule_id, confidence) so a finding surfaced from inside an archive is
+    indistinguishable in shape from one surfaced from a plain source file. The
+    KTD7 text shim the bytecode (U2) and archive (U3) scanners share for SAST,
+    placed here rather than in forensics_core so the single _PACK source of
+    truth is not forked. `ext` overrides the rule-selection extension (defaults
+    to rel_path's extension); pass e.g. ".py" when scanning a bytecode listing.
+    """
+    global _pack_error_emitted
+    if PACK_LOAD_ERROR:
+        if not _pack_error_emitted:
+            _pack_error_emitted = True
+            return [_pack_load_finding(rel_path)]
+        return []
+
+    if ext is None:
+        ext = os.path.splitext(rel_path)[1].lower()
+    if ext not in _PACK_EXTENSIONS:
+        return []
+
+    rules = _PACK.rules_for_extension(ext)
+    findings = []
+    # split('\n') for parity with scan_file's readlines() (line numbers + no
+    # Unicode-line-boundary split-evasion).
+    for i, line in enumerate(text.split('\n')):
+        if len(line) > core.MAX_LINE_LENGTH:
+            continue
+        for rule in rules:
+            if rule.regex.search(line):
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME,
+                    severity=rule.severity,
+                    title=rule.title,
+                    description=f"Potential {rule.category} vulnerability",
+                    file=rel_path,
+                    line=i + 1,
+                    snippet=line.strip()[:120],
+                    category=rule.category,
+                    rule_id=rule.id,
+                    confidence=rule.confidence,
+                ))
+    return findings
+
+
 def main():
     args = core.parse_common_args(sys.argv, "SAST Vulnerability Scanner")
     repo_path = args.repo_path

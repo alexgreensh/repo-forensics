@@ -397,6 +397,62 @@ def walk_repo(repo_path, ignore_patterns=None, skip_dirs=None, skip_lockfiles=Tr
             yield file_path, rel_path
 
 
+def walk_aux(repo_path, ignore_patterns=None, skip_dirs=None, *,
+             apply_size_cap=False, reach_pycache=False, skip_lockfiles=True):
+    """Auxiliary walk for the binary-reaching scanners (oversize, bytecode,
+    archive). Yields (file_path, rel_path).
+
+    Unlike walk_repo this NEVER skips files by BINARY_EXTENSIONS — these
+    scanners do their own byte-level inspection — and it makes two of
+    walk_repo's hard-coded behaviours explicit per call:
+
+    - apply_size_cap: when False (the default for these scanners), files larger
+      than MAX_FILE_SIZE_MB are STILL yielded. walk_repo skips them
+      unconditionally (the `os.path.getsize(...) > cap: continue` guard) so an
+      attacker pads a payload past 10 MB to fall off every scanner's radar. The
+      oversize/bytecode/archive scanners MUST see those files (the headline
+      blind spot in the origin audit).
+    - reach_pycache: when True, the __pycache__ directory is traversed. It is in
+      IGNORE_DIRS and therefore invisible to walk_repo; the bytecode scanner
+      needs it.
+
+    Symlinks are still refused (traversal safety), lockfiles still skipped by
+    default, and .forensicsignore patterns are still honoured.
+    """
+    if skip_dirs is None:
+        skip_dirs = set(IGNORE_DIRS)
+        if reach_pycache:
+            skip_dirs.discard('__pycache__')
+    if ignore_patterns is None:
+        ignore_patterns = load_ignore_patterns(repo_path)
+
+    for root, dirs, files in os.walk(repo_path, followlinks=False):
+        dirs[:] = [d for d in dirs if d not in skip_dirs]
+
+        for filename in files:
+            if skip_lockfiles and filename in LOCKFILES:
+                continue
+
+            file_path = os.path.join(root, filename)
+
+            # Skip symlinks to prevent traversal outside repo
+            if os.path.islink(file_path):
+                continue
+
+            if should_ignore(file_path, repo_path, ignore_patterns):
+                continue
+
+            if apply_size_cap:
+                try:
+                    if os.path.getsize(file_path) > MAX_FILE_SIZE_MB * 1024 * 1024:
+                        continue
+                except OSError:
+                    continue
+
+            rel_path = os.path.relpath(file_path, repo_path)
+            yield file_path, rel_path
+
+
 # --- Raw-content Trifecta Scanner ---
 # Rule 19 Lethal Trifecta relies on sub-scanner findings to detect the three
 # primitives (exec, network, credential read). In practice, sub-scanners miss
@@ -546,6 +602,58 @@ def detect_trifecta_raw(repo_path, ignore_patterns=None):
                 category="credential-read",
             ))
 
+    return findings
+
+
+def scan_text_trifecta(text, rel_path):
+    """Run the three Lethal-Trifecta primitive regexes over an in-memory text
+    blob (a disassembled .pyc listing, an extracted archive member) and return
+    one Finding per primitive that matches.
+
+    Unlike detect_trifecta_raw — which is path-based, gated to source
+    extensions, and emits only when ALL THREE primitives co-occur to feed Rule
+    19 — this helper:
+      * accepts text directly (no file on disk, no extension gate), and
+      * emits each matched primitive INDIVIDUALLY, because a single exec or
+        credential-read primitive hidden inside compiled bytecode or an archive
+        member is itself worth surfacing (that hiding is the whole attack).
+
+    Severity stays "high"; the caller re-labels title/category as needed (e.g.
+    bytecode-hidden-logic, archive-indirection). Comment-only lines are skipped,
+    matching detect_trifecta_raw, and only the first match per primitive is
+    recorded (bounded — early-exits once all three are seen).
+    """
+    findings = []
+    primitives = (
+        (_TRIFECTA_EXEC_RE, "Code execution primitive", "code-execution",
+         "Raw-content match for exec primitive (os.system, subprocess, eval, exec, shell=true)"),
+        (_TRIFECTA_NETWORK_RE, "Outbound network primitive", "exfiltration",
+         "Raw-content match for outbound network primitive (http.client, requests.post, urllib, socket, axios)"),
+        (_TRIFECTA_CREDENTIAL_RE, "Credential read primitive", "credential-read",
+         "Raw-content match for credential read primitive (.ssh/id_*, .aws/credentials, .netrc, GITHUB_TOKEN)"),
+    )
+    seen = [False, False, False]
+    # split('\n') (not splitlines()) so a payload cannot be hidden across a
+    # Unicode line-boundary char (\x0b,  , …) that splitlines would break
+    # but a single-line regex would otherwise see as one line on the file path.
+    for line_num, line in enumerate(text.split('\n'), start=1):
+        stripped = line.lstrip()
+        if stripped.startswith(('#', '//', ';;', '/*', '*')):
+            continue
+        if len(line) > MAX_LINE_LENGTH:
+            line = line[:MAX_LINE_LENGTH]
+        for idx, (regex, title, category, desc) in enumerate(primitives):
+            if not seen[idx] and regex.search(line):
+                seen[idx] = True
+                findings.append(Finding(
+                    scanner="trifecta_raw", severity="high",
+                    title=title, description=desc,
+                    file=rel_path, line=line_num,
+                    snippet=line.strip()[:120],
+                    category=category,
+                ))
+        if all(seen):
+            break
     return findings
 
 

@@ -70,7 +70,7 @@ Deep security auditing for repositories, AI agent skills, and MCP servers.
 - **process.env exposure detection** (v2.6.5): Flags console.log(process.env), JSON.stringify(process.env), and crash report env dumps
 - **Docker ARG secret detection** (v2.6.5): Catches secrets passed via ARG directives (permanently visible in docker history)
 - **1Password/Vault token detection** (v2.6.5): OP_CONNECT_TOKEN, ops_ service account tokens, hvs. Vault tokens
-- **20 scanners** with 41 correlation rules
+- **23 scanners** with 41 correlation rules
 
 ## How Detection Stays Fresh
 
@@ -119,12 +119,12 @@ Detection runs in layers, each with its own update cadence:
 
 ## Quick Start
 
-Full audit (all 20 scanners):
+Full audit (all 23 scanners):
 ```bash
 ./scripts/run_forensics.sh /path/to/repo
 ```
 
-Focused AI skill scan (10 scanners, faster):
+Focused AI skill scan (13 scanners, faster):
 ```bash
 ./scripts/run_forensics.sh /path/to/repo --skill-scan
 ```
@@ -175,6 +175,29 @@ JSON output for automation:
 | **ast_analysis** | Python AST: obfuscated exec chains, `__reduce__` backdoors, marshal/types bytecode, audit hook abuse, self-modification | full |
 | **binary** | Executables hidden as images/text files | full |
 | **git_forensics** | Time anomalies, GPG signature issues, identity inconsistencies | full |
+| **oversize** | Files padded past the 10 MB scan cap (head+tail window scan) and whitespace-inflation padding that hides a payload after a long whitespace run | skill + full |
+| **bytecode** | Python `.pyc` bytecode: dangerous-call primitives (os.system/subprocess/exec), embedded URLs / credential paths, orphan bytecode shipped without source. Unmarshalled in an isolated subprocess so hostile bytecode cannot crash the scan | skill + full |
+| **archive** | Payloads hidden inside `.zip/.docx/.xlsx/.pptx/.jar/.whl/.tar.*` and other archives. Members are read in memory (never written to disk) and run through the SAST / trifecta / secret / skill-threat detectors; bomb-, fan-out-, and tar-link-safe | skill + full |
+
+### Bypass coverage and known scope (archive / oversize / bytecode)
+
+These three scanners close the "hide the payload where the text reader never
+looks" bypass class (CSA / Trail of Bits, June 2026). Their coverage is precise,
+not total — what they do **not** yet reach is surfaced as a loud INFO finding
+(`unsupported-archive-type`, `opaque-archive`, `archive-scan-incomplete`,
+`unanalyzable-bytecode`) rather than implied as covered:
+
+- **Archives:** the listed zip- and tar-family formats only. `.7z .xz .zst .rar
+  .cab` and encrypted/password-protected members are reported as unsupported/
+  opaque, not inspected. Nested archives are opened to depth 2. A base64- or
+  otherwise-encoded payload **inside** an archive member is not decoded here
+  (encoded-blob rescan is deferred follow-up work).
+- **Bytecode:** Python `.pyc` only. Java `.class`, Node `.jsc`, and `.wasm`
+  carry compiled logic the source scanners also miss, but are out of scope for
+  this scanner.
+- **Oversize:** files over 10 MB are scanned by head+tail window (first + last
+  1 MB), so a payload buried in the exact middle of a multi-hundred-MB file may
+  be sampled rather than fully read.
 
 ## Dynamic Analysis (DAST)
 

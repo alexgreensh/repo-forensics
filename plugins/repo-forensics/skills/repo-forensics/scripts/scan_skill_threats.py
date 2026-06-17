@@ -578,15 +578,24 @@ def scan_hex_encoding(content, rel_path):
 
 
 def scan_file(file_path, rel_path):
-    """Run all 10 categories on a single file."""
+    """Run all categories on a single file (reads, then delegates to scan_content)."""
     if PACK_LOAD_ERROR:
         return [_pack_load_finding(rel_path)]
-
     try:
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             content = f.read()
     except (OSError, UnicodeDecodeError):
         return []
+    return scan_content(content, rel_path)
+
+
+def scan_content(content, rel_path):
+    """Run all categories over already-loaded text — an extracted archive
+    member, a decoded blob. The KTD7 in-memory entry point scan_archive recurses
+    so prompt-injection / unicode-smuggling / exfil / IOC detection reaches
+    inside archives (the embedded-instruction-in-word/document.xml case)."""
+    if PACK_LOAD_ERROR:
+        return [_pack_load_finding(rel_path)]
 
     findings = []
 
