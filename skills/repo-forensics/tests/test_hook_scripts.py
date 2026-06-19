@@ -1,12 +1,16 @@
 import os
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 NUDGE_SCRIPT = REPO_ROOT / "hooks" / "first-run-nudge.sh"
 PRE_SCAN_WRAPPER = REPO_ROOT / "hooks" / "run_pre_scan.sh"
+SESSION_SCAN_WRAPPER = REPO_ROOT / "hooks" / "run_session_scan.sh"
+INSTALL_REFRESH_DAEMON = REPO_ROOT / "hooks" / "install_refresh_daemon.sh"
+ENSURE_REFRESH_DAEMON = REPO_ROOT / "hooks" / "ensure_refresh_daemon.sh"
 
 
 def _install_nudge_script(cache_root):
@@ -181,3 +185,104 @@ def test_pre_scan_wrapper_survives_stripped_path_and_preserves_block_exit():
 
     assert result.returncode == 2
     assert '"decision": "block"' in result.stdout
+
+
+def test_session_wrapper_bootstraps_refresher_before_scan(tmp_path):
+    plugin_root = tmp_path / "plugin"
+    hooks = plugin_root / "hooks"
+    scripts = plugin_root / "skills" / "repo-forensics" / "scripts"
+    hooks.mkdir(parents=True)
+    scripts.mkdir(parents=True)
+    shutil.copy2(SESSION_SCAN_WRAPPER, hooks / "run_session_scan.sh")
+    (scripts / "session_scan.py").write_text("# scanner placeholder\n")
+    (hooks / "ensure_refresh_daemon.sh").write_text(
+        '#!/bin/bash\ntouch "$HOME/refresher-ensured"\n'
+    )
+    (hooks / "python-launcher.sh").write_text(
+        '#!/bin/bash\n[ -f "$HOME/refresher-ensured" ] || exit 9\nexit 0\n'
+    )
+    for path in hooks.iterdir():
+        path.chmod(0o755)
+    env = {
+        **os.environ,
+        "HOME": str(tmp_path),
+        "CLAUDE_PLUGIN_ROOT": str(plugin_root),
+    }
+
+    result = _run_script(hooks / "run_session_scan.sh", env)
+
+    assert result.returncode == 0
+    assert (tmp_path / "refresher-ensured").is_file()
+
+
+def test_refresh_installer_prefers_its_own_plugin_over_claude_cache(tmp_path):
+    home = tmp_path / "home"
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    home.mkdir()
+    stale = (
+        home / ".claude" / "plugins" / "cache" / "market" /
+        "repo-forensics" / "99.0.0" / "skills" / "repo-forensics" / "scripts"
+    )
+    stale.mkdir(parents=True)
+    (stale / "refresh_threat_dbs.py").write_text("# stale\n")
+    commands = {
+        "uname": "#!/bin/sh\necho Darwin\n",
+        "plutil": "#!/bin/sh\nexit 0\n",
+        "launchctl": "#!/bin/sh\nexit 0\n",
+    }
+    for name, body in commands.items():
+        command = fake_bin / name
+        command.write_text(body)
+        command.chmod(0o755)
+    env = {
+        **os.environ,
+        "HOME": str(home),
+        "PATH": f"{fake_bin}:/usr/bin:/bin:/usr/sbin:/sbin",
+    }
+
+    result = _run_script(INSTALL_REFRESH_DAEMON, env)
+
+    assert result.returncode == 0, result.stderr
+    plist = (
+        home / "Library" / "LaunchAgents" /
+        "com.alexgreenshpun.repo-forensics-refresh.plist"
+    ).read_text()
+    expected = REPO_ROOT / "skills" / "repo-forensics" / "scripts" / "refresh_threat_dbs.py"
+    assert str(expected) in plist
+    assert str(stale / "refresh_threat_dbs.py") not in plist
+
+
+def test_refresh_ensure_uses_session_triggered_fallback_on_linux(tmp_path):
+    home = tmp_path / "home"
+    plugin_root = tmp_path / "plugin"
+    hooks = plugin_root / "hooks"
+    scripts = plugin_root / "skills" / "repo-forensics" / "scripts"
+    fake_bin = tmp_path / "bin"
+    home.mkdir()
+    hooks.mkdir(parents=True)
+    scripts.mkdir(parents=True)
+    fake_bin.mkdir()
+    shutil.copy2(ENSURE_REFRESH_DAEMON, hooks / "ensure_refresh_daemon.sh")
+    (scripts / "refresh_threat_dbs.py").write_text("# refresh placeholder\n")
+    (hooks / "python-launcher.sh").write_text(
+        '#!/bin/bash\ntouch "$HOME/background-refresh-started"\n'
+    )
+    (fake_bin / "uname").write_text("#!/bin/sh\necho Linux\n")
+    for path in (hooks / "ensure_refresh_daemon.sh", hooks / "python-launcher.sh", fake_bin / "uname"):
+        path.chmod(0o755)
+    env = {
+        **os.environ,
+        "HOME": str(home),
+        "CLAUDE_PLUGIN_ROOT": str(plugin_root),
+        "PATH": f"{fake_bin}:/usr/bin:/bin",
+    }
+
+    result = _run_script(hooks / "ensure_refresh_daemon.sh", env)
+    deadline = time.time() + 2
+    marker = home / "background-refresh-started"
+    while not marker.exists() and time.time() < deadline:
+        time.sleep(0.02)
+
+    assert result.returncode == 0, result.stderr
+    assert marker.is_file()

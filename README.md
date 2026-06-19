@@ -63,9 +63,13 @@ Hooks auto-wire on install. Every `git clone`, `npm install`, `pip install` is s
 Install the plugin via the Codex marketplace. Hooks auto-wire from `plugin.json`. Same three hooks as Claude Code: PreToolUse (IOC gate), PostToolUse (auto-scan), SessionStart (security scan).
 
 ```bash
-codex plugin marketplace add .
+codex plugin marketplace add alexgreensh/repo-forensics --ref main
 codex plugin add repo-forensics@alexgreensh-repo-forensics
 ```
+
+Restart Codex and trust the four Repo Forensics hook handlers when prompted.
+The first trusted SessionStart automatically bootstraps daily threat-feed
+refresh; no separate cron setup is required.
 
 For a local checkout/manual wire-up:
 
@@ -166,7 +170,7 @@ Once installed as a plugin, repo-forensics runs automatically in the background.
 |------|---------|-------------|
 | **PreToolUse** | Before any `npm install`, `pip install`, shell command | Blocks known-malicious packages before execution. IOC-only, <10ms. |
 | **PostToolUse** | After `git clone`, `git pull`, `npm install`, `brew upgrade`, etc. | Full 25-scanner audit on the cloned/installed code. |
-| **SessionStart** | Every new session | Detects changed plugins, skills, and MCP servers since last session. Refreshes threat databases daily. |
+| **SessionStart** | Every new session | Detects changed plugins, skills, and MCP servers since last session. Bootstraps/repairs daily IOC, CISA KEV, and signed rule-pack refresh. |
 
 **Platform support:**
 
@@ -178,6 +182,12 @@ Once installed as a plugin, repo-forensics runs automatically in the background.
 | Cursor / NanoClaw / CLI | N/A (no plugin hook system) | Use manual `/repo-forensics` invocation |
 
 Claude Code v2.1.160+ may ask for an extra acceptEdits confirmation before writing package-manager and dev-environment config files such as `.npmrc`, `.yarnrc*`, `bunfig.toml`, `.bazelrc`, `.pre-commit-config.yaml`, and `.devcontainer/`. Repo Forensics scans these files normally; the extra prompt is Claude Code's own write-safety layer.
+
+Threat-feed refresh is self-healing after hook trust. On macOS, SessionStart
+installs or repairs a per-user LaunchAgent. On Linux and Windows, it starts a
+detached refresh when the last fully successful update is older than 24 hours.
+The freshness marker is updated only after IOC, CISA KEV, and signed rule-pack
+feeds all succeed; failed or partial updates remain visible as stale.
 
 ---
 
@@ -239,7 +249,7 @@ Scanning never requires network access. The feed is a freshness layer on top of 
 
 ## Battle-Tested Against Real Attacks
 
-1,838 tests across 40+ test files. Not synthetic toy examples: detection patterns built from real supply chain campaigns that hit production systems.
+1,844 tests across 40+ test files. Not synthetic toy examples: detection patterns built from real supply chain campaigns that hit production systems.
 
 **Named attack campaigns in the IOC database:**
 
@@ -265,7 +275,7 @@ Scanning never requires network access. The feed is a freshness layer on top of 
 
 Every campaign above has version-pinned IOCs in `compromised_versions.json`, detection rules in the lifecycle and dependency scanners, and correlation rules for compound attack patterns.
 
-**The tests are safe to run.** All 1,838 tests use synthetic fixtures in temporary directories. No real malware is downloaded or executed. Pattern matching runs against fake package.json files containing attack signatures, the same way antivirus software tests against EICAR strings.
+**The tests are safe to run.** All 1,844 tests use synthetic fixtures in temporary directories. No real malware is downloaded or executed. Pattern matching runs against fake package.json files containing attack signatures, the same way antivirus software tests against EICAR strings.
 
 ---
 
@@ -422,7 +432,7 @@ Every pinned dependency is checked against live CVE databases. CISA KEV matches 
 
 - **OSV:** Every `(ecosystem, package, version)` queried against `api.osv.dev`. Matches emit CVE findings with CVSS-mapped severity.
 - **CISA KEV:** Cross-referenced against the Known Exploited Vulnerabilities catalog. In-the-wild exploitation = CRITICAL.
-- **Caches:** KEV catalog cached 24h. Per-package OSV queries cached 24h (LRU-capped, mode 0o600).
+- **Caches:** KEV catalog cached 24h. Per-package OSV queries cached 24h (LRU-capped, mode 0o600). SessionStart automatically bootstraps background IOC + KEV + signed rule-pack refresh after hook trust.
 - **Offline:** `--offline` uses cached data. `--no-vulns` disables. `--update-vulns` refreshes KEV before scanning.
 - **Hardening:** Hardcoded feed URLs (no SSRF), HTTPS-only, response size caps, fail-closed CVE regex, PEP 503 canonical names.
 
@@ -560,7 +570,7 @@ Exit codes: `0` = clean, `1` = warn, `2` = block merge.
 | **IOC auto-update** | `--update-iocs` pulls latest C2 IPs, malicious domains, known-bad packages |
 | **Installation verification** | `--verify-install` checks repo-forensics itself for tampering |
 | **Manifest drift** | Declared vs actual imports, phantom deps, runtime installs |
-| **1,838 pytest tests** | Full coverage across 40+ test files |
+| **1,844 pytest tests** | Full coverage across 40+ test files |
 
 </details>
 

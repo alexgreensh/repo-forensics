@@ -69,6 +69,17 @@ def _load_refresh_module(monkeypatch):
     return mod
 
 
+def _load_refresh_module_for_platform(monkeypatch, platform):
+    monkeypatch.setattr(sys, "platform", platform)
+    path = os.path.join(_SCRIPTS_DIR, "refresh_threat_dbs.py")
+    spec = importlib.util.spec_from_file_location(
+        f"refresh_threat_dbs_{platform}_test", path
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 class _FakeFeed:
     """Stand-in for the rulepack_feed module loaded by the refresher."""
     def __init__(self, result):
@@ -92,6 +103,7 @@ def _stub_feed_import(mod, monkeypatch, fake):
             return fake
         return real(name, path)
     monkeypatch.setattr(mod, "_import_module_by_path", _patched)
+    monkeypatch.setattr(mod, "_log", lambda message: None)
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="refresh uses fcntl (POSIX)")
@@ -125,9 +137,54 @@ def test_refresh_main_calls_all_three(monkeypatch, tmp_path):
     monkeypatch.setattr(mod, "_resolve_scripts_dir", lambda: _SCRIPTS_DIR)
     monkeypatch.setattr(mod, "_acquire_lock", lambda: 999)
     monkeypatch.setattr(mod, "_write_marker", lambda forensics_core=None: None)
+    monkeypatch.setattr(mod, "_log", lambda message: None)
     # Neutralize lock teardown (fd 999 is fake).
     import fcntl as _fcntl
     monkeypatch.setattr(_fcntl, "flock", lambda *a, **k: None)
     monkeypatch.setattr(os, "close", lambda fd: None)
     mod.main()
     assert seen == {"ioc": 1, "kev": 1, "rp": 1}
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX lock teardown fixture")
+def test_refresh_main_does_not_mark_partial_failure_fresh(monkeypatch, tmp_path):
+    mod = _load_refresh_module(monkeypatch)
+    marker_writes = []
+    monkeypatch.setattr(mod, "_refresh_iocs", lambda d: True)
+    monkeypatch.setattr(mod, "_refresh_kev", lambda d: False)
+    monkeypatch.setattr(mod, "_refresh_rulepacks", lambda d: True)
+    monkeypatch.setattr(mod, "_resolve_scripts_dir", lambda: _SCRIPTS_DIR)
+    monkeypatch.setattr(mod, "_acquire_lock", lambda: 999)
+    monkeypatch.setattr(
+        mod, "_write_marker", lambda forensics_core=None: marker_writes.append(True)
+    )
+    monkeypatch.setattr(mod, "_log", lambda message: None)
+    import fcntl as _fcntl
+    monkeypatch.setattr(_fcntl, "flock", lambda *a, **k: None)
+    monkeypatch.setattr(os, "close", lambda fd: None)
+
+    mod.main()
+
+    assert marker_writes == []
+
+
+def test_refresh_resolver_prefers_invoked_plugin_over_stale_claude_cache(
+        monkeypatch, tmp_path):
+    mod = _load_refresh_module(monkeypatch)
+    stale = (
+        tmp_path / ".claude" / "plugins" / "cache" / "market" /
+        "repo-forensics" / "99.0.0" / "skills" / "repo-forensics" / "scripts"
+    )
+    stale.mkdir(parents=True)
+    for name in ("ioc_manager.py", "forensics_core.py", "vuln_feed.py"):
+        (stale / name).write_text("# stale cache\n")
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    resolved = mod._resolve_scripts_dir()
+
+    assert resolved == os.path.dirname(os.path.abspath(mod.__file__))
+
+
+def test_refresh_module_loads_on_linux(monkeypatch):
+    mod = _load_refresh_module_for_platform(monkeypatch, "linux")
+    assert callable(mod.main)

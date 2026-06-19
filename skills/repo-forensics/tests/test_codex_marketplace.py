@@ -20,6 +20,7 @@ def test_codex_marketplace_catalog_points_to_real_nested_plugin():
     assert (nested / ".codex-plugin" / "plugin.json").is_file()
     assert (nested / "hooks" / "hooks.json").is_file()
     assert (nested / "hooks" / "python-launcher.sh").is_file()
+    assert (nested / "hooks" / "ensure_refresh_daemon.sh").is_file()
     assert (nested / "skills" / "repo-forensics" / "SKILL.md").is_file()
     assert (nested / "skills" / "forensify" / "SKILL.md").is_file()
     assert not list(nested.rglob("__pycache__"))
@@ -94,6 +95,7 @@ def test_codex_cli_can_discover_and_install_local_marketplace(tmp_path):
     assert {"PreToolUse", "PostToolUse", "SessionStart"} <= set(hook_data["hooks"])
 
     installed_root = installed_hooks[0].parents[1]
+    assert (installed_root / "hooks" / "ensure_refresh_daemon.sh").is_file()
     verify = subprocess.run(
         [
             "python3",

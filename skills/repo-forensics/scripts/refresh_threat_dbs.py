@@ -2,13 +2,13 @@
 """
 refresh_threat_dbs.py - Daily background refresher for repo-forensics threat DBs.
 
-Designed to be invoked by launchd once per day, NEVER from inside a Claude Code
-session. Refreshes IOC + KEV caches in the background so SessionStart hooks can
-run in milliseconds instead of waiting on network calls.
+Designed to run in the background once per day: through launchd on macOS or a
+detached SessionStart kick on other platforms. Refreshes IOC + KEV caches
+without making SessionStart wait on network calls.
 
 Safety properties (post-review hardening):
   - Lock file in ~/.cache (NOT /tmp) with O_NOFOLLOW (no symlink follow).
-  - Single-instance via fcntl.flock (LOCK_EX | LOCK_NB).
+  - Single-instance via fcntl.flock or msvcrt.locking.
   - Hard wall-clock cap via SIGALRM + socket.setdefaulttimeout (defense-in-depth).
   - Atomic writes: ioc_manager and vuln_feed must use temp+rename internally.
   - Modules loaded by absolute path via importlib (sys.path NOT polluted).
@@ -29,11 +29,15 @@ import socket
 import sys
 import time
 
-# macOS-only by design (launchd-invoked). Bail cleanly elsewhere.
-if sys.platform != "darwin":
-    sys.exit(0)
+try:
+    import fcntl  # POSIX
+except ImportError:  # pragma: no cover - exercised on Windows
+    fcntl = None
 
-import fcntl  # POSIX-only; macOS guaranteed by guard above
+try:
+    import msvcrt  # Windows
+except ImportError:  # pragma: no cover - POSIX
+    msvcrt = None
 
 # ---------------------------------------------------------------------------
 # Hard limits
@@ -136,7 +140,15 @@ def _acquire_lock():
         return None
 
     try:
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if fcntl is not None:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        elif msvcrt is not None:  # pragma: no cover - Windows
+            if os.fstat(fd).st_size == 0:
+                os.write(fd, b"\0")
+            os.lseek(fd, 0, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+        else:
+            raise OSError(errno.ENOSYS, "no supported file-lock API")
         return fd
     except OSError as e:
         if e.errno in (errno.EWOULDBLOCK, errno.EAGAIN):
@@ -148,6 +160,21 @@ def _acquire_lock():
         except OSError:
             pass
         return None
+
+
+def _release_lock(fd):
+    try:
+        if fcntl is not None:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        elif msvcrt is not None:  # pragma: no cover - Windows
+            os.lseek(fd, 0, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+    except OSError:
+        pass
+    try:
+        os.close(fd)
+    except OSError:
+        pass
 
 
 def _write_marker(forensics_core=None):
@@ -175,16 +202,26 @@ def _resolve_scripts_dir():
     """Find scripts dir without polluting sys.path.
 
     Resolution order:
-      1. Newest installed version under ~/.claude/plugins/cache that has all
-         required siblings. This wins so a stale launchd plist registered
-         against an old version still picks up newly-installed code after
-         the user runs `claude /plugins update repo-forensics`.
-      2. This script's own directory if it has the expected siblings —
-         covers source-repo dogfood and standalone-copy installs.
+      1. This script's own plugin directory. The SessionStart ensure hook
+         repairs scheduler paths after plugin upgrades, so crossing into a
+         different agent's cache is both unnecessary and unsafe.
+      2. Newest installed Claude or Codex cache only as a recovery fallback
+         for legacy scheduler entries whose original version was removed.
     """
+    here = os.path.dirname(os.path.abspath(__file__))
+    if (os.path.isfile(os.path.join(here, "ioc_manager.py"))
+            and os.path.isfile(os.path.join(here, "forensics_core.py"))
+            and os.path.isfile(os.path.join(here, "vuln_feed.py"))):
+        return here
+
     home = os.path.expanduser("~")
-    plugin_root = os.path.join(home, ".claude", "plugins", "cache")
-    if os.path.isdir(plugin_root):
+    plugin_roots = [
+        os.path.join(home, ".codex", "plugins", "cache"),
+        os.path.join(home, ".claude", "plugins", "cache"),
+    ]
+    for plugin_root in plugin_roots:
+        if not os.path.isdir(plugin_root):
+            continue
         candidates = []
         try:
             for marketplace in os.listdir(plugin_root):
@@ -209,11 +246,6 @@ def _resolve_scripts_dir():
         if candidates:
             candidates.sort(reverse=True)
             return candidates[0][1]
-
-    here = os.path.dirname(os.path.abspath(__file__))
-    if (os.path.isfile(os.path.join(here, "ioc_manager.py"))
-            and os.path.isfile(os.path.join(here, "forensics_core.py"))):
-        return here
     return None
 
 
@@ -272,8 +304,8 @@ def _refresh_rulepacks(scripts_dir):
     """Fetch + verify + cache the signed rule-pack bundle (U6). Returns True on
     success. Runs WITHIN the existing 60s SIGALRM hard cap and the single-
     instance lock — its self-test step reuses rule_loader's save/restore SIGALRM
-    so it never clobbers our cap. Cross-platform updater (no macOS assumptions),
-    though this refresher itself is macOS-launchd-only."""
+    so it never clobbers our cap. Cross-platform updater with no scheduler
+    assumptions."""
     try:
         feed_path = os.path.join(scripts_dir, "rulepack_feed.py")
         rulepack_feed = _import_module_by_path("rulepack_feed", feed_path)
@@ -324,17 +356,13 @@ def main():
         ok_ioc = _refresh_iocs(scripts_dir)
         ok_kev = _refresh_kev(scripts_dir)
         ok_rulepacks = _refresh_rulepacks(scripts_dir)
-        _write_marker(forensics_core=forensics_core)
+        if ok_ioc and ok_kev and ok_rulepacks:
+            _write_marker(forensics_core=forensics_core)
+        else:
+            _log("refresh incomplete — success marker not updated")
         _log(f"refresh done (ioc={ok_ioc}, kev={ok_kev}, rulepacks={ok_rulepacks})")
     finally:
-        try:
-            fcntl.flock(lock_fd, fcntl.LOCK_UN)
-        except OSError:
-            pass
-        try:
-            os.close(lock_fd)
-        except OSError:
-            pass
+        _release_lock(lock_fd)
         try:
             signal.alarm(0)
         except (AttributeError, OSError):

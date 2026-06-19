@@ -2,6 +2,25 @@
 
 All notable changes to repo-forensics. Versions follow semver.
 
+## [2.11.4] - 2026-06-20
+
+### Fixed — threat intelligence refresh self-healing
+
+- SessionStart now bootstraps or repairs background threat-feed refresh
+  automatically after the user trusts the plugin hook. macOS uses a daily
+  LaunchAgent; Linux and Windows use a detached, once-daily session kick.
+- Updater resolution now prefers the plugin copy that invoked it, preventing a
+  Codex install from silently running older refresh code from a stale Claude
+  plugin cache. Versioned scheduler paths repair themselves on the next session.
+- The successful-refresh marker advances only when IOC, CISA KEV, and signed
+  rule-pack updates all succeed. Partial/network failures remain visibly stale
+  instead of creating a false-fresh state.
+- The refresher now runs cross-platform with POSIX `flock` or Windows
+  `msvcrt.locking`, while preserving the non-blocking SessionStart path.
+- Added regression coverage for bootstrap ordering, source resolution,
+  partial-failure truthfulness, Linux loading, cross-platform fallback, and
+  Codex marketplace packaging.
+
 ## [2.11.3] - 2026-06-20
 
 ### Fixed

@@ -38,34 +38,23 @@ if [ -z "$PYTHON_BIN" ]; then
     exit 1
 fi
 
-# 2) Find the newest installed scripts dir under the plugin cache
-PLUGIN_ROOT="$HOME/.claude/plugins/cache"
+# 2) Bind the service to the plugin copy that invoked this installer. A global
+# cache search used to prefer an unrelated/stale Claude install even when Codex
+# was the active plugin. SessionStart re-runs the ensure step after upgrades, so
+# a versioned cache path is repaired automatically.
+SCRIPT_DIR="$(dirname "$0")"
+HERE="$(cd "$SCRIPT_DIR" && pwd)"
+CANDIDATE="$HERE/../skills/repo-forensics/scripts/refresh_threat_dbs.py"
 SCRIPT_PATH=""
-if [ -d "$PLUGIN_ROOT" ]; then
-    # Use mtime not version-sort so this matches the Python resolver's selection.
-    while IFS= read -r -d '' f; do
-        SCRIPT_PATH="$f"
-    done < <(find "$PLUGIN_ROOT" -maxdepth 6 -type f \
-        -path "*/repo-forensics/*/skills/repo-forensics/scripts/refresh_threat_dbs.py" \
-        -print0 2>/dev/null | xargs -0 stat -f '%m %N' 2>/dev/null \
-        | sort -n | awk '{$1=""; sub(/^ /, ""); print}' | tr '\n' '\0')
-fi
-
-# Fallback: relative to this script (source-repo dogfood)
-if [ -z "$SCRIPT_PATH" ]; then
-    SCRIPT_DIR="$(dirname "$0")"
-    HERE="$(cd "$SCRIPT_DIR" && pwd)"
-    CANDIDATE="$HERE/../skills/repo-forensics/scripts/refresh_threat_dbs.py"
-    if [ -f "$CANDIDATE" ]; then
-        CANDIDATE_DIR="$(dirname "$CANDIDATE")"
-        CANDIDATE_BASE="$(basename "$CANDIDATE")"
-        SCRIPT_PATH="$(cd "$CANDIDATE_DIR" && pwd)/$CANDIDATE_BASE"
-    fi
+if [ -f "$CANDIDATE" ]; then
+    CANDIDATE_DIR="$(dirname "$CANDIDATE")"
+    CANDIDATE_BASE="$(basename "$CANDIDATE")"
+    SCRIPT_PATH="$(cd "$CANDIDATE_DIR" && pwd)/$CANDIDATE_BASE"
 fi
 
 if [ -z "$SCRIPT_PATH" ] || [ ! -f "$SCRIPT_PATH" ]; then
     echo "[install] ERROR: refresh_threat_dbs.py not found" >&2
-    echo "[install] Searched: $PLUGIN_ROOT (newest by mtime)" >&2
+    echo "[install] Expected relative to: $HERE" >&2
     exit 1
 fi
 

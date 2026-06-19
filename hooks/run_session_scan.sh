@@ -9,6 +9,13 @@ set -u
 
 SCRIPT="${CLAUDE_PLUGIN_ROOT}/skills/repo-forensics/scripts/session_scan.py"
 LAUNCHER="${CLAUDE_PLUGIN_ROOT}/hooks/python-launcher.sh"
+ENSURE_REFRESH="${CLAUDE_PLUGIN_ROOT}/hooks/ensure_refresh_daemon.sh"
+
+# Bootstrap or repair the background updater before checking freshness. This
+# stays silent and never blocks SessionStart if the platform scheduler fails.
+if [ -f "$ENSURE_REFRESH" ]; then
+    "${BASH:-/bin/bash}" "$ENSURE_REFRESH" || true
+fi
 
 if [ ! -f "$SCRIPT" ]; then
     echo "[repo-forensics] WARNING: session_scan.py not found at: $SCRIPT"

@@ -31,7 +31,7 @@
     "scripts/ioc_manager.py": "a90e8c3e546c2e5800ae3196e2dfec10873364908f7f5235d869de4a8cd71ddc",
     "scripts/parse_pnpm_lock.py": "720f084e11cd759ab453bdfa161950111a49455ff2c6ba55ef5a9c3e32161f0c",
     "scripts/pre_scan.py": "8503b0e880ae57c7092b8897ce0de583c52685ae2d8604905b724cdd50088dd6",
-    "scripts/refresh_threat_dbs.py": "f956f59c6abb60c1be775dd8f4d05196fd7d146e353fcb7cf1b6fa5575586432",
+    "scripts/refresh_threat_dbs.py": "1728c2a6402f8c89ef9181149f4a31e30ce0ec0313df98b8010db9e76732c588",
     "scripts/rule_loader.py": "eff4c3962c6f17b52abb5b2aa3b6abcb5871c9d7c5e15cc5e9da563887cbe645",
     "scripts/rulepack_feed.py": "94e472fd845cfb466e5fac7959be1a35ba4f736d6be20f6e78e03087a0c4800b",
     "scripts/run_forensics.sh": "d61ef83d58e00d95bf6f8cc2051484b62b19bf9aeb42d7b606c8249f2cc3d8dc",
@@ -61,7 +61,7 @@
     "scripts/scan_secrets.py": "e7938ba74fab6509a24b56892c8cf3e496a58b3add7096982cfb6fe57a99c1e5",
     "scripts/scan_skill_threats.py": "a10f2087b79bedee5d7df6c6cc4358db7a8ed2d8295904d33e4955e7515191c7",
     "scripts/scan_splitstream.py": "95f8b56fcfd6d3900af823269e9a6e8ef1c7a0d2b417bd1936bf0f0293175a6e",
-    "scripts/session_scan.py": "f970d3f8e62b1e1df9a4bd0ed602eafe03fafcad4809ba79ba6db34b978a87ad",
+    "scripts/session_scan.py": "97b017decba971986f6d7aa64606fdfad083031168d71fcb16f925f369841e24",
     "scripts/verify_install.py": "deac3cd2726bec4a85ddf95a2e1f31d4cc5701213514cd46701efe7df8a92b73",
     "scripts/vuln_feed.py": "4f200be10655b5997796aeabef1cc7d4e6da9d5429975bfbe3f16a8e19d21031"
   },
@@ -70,20 +70,21 @@
   },
   "symlink_count": 1,
   "repo_hooks": {
+    "hooks/ensure_refresh_daemon.sh": "9cd1f854c0aa55f9148cf9aeec36b16a4e16c79f75a56a967a11e5073c41784e",
     "hooks/first-run-nudge.sh": "75e223642d0266d7fd097a1b572775a61084245c1ba00558549930ef56776126",
     "hooks/hooks.json": "e209ede63b2f5be5af09cea75b5504e542ebfa0f3f798c50bbf18c1c4d6f94a4",
-    "hooks/install_refresh_daemon.sh": "c93f1cde66b54482c61cb99bf2c540a0682ac19b26ec60d02d5dcfea1ed3b008",
+    "hooks/install_refresh_daemon.sh": "f502f25a39bb4a0e09046b017d275eb9dae240a42da7ce45e345348b72fd2431",
     "hooks/python-launcher.sh": "c7c344b05c1134a464b10a95f57ad7ae8368c04f34150773dc5877d7c2aaafa5",
     "hooks/run_auto_scan.sh": "8acb8c4e6eb2a75a1c00d46a4aaca49bd75847f9f251803c89cbe24c6f10279c",
     "hooks/run_pre_scan.sh": "fad2e9a784e0b8d7ee2ea8b1c0566e07e897e5a5a1edaf36f57747e456b68c5f",
-    "hooks/run_session_scan.sh": "55e5acae7427b132b5c4184c59de5ff3858c28abf4c73e61f75ac6090ba84cda",
+    "hooks/run_session_scan.sh": "72792f801bfe3f21651224e64e4eb4eb024d99a94369be26c4a05f723949b2e7",
     "hooks/uninstall_refresh_daemon.sh": "a19eac4c77191815e9671d1adb8af1cb04ac22eef5a1f0897d6f31e0d9e57121"
   },
-  "hook_count": 8,
+  "hook_count": 9,
   "repo_manifests": {
-    ".claude-plugin/marketplace.json": "0214819e40aa11108fd7832b5c40df572bc6377a5a3ee11a187eaee84080e8b7",
-    ".claude-plugin/plugin.json": "bfbf9f929c227fbd3568c85777df68fb98ffee0d7b02d4b48843951ca4dd1ff6",
-    ".codex-plugin/plugin.json": "0e5b25851bbef36edf8741131d2de181999b7a78472c8ceae7d6c92dffff2a42"
+    ".claude-plugin/marketplace.json": "047fe800a3839ad4608e41c3adee807ed5f168f94848ad9a5638fa1de8cf09a6",
+    ".claude-plugin/plugin.json": "7490052a223d1d8981fad841f0391774f76415bdef361ee0235afaebba006203",
+    ".codex-plugin/plugin.json": "581126579935000cabbb7ebbd16fc6ef7d354fa2875600eff584f582c5e4d9b5"
   },
   "manifest_count": 3,
   "repo_source_manifests": {

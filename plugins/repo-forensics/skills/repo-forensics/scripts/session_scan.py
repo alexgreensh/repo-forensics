@@ -3,13 +3,12 @@
 session_scan.py - SessionStart hook handler for repo-forensics v2.
 Runs once when Claude Code starts a session. Three steps:
 
-  1. Refresh threat databases if stale (IOC + KEV, once per day)
+  1. Check threat database freshness (the hook wrapper schedules refreshes)
   2. Detect changes in plugins/skills/MCP servers since last session
   3. Scan changed items against fresh databases
 
 Design constraints:
-  - Step 1 makes network calls ONLY if caches are >24h old (once/day).
-    Network timeout is 10s per source. Failure = use stale cache.
+  - Step 1 is read-only. Network refresh runs in the background once/day.
   - Steps 2+3 are local-only (zero network calls).
   - Total timeout budget: 15s (set in hooks.json).
   - Silent when nothing changed. User sees output only when relevant.
@@ -45,7 +44,7 @@ BASELINE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "repo-forensics")
 BASELINE_FILE = os.path.join(BASELINE_DIR, "session-baseline.json")
 BASELINE_VERSION = 2
 
-# Threat DB freshness check (refresh moved to refresh_threat_dbs.py launchd job)
+# Threat DB freshness check (refresh moved to background scheduler/session kick)
 LAST_RUN_MARKER = os.path.join(BASELINE_DIR, ".last-refresh")
 STALE_WARN_DAYS = 7
 
@@ -78,7 +77,7 @@ ENV_KILL_SWITCH = "REPO_FORENSICS_SESSION_SCAN"
 
 # ========================================================================
 # Step 1: Read-only threat DB freshness check
-# (Network-based refresh moved to refresh_threat_dbs.py launchd job to keep
+# (Network-based refresh moved to refresh_threat_dbs.py background job to keep
 #  SessionStart latency under 2s.)
 # ========================================================================
 
@@ -92,7 +91,7 @@ def check_threat_db_freshness():
       - "stale_marker": daemon ran recently in the past but hasn't refreshed
         in over STALE_WARN_DAYS days.
       - "daemon_missing": IOC or KEV cache exists but no refresh marker —
-        daemon is likely not installed.
+        the background refresher has not completed successfully.
     """
     warnings = []
     ioc_path = os.path.join(BASELINE_DIR, ".forensics-iocs.json")
@@ -113,15 +112,15 @@ def check_threat_db_freshness():
         if os.path.isfile(ioc_path) or os.path.isfile(kev_path):
             warnings.append(ThreatDBWarning(
                 kind="daemon_missing",
-                detail="caches exist but no refresh marker found",
-                remediation="bash hooks/install_refresh_daemon.sh",
+                detail="caches exist but no successful refresh marker found",
+                remediation="start a new session or run refresh_threat_dbs.py",
             ))
     return warnings
 
 
 # Compatibility alias — callers expect this name
 def refresh_threat_databases():
-    """Backwards-compat wrapper. Network refresh now in launchd daemon.
+    """Backwards-compat wrapper. Network refresh now runs in the background.
     This is now a fast read-only freshness check (<10ms)."""
     return check_threat_db_freshness()
 
