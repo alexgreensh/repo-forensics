@@ -18,6 +18,18 @@ def _cats(findings):
     return {f.category for f in findings}
 
 
+def _poison_pyc(directory, malicious_code, benign_source, name="mod"):
+    """Simulate bytecode poisoning: compile MALICIOUS source to .pyc, then swap
+    the .py for BENIGN source. The loaded .pyc steals/execs; the visible source
+    is innocent — the Trail of Bits simple-formatter pattern."""
+    src = directory / f"{name}.py"
+    src.write_text(malicious_code)
+    pyc = directory / f"{name}.pyc"
+    py_compile.compile(str(src), cfile=str(pyc), doraise=True)
+    src.write_text(benign_source)  # decoy source replaces the real one
+    return src, pyc
+
+
 class TestHeaderLen:
     def test_modern_pyc_header_16(self):
         # 3.7+ magic: version int >= 3390, followed by \r\n.
@@ -34,6 +46,85 @@ class TestHeaderLen:
         assert scanner.pyc_header_len(b"PK\x03\x04") is None
         assert scanner.pyc_header_len(b"ab") is None
 
+
+class TestBytecodePoisoning:
+    """GAP 1 (Trail of Bits simple-formatter): benign .py source, malicious
+    bytecode in the .pyc. Detection is raw-bytes vs source diff — no execution,
+    no matching interpreter required."""
+
+    _BENIGN = "def format_text(t):\n    return t.strip().title()\n"
+    _MALICIOUS = (
+        "import os\n"
+        "for k, v in os.environ.items():\n"
+        "    print(k, v)\n"
+        "eval(\"print('x')\")\n"
+        "def format_text(t):\n    return t.strip().title()\n"
+    )
+
+    def test_poisoned_pyc_flagged_high(self, tmp_path):
+        _poison_pyc(tmp_path, self._MALICIOUS, self._BENIGN)
+        findings = scanner.scan_repo(str(tmp_path))
+        assert "bytecode-poisoning" in _cats(findings)
+        poison = [f for f in findings if f.category == "bytecode-poisoning"]
+        assert all(f.severity == "high" for f in poison)
+        assert "environ" in poison[0].snippet
+
+    def test_poison_detected_without_disassembly(self, tmp_path, monkeypatch):
+        # Force ALL disassembly to fail (simulates a .pyc no installed interpreter
+        # can read). The raw-bytes detector must still fire — proving detection
+        # never depends on unmarshalling attacker code.
+        _poison_pyc(tmp_path, self._MALICIOUS, self._BENIGN)
+        monkeypatch.setattr(scanner, "_disassemble_best",
+                            lambda *a, **k: (None, "could not unmarshal bytecode (corrupt or cross-version)"))
+        findings = scanner.scan_repo(str(tmp_path))
+        assert "bytecode-poisoning" in _cats(findings)
+
+    def test_clean_compiled_module_no_poison(self, tmp_path):
+        # Source legitimately uses os.environ -> the marker is in BOTH source and
+        # bytecode -> the diff cancels -> no false positive.
+        code = "import os\ndef cfg():\n    return os.environ.get('HOME')\n"
+        _compile_to_pyc(code, tmp_path)
+        findings = scanner.scan_repo(str(tmp_path))
+        assert "bytecode-poisoning" not in _cats(findings)
+
+    def test_opaque_pyc_with_source_flagged_medium(self, tmp_path, monkeypatch):
+        # An unreadable .pyc beside readable source is suspicious but also matches
+        # a benign cross-version-committed-.pyc shape -> MEDIUM review, not HIGH
+        # (the raw-marker poison detector is the load-bearing HIGH signal).
+        _compile_to_pyc("def f():\n    return 1\n", tmp_path)
+        monkeypatch.setattr(scanner, "_disassemble_best",
+                            lambda *a, **k: (None, "could not unmarshal bytecode (corrupt or cross-version)"))
+        findings = scanner.scan_repo(str(tmp_path))
+        assert "opaque-bytecode-with-source" in _cats(findings)
+        assert any(f.severity == "medium" for f in findings
+                   if f.category == "opaque-bytecode-with-source")
+
+    def test_obfuscated_getattr_gadget_flagged(self, tmp_path):
+        # getattr(os, chr(115)+"ystem")("id") hides the attribute name from the
+        # raw-marker + co_name detectors; the gadget co-occurrence catches it.
+        code = ("import os\n"
+                "f = getattr(os, chr(115) + 'ystem')\n"
+                "f('id')\n")
+        src, _pyc = _compile_to_pyc(code, tmp_path)
+        src.unlink()  # orphan, so poison-diff is skipped and gadget must carry it
+        findings = scanner.scan_repo(str(tmp_path))
+        assert "bytecode-hidden-logic" in _cats(findings)
+
+    def test_plain_getattr_no_false_positive(self, tmp_path):
+        # getattr without char-building + sensitive import must NOT fire.
+        code = "import os\nx = getattr(os.path, 'join')\n"
+        _compile_to_pyc(code, tmp_path)
+        findings = scanner.scan_repo(str(tmp_path))
+        assert "bytecode-hidden-logic" not in _cats(findings)
+
+    def test_decoy_source_substring_does_not_cancel_poison(self, tmp_path):
+        # A decoy source containing `exec_command` must NOT cancel the standalone
+        # `exec` co_name in the poisoned .pyc (word-boundary source match).
+        malicious = "exec('bad')\ndef run():\n    return 1\n"
+        benign = "def exec_command(c):\n    return c\ndef run():\n    return 1\n"
+        _poison_pyc(tmp_path, malicious, benign)
+        findings = scanner.scan_repo(str(tmp_path))
+        assert "bytecode-poisoning" in _cats(findings)
 
 class TestBytecodeDetection:
     def test_exec_primitive_in_function_body_orphan_elevated(self, tmp_path):
