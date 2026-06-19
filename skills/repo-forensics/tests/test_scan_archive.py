@@ -77,6 +77,88 @@ class TestZipIndirection:
         assert not any(fnd.severity in ("critical", "high") for fnd in findings)
 
 
+class TestMagicByteDetection:
+    """GAP 2 (Trail of Bits context-loader): an archive renamed to dodge the
+    extension gate must still be opened by its content magic."""
+
+    def test_zip_renamed_to_txt_is_opened(self, tmp_path):
+        # A zip saved as `.instructions.docx.txt` — extension ends `.txt`, so the
+        # extension gate skips it. Content magic (PK) must route it in.
+        f = tmp_path / ".instructions.docx.txt"
+        _make_zip(f, {"skill.py": f"import os\n{_EXEC}\n"})
+        findings = scanner.scan_repo(str(tmp_path))
+        assert "archive-indirection" in _cats(findings)
+        assert any("skill.py" in fnd.file for fnd in findings)
+
+    def test_plain_text_not_treated_as_archive(self, tmp_path):
+        (tmp_path / "notes.txt").write_text("just some plain text, no archive here\n")
+        findings = scanner.scan_repo(str(tmp_path))
+        assert findings == []
+
+    def test_sniff_unsupported_magic_renamed(self, tmp_path):
+        # A 7-Zip stream renamed to .txt is surfaced as unsupported, not silently
+        # ignored (fail-loud, R12).
+        (tmp_path / "blob.txt").write_bytes(b"7z\xbc\xaf\x27\x1c" + b"\x00" * 64)
+        findings = scanner.scan_repo(str(tmp_path))
+        assert "unsupported-archive-type" in _cats(findings)
+
+
+class TestOfficeDocExecutableMember:
+    """GAP 2: a script/binary inside an OOXML structure is flagged on structure
+    alone, regardless of how benign its payload looks."""
+
+    def _ooxml(self, extra):
+        members = {
+            "[Content_Types].xml": "<Types/>",
+            "word/document.xml": "<w:document/>",
+        }
+        members.update(extra)
+        return members
+
+    def test_shell_script_in_docx_flagged(self, tmp_path):
+        f = tmp_path / "evil.docx"
+        # Benign-looking body — caught on structure, not content.
+        _make_zip(f, self._ooxml({"word/sync1.sh": '#!/bin/sh\necho "PWND!"\n'}))
+        findings = scanner.scan_repo(str(tmp_path))
+        assert "executable-in-office-doc" in _cats(findings)
+        assert any(fnd.severity == "high" and "sync1.sh" in fnd.snippet
+                   for fnd in findings)
+
+    def test_forged_extension_script_caught_by_shebang(self, tmp_path):
+        f = tmp_path / "evil.docx"
+        _make_zip(f, self._ooxml({"word/notes.dat": "#!/bin/bash\nid\n"}))
+        findings = scanner.scan_repo(str(tmp_path))
+        assert "executable-in-office-doc" in _cats(findings)
+
+    def test_native_binary_in_docx_flagged(self, tmp_path):
+        f = tmp_path / "evil.docx"
+        _make_zip(f, self._ooxml({"word/payload.exe": "MZ\x90\x00stub"}))
+        findings = scanner.scan_repo(str(tmp_path))
+        assert "executable-in-office-doc" in _cats(findings)
+
+    def test_clean_docx_with_fonts_no_findings(self, tmp_path):
+        # The precision guard: a clean Office doc embedding binary fonts must NOT
+        # produce findings (binary members are not fed to text SAST).
+        f = tmp_path / "clean.docx"
+        fake_font = b"\x00\x01\x00\x00" + os.urandom(2048)  # TTF-like binary
+        _make_zip(f, self._ooxml({
+            "word/fonts/OpenSans.ttf": fake_font,
+            "word/styles.xml": "<w:styles/>",
+            "docProps/core.xml": "<cp:coreProperties/>",
+        }))
+        findings = scanner.scan_repo(str(tmp_path))
+        assert not any(fnd.severity in ("critical", "high") for fnd in findings), \
+            [(fnd.severity, fnd.category) for fnd in findings]
+
+    def test_script_in_plain_zip_not_office_flagged(self, tmp_path):
+        # A .sh inside a normal zip (not OOXML) is legitimate — must NOT trip the
+        # office-doc structural rule.
+        f = tmp_path / "tools.zip"
+        _make_zip(f, {"scripts/build.sh": "#!/bin/sh\nmake\n"})
+        findings = scanner.scan_repo(str(tmp_path))
+        assert "executable-in-office-doc" not in _cats(findings)
+
+
 class TestZipBombAndFanout:
     def test_zip_bomb_aborted(self, tmp_path):
         # 2 MB of zeros compresses to ~KB -> ratio over the limit -> zip-bomb.
