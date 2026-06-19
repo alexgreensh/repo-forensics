@@ -334,6 +334,8 @@ def run_targeted_scan(repo_path):
         'scan_oversize.py',
         'scan_splitstream.py',
         'scan_provenance.py',
+        'scan_archive.py',
+        'scan_bytecode.py',
     ]
 
     from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -351,6 +353,18 @@ def run_targeted_scan(repo_path):
                     all_findings.extend(findings)
             except Exception as e:
                 print(f"[!] Scanner {futures[future]} failed: {e}", file=sys.stderr)
+
+    # Raw-content correlation fallbacks (Lethal Trifecta + registry hijack), run
+    # before correlate() so the hook path has the same raw-content feed as the
+    # full-scan build_report path. Without these the PostToolUse hook gives a
+    # false-clean on registry-hijack and trifecta payloads at install time — the
+    # exact moment interception matters most.
+    try:
+        import forensics_core as core
+        all_findings.extend(f.to_dict() for f in core.detect_trifecta_raw(repo_path))
+        all_findings.extend(f.to_dict() for f in core.detect_registry_hijack_raw(repo_path))
+    except (ImportError, OSError, AttributeError) as e:
+        print(f"[!] Raw-content scan failed: {e}", file=sys.stderr)
 
     # Run correlation engine on collected findings to detect compound threats.
     # Uses the shared findings_from_dicts helper to stay in sync with
