@@ -2,6 +2,18 @@
 
 All notable changes to repo-forensics. Versions follow semver.
 
+## [2.11.3] - 2026-06-20
+
+### Fixed
+
+- **Codex automation hooks now load.** Removed the unsupported top-level
+  `description` field from `hooks/hooks.json`. Codex uses a strict hook-file
+  schema and previously rejected the entire plugin hook manifest, leaving
+  Codex marketplace installs with the skills available but without the
+  PreToolUse IOC gate, PostToolUse auto-scan, or SessionStart security scan.
+- Added regression coverage for both the root plugin and the nested Codex
+  marketplace mirror so future metadata changes cannot silently disable hooks.
+
 ## [2.11.2] - 2026-06-20
 
 ### Added — three scanner-bypass detection classes hardened

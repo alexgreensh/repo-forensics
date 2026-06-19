@@ -1,5 +1,4 @@
 {
-  "description": "repo-forensics: PreToolUse IOC gate, PostToolUse auto-scan, SessionStart security scan (plugin/skill/MCP change detection + threat DB refresh) + first-run nudge",
   "hooks": {
     "PreToolUse": [
       {

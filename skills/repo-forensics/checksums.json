@@ -71,7 +71,7 @@
   "symlink_count": 1,
   "repo_hooks": {
     "hooks/first-run-nudge.sh": "75e223642d0266d7fd097a1b572775a61084245c1ba00558549930ef56776126",
-    "hooks/hooks.json": "334cc0b0ad4ffa1d0c34ac2f3b01d09c6fb8488ed386bd64e2e9f0609f905faf",
+    "hooks/hooks.json": "e209ede63b2f5be5af09cea75b5504e542ebfa0f3f798c50bbf18c1c4d6f94a4",
     "hooks/install_refresh_daemon.sh": "c93f1cde66b54482c61cb99bf2c540a0682ac19b26ec60d02d5dcfea1ed3b008",
     "hooks/python-launcher.sh": "c7c344b05c1134a464b10a95f57ad7ae8368c04f34150773dc5877d7c2aaafa5",
     "hooks/run_auto_scan.sh": "8acb8c4e6eb2a75a1c00d46a4aaca49bd75847f9f251803c89cbe24c6f10279c",
@@ -81,9 +81,9 @@
   },
   "hook_count": 8,
   "repo_manifests": {
-    ".claude-plugin/marketplace.json": "98f087617177d1f0a11ffa4afe04b7279cab25b8415f4684ce0462ebb3b6fd37",
-    ".claude-plugin/plugin.json": "f32819186cc438ab005bf250f62d0759e6055dbcd47db558ea7743dea8e1c2a9",
-    ".codex-plugin/plugin.json": "1a01e6c1f17eac97881e62f5cd436fb97512cbdfcbb20505b2ff406b44546ccf"
+    ".claude-plugin/marketplace.json": "0214819e40aa11108fd7832b5c40df572bc6377a5a3ee11a187eaee84080e8b7",
+    ".claude-plugin/plugin.json": "bfbf9f929c227fbd3568c85777df68fb98ffee0d7b02d4b48843951ca4dd1ff6",
+    ".codex-plugin/plugin.json": "0e5b25851bbef36edf8741131d2de181999b7a78472c8ceae7d6c92dffff2a42"
   },
   "manifest_count": 3,
   "repo_source_manifests": {

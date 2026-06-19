@@ -130,10 +130,21 @@ def test_codex_plugin_manifest_points_to_nested_hooks_schema():
     hooks_path = REPO_ROOT / plugin["hooks"]
     hook_data = json.loads(hooks_path.read_text())
 
+    # Codex deserializes plugin hook files with a strict top-level schema.
+    # Extra metadata such as Claude Code's optional "description" field makes
+    # Codex reject the entire file and silently disables all automation hooks.
+    assert set(hook_data) == {"hooks"}
     assert isinstance(hook_data.get("hooks"), dict)
     for event in ("PreToolUse", "PostToolUse", "SessionStart"):
         assert event in hook_data["hooks"]
         assert event not in {key for key in hook_data.keys() if key != "hooks"}
+
+
+def test_codex_marketplace_mirror_uses_strict_hooks_schema():
+    hooks_path = REPO_ROOT / "plugins" / "repo-forensics" / "hooks" / "hooks.json"
+    hook_data = json.loads(hooks_path.read_text())
+
+    assert set(hook_data) == {"hooks"}
 
 
 def test_codex_install_session_start_matches_marketplace_hook_commands(monkeypatch, tmp_path):
