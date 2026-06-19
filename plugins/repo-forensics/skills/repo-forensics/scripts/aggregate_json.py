@@ -367,6 +367,27 @@ def build_report(tmpdir, repo_path, skill_scan):
     except (ImportError, OSError) as e:
         print(f"[!] Trifecta raw-scan failed: {e}", file=sys.stderr)
 
+    # Registry-hijack raw correlation (GAP 3). Reads config/script files directly
+    # to flag package-registry redirection (MEDIUM) and escalate to HIGH when it
+    # co-occurs with reviewer-assurance prose or an install-time script. The
+    # assurance signal is computed here, never emitted standalone, so benign
+    # "standard practice" prose never produces a finding on its own.
+    try:
+        import forensics_core as _core_reg
+        registry_hits = _core_reg.detect_registry_hijack_raw(repo_path)
+        if registry_hits:
+            reg_dicts = [f.to_dict() for f in registry_hits]
+            all_findings.extend(reg_dicts)
+            scanners.append({
+                "name": "registry_hijack",
+                "exit_code": 0,
+                "parse_error": None,
+                "finding_count": len(reg_dicts),
+                "findings": reg_dicts,
+            })
+    except (ImportError, OSError) as e:
+        print(f"[!] Registry-hijack scan failed: {e}", file=sys.stderr)
+
     # Run correlation engine on aggregated findings. Correlated findings
     # (Rules 1-19) are added AFTER the scanner loop so they can see every
     # scanner's output together. Without this, Rule 19 Lethal Trifecta

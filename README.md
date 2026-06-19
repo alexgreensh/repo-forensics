@@ -194,6 +194,12 @@ $ ./run_forensics.sh ./suspicious-skill
              47 invisible Unicode chars (text smuggling)
   [CRITICAL] Known Malicious Package: 'claud-code'
              SANDWORM_MODE campaign IOC
+  [HIGH]     Bytecode poisoning (compiled code exceeds its source)
+             utils.cpython-311.pyc reads os.environ; utils.py does not
+  [HIGH]     Registry redirect wrapped in reviewer-disarming assurance prose
+             .npmrc -> non-canonical host (dependency confusion)
+  [HIGH]     Executable script smuggled in Office document
+             notes.docx -> word/sync1.sh
 
   VERDICT: 31 findings (12 critical, 11 high, 6 medium, 2 low)
   EXIT CODE: 2 -- do not install
@@ -233,7 +239,7 @@ Scanning never requires network access. The feed is a freshness layer on top of 
 
 ## Battle-Tested Against Real Attacks
 
-1,814 tests across 40+ test files. Not synthetic toy examples: detection patterns built from real supply chain campaigns that hit production systems.
+1,837 tests across 40+ test files. Not synthetic toy examples: detection patterns built from real supply chain campaigns that hit production systems.
 
 **Named attack campaigns in the IOC database:**
 
@@ -259,7 +265,7 @@ Scanning never requires network access. The feed is a freshness layer on top of 
 
 Every campaign above has version-pinned IOCs in `compromised_versions.json`, detection rules in the lifecycle and dependency scanners, and correlation rules for compound attack patterns.
 
-**The tests are safe to run.** All 1,814 tests use synthetic fixtures in temporary directories. No real malware is downloaded or executed. Pattern matching runs against fake package.json files containing attack signatures, the same way antivirus software tests against EICAR strings.
+**The tests are safe to run.** All 1,837 tests use synthetic fixtures in temporary directories. No real malware is downloaded or executed. Pattern matching runs against fake package.json files containing attack signatures, the same way antivirus software tests against EICAR strings.
 
 ---
 
@@ -323,8 +329,8 @@ Each scanner targets a distinct attack surface. Together they cover the full thr
 | **devcontainer** | Host secret mounts, privileged mode, docker.sock escape, remoteEnv localEnv interpolation, lifecycle command risks, untrusted features | JSON structure analysis of devcontainer.json |
 | **post_incident** | npm cache artifacts, RAT binaries, C2 persistence, install log traces, compromised node_modules | File existence checks, npm cache/log scanning, LaunchAgent grep |
 | **entrypoint** | IIFE injection at end of CJS entrypoints (node-ipc pattern), import-time execution in Python `__init__.py`/`setup.py` (durabletask pattern), high-entropy appended content | CJS structural analysis, Python AST top-level scope walking |
-| **archive** | Payloads hidden inside `.zip/.docx/.xlsx/.pptx/.jar/.whl/.tar.*` and other archives that other scanners treat as opaque (the ClawHub document-archive bypass) | Members read **in memory, never written to disk**; streaming bomb guard, fan-out cap, tar symlink/hardlink/device/FIFO refusal, depth-bounded, fail-loud on every gap |
-| **bytecode** | Dangerous-call primitives, embedded URLs / credential paths, and orphan bytecode inside compiled Python `.pyc` that source-only scanners never read | `marshal.loads` quarantined in a disposable subprocess so hostile bytecode cannot crash the scan; magic-derived header, recursive `co_consts` walk |
+| **archive** | Payloads hidden inside `.zip/.docx/.xlsx/.pptx/.jar/.whl/.tar.*` and other archives that other scanners treat as opaque, including archives **renamed to dodge extension gating** (a zip saved as `.txt`) and **scripts/executables smuggled inside an Office document** | Detected by **magic bytes** (`PK`/`ustar`/gzip) and `is_zipfile`, not filename, so renamed and polyglot/self-extracting archives are still opened; an executable member inside an OOXML structure is a HIGH structural finding; members read **in memory, never written to disk**; streaming bomb guard, fan-out cap, tar symlink/hardlink/device/FIFO refusal, depth-bounded, fail-loud on every gap |
+| **bytecode** | Dangerous-call primitives, embedded URLs / credential paths, orphan bytecode, and **bytecode poisoning** — a benign `.py` source shipping a malicious compiled `.pyc` (Python loads the cache over source) — inside compiled Python that source-only scanners never read | Poisoning is detected by diffing raw `.pyc` danger markers against the sibling source with **zero unmarshalling or execution** (cross-version-safe; the verdict never runs attacker bytecode); best-effort multi-interpreter decode enriches the report; `marshal.loads` quarantined in a disposable subprocess; obfuscated dynamic-attribute (`getattr`+char-built names) gadget detection |
 | **oversize** | Payloads padded past the 10 MB scan cap, and whitespace-inflation that pushes a payload past the cap or hides it after a long whitespace run | Head+tail window scan of oversized files, vectorized whitespace analysis, wall-clock bounded |
 | **splitstream** | Payloads split into inert base64/base85/base32/hex fragments scattered across unrelated files (no import edge) and concatenated at runtime -- evades per-file and cross-file taint checks | Single O(n) pass, fragments fingerprinted by alphabet + length-band and grouped, reassembled per group and decode-rescanned; member/size/wall-clock bounded |
 | **provenance** | Artifacts whose present signature/attestation **fails** verification -- the tampering signal (modified after signing, or signed by an untrusted key) | Shells out to cosign / gh / npm / pip when on PATH (zero added deps), timeout-bounded, never networks or hard-fails; the universal unsigned state is deliberately not alarmed -- only real tampering surfaces, as CRITICAL |
@@ -554,7 +560,7 @@ Exit codes: `0` = clean, `1` = warn, `2` = block merge.
 | **IOC auto-update** | `--update-iocs` pulls latest C2 IPs, malicious domains, known-bad packages |
 | **Installation verification** | `--verify-install` checks repo-forensics itself for tampering |
 | **Manifest drift** | Declared vs actual imports, phantom deps, runtime installs |
-| **1,814 pytest tests** | Full coverage across 40+ test files |
+| **1,837 pytest tests** | Full coverage across 40+ test files |
 
 </details>
 

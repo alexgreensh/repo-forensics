@@ -25,8 +25,10 @@ core.walk_aux(reach_pycache=True), and for each one:
 Created by Alex Greenshpun
 """
 
+import functools
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -73,6 +75,84 @@ _CRED_CONST_MARKERS = (".ssh/id_rsa", ".ssh/id_ed25519", ".ssh/id_dsa",
                        ".netrc", "/etc/shadow")
 _CRED_NAME_MARKERS = {"GITHUB_TOKEN", "GH_TOKEN", "NPM_TOKEN",
                       "AWS_SECRET_ACCESS_KEY", "AWS_ACCESS_KEY_ID"}
+# Sensitive modules whose attributes attackers resolve dynamically (getattr +
+# char-built names) to dodge static co_name detection.
+_OBFUSCATION_MODULES = {"os", "subprocess", "socket", "importlib", "ctypes"}
+
+# Danger primitives stored as PLAINTEXT in the marshalled .pyc stream (co_names,
+# string co_consts, IMPORT_NAME targets are all literal byte sequences). Scanning
+# for these in the raw bytes needs NO unmarshalling and NO matching interpreter,
+# so it is cross-version-safe and never executes attacker code (KTD-1). Detection
+# is by DIFF against the sibling source: a marker present in the compiled file but
+# absent from its .py is the poisoning signal. Common-but-dangerous names
+# (environ, eval) are safe to include because a clean module that legitimately
+# uses them has them in BOTH source and bytecode, so the diff cancels.
+#
+# Name markers are matched ANCHORED to their marshal short-string length prefix
+# (a co_name "environ" is stored as b"\x07environ"), which prevents a short token
+# from false-matching a substring of the embedded co_filename path or a longer
+# identifier (e.g. "compile" inside a "/test_compiled/" path). Substring markers
+# are long and distinctive enough that anchoring is unnecessary and would break
+# (they live inside larger string constants).
+_POISON_NAME_MARKERS = (
+    b"environ", b"getenv", b"putenv", b"system", b"popen", b"Popen",
+    b"subprocess", b"eval", b"exec", b"compile", b"__import__", b"marshal",
+    b"socket", b"urlopen", b"urlretrieve", b"b64decode", b"b16decode",
+)
+_POISON_SUBSTR_MARKERS = (
+    b"/dev/tcp", b"http://", b"https://", b".ssh/id_", b".aws/credentials",
+    b".netrc", b"/etc/shadow",
+)
+
+@functools.lru_cache(maxsize=1)
+def _alt_interpreters():
+    """Installed interpreters other than the host, discovered once, used only for
+    best-effort cross-version DECODE enrichment (never load-bearing for the
+    verdict). Reuses the existing isolated _pyc_unmarshal.py subprocess."""
+    found = []
+    for ver in ("3.14", "3.13", "3.12", "3.11", "3.10", "3.9", "3.8"):
+        path = shutil.which(f"python{ver}")
+        if path and os.path.realpath(path) != os.path.realpath(sys.executable):
+            found.append(path)
+    return tuple(found)
+
+
+def _poison_markers_vs_source(raw, sibling_path, rel_path):
+    """Load-bearing, no-execution poisoning detector. Returns a HIGH finding when
+    the raw .pyc bytes reference danger primitives that are absent from the
+    sibling .py source (benign-source / malicious-bytecode pattern). Requires a
+    sibling source to diff against; orphan .pyc are handled elsewhere."""
+    try:
+        with open(sibling_path, "rb") as f:
+            src = f.read(MAX_PYC_BYTES + 1)  # cap: markers are short, decoy may be huge
+    except OSError:
+        return []
+    hits = set()
+    for m in _POISON_NAME_MARKERS:
+        # pyc side: anchor to the marshal length prefix so we match a real co_name,
+        # not a substring of the embedded source path or a longer identifier.
+        # source side: word-boundary match so a decoy identifier like
+        # `exec_command` cannot cancel the standalone `exec` co_name in the pyc.
+        if (bytes([len(m)]) + m) in raw and not re.search(rb"\b" + re.escape(m) + rb"\b", src):
+            hits.add(m.decode("ascii", "replace"))
+    for m in _POISON_SUBSTR_MARKERS:
+        if m in raw and m not in src:
+            hits.add(m.decode("ascii", "replace"))
+    hits = sorted(hits)
+    if not hits:
+        return []
+    return [core.Finding(
+        scanner=SCANNER_NAME, severity="high",
+        title="Bytecode poisoning (compiled code exceeds its source)",
+        description=(
+            "Compiled .pyc references dangerous primitives that do not appear in "
+            "its .py source. Either the bytecode was modified after compilation "
+            "or the source is a decoy that hides what the loaded module actually "
+            "does (Python loads a cached .pyc over its source when the header "
+            f"validates). Markers only in bytecode: {', '.join(hits)}."),
+        file=rel_path, line=0, snippet=", ".join(hits),
+        category="bytecode-poisoning",
+    )]
 
 
 def _parse_blob(blob):
@@ -132,6 +212,18 @@ def _native_primitives(blob, rel_path):
             ".netrc) or token env-var name in its string constants / names.",
             "credential-read")
 
+    # Obfuscated dynamic attribute access: a sensitive module imported PLUS
+    # getattr PLUS a char-building primitive (chr/ord). This catches the
+    # getattr(os, chr(115)+"ystem") form that hides a dangerous attribute name
+    # from the static co_name / raw-marker detectors. Narrow co-occurrence keeps
+    # false positives low (plain getattr or plain chr alone never fires).
+    if (imported & _OBFUSCATION_MODULES) and ("getattr" in names) and (names & {"chr", "ord"}):
+        add("medium", "Obfuscated dynamic attribute access",
+            "Bytecode imports a sensitive module (os/subprocess/socket/ctypes) and "
+            "resolves an attribute via getattr() with char-constructed names — a "
+            "known technique to hide os.system / subprocess calls from name-based "
+            "detection.", "obfuscation")
+
     return findings
 
 
@@ -186,12 +278,12 @@ def _unanalyzable(rel_path, reason):
     )
 
 
-def _disassemble(pyc_path, header_len):
+def _disassemble(pyc_path, header_len, interpreter=None):
     """Run the isolated unmarshal+dis child. Returns (blob, error_reason).
     Exactly one of the two is truthy."""
     try:
         proc = subprocess.run(
-            [sys.executable, _UNMARSHAL, pyc_path, str(header_len)],
+            [interpreter or sys.executable, _UNMARSHAL, pyc_path, str(header_len)],
             capture_output=True, timeout=PER_FILE_TIMEOUT_SEC,
         )
     except subprocess.TimeoutExpired:
@@ -208,15 +300,31 @@ def _disassemble(pyc_path, header_len):
     return proc.stdout.decode("utf-8", "surrogatepass"), None
 
 
+def _disassemble_best(pyc_path, header_len):
+    """Disassemble with the host interpreter; on a cross-version unmarshal
+    failure, fall back to each OTHER installed interpreter so a .pyc compiled for
+    a different Python can still be decoded for analysis. Best-effort: detection
+    never depends on this succeeding (KTD-2)."""
+    blob, error = _disassemble(pyc_path, header_len)
+    if error is None or "unmarshal" not in error:
+        return blob, error
+    for interp in _alt_interpreters():
+        alt_blob, alt_error = _disassemble(pyc_path, header_len, interp)
+        if alt_error is None:
+            return alt_blob, None
+    return blob, error
+
+
 def scan_pyc(pyc_path, rel_path):
     """Analyze one .pyc. Returns a list of Findings."""
     findings = []
     try:
         size = os.path.getsize(pyc_path)
         with open(pyc_path, "rb") as f:
-            magic4 = f.read(4)
+            raw = f.read(MAX_PYC_BYTES + 1)
     except OSError:
         return findings
+    magic4 = raw[:4]
 
     header_len = pyc_header_len(magic4)
     if header_len is None:
@@ -226,9 +334,40 @@ def scan_pyc(pyc_path, rel_path):
         findings.append(_unanalyzable(rel_path, f"file too large ({size} bytes)"))
         return findings
 
-    blob, error = _disassemble(pyc_path, header_len)
+    sibling = _sibling_py(pyc_path)
+    has_source = os.path.exists(sibling)
+
+    # (1) LOAD-BEARING detector — no execution, no unmarshal, cross-version-safe:
+    # danger primitives in the raw bytecode that are absent from the sibling
+    # source = poisoning. This is the verdict; everything below only enriches it.
+    poison = _poison_markers_vs_source(raw, sibling, rel_path) if has_source else []
+    findings.extend(poison)
+
+    # (2) Best-effort disassembly (host first, then other installed interpreters)
+    # for richer primitive analysis and to show the analyst the decoded payload.
+    blob, error = _disassemble_best(pyc_path, header_len)
     if error is not None:
-        findings.append(_unanalyzable(rel_path, error))
+        # An unreadable compiled file shadowing readable source is suspicious:
+        # Python loads cached bytecode over source when the header validates, so
+        # this is a place poisoning can hide. But a repo that legitimately commits
+        # a .pyc for a Python version absent from this host produces the same
+        # shape, so this is MEDIUM (review), not HIGH — the raw-marker poison
+        # detector above is the load-bearing HIGH signal and ran already.
+        if not poison:
+            if has_source:
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="medium",
+                    title="Opaque bytecode shadowing source",
+                    description=(
+                        "A .pyc that no installed interpreter can unmarshal sits "
+                        "next to a readable .py source. Python loads cached "
+                        "bytecode over source when the header validates, so review "
+                        "whether this is a poisoned cache or a benign artifact "
+                        f"committed for an uninstalled Python version. ({error})"),
+                    file=rel_path, line=0, snippet=error,
+                    category="opaque-bytecode-with-source"))
+            else:
+                findings.append(_unanalyzable(rel_path, error))
         return findings
 
     # Detect primitives: bytecode-native co-occurrence (catches os.system /
@@ -263,8 +402,9 @@ def scan_pyc(pyc_path, rel_path):
 
     # Orphan handling: a .pyc with no sibling .py. Only meaningful as a signal
     # when a primitive also matched OR when it is NOT in a vendor root (stripped
-    # wheels and Cython builds ship loose .pyc legitimately).
-    if not os.path.exists(_sibling_py(pyc_path)):
+    # wheels and Cython builds ship loose .pyc legitimately). Reuses has_source
+    # computed above rather than re-stat'ing the sibling.
+    if not has_source:
         if matched_primitive:
             findings.append(core.Finding(
                 scanner=SCANNER_NAME, severity="high",

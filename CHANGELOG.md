@@ -2,6 +2,51 @@
 
 All notable changes to repo-forensics. Versions follow semver.
 
+## [2.12.0] - 2026-06-20
+
+### Added — three scanner-bypass detection classes hardened
+
+Closes three classes of scanner-evasion where a malicious payload is carried in
+a form the text-only scanners never inspect, plus a supply-chain redirect class.
+
+- **Content-based archive detection** (`scan_archive`): archives are now
+  identified by magic bytes (`PK` / `ustar` / gzip / bzip2) and `is_zipfile`,
+  not filename, so an archive renamed to dodge extension gating (e.g. a zip saved
+  as `.docx.txt`) or a polyglot / self-extracting zip with a stub prefix is still
+  opened and scanned. A script or native executable smuggled inside an OOXML
+  (Office) document is flagged HIGH on structure alone. Binary members are
+  identified by non-text-byte ratio (not a single null byte, which an attacker
+  can trivially prepend) so embedded fonts/images neither false-positive nor
+  blind the detectors.
+- **Bytecode poisoning detection** (`scan_bytecode`): a benign `.py` source
+  shipping a malicious compiled `.pyc` (Python loads the cached bytecode over
+  source when the header validates) is caught by diffing raw `.pyc` danger
+  markers against the sibling source — **no unmarshalling, no execution,
+  cross-version-safe**, so the verdict never runs attacker bytecode. Markers are
+  anchored to the marshal length prefix (compiled side) and word boundaries
+  (source side) to prevent substring-cancellation evasion. Best-effort
+  multi-interpreter decode enriches the report but never gates the verdict.
+  Obfuscated dynamic attribute access (`getattr` + char-built names + sensitive
+  import) is also flagged.
+- **Registry hijack / dependency confusion** (`detect_registry_hijack_raw`):
+  npm / yarn (incl. Berry `npmRegistryServer`) / pip `index-url` / bun registry
+  redirected to a non-canonical host is flagged MEDIUM (corporate mirrors are
+  legitimate — review, not block), escalating to HIGH only when the redirect
+  co-occurs with reviewer-disarming assurance prose ("already public",
+  "audited", "introduces no disclosure surface"). Resolves `${VAR}` indirection,
+  strips comments, and is ReDoS-safe.
+- **Install-time hook parity**: the archive and bytecode scanners plus the
+  trifecta and registry-hijack raw detectors now run in the PostToolUse hook
+  path, so a `git clone` / `npm install` is no longer given a false-clean
+  verdict on exactly these threats.
+
+### Notes
+
+- Calibrated for accuracy over aggression: the offline benign-corpus
+  false-positive gate stays green. HIGH is reserved for unambiguous manipulation,
+  not legitimate corporate mirrors or normally-committed bytecode caches.
+- Detection never executes or unmarshals attacker code to reach a verdict.
+
 ## [2.11.1] - 2026-06-18
 
 ### Added — final two scanner-bypass detection gaps closed

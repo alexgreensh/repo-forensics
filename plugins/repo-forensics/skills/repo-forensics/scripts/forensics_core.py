@@ -15,6 +15,7 @@ import json
 import time
 import hashlib
 import fnmatch
+import urllib.parse
 from dataclasses import dataclass, asdict
 
 # --- Severity System ---
@@ -602,6 +603,161 @@ def detect_trifecta_raw(repo_path, ignore_patterns=None):
                 category="credential-read",
             ))
 
+    return findings
+
+
+# --- Registry-hijack raw correlation detector (GAP 3) -----------------------
+# A skill that redirects npm/yarn/pip package resolution to a non-canonical host
+# is a dependency-confusion / supply-chain vector. Hostname alone cannot prove
+# malice (legitimate corporate mirrors look identical), so a bare redirect is
+# MEDIUM/WARN. It escalates to HIGH only when it co-occurs with reviewer-directed
+# "assurance" prose (engineered to disarm a human/LLM reviewer) or with an
+# install-time / lifecycle script (a redirect that auto-runs persists on every
+# future install). Calibrated for accuracy over aggression: the benign-corpus FP
+# gate must stay green (a clean corporate mirror flags MEDIUM, never HIGH).
+_REGISTRY_CANONICAL_HOSTS = (
+    "registry.npmjs.org", "registry.yarnpkg.com", "registry.yarnpkg.org",
+    "pypi.org", "files.pythonhosted.org", "registry.bower.io",
+    "registry.npmmirror.com",  # well-known public mirror, not attacker-specific
+)
+_REGISTRY_SCAN_EXTS = {".sh", ".bash", ".zsh", ".ksh", ".conf", ".cfg", ".ini",
+                       ".toml", ".cmd", ".ps1", ".js", ".ts", ".py", ".rb",
+                       ".env", ".yml", ".yaml", ".npmrc", ".yarnrc"}
+_REGISTRY_SCAN_NAMES = {".npmrc", ".yarnrc", ".yarnrc.yml", "pip.conf", "pip.ini",
+                        ".pip.conf", "bunfig.toml", ".bunfig.toml"}
+_REGISTRY_MAX_SCAN_FILES = 2000
+_REGISTRY_MAX_SCAN_BYTES = 512 * 1024
+# A registry/index-url directive and the value it is set to (a literal URL or a
+# ${VAR}/$VAR reference resolved against same-file assignments). Covers npm/pip
+# (registry / index-url) and Yarn Berry (.yarnrc.yml npmRegistryServer). The
+# `\s*(?:[=:]\s*)?` form avoids the catastrophic-backtracking (ReDoS) of two
+# adjacent greedy `\s*` runs around an optional separator.
+_REGISTRY_DIRECTIVE_RE = re.compile(
+    r"""(?im)\b((?:extra-)?index-url|registry|npmRegistryServer|npmPublishRegistry)\b"""
+    r"""\s*(?:[=:]\s*)?["']?"""
+    r"""(\$\{?[A-Za-z_][A-Za-z0-9_]*\}?|https?://[^\s"']+)""")
+_URL_VAR_ASSIGN_RE = re.compile(
+    r"""(?im)^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*["']?(https?://[^\s"']+)""")
+# Reviewer-directed assurance prose: self-justifying safety claims aimed at the
+# reviewer to disarm scrutiny of the redirect. Each alternative is specific
+# enough to be rare in benign docs — generic phrasing like "safe to use" or
+# "standard practice" is deliberately excluded to keep the HIGH escalation
+# false-positive-free.
+_REGISTRY_ASSURANCE_RE = re.compile(
+    r"""(?i)("""
+    r"""already public(\s+information)?|"""
+    r"""appsec[-\s]?audited|audited\s+(dependency|allowlist|allow-list)|"""
+    r"""(does not|doesn't)\s+introduce\s+(new\s+)?(disclosure|attack|exposure)\s*(surface)?|"""
+    r"""no\s+(new\s+)?(disclosure|attack|exposure)\s+surface|"""
+    r"""(is|are)\s+the\s+same\s+value(s)?\s+(published|referenced|shown)|"""
+    r"""no\s+(auth\w*|credentials?|secrets?)\s+(are\s+)?(written|stored|disclosed)"""
+    r""")""")
+
+
+_REGISTRY_VAR_REF_RE = re.compile(r"^\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?$")
+
+
+def _registry_host(value, var_urls):
+    """Resolve a registry directive value to a hostname. Handles ${VAR}/$VAR
+    references via same-file URL assignments. Returns host or None."""
+    val = value.strip().strip('"\'')
+    var_ref = _REGISTRY_VAR_REF_RE.match(val)
+    if var_ref:
+        val = var_urls.get(var_ref.group(1))
+        if not val:
+            return None
+    if not val.startswith(("http://", "https://")):
+        return None
+    try:
+        return urllib.parse.urlsplit(val).hostname
+    except ValueError:
+        return None
+
+
+def detect_registry_hijack_raw(repo_path, ignore_patterns=None):
+    """Scan for package-registry redirection (GAP 3). Returns Finding objects:
+    a MEDIUM `registry-redirect` per affected file, plus a HIGH `registry-hijack`
+    when the redirect co-occurs with reviewer-assurance prose or an install-time
+    script. Reads files directly (like detect_trifecta_raw) so the standalone
+    assurance signal never surfaces on its own."""
+    findings = []
+    if not repo_path or not os.path.isdir(repo_path):
+        return findings
+    try:
+        walker = walk_repo(repo_path, ignore_patterns=ignore_patterns,
+                           skip_binary=True, skip_lockfiles=True)
+    except OSError:
+        return findings
+
+    scanned = 0
+    for file_path, rel_path in walker:
+        if scanned >= _REGISTRY_MAX_SCAN_FILES:
+            break
+        base = os.path.basename(file_path).lower()
+        ext = os.path.splitext(base)[1].lower()
+        if ext not in _REGISTRY_SCAN_EXTS and base not in _REGISTRY_SCAN_NAMES:
+            continue
+        # Count toward the budget once a file passes the extension gate, so an
+        # adversarial flood of large config-extension files still terminates.
+        scanned += 1
+        try:
+            if os.path.getsize(file_path) > _REGISTRY_MAX_SCAN_BYTES:
+                continue
+            with open(file_path, "r", encoding="utf-8", errors="replace") as fh:
+                content = fh.read()
+        except (OSError, UnicodeDecodeError):
+            continue
+
+        # Strip comment lines before matching directives: a commented-out mirror
+        # URL (common in setup.py / .npmrc docs) is not an active redirect.
+        scan_lines = [ln for ln in content.splitlines()
+                      if not ln.lstrip().startswith(("#", ";"))]
+        scan_content = "\n".join(scan_lines)
+
+        var_urls = {m.group(1): m.group(2)
+                    for m in _URL_VAR_ASSIGN_RE.finditer(scan_content)}
+        redirect_hosts = []
+        redirect_line = 0
+        for m in _REGISTRY_DIRECTIVE_RE.finditer(scan_content):
+            host = _registry_host(m.group(2), var_urls)
+            if host and not any(host == c or host.endswith("." + c)
+                                for c in _REGISTRY_CANONICAL_HOSTS):
+                if host not in redirect_hosts:
+                    redirect_hosts.append(host)
+                    if not redirect_line:
+                        redirect_line = scan_content.count("\n", 0, m.start()) + 1
+        if not redirect_hosts:
+            continue
+
+        hosts_str = ", ".join(redirect_hosts)
+        findings.append(Finding(
+            scanner="registry_hijack", severity="medium",
+            title="Package registry redirected to non-canonical host",
+            description=(
+                "A package-manager configuration points dependency resolution at "
+                f"a non-canonical endpoint ({hosts_str}). Corporate mirrors are "
+                "legitimate, so review whether this endpoint is trusted; an "
+                "untrusted one is a dependency-confusion / supply-chain redirect."),
+            file=rel_path, line=redirect_line, snippet=hosts_str,
+            category="registry-redirect"))
+
+        # Escalate to HIGH only on reviewer-directed assurance prose — the
+        # unambiguous manipulation signal. Install-script context alone is NOT
+        # escalated: legitimate corporate bootstrap/setup scripts routinely set a
+        # mirror, so escalating on filename would false-positive on every one.
+        if _REGISTRY_ASSURANCE_RE.search(content):
+            findings.append(Finding(
+                scanner="registry_hijack", severity="high",
+                title="Registry redirect wrapped in reviewer-disarming assurance prose",
+                description=(
+                    f"The registry redirect to {hosts_str} co-occurs with "
+                    "self-justifying assurance language ('already public', "
+                    "'audited', 'introduces no disclosure surface') engineered to "
+                    "disarm a reviewer. A genuine corporate mirror does not need to "
+                    "argue for its own safety — this is the dependency-confusion "
+                    "social-engineering pattern."),
+                file=rel_path, line=redirect_line, snippet=hosts_str,
+                category="registry-hijack"))
     return findings
 
 

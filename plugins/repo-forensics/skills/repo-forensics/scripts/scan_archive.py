@@ -90,6 +90,29 @@ _MEMBER_READ_ERRORS = (OSError, EOFError, zipfile.BadZipFile, tarfile.TarError,
 # omitting or forging its extension.
 _SNIFF_EXTS = (".py", ".js", ".sh")
 
+# Leading-byte signatures. An archive renamed to a non-archive extension (e.g. a
+# zip saved as `.instructions.docx.txt`, the Trail of Bits context-loader bypass)
+# is invisible to extension gating, so we sniff CONTENT before deciding. tar has
+# no leading magic — its `ustar` marker sits at offset 257.
+_ZIP_MAGIC = (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08")
+_UNSUPPORTED_MAGIC = (
+    b"7z\xbc\xaf\x27\x1c",   # 7-Zip
+    b"\xfd7zXZ\x00",         # xz
+    b"Rar!\x1a\x07\x00",     # RAR4
+    b"Rar!\x1a\x07\x01",     # RAR5
+    b"\x28\xb5\x2f\xfd",     # zstd
+    b"MSCF",                 # cab
+)
+_SNIFF_BYTES = 265  # enough to reach the tar `ustar` marker at offset 257
+
+# OOXML (Office Open XML) members that are executable — a Word/Excel/PowerPoint
+# document never legitimately ships a script or native binary inside its zip.
+_SCRIPT_MEMBER_EXTS = (".sh", ".bash", ".zsh", ".ksh", ".py", ".pyw", ".rb",
+                       ".pl", ".ps1", ".psm1", ".psd1", ".bat", ".cmd", ".command",
+                       ".scpt", ".js", ".mjs", ".cjs", ".vbs", ".vbe", ".jse",
+                       ".wsf", ".exe", ".dll", ".so", ".dylib", ".com", ".msi",
+                       ".scr", ".app", ".deb", ".rpm", ".pkg", ".jar")
+
 
 def _archive_kind(name):
     low = name.lower()
@@ -104,6 +127,62 @@ def _archive_kind(name):
     if ext in _UNSUPPORTED_EXTS:
         return "unsupported"
     return None
+
+
+def _sniff_archive_kind(file_path):
+    """Content-based archive detection by leading-byte magic. Catches an archive
+    whose extension is forged or dropped. Returns the same vocabulary as
+    _archive_kind ('zip'/'tar'/'unsupported') or None. gzip/bzip2 streams route
+    to 'tar' because tarfile auto-detects their compression."""
+    try:
+        with open(file_path, "rb") as f:
+            head = f.read(_SNIFF_BYTES)
+    except OSError:
+        return None
+    if head.startswith(_ZIP_MAGIC):
+        return "zip"
+    if head.startswith((b"\x1f\x8b", b"BZh")):  # gzip / bzip2 stream
+        return "tar"
+    if len(head) >= 262 and head[257:262] == b"ustar":
+        return "tar"
+    for magic in _UNSUPPORTED_MAGIC:
+        if head.startswith(magic):
+            return "unsupported"
+    # Leading magic can be hidden behind a stub (self-extracting / polyglot zip):
+    # zipfile reads the end-of-central-directory at EOF, so such a file opens
+    # fine yet has no PK at offset 0. is_zipfile locates the EOCD, catching it.
+    try:
+        if zipfile.is_zipfile(file_path):
+            return "zip"
+    except OSError:
+        pass
+    return None
+
+
+def _is_ooxml(names):
+    """An OOXML container has the content-types manifest plus a recognised office
+    payload root. This is the structural signature, not the file extension."""
+    return "[Content_Types].xml" in names and any(
+        n.startswith(("word/", "xl/", "ppt/", "visio/")) for n in names)
+
+
+def _is_script_member(name, data):
+    """A member is a script if its name carries a script extension or its bytes
+    start with a shebang. Detection is structural — payload content is irrelevant
+    (a benign-looking `echo` is still an executable that should never be here)."""
+    if name.lower().endswith(_SCRIPT_MEMBER_EXTS):
+        return True
+    return data is not None and data[:2] == b"#!"
+
+
+def _office_exec_finding(label, vpath, member_name, reason):
+    """A HIGH structural finding for an executable smuggled in an Office document.
+    Shared by the name-based (pre-read) and shebang-based (post-read) checks."""
+    return _finding(
+        "high", "Executable script smuggled in Office document",
+        f"{vpath} {reason} inside an OOXML document structure; Office files never "
+        f"legitimately contain executable scripts.",
+        label, "executable-in-office-doc", member_name)
 
 
 def _finding(severity, title, desc, file, category, snippet=""):
@@ -140,7 +219,19 @@ def _scan_member_text(data, vpath):
     """Run the four in-process detectors over a decoded member (bounded to
     MEMBER_SCAN_BYTES so one large member cannot overrun the budget). Returns
     inner findings carrying vpath."""
-    text = data[:MEMBER_SCAN_BYTES].decode("utf-8", errors="replace")
+    window = data[:MEMBER_SCAN_BYTES]
+    # Binary members (embedded fonts, images, compiled blobs) are not source code;
+    # decoding them as text and running SAST produces garbage matches. Detect
+    # binary by the RATIO of non-text bytes, NOT a single null — a lone null is
+    # trivially prepended by an attacker to blind every text detector, so the
+    # sentinel-byte test is unsafe. A real font/image is densely non-text; a
+    # script with a stray null is overwhelmingly printable and still scanned.
+    # Structural/nested-archive checks already ran in the caller.
+    if window:
+        nontext = sum(1 for b in window if b < 9 or (13 < b < 32))
+        if nontext / len(window) > 0.30:
+            return []
+    text = window.decode("utf-8", errors="replace")
     out = []
     ext = os.path.splitext(vpath)[1].lower()
     if ext in scan_sast._PACK_EXTENSIONS:
@@ -213,6 +304,7 @@ def _scan_zip(source, label, depth, state, findings):
                 findings.append(_finding("low", "Unreadable archive",
                                          f"{label} zip index is corrupt.", label, "opaque-archive"))
                 return
+            is_ooxml = _is_ooxml([i.filename for i in infos])
             for info in infos:
                 if _over_budget(state):
                     state["incomplete"] = True
@@ -225,6 +317,12 @@ def _scan_zip(source, label, depth, state, findings):
                     break
                 state["files"] += 1
                 vpath = f"{label} -> {info.filename}"
+                # Structural anomaly: a script inside an Office document. Flag on
+                # the name alone (HIGH) so a member too large to read, or one with
+                # a benign body, is still caught.
+                if is_ooxml and info.filename.lower().endswith(_SCRIPT_MEMBER_EXTS):
+                    inner.append(_office_exec_finding(
+                        label, vpath, info.filename, "is a script member"))
                 try:
                     fh = zf.open(info)
                 except _MEMBER_READ_ERRORS:
@@ -234,6 +332,13 @@ def _scan_zip(source, label, depth, state, findings):
                     continue
                 with fh:
                     data_m, status = _stream_read(fh, info.file_size, info.compress_size, state)
+                # Shebang-based detection for script members whose extension is
+                # forged (caught only once: name-based check above is extension-only).
+                if (is_ooxml and status == "ok"
+                        and not info.filename.lower().endswith(_SCRIPT_MEMBER_EXTS)
+                        and _is_script_member(info.filename, data_m)):
+                    inner.append(_office_exec_finding(
+                        label, vpath, info.filename, "carries a shebang"))
                 if status == "bomb":
                     findings.append(_finding("high", "Zip bomb member aborted",
                                              f"{vpath} decompresses past the safety ratio; aborted.",
@@ -345,6 +450,10 @@ def scan_repo(repo_path, ignore_patterns=None):
         repo_path, ignore_patterns=ignore_patterns, apply_size_cap=False
     ):
         kind = _archive_kind(os.path.basename(file_path))
+        if kind is None:
+            # Extension said "not an archive" — sniff CONTENT before trusting it.
+            # An archive renamed to dodge extension gating is caught here.
+            kind = _sniff_archive_kind(file_path)
         if kind is None:
             continue
         if archives >= MAX_ARCHIVES:
