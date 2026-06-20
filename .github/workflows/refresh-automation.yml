@@ -1,0 +1,55 @@
+name: Refresh automation matrix
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  refresh-contract:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - name: Install hash-locked test runner
+        run: >-
+          python -m pip install --disable-pip-version-check
+          --require-hashes --only-binary=:all:
+          -r .github/requirements/pytest.txt
+      - name: Native refresh and agent-install contracts
+        run: >-
+          python -m pytest -q
+          skills/repo-forensics/tests/test_refresh_controller.py
+          skills/repo-forensics/tests/test_refresh_rulepacks.py
+          skills/repo-forensics/tests/test_rulepack_feed.py
+          skills/repo-forensics/tests/test_ioc_manager.py
+          skills/repo-forensics/tests/test_vuln_feed.py
+          skills/repo-forensics/tests/test_session_scan.py
+          skills/repo-forensics/tests/test_hook_scripts.py
+          skills/repo-forensics/tests/test_openclaw_install.py
+          skills/repo-forensics/tests/test_codex_install.py
+      - name: Stable payload self-check
+        run: python skills/repo-forensics/scripts/refresh_threat_dbs.py --self-check
+
+  mirror-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - name: Codex payload is deterministic
+        run: |
+          scripts/sync_codex_marketplace_plugin.sh
+          git diff --exit-code -- plugins/repo-forensics

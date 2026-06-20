@@ -215,74 +215,61 @@ def test_session_wrapper_bootstraps_refresher_before_scan(tmp_path):
     assert (tmp_path / "refresher-ensured").is_file()
 
 
-def test_refresh_installer_prefers_its_own_plugin_over_claude_cache(tmp_path):
-    home = tmp_path / "home"
-    fake_bin = tmp_path / "bin"
-    fake_bin.mkdir()
-    home.mkdir()
-    stale = (
-        home / ".claude" / "plugins" / "cache" / "market" /
-        "repo-forensics" / "99.0.0" / "skills" / "repo-forensics" / "scripts"
-    )
-    stale.mkdir(parents=True)
-    (stale / "refresh_threat_dbs.py").write_text("# stale\n")
-    commands = {
-        "uname": "#!/bin/sh\necho Darwin\n",
-        "plutil": "#!/bin/sh\nexit 0\n",
-        "launchctl": "#!/bin/sh\nexit 0\n",
-    }
-    for name, body in commands.items():
-        command = fake_bin / name
-        command.write_text(body)
-        command.chmod(0o755)
-    env = {
-        **os.environ,
-        "HOME": str(home),
-        "PATH": f"{fake_bin}:/usr/bin:/bin:/usr/sbin:/sbin",
-    }
-
-    result = _run_script(INSTALL_REFRESH_DAEMON, env)
-
-    assert result.returncode == 0, result.stderr
-    plist = (
-        home / "Library" / "LaunchAgents" /
-        "com.alexgreenshpun.repo-forensics-refresh.plist"
-    ).read_text()
-    expected = REPO_ROOT / "skills" / "repo-forensics" / "scripts" / "refresh_threat_dbs.py"
-    assert str(expected) in plist
-    assert str(stale / "refresh_threat_dbs.py") not in plist
-
-
-def test_refresh_ensure_uses_session_triggered_fallback_on_linux(tmp_path):
+def test_refresh_installer_delegates_to_plugin_controller(tmp_path):
     home = tmp_path / "home"
     plugin_root = tmp_path / "plugin"
     hooks = plugin_root / "hooks"
     scripts = plugin_root / "skills" / "repo-forensics" / "scripts"
-    fake_bin = tmp_path / "bin"
     home.mkdir()
     hooks.mkdir(parents=True)
     scripts.mkdir(parents=True)
-    fake_bin.mkdir()
-    shutil.copy2(ENSURE_REFRESH_DAEMON, hooks / "ensure_refresh_daemon.sh")
-    (scripts / "refresh_threat_dbs.py").write_text("# refresh placeholder\n")
+    shutil.copy2(INSTALL_REFRESH_DAEMON, hooks / "install_refresh_daemon.sh")
+    (scripts / "refresh_controller.py").write_text("# controller placeholder\n")
     (hooks / "python-launcher.sh").write_text(
-        '#!/bin/bash\ntouch "$HOME/background-refresh-started"\n'
+        '#!/bin/bash\nprintf "%s\\n" "$@" > "$HOME/controller-args"\n'
     )
-    (fake_bin / "uname").write_text("#!/bin/sh\necho Linux\n")
-    for path in (hooks / "ensure_refresh_daemon.sh", hooks / "python-launcher.sh", fake_bin / "uname"):
+    for path in hooks.iterdir():
         path.chmod(0o755)
     env = {
         **os.environ,
         "HOME": str(home),
         "CLAUDE_PLUGIN_ROOT": str(plugin_root),
-        "PATH": f"{fake_bin}:/usr/bin:/bin",
+    }
+
+    result = _run_script(hooks / "install_refresh_daemon.sh", env)
+
+    assert result.returncode == 0, result.stderr
+    args = (home / "controller-args").read_text().splitlines()
+    assert args == [str(scripts / "refresh_controller.py"), "ensure", "--json"]
+
+
+def test_refresh_ensure_delegates_to_controller_with_fixed_path(tmp_path):
+    home = tmp_path / "home"
+    plugin_root = tmp_path / "plugin"
+    hooks = plugin_root / "hooks"
+    scripts = plugin_root / "skills" / "repo-forensics" / "scripts"
+    home.mkdir()
+    hooks.mkdir(parents=True)
+    scripts.mkdir(parents=True)
+    shutil.copy2(ENSURE_REFRESH_DAEMON, hooks / "ensure_refresh_daemon.sh")
+    (scripts / "refresh_controller.py").write_text("# controller placeholder\n")
+    (hooks / "python-launcher.sh").write_text(
+        '#!/bin/bash\nprintf "%s\\n" "$@" > "$HOME/controller-args"\n'
+    )
+    for path in (hooks / "ensure_refresh_daemon.sh", hooks / "python-launcher.sh"):
+        path.chmod(0o755)
+    env = {
+        **os.environ,
+        "HOME": str(home),
+        "CLAUDE_PLUGIN_ROOT": str(plugin_root),
+        "PATH": f"{tmp_path / 'hostile'}:/usr/bin:/bin",
     }
 
     result = _run_script(hooks / "ensure_refresh_daemon.sh", env)
-    deadline = time.time() + 2
-    marker = home / "background-refresh-started"
-    while not marker.exists() and time.time() < deadline:
-        time.sleep(0.02)
-
     assert result.returncode == 0, result.stderr
-    assert marker.is_file()
+    args_file = home / "controller-args"
+    deadline = time.time() + 2
+    while not args_file.exists() and time.time() < deadline:
+        time.sleep(0.01)
+    args = args_file.read_text().splitlines()
+    assert args == [str(scripts / "refresh_controller.py"), "ensure"]

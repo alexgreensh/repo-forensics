@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
-# uninstall_refresh_daemon.sh — Remove the repo-forensics threat DB refresh daemon.
-# Safe to run even if not installed.
+# Compatibility entry point: disable and uninstall native refresh automation.
 
-set -euo pipefail
-
-LABEL="com.alexgreenshpun.repo-forensics-refresh"
-PLIST_PATH="$HOME/Library/LaunchAgents/${LABEL}.plist"
-
-launchctl bootout "gui/$UID" "$PLIST_PATH" 2>/dev/null || true
-rm -f "$PLIST_PATH"
-
-echo "[uninstall] OK: ${LABEL} removed"
-echo "[uninstall] (Cache files in ~/.cache/repo-forensics left intact)"
+set -u
+CALLER_PATH="${PATH:-}"
+PATH="/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin"
+export PATH
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)" || exit 1
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+CONTROLLER="$PLUGIN_ROOT/skills/repo-forensics/scripts/refresh_controller.py"
+LAUNCHER="$PLUGIN_ROOT/hooks/python-launcher.sh"
+PATH="${CALLER_PATH:+$CALLER_PATH:}$PATH" \
+    exec "${BASH:-/bin/bash}" "$LAUNCHER" "$CONTROLLER" uninstall --json

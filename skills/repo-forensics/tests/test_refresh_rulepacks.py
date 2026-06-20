@@ -137,12 +137,15 @@ def test_refresh_main_calls_all_three(monkeypatch, tmp_path):
     monkeypatch.setattr(mod, "_resolve_scripts_dir", lambda: _SCRIPTS_DIR)
     monkeypatch.setattr(mod, "_acquire_lock", lambda: 999)
     monkeypatch.setattr(mod, "_write_marker", lambda forensics_core=None: None)
+    monkeypatch.setattr(mod, "_write_state", lambda **updates: None)
+    monkeypatch.setattr(mod, "LAST_ATTEMPT_MARKER", str(tmp_path / ".last-attempt"))
+    monkeypatch.setattr(mod, "DISABLED_MARKER", str(tmp_path / "refresh.disabled"))
     monkeypatch.setattr(mod, "_log", lambda message: None)
     # Neutralize lock teardown (fd 999 is fake).
     import fcntl as _fcntl
     monkeypatch.setattr(_fcntl, "flock", lambda *a, **k: None)
     monkeypatch.setattr(os, "close", lambda fd: None)
-    mod.main()
+    mod._worker_main()
     assert seen == {"ioc": 1, "kev": 1, "rp": 1}
 
 
@@ -159,11 +162,14 @@ def test_refresh_main_does_not_mark_partial_failure_fresh(monkeypatch, tmp_path)
         mod, "_write_marker", lambda forensics_core=None: marker_writes.append(True)
     )
     monkeypatch.setattr(mod, "_log", lambda message: None)
+    monkeypatch.setattr(mod, "_write_state", lambda **updates: None)
+    monkeypatch.setattr(mod, "LAST_ATTEMPT_MARKER", str(tmp_path / ".last-attempt"))
+    monkeypatch.setattr(mod, "DISABLED_MARKER", str(tmp_path / "refresh.disabled"))
     import fcntl as _fcntl
     monkeypatch.setattr(_fcntl, "flock", lambda *a, **k: None)
     monkeypatch.setattr(os, "close", lambda fd: None)
 
-    mod.main()
+    mod._worker_main()
 
     assert marker_writes == []
 
@@ -188,3 +194,32 @@ def test_refresh_resolver_prefers_invoked_plugin_over_stale_claude_cache(
 def test_refresh_module_loads_on_linux(monkeypatch):
     mod = _load_refresh_module_for_platform(monkeypatch, "linux")
     assert callable(mod.main)
+
+
+def test_native_lock_roundtrip(monkeypatch, tmp_path):
+    mod = _load_refresh_module_for_platform(monkeypatch, sys.platform)
+    monkeypatch.setattr(mod, "CACHE_DIR", str(tmp_path))
+    monkeypatch.setattr(mod, "LOCK_FILE", str(tmp_path / "refresh.lock"))
+    monkeypatch.setattr(mod, "LOG_FILE", str(tmp_path / "refresh.log"))
+
+    first = mod._acquire_lock()
+    assert first is not None
+    try:
+        assert mod._acquire_lock() is None
+    finally:
+        mod._release_lock(first)
+
+
+def test_supervisor_records_cross_platform_timeout(monkeypatch, tmp_path):
+    mod = _load_refresh_module_for_platform(monkeypatch, sys.platform)
+    states = []
+    monkeypatch.setattr(mod, "_log", lambda message: None)
+    monkeypatch.setattr(mod, "_write_state", lambda **updates: states.append(updates))
+    monkeypatch.setattr(
+        mod.subprocess,
+        "run",
+        lambda *a, **k: (_ for _ in ()).throw(mod.subprocess.TimeoutExpired(a[0], 0.01)),
+    )
+
+    assert mod.main([]) == 0
+    assert states[-1]["status"] == "timeout"

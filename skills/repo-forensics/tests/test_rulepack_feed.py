@@ -248,6 +248,31 @@ class TestAcceptanceChain:
         assert not ok
         assert "rollback" in msg.lower() or "floor" in msg.lower()
 
+    def test_equal_version_identical_content_is_current_not_rollback(self, tmp_path):
+        raw = _serialize(_make_bundle())
+        sig = _sign(raw)
+        assert _accept(raw, sig, tmp_path)[0]
+
+        ok, msg, bundle = _accept(raw, sig, tmp_path)
+
+        assert ok, msg
+        assert bundle["packs"]["demo"]["pack_version"] == 2
+
+    def test_equal_version_changed_content_is_equivocation(self, tmp_path):
+        first = _serialize(_make_bundle())
+        assert _accept(first, _sign(first), tmp_path)[0]
+        changed_bundle = _make_bundle()
+        changed_bundle["packs"]["demo"]["rules"][0].update({
+            "pattern": "different",
+            "examples": {"match": ["different"], "no_match": ["safe"]},
+        })
+        changed = _serialize(changed_bundle)
+
+        ok, msg, _ = _accept(changed, _sign(changed), tmp_path)
+
+        assert not ok
+        assert "equivocation" in msg
+
     def test_failing_self_test_rejects_whole_bundle(self, tmp_path):
         # Valid signature, but one rule's example self-test fails -> whole bundle
         # rejected (no partial acceptance).
@@ -350,6 +375,64 @@ class TestSignedBytesAndFreshness:
         ok, msg, _ = _accept(raw3, _sign(raw3), cache)
         assert not ok
         assert "rollback" in msg.lower() or "floor" in msg.lower()
+
+    def test_equal_version_recovers_after_cache_clear_from_persisted_digest(self, tmp_path):
+        cache = tmp_path / "cache"
+        raw = _serialize(_make_bundle())
+        sig = _sign(raw)
+        assert _accept(raw, sig, cache)[0]
+        import shutil
+        shutil.rmtree(cache)
+
+        ok, msg, _ = _accept(raw, sig, cache)
+
+        assert ok, msg
+        assert (cache / "bundle.json").read_bytes() == raw
+
+    def test_interrupted_pair_commit_restores_last_known_good(self, tmp_path, monkeypatch):
+        first = _make_bundle()
+        first_raw = _serialize(first)
+        assert _accept(first_raw, _sign(first_raw), tmp_path)[0]
+        second = _make_bundle()
+        second["packs"]["demo"]["pack_version"] = 3
+        second_raw = _serialize(second)
+        second_sig = _sign(second_raw)
+        real_write = rulepack_feed._atomic_write_bytes
+        failed = {"done": False}
+
+        def fail_current_signature_once(path, data, mode=0o600):
+            if path == rulepack_feed._sig_path(str(tmp_path)) and not failed["done"]:
+                failed["done"] = True
+                raise OSError("injected signature rename failure")
+            return real_write(path, data, mode=mode)
+
+        monkeypatch.setattr(rulepack_feed, "_atomic_write_bytes", fail_current_signature_once)
+        with pytest.raises(OSError, match="injected"):
+            _accept(second_raw, second_sig, tmp_path)
+
+        pair = rulepack_feed.read_verified_cached_pair(str(tmp_path), pubkey=TEST_PUB)
+        assert pair is not None
+        assert pair[0] == first_raw
+
+    def test_loader_uses_previous_signed_generation_after_torn_commit(
+            self, tmp_path, monkeypatch):
+        monkeypatch.setattr(rulepack_feed, "RULEPACK_FEED_PUBKEY_HEX", TEST_PUB.hex())
+        first = _make_bundle()
+        first_raw = _serialize(first)
+        assert _accept(first_raw, _sign(first_raw), tmp_path)[0]
+        second = _make_bundle()
+        second["packs"]["demo"]["pack_version"] = 3
+        second_raw = _serialize(second)
+        assert _accept(second_raw, _sign(second_raw), tmp_path)[0]
+        # Torn current generation: new JSON paired with the previous signature.
+        (tmp_path / "bundle.json.sig").write_bytes(_sign(first_raw))
+
+        rule_loader._reset_overlay_state()
+        recovered = rule_loader._verified_cache_bundle(str(tmp_path))
+
+        assert recovered is not None
+        assert recovered["packs"]["demo"]["pack_version"] == 2
+        assert rule_loader.get_rulepack_degraded() is True
 
 
 # ---------------------------------------------------------------------------

@@ -47,6 +47,8 @@ CACHE_FILENAME = ".forensics-iocs.json"
 # unprotected (a same-user attacker could edit the .json and slip past the gate),
 # so the two are deliberately one and the same byte stream now.
 SIG_CACHE_FILENAME = ".forensics-iocs.sig"
+PREVIOUS_CACHE_FILENAME = ".forensics-iocs.previous.json"
+PREVIOUS_SIG_CACHE_FILENAME = ".forensics-iocs.previous.sig"
 # Sentinel recording that this install has seen a signed feed at least once. Its
 # presence means "a signature USED to be here": if the .sig later goes missing,
 # we degrade rather than silently trusting an unsigned (possibly stripped) cache.
@@ -276,6 +278,14 @@ def _sig_cache_path(cache_dir=None):
     return os.path.join(base, SIG_CACHE_FILENAME)
 
 
+def _previous_cache_path(cache_dir=None):
+    return os.path.join(os.path.dirname(_cache_path(cache_dir)), PREVIOUS_CACHE_FILENAME)
+
+
+def _previous_sig_cache_path(cache_dir=None):
+    return os.path.join(os.path.dirname(_cache_path(cache_dir)), PREVIOUS_SIG_CACHE_FILENAME)
+
+
 def _signed_seen_path(cache_dir=None):
     base = cache_dir if cache_dir else os.path.join(
         os.path.expanduser("~"), ".cache", "repo-forensics")
@@ -329,6 +339,38 @@ def _atomic_write_bytes(path, data, mode=0o600):
         raise
 
 
+def _pair_signature_state(cache_path, sig_path):
+    """Verify one on-disk IOC payload/signature pair."""
+    if not (os.path.isfile(cache_path) and os.path.isfile(sig_path)):
+        return None
+    try:
+        with open(cache_path, "rb") as f:
+            raw = f.read()
+        with open(sig_path, "rb") as f:
+            sig = f.read()
+    except OSError:
+        return False
+    return _verify_ioc_bytes(raw, sig)
+
+
+def _restore_previous_signed_cache(cache_dir=None):
+    """Restore the last complete signed generation after an interrupted commit."""
+    previous_cache = _previous_cache_path(cache_dir)
+    previous_sig = _previous_sig_cache_path(cache_dir)
+    if _pair_signature_state(previous_cache, previous_sig) is not True:
+        return False
+    try:
+        raw = open(previous_cache, "rb").read()
+        sig = open(previous_sig, "rb").read()
+        # Keep the previous files intact until both authoritative writes finish,
+        # so another crash during recovery remains recoverable.
+        _atomic_write_bytes(_cache_path(cache_dir), raw, mode=0o600)
+        _atomic_write_bytes(_sig_cache_path(cache_dir), sig, mode=0o600)
+        return True
+    except OSError:
+        return False
+
+
 def _verify_ioc_cache_signature(cache_dir=None):
     """Verify the cached IOC feed's detached signature over the EXACT bytes of
     the .json cache that get parsed and trusted (KTD-11 verify-on-load). The
@@ -344,18 +386,20 @@ def _verify_ioc_cache_signature(cache_dir=None):
     """
     cache_path = _cache_path(cache_dir)
     sig_path = _sig_cache_path(cache_dir)
-    if not (os.path.isfile(cache_path) and os.path.isfile(sig_path)):
-        return None
-    try:
-        with open(cache_path, "rb") as f:
-            raw = f.read()
-        with open(sig_path, "rb") as f:
-            sig = f.read()
-    except OSError:
+    state = _pair_signature_state(cache_path, sig_path)
+    if state is False and _restore_previous_signed_cache(cache_dir):
+        state = _pair_signature_state(cache_path, sig_path)
+    return state
+
+
+def _verify_ioc_bytes(raw, sig):
+    """Verify freshly downloaded bytes before they can replace trusted cache."""
+    if not isinstance(raw, (bytes, bytearray)) or not isinstance(sig, (bytes, bytearray)):
         return False
     try:
         import _ed25519
-        return bool(_ed25519.verify(sig, raw, bytes.fromhex(IOC_FEED_PUBKEY_HEX)))
+        return bool(_ed25519.verify(bytes(sig), bytes(raw),
+                                    bytes.fromhex(IOC_FEED_PUBKEY_HEX)))
     except Exception:
         return False
 
@@ -371,6 +415,10 @@ def _load_cache(cache_dir=None, ttl_hours=None):
     which cannot carry a post-hoc `_cached_at` wrapper, so mtime is authoritative
     there.
     """
+    # A power loss between the two authoritative renames can leave a mismatched
+    # pair. Recover the prior complete generation before parsing trusted bytes.
+    if _pair_signature_state(_cache_path(cache_dir), _sig_cache_path(cache_dir)) is False:
+        _restore_previous_signed_cache(cache_dir)
     path = _cache_path(cache_dir)
     if not os.path.exists(path):
         return None
@@ -379,14 +427,18 @@ def _load_cache(cache_dir=None, ttl_hours=None):
             data = json.load(f)
         if not isinstance(data, dict):
             return None
-        # Check freshness
+        # Check freshness. A non-numeric or future-dated _cached_at is treated as
+        # untrustworthy: an attacker with write access could otherwise set it just
+        # behind "now" to make a stale, poisoned cache look perpetually fresh.
+        # Fall back to the kernel-managed mtime in those cases (mirrors vuln_feed).
+        now = time.time()
         cached_at = data.get('_cached_at')
-        if cached_at is None:
+        if not isinstance(cached_at, (int, float)) or cached_at > now + 300:
             try:
                 cached_at = os.path.getmtime(path)
             except OSError:
                 return None
-        age_hours = (time.time() - cached_at) / 3600
+        age_hours = (now - cached_at) / 3600
         max_age = ttl_hours if ttl_hours is not None else _IOC_CACHE_TTL_HOURS
         if age_hours > max_age:
             return None
@@ -482,11 +534,31 @@ def _save_signed_cache(raw_bytes, sig_bytes, cache_dir=None):
     """
     if raw_bytes is None or sig_bytes is None:
         return
-    # Write the sig FIRST, then the cache, then the signed-seen sentinel: if we
-    # crash mid-write a stale sig over a new cache simply verifies False (safe
-    # degrade), never a false-trusted state.
-    _atomic_write_bytes(_sig_cache_path(cache_dir), sig_bytes, mode=0o600)
-    _atomic_write_bytes(_cache_path(cache_dir), bytes(raw_bytes), mode=0o600)
+    cache_path = _cache_path(cache_dir)
+    sig_path = _sig_cache_path(cache_dir)
+
+    # Snapshot the current *verified pair* before touching either authoritative
+    # file. Read each file ONCE and verify those exact bytes, so the retained
+    # recovery generation can never be a TOCTOU-swapped unsigned payload (the
+    # old verify-then-reopen left a window to substitute the backup bytes).
+    try:
+        with open(cache_path, "rb") as f:
+            current_raw = f.read()
+        with open(sig_path, "rb") as f:
+            current_sig = f.read()
+    except OSError:
+        current_raw = current_sig = None
+    if (current_raw is not None and current_sig is not None
+            and _verify_ioc_bytes(current_raw, current_sig) is True):
+        _atomic_write_bytes(_previous_cache_path(cache_dir), current_raw, mode=0o600)
+        _atomic_write_bytes(_previous_sig_cache_path(cache_dir), current_sig, mode=0o600)
+
+    try:
+        _atomic_write_bytes(cache_path, bytes(raw_bytes), mode=0o600)
+        _atomic_write_bytes(sig_path, sig_bytes, mode=0o600)
+    except OSError:
+        _restore_previous_signed_cache(cache_dir)
+        raise
     _mark_signed_seen(cache_dir)
 
 
@@ -494,10 +566,9 @@ def update_iocs(feed_url=None, cache_dir=None, sig_url=None):
     """Pull latest IOCs from remote feed and cache locally.
     Returns (success: bool, message: str).
 
-    Also fetches the detached `.sig` (KTD-11) and persists the EXACT raw feed
-    bytes so verify-on-load can re-verify the signature. A missing/invalid `.sig`
-    does NOT fail the update (backward compatibility + availability) — it just
-    means the cache loads degraded on the new client.
+    Also fetches and verifies the detached `.sig` before replacing any cache.
+    Missing/invalid signatures fail closed and preserve the last known-good
+    cache; the aggregate refresher must never call untrusted bytes "fresh".
     """
     data, raw = fetch_remote_iocs(feed_url, _return_raw=True)
     if data is None:
@@ -507,13 +578,17 @@ def update_iocs(feed_url=None, cache_dir=None, sig_url=None):
     # AS the .json cache so verify-on-load checks the same bytes it parses.
     sig = _fetch_url_bytes(sig_url or (feed_url or IOC_FEED_URL) + ".sig",
                            _SIG_MAX_BYTES)
-    if sig is not None and raw is not None:
-        _save_signed_cache(raw, sig, cache_dir)
-    else:
-        # Genuinely-legacy unsigned feed: fall back to the _cached_at-wrapped
-        # cache. (If this install has previously seen a signature, get_iocs will
-        # still degrade because the .sig is now absent — see _has_seen_signed.)
-        _save_cache(data, cache_dir)
+    if sig is None or raw is None:
+        return False, "IOC signature missing (last known-good cache preserved)"
+    if not _verify_ioc_bytes(raw, sig):
+        return False, "IOC signature invalid (last known-good cache preserved)"
+    required_lists = ("c2_ips", "malicious_domains", "malicious_npm_packages",
+                      "malicious_pypi_packages")
+    if (not isinstance(data, dict) or not isinstance(data.get("version"), str)
+            or any(not isinstance(data.get(key), list) for key in required_lists)
+            or sum(len(data[key]) for key in required_lists) == 0):
+        return False, "IOC feed structure invalid (last known-good cache preserved)"
+    _save_signed_cache(raw, sig, cache_dir)
     version = data.get('version', 'unknown')
     c2_count = len(data.get('c2_ips', []))
     domain_count = len(data.get('malicious_domains', []))

@@ -1,7 +1,7 @@
 {
   "version": "2",
   "generator": "repo-forensics/verify_install",
-  "file_count": 61,
+  "file_count": 62,
   "files": {
     ".gitignore": "8b2598a3359a556874b8069d42dea2686f07d46c3ca1b540c4025788b258180a",
     "SKILL.md": "f415fc5ffa343bcf80e6b28d816b78d8ac4c05826d3b1246d6726f209eba20fa",
@@ -28,12 +28,13 @@
     "scripts/dast_sandbox.sb": "6f6e9571a73aa8a9d07e7e4c5c0e6ae49fb6447c5f34a446154d301c6c4e8875",
     "scripts/forensics_core.py": "6e8813361969ccf45d519ac42e934a4b4e4f92c9484e0b7cf01c0be94d684e10",
     "scripts/gen_rule_ids.py": "0ca34e28ed02c767790c9c898ee6e364518a898e4a6e71ea3ef314a56075c34e",
-    "scripts/ioc_manager.py": "a90e8c3e546c2e5800ae3196e2dfec10873364908f7f5235d869de4a8cd71ddc",
+    "scripts/ioc_manager.py": "74bf4df219ed5bb46681603f3e58bb15957f3078f14d2f0d5ac1ae09822eb0c4",
     "scripts/parse_pnpm_lock.py": "720f084e11cd759ab453bdfa161950111a49455ff2c6ba55ef5a9c3e32161f0c",
     "scripts/pre_scan.py": "8503b0e880ae57c7092b8897ce0de583c52685ae2d8604905b724cdd50088dd6",
-    "scripts/refresh_threat_dbs.py": "1728c2a6402f8c89ef9181149f4a31e30ce0ec0313df98b8010db9e76732c588",
-    "scripts/rule_loader.py": "eff4c3962c6f17b52abb5b2aa3b6abcb5871c9d7c5e15cc5e9da563887cbe645",
-    "scripts/rulepack_feed.py": "94e472fd845cfb466e5fac7959be1a35ba4f736d6be20f6e78e03087a0c4800b",
+    "scripts/refresh_controller.py": "e5a1737836661ceef7d64818d70f84a76499aba0633f7af468afdfe0455f9932",
+    "scripts/refresh_threat_dbs.py": "f1dd2c4d2aa3ae47e722aad1575a7836794016c804dcf3e01baa90efbe963829",
+    "scripts/rule_loader.py": "ba7a0ca13a40603fdf710ace1236ee58685115a4f59000718c9b6c86638f235b",
+    "scripts/rulepack_feed.py": "f63781e4c909257c97c4dadf0018621c6f5455096bd51ae7be8eee106b8f66be",
     "scripts/run_forensics.sh": "d61ef83d58e00d95bf6f8cc2051484b62b19bf9aeb42d7b606c8249f2cc3d8dc",
     "scripts/scan_agent_skills.py": "1037594101103df6ccb02e25e3a7cb95e5b50a9b651627b69ce4e1f7c06060cb",
     "scripts/scan_archive.py": "19b4468414cedf3c676a110c273475eb3b039400d09665c1ae44914b69d0095e",
@@ -61,30 +62,30 @@
     "scripts/scan_secrets.py": "e7938ba74fab6509a24b56892c8cf3e496a58b3add7096982cfb6fe57a99c1e5",
     "scripts/scan_skill_threats.py": "a10f2087b79bedee5d7df6c6cc4358db7a8ed2d8295904d33e4955e7515191c7",
     "scripts/scan_splitstream.py": "95f8b56fcfd6d3900af823269e9a6e8ef1c7a0d2b417bd1936bf0f0293175a6e",
-    "scripts/session_scan.py": "97b017decba971986f6d7aa64606fdfad083031168d71fcb16f925f369841e24",
-    "scripts/verify_install.py": "deac3cd2726bec4a85ddf95a2e1f31d4cc5701213514cd46701efe7df8a92b73",
-    "scripts/vuln_feed.py": "4f200be10655b5997796aeabef1cc7d4e6da9d5429975bfbe3f16a8e19d21031"
+    "scripts/session_scan.py": "ebd4caa11a011a22584619fc5679e380e72ebb59657eb362bca6a1c889251c19",
+    "scripts/verify_install.py": "d17847557d3d49d364e1a2dcaf531c40c8f819a53acee81888113d8cda9c488f",
+    "scripts/vuln_feed.py": "79850f6d08cb0cb2f0b05ef2ac156457f96889914b7457c3d4a2aecf7f739c4a"
   },
   "repo_symlinks": {
     "skill": "skills/repo-forensics"
   },
   "symlink_count": 1,
   "repo_hooks": {
-    "hooks/ensure_refresh_daemon.sh": "9cd1f854c0aa55f9148cf9aeec36b16a4e16c79f75a56a967a11e5073c41784e",
+    "hooks/ensure_refresh_daemon.sh": "6e8ad7d0126015502c1925dc4f214022744efea1a80a0a07d7f5d8cda7eccab9",
     "hooks/first-run-nudge.sh": "75e223642d0266d7fd097a1b572775a61084245c1ba00558549930ef56776126",
     "hooks/hooks.json": "e209ede63b2f5be5af09cea75b5504e542ebfa0f3f798c50bbf18c1c4d6f94a4",
-    "hooks/install_refresh_daemon.sh": "f502f25a39bb4a0e09046b017d275eb9dae240a42da7ce45e345348b72fd2431",
+    "hooks/install_refresh_daemon.sh": "9f41be0ea8df35f824a3a4ee3f766b9f34c67026ff016f601de1bdeedb216db2",
     "hooks/python-launcher.sh": "c7c344b05c1134a464b10a95f57ad7ae8368c04f34150773dc5877d7c2aaafa5",
     "hooks/run_auto_scan.sh": "8acb8c4e6eb2a75a1c00d46a4aaca49bd75847f9f251803c89cbe24c6f10279c",
     "hooks/run_pre_scan.sh": "fad2e9a784e0b8d7ee2ea8b1c0566e07e897e5a5a1edaf36f57747e456b68c5f",
     "hooks/run_session_scan.sh": "72792f801bfe3f21651224e64e4eb4eb024d99a94369be26c4a05f723949b2e7",
-    "hooks/uninstall_refresh_daemon.sh": "a19eac4c77191815e9671d1adb8af1cb04ac22eef5a1f0897d6f31e0d9e57121"
+    "hooks/uninstall_refresh_daemon.sh": "a4e48bd32fe653818e210ad98457b9c9436c6f8a58630c3105ea4a18280a3412"
   },
   "hook_count": 9,
   "repo_manifests": {
-    ".claude-plugin/marketplace.json": "047fe800a3839ad4608e41c3adee807ed5f168f94848ad9a5638fa1de8cf09a6",
-    ".claude-plugin/plugin.json": "7490052a223d1d8981fad841f0391774f76415bdef361ee0235afaebba006203",
-    ".codex-plugin/plugin.json": "581126579935000cabbb7ebbd16fc6ef7d354fa2875600eff584f582c5e4d9b5"
+    ".claude-plugin/marketplace.json": "e83fe830120569fe9d0dbd2734e7fad5cb81a9be166f5572dad317fa727c0506",
+    ".claude-plugin/plugin.json": "7fcb6b2eac4d1e250ed7cea38ac4aff46a7e27a89b4cd920a6e52197b85d09bc",
+    ".codex-plugin/plugin.json": "35417614e5304731d8a86e2046094aeb1ba42e1121107a449d7ceda323cbdef6"
   },
   "manifest_count": 3,
   "repo_source_manifests": {

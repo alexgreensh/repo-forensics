@@ -187,10 +187,10 @@ def test_fetch_kev_oversized_response(monkeypatch):
 
 
 def test_update_kev_cache_filters_bad_cve_ids(monkeypatch, tmp_path):
+    valid = [{"cveID": f"CVE-2024-{i:04d}"} for i in range(1, 101)]
     payload = json.dumps({
         "catalogVersion": "v1",
-        "vulnerabilities": [
-            {"cveID": "CVE-2024-0001"},
+        "vulnerabilities": valid + [
             {"cveID": "not-a-cve"},
             {"cveID": 12345},              # wrong type
             {"cveID": "CVE-2024-0002; DROP TABLE"},  # injection attempt
@@ -201,9 +201,24 @@ def test_update_kev_cache_filters_bad_cve_ids(monkeypatch, tmp_path):
     ok, msg = vuln_feed.update_kev_cache(cache_dir=str(tmp_path))
     assert ok
     cves = vuln_feed.get_kev_cves(cache_dir=str(tmp_path), offline=True)
-    # Only the clean, fully-validated CVE id passes. The injection attempt
-    # "CVE-2024-0002; DROP TABLE" fails fullmatch and is rejected (fail-closed).
-    assert cves == {"CVE-2024-0001"}
+    # The 100 clean IDs pass; malformed/injection entries are rejected.
+    assert len(cves) == 100
+    assert "CVE-2024-0001" in cves
+
+
+def test_update_kev_cache_rejects_truncated_catalog_without_replacing_cache(monkeypatch, tmp_path):
+    previous = {"_cached_at": time.time(), "catalogVersion": "good",
+                "cve_ids": [f"CVE-2023-{i:04d}" for i in range(1, 101)]}
+    cache = tmp_path / vuln_feed.KEV_CACHE_FILENAME
+    cache.write_text(json.dumps(previous))
+    payload = json.dumps({"catalogVersion": "truncated", "vulnerabilities": []}).encode()
+    monkeypatch.setattr(vuln_feed.urllib.request, "urlopen", _stub_urlopen(payload))
+
+    ok, msg = vuln_feed.update_kev_cache(cache_dir=str(tmp_path))
+
+    assert not ok
+    assert "truncated/poisoned" in msg
+    assert json.loads(cache.read_text())["catalogVersion"] == "good"
 
 
 # ======================================================================
@@ -213,7 +228,7 @@ def test_update_kev_cache_filters_bad_cve_ids(monkeypatch, tmp_path):
 def test_cache_file_is_mode_0600(tmp_path, monkeypatch):
     payload = json.dumps({
         "catalogVersion": "v1",
-        "vulnerabilities": [{"cveID": "CVE-2024-0001"}]
+        "vulnerabilities": [{"cveID": f"CVE-2024-{i:04d}"} for i in range(1, 101)]
     }).encode("utf-8")
     monkeypatch.setattr(vuln_feed.urllib.request, "urlopen", _stub_urlopen(payload))
     vuln_feed.update_kev_cache(cache_dir=str(tmp_path))
@@ -234,7 +249,7 @@ def test_stale_cache_is_ignored_when_offline_false_and_refresh_works(tmp_path, m
     # Fresh fetch returns new data
     fresh_payload = json.dumps({
         "catalogVersion": "fresh",
-        "vulnerabilities": [{"cveID": "CVE-2025-0001"}]
+        "vulnerabilities": [{"cveID": f"CVE-2025-{i:04d}"} for i in range(1, 101)]
     }).encode("utf-8")
     monkeypatch.setattr(vuln_feed.urllib.request, "urlopen", _stub_urlopen(fresh_payload))
     result = vuln_feed.get_kev_cves(cache_dir=str(tmp_path))

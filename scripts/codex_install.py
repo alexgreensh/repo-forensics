@@ -13,10 +13,14 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
 MARKER = "repo-forensics"
+OWNERSHIP_MARKER = "REPO_FORENSICS_MANAGED=1"
+MANAGED_SCRIPTS = ("run_pre_scan.sh", "run_auto_scan.sh", "run_session_scan.sh",
+                   "first-run-nudge.sh")
 HOOK_EVENTS = ("PreToolUse", "PostToolUse", "SessionStart")
 CODEX_STATE_EVENTS = {
     "PreToolUse": "pre_tool_use",
@@ -29,12 +33,21 @@ def _repo_root():
     return Path(__file__).resolve().parents[1]
 
 
+def _dq(value):
+    """Escape a value for safe interpolation inside a double-quoted shell string.
+    The install path is embedded into a command Codex stores and evaluates on
+    every hook event; an unescaped `"`, `$`, or backtick would break the quoting
+    and allow command injection if the repo lives at a hostile path."""
+    return (str(value).replace("\\", "\\\\").replace('"', '\\"')
+            .replace("$", "\\$").replace("`", "\\`"))
+
+
 def _hook_command(script_name):
     root = _repo_root()
     script = root / "hooks" / script_name
     if not script.exists():
         print(f"[repo-forensics] WARNING: {script} not found", file=sys.stderr)
-    return f'CLAUDE_PLUGIN_ROOT="{root}" bash "{script}"'
+    return f'{OWNERSHIP_MARKER} CLAUDE_PLUGIN_ROOT="{_dq(root)}" bash "{_dq(script)}"'
 
 
 def _managed_hooks():
@@ -98,22 +111,51 @@ def _load_existing(path):
     try:
         with open(path, "r") as f:
             return json.load(f)
-    except (json.JSONDecodeError, OSError):
-        return {}
+    except (json.JSONDecodeError, OSError) as exc:
+        raise ValueError(f"refusing to overwrite unreadable Codex hooks {path}: {exc}")
+
+
+def _command_is_ours(cmd):
+    if not isinstance(cmd, str):
+        return False
+    normalized = cmd.replace("\\", "/")
+    managed_path = ("/hooks/" in normalized
+                    and any(f"/{name}" in normalized for name in MANAGED_SCRIPTS))
+    legacy_structure = managed_path and (
+        "CLAUDE_PLUGIN_ROOT=" in normalized or MARKER in normalized.lower()
+    )
+    return OWNERSHIP_MARKER in cmd or legacy_structure
 
 
 def _is_ours(hook_entry):
     if not isinstance(hook_entry, dict):
         return False
-
-    cmd = hook_entry.get("command", "")
-    if isinstance(cmd, str) and MARKER in cmd:
+    if _command_is_ours(hook_entry.get("command", "")):
         return True
 
     for h in hook_entry.get("hooks", []):
         if _is_ours(h):
             return True
     return False
+
+
+def _remove_owned_from_entry(entry):
+    """Remove only owned inner commands, preserving a shared matcher entry."""
+    if not isinstance(entry, dict):
+        return entry
+    if _command_is_ours(entry.get("command", "")):
+        return None
+    hooks = entry.get("hooks")
+    if not isinstance(hooks, list):
+        return entry
+    kept = [hook for hook in hooks
+            if not (isinstance(hook, dict)
+                    and _command_is_ours(hook.get("command", "")))]
+    if not kept:
+        return None
+    cleaned = dict(entry)
+    cleaned["hooks"] = kept
+    return cleaned
 
 
 def _remove_ours_from_event_map(event_map):
@@ -126,7 +168,9 @@ def _remove_ours_from_event_map(event_map):
             cleaned[event] = entries
             continue
 
-        kept = [entry for entry in entries if not _is_ours(entry)]
+        kept = [cleaned for entry in entries
+                for cleaned in [_remove_owned_from_entry(entry)]
+                if cleaned is not None]
         if kept:
             cleaned[event] = kept
     return cleaned
@@ -152,7 +196,9 @@ def _remove_ours(existing):
             continue
 
         if key in HOOK_EVENTS and isinstance(value, list):
-            legacy_kept = [entry for entry in value if not _is_ours(entry)]
+            legacy_kept = [cleaned for entry in value
+                           for cleaned in [_remove_owned_from_entry(entry)]
+                           if cleaned is not None]
             if legacy_kept:
                 cleaned[key] = legacy_kept
             continue
@@ -163,9 +209,26 @@ def _remove_ours(existing):
 
 
 def _write_config(path, data):
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2)
-        f.write("\n")
+    # Atomic write: a crash between truncate and final write would otherwise
+    # leave an empty config that the fail-closed loader refuses to touch,
+    # permanently stranding the user's other (non-forensics) hooks.
+    import tempfile
+    path = os.fspath(path)
+    directory = os.path.dirname(path) or "."
+    fd, tmp = tempfile.mkstemp(prefix=".repo-forensics.", dir=directory)
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(data, f, indent=2)
+            f.write("\n")
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def _schema_errors(data):
@@ -177,19 +240,71 @@ def _schema_errors(data):
     if not isinstance(hooks, dict):
         return ['hooks file must use Codex nested schema: {"hooks": {...}}']
 
+    managed = _managed_hooks()
     for event in HOOK_EVENTS:
         entries = hooks.get(event)
         if not isinstance(entries, list):
             errors.append(f"missing Codex hook list: hooks.{event}")
             continue
-        if not any(_is_ours(entry) for entry in entries):
-            errors.append(f"missing repo-forensics command in hooks.{event}")
+        expected = {
+            hook["command"]
+            for entry in managed[event]
+            for hook in entry.get("hooks", [])
+        }
+        actual = {
+            hook.get("command")
+            for entry in entries if isinstance(entry, dict)
+            for hook in entry.get("hooks", []) if isinstance(hook, dict)
+        }
+        missing_commands = expected - actual
+        if missing_commands:
+            errors.append(f"missing current repo-forensics command in hooks.{event}")
+        stale_owned = {
+            hook.get("command")
+            for entry in entries if isinstance(entry, dict)
+            for hook in entry.get("hooks", [])
+            if isinstance(hook, dict) and _command_is_ours(hook.get("command", ""))
+        } - expected
+        if stale_owned:
+            errors.append(f"stale repo-forensics command in hooks.{event}")
 
         legacy_entries = data.get(event, [])
         if isinstance(legacy_entries, list) and any(_is_ours(entry) for entry in legacy_entries):
             errors.append(f"repo-forensics command still present in legacy top-level {event}")
 
+    root = _repo_root()
+    expected_scripts = {
+        Path(command.rsplit('"', 2)[1])
+        for event in managed.values()
+        for entry in event
+        for hook in entry.get("hooks", [])
+        for command in [hook.get("command", "")]
+        if command.count('"') >= 2
+    }
+    for script in expected_scripts:
+        if not script.is_file() or root not in script.parents:
+            errors.append(f"managed hook script missing: {script}")
     return errors
+
+
+def _run_refresh_controller(command):
+    controller = _repo_root() / "skills" / "repo-forensics" / "scripts" / "refresh_controller.py"
+    if not controller.is_file():
+        print(f"[repo-forensics] Refresh controller not found: {controller}", file=sys.stderr)
+        return 1
+    try:
+        result = subprocess.run(
+            [sys.executable, str(controller), command, "--json"],
+            capture_output=True, text=True, timeout=30, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        print(f"[repo-forensics] Refresh controller {command} failed: {exc}", file=sys.stderr)
+        return 1
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip()
+        print(f"[repo-forensics] Refresh controller {command} failed"
+              + (f": {detail[:500]}" if detail else ""), file=sys.stderr)
+    return result.returncode
 
 
 def _registered_events(path=None, config_path=None):
@@ -268,16 +383,15 @@ def install():
 
 def uninstall():
     path = _codex_hooks_path()
-    if not path.exists():
-        print("[repo-forensics] No hooks.json found, nothing to uninstall")
+    existing = _load_existing(path) if path.exists() else None
+    cleaned = _remove_ours(existing) if existing is not None else None
+    if _run_refresh_controller("uninstall") != 0:
+        return 1
+    if cleaned is None:
+        print("[repo-forensics] No hooks.json found; refresh scheduler removed")
         return 0
-
-    existing = _load_existing(path)
-    cleaned = _remove_ours(existing)
-
     _write_config(path, cleaned)
-
-    print(f"[repo-forensics] Hooks removed from {path}")
+    print(f"[repo-forensics] Hooks and refresh scheduler removed from {path}")
     return 0
 
 
@@ -292,11 +406,15 @@ def main():
     )
     args = parser.parse_args()
 
-    if args.verify:
-        return verify(require_registered=args.require_registered)
-    if args.uninstall:
-        return uninstall()
-    return install()
+    try:
+        if args.verify:
+            return verify(require_registered=args.require_registered)
+        if args.uninstall:
+            return uninstall()
+        return install()
+    except ValueError as exc:
+        print(f"[repo-forensics] {exc}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

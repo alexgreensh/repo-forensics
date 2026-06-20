@@ -62,7 +62,7 @@ if git -C "${REPO_ROOT}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
         | sort > "${KEEP_FILE}"
 
     while IFS= read -r -d '' staged_file; do
-        rel="${staged_file#${STAGE}/skills/repo-forensics/}"
+        rel="${staged_file#"${STAGE}"/skills/repo-forensics/}"
         if ! grep -Fxq "$rel" "${KEEP_FILE}"; then
             rm -f "$staged_file"
         fi

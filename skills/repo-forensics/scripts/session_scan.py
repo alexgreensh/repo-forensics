@@ -44,8 +44,10 @@ BASELINE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "repo-forensics")
 BASELINE_FILE = os.path.join(BASELINE_DIR, "session-baseline.json")
 BASELINE_VERSION = 2
 
-# Threat DB freshness check (refresh moved to background scheduler/session kick)
-LAST_RUN_MARKER = os.path.join(BASELINE_DIR, ".last-refresh")
+# Threat DB freshness check (refresh moved to background scheduler/session kick).
+# refresh-state.json and refresh.disabled are resolved live inside
+# check_threat_db_freshness() from BASELINE_DIR — see the note there.
+LAST_RUN_MARKER = os.path.join(BASELINE_DIR, ".last-refresh-v2")
 STALE_WARN_DAYS = 7
 
 # Mtime gate: re-hash files whose mtime is more than this far in the future.
@@ -94,26 +96,56 @@ def check_threat_db_freshness():
         the background refresher has not completed successfully.
     """
     warnings = []
+    # Derive every path from the live BASELINE_DIR so the freshness check has a
+    # single source of truth. Frozen module-level constants would otherwise pin
+    # to the real ~/.cache marker even after BASELINE_DIR is repointed (tests,
+    # relocated caches), leaking host state into the check.
     ioc_path = os.path.join(BASELINE_DIR, ".forensics-iocs.json")
     kev_path = os.path.join(BASELINE_DIR, "kev.json")
+    refresh_disabled_file = os.path.join(BASELINE_DIR, "refresh.disabled")
+    refresh_state_file = os.path.join(BASELINE_DIR, "refresh-state.json")
+
+    if os.path.isfile(refresh_disabled_file):
+        return [ThreatDBWarning(
+            kind="refresh_disabled",
+            detail="automatic threat intelligence refresh is disabled",
+            remediation="run refresh_controller.py enable",
+        )]
+
+    state = {}
+    try:
+        with open(refresh_state_file, encoding="utf-8") as f:
+            loaded = json.load(f)
+        if isinstance(loaded, dict):
+            state = loaded
+    except (OSError, ValueError):
+        pass
 
     try:
         last_ts = os.path.getmtime(LAST_RUN_MARKER)
         age_days = (time.time() - last_ts) / 86400.0
-        # Negative age (clock jumped backward) — treat as fresh, don't alarm.
-        if age_days > STALE_WARN_DAYS:
+        failed = [name for name, result in (state.get("feeds") or {}).items()
+                  if isinstance(result, dict) and not result.get("ok")]
+        if age_days < -(CLOCK_SKEW_TOLERANCE_NS / 1_000_000_000 / 86400):
+            warnings.append(ThreatDBWarning(
+                kind="future_marker",
+                detail="success marker is future-dated",
+                remediation="run refresh_controller.py ensure --json",
+            ))
+        elif age_days > STALE_WARN_DAYS:
+            failed_detail = f"; last failed: {', '.join(failed)}" if failed else ""
             warnings.append(ThreatDBWarning(
                 kind="stale_marker",
-                detail=f"{age_days:.0f} days since last refresh",
-                remediation="launchctl list | grep repo-forensics-refresh",
+                detail=f"{age_days:.0f} days since last complete verified refresh{failed_detail}",
+                remediation="run refresh_controller.py status --json",
             ))
     except OSError:
         # Marker missing — first run, OR daemon never installed.
         if os.path.isfile(ioc_path) or os.path.isfile(kev_path):
             warnings.append(ThreatDBWarning(
-                kind="daemon_missing",
+                kind="refresh_never_succeeded",
                 detail="caches exist but no successful refresh marker found",
-                remediation="start a new session or run refresh_threat_dbs.py",
+                remediation="start a new session or run refresh_controller.py ensure --json",
             ))
     return warnings
 
@@ -640,9 +672,13 @@ def _extract_dependencies(dirpath):
 def _render_warning(w):
     """Render a ThreatDBWarning into a single user-facing line."""
     if w.kind == "stale_marker":
-        return f"Threat DBs are {w.detail}. Check: {w.remediation}"
-    if w.kind == "daemon_missing":
-        return f"Threat DB refresh daemon not running ({w.detail}). Install: {w.remediation}"
+        return f"Threat intelligence is stale: {w.detail}. Check: {w.remediation}"
+    if w.kind in ("daemon_missing", "refresh_never_succeeded"):
+        return f"Threat refresh has never completed ({w.detail}). Repair: {w.remediation}"
+    if w.kind == "future_marker":
+        return f"Threat refresh clock skew detected ({w.detail}). Repair: {w.remediation}"
+    if w.kind == "refresh_disabled":
+        return f"Threat refresh disabled ({w.detail}). Re-enable: {w.remediation}"
     return f"{w.kind}: {w.detail}"
 
 

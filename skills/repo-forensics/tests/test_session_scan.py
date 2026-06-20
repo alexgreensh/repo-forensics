@@ -91,7 +91,7 @@ class TestRefreshThreatDatabases:
         create_file(os.path.join(tmp_dir, ".forensics-iocs.json"), "{}")
         msgs = session_scan.check_threat_db_freshness()
         assert len(msgs) >= 1
-        assert msgs[0].kind == "daemon_missing"
+        assert msgs[0].kind == "refresh_never_succeeded"
 
     def test_no_marker_no_cache_no_warning(self, tmp_dir, monkeypatch):
         monkeypatch.setattr(session_scan, 'BASELINE_DIR', tmp_dir)

@@ -9,7 +9,7 @@ without making SessionStart wait on network calls.
 Safety properties (post-review hardening):
   - Lock file in ~/.cache (NOT /tmp) with O_NOFOLLOW (no symlink follow).
   - Single-instance via fcntl.flock or msvcrt.locking.
-  - Hard wall-clock cap via SIGALRM + socket.setdefaulttimeout (defense-in-depth).
+  - Cross-platform hard wall-clock cap via a supervising parent process.
   - Atomic writes: ioc_manager and vuln_feed must use temp+rename internally.
   - Modules loaded by absolute path via importlib (sys.path NOT polluted).
   - Log inputs sanitized (no CR/LF injection from remote feed).
@@ -23,10 +23,13 @@ Created by Alex Greenshpun.
 
 import errno
 import importlib.util
+import json
 import os
 import signal
 import socket
+import subprocess
 import sys
+import tempfile
 import time
 
 try:
@@ -50,7 +53,10 @@ ENV_KILL_SWITCH = "REPO_FORENSICS_DISABLE_REFRESH"
 
 CACHE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "repo-forensics")
 LOG_FILE = os.path.join(CACHE_DIR, "refresh.log")
-LAST_RUN_MARKER = os.path.join(CACHE_DIR, ".last-refresh")
+LAST_RUN_MARKER = os.path.join(CACHE_DIR, ".last-refresh-v2")
+LAST_ATTEMPT_MARKER = os.path.join(CACHE_DIR, ".last-refresh-attempt")
+STATE_FILE = os.path.join(CACHE_DIR, "refresh-state.json")
+DISABLED_MARKER = os.path.join(CACHE_DIR, "refresh.disabled")
 LOCK_FILE = os.path.join(CACHE_DIR, "refresh.lock")  # In CACHE_DIR, NOT /tmp
 
 
@@ -105,6 +111,43 @@ def _alarm_handler(signum, frame):
     except OSError:
         pass
     os._exit(0)
+
+
+def _atomic_json(path, value):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".tmp-", dir=os.path.dirname(path))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(value, f, indent=2, sort_keys=True)
+            f.write("\n")
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def _load_state():
+    try:
+        with open(STATE_FILE, encoding="utf-8") as f:
+            value = json.load(f)
+        return value if isinstance(value, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _write_state(**updates):
+    try:
+        state = _load_state()
+        state.update(updates)
+        _atomic_json(STATE_FILE, state)
+    except OSError as e:
+        _log(f"state write failed: {e}")
 
 
 def _acquire_lock():
@@ -188,64 +231,25 @@ def _write_marker(forensics_core=None):
             forensics_core.atomic_write_text(
                 LAST_RUN_MARKER, str(time.time()), mode=0o600
             )
-            return
+            return True
         tmp = LAST_RUN_MARKER + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             f.write(str(time.time()))
         os.replace(tmp, LAST_RUN_MARKER)
         os.chmod(LAST_RUN_MARKER, 0o600)
+        return True
     except OSError as e:
         _log(f"marker write failed: {e}")
+        return False
 
 
 def _resolve_scripts_dir():
-    """Find scripts dir without polluting sys.path.
-
-    Resolution order:
-      1. This script's own plugin directory. The SessionStart ensure hook
-         repairs scheduler paths after plugin upgrades, so crossing into a
-         different agent's cache is both unnecessary and unsafe.
-      2. Newest installed Claude or Codex cache only as a recovery fallback
-         for legacy scheduler entries whose original version was removed.
-    """
+    """Use only this integrity-checked stable payload; never cross-load agents."""
     here = os.path.dirname(os.path.abspath(__file__))
-    if (os.path.isfile(os.path.join(here, "ioc_manager.py"))
-            and os.path.isfile(os.path.join(here, "forensics_core.py"))
-            and os.path.isfile(os.path.join(here, "vuln_feed.py"))):
+    required = ("ioc_manager.py", "forensics_core.py", "vuln_feed.py",
+                "rulepack_feed.py", "rule_loader.py", "_ed25519.py")
+    if all(os.path.isfile(os.path.join(here, name)) for name in required):
         return here
-
-    home = os.path.expanduser("~")
-    plugin_roots = [
-        os.path.join(home, ".codex", "plugins", "cache"),
-        os.path.join(home, ".claude", "plugins", "cache"),
-    ]
-    for plugin_root in plugin_roots:
-        if not os.path.isdir(plugin_root):
-            continue
-        candidates = []
-        try:
-            for marketplace in os.listdir(plugin_root):
-                rf_dir = os.path.join(plugin_root, marketplace, "repo-forensics")
-                if not os.path.isdir(rf_dir):
-                    continue
-                for ver in os.listdir(rf_dir):
-                    scripts = os.path.join(
-                        rf_dir, ver, "skills", "repo-forensics", "scripts"
-                    )
-                    if (os.path.isdir(scripts)
-                            and os.path.isfile(os.path.join(scripts, "ioc_manager.py"))
-                            and os.path.isfile(os.path.join(scripts, "forensics_core.py"))
-                            and os.path.isfile(os.path.join(scripts, "vuln_feed.py"))):
-                        try:
-                            mtime = os.path.getmtime(scripts)
-                        except OSError:
-                            mtime = 0
-                        candidates.append((mtime, scripts))
-        except OSError:
-            pass
-        if candidates:
-            candidates.sort(reverse=True)
-            return candidates[0][1]
     return None
 
 
@@ -320,9 +324,25 @@ def _refresh_rulepacks(scripts_dir):
         return False
 
 
-def main():
-    if os.environ.get(ENV_KILL_SWITCH, "").lower() in ("1", "true", "yes", "on"):
+def self_check():
+    scripts_dir = _resolve_scripts_dir()
+    if scripts_dir is None:
+        return False
+    for name in ("ioc_manager.py", "forensics_core.py", "vuln_feed.py",
+                 "rulepack_feed.py", "rule_loader.py", "_ed25519.py"):
+        try:
+            with open(os.path.join(scripts_dir, name), encoding="utf-8") as f:
+                compile(f.read(), name, "exec")
+        except (OSError, SyntaxError):
+            return False
+    return True
+
+
+def _worker_main():
+    if (os.environ.get(ENV_KILL_SWITCH, "").lower() in ("1", "true", "yes", "on")
+            or os.path.exists(DISABLED_MARKER)):
         _log("kill switch active — exiting")
+        _write_state(status="disabled")
         return
 
     # Defense in depth for hung TLS/DNS
@@ -331,20 +351,33 @@ def main():
     except Exception:
         pass
 
-    try:
-        signal.signal(signal.SIGALRM, _alarm_handler)
-        signal.alarm(REFRESH_HARD_CAP_SEC)
-    except (AttributeError, OSError):
-        pass
-
     lock_fd = _acquire_lock()
     if lock_fd is None:
         return
 
+    # Inner POSIX hard cap. The parent supervises with subprocess timeout, but a
+    # worker invoked directly (tests, manual runs) would otherwise have no cap at
+    # all — wire the handler that was previously dead code. Windows lacks SIGALRM
+    # and relies solely on the parent's subprocess timeout.
+    _alarm_armed = hasattr(signal, "SIGALRM")
+    if _alarm_armed:
+        signal.signal(signal.SIGALRM, _alarm_handler)
+        signal.alarm(REFRESH_HARD_CAP_SEC)
+
     try:
+        started = time.time()
+        run_id = os.environ.get("REPO_FORENSICS_RUN_ID") or f"{int(started * 1000)}-{os.getpid()}"
+        try:
+            with open(LAST_ATTEMPT_MARKER, "w", encoding="utf-8") as f:
+                f.write(str(started))
+            os.chmod(LAST_ATTEMPT_MARKER, 0o600)
+        except OSError:
+            pass
+        _write_state(status="refreshing", last_attempt=started, pid=os.getpid(), run_id=run_id)
         scripts_dir = _resolve_scripts_dir()
         if scripts_dir is None:
             _log("scripts dir not found — exiting")
+            _write_state(status="repair-needed", last_error="scripts dir not found")
             return
         _log(f"refresh start (scripts_dir={scripts_dir})")
         # Pre-load forensics_core for the shared atomic-write helper used by marker.
@@ -354,26 +387,83 @@ def main():
         except Exception:
             forensics_core = None
         ok_ioc = _refresh_iocs(scripts_dir)
+        if os.path.exists(DISABLED_MARKER):
+            _write_state(status="disabled", last_attempt=started, run_id=run_id,
+                         last_error="disabled during refresh")
+            return
         ok_kev = _refresh_kev(scripts_dir)
+        if os.path.exists(DISABLED_MARKER):
+            _write_state(status="disabled", last_attempt=started, run_id=run_id,
+                         last_error="disabled during refresh")
+            return
         ok_rulepacks = _refresh_rulepacks(scripts_dir)
+        finished = time.time()
+        if os.path.exists(DISABLED_MARKER):
+            _write_state(status="disabled", last_attempt=started, run_id=run_id,
+                         last_error="disabled during refresh")
+            return
+        previous_feeds = _load_state().get("feeds") or {}
+        def feed_state(name, ok):
+            previous = previous_feeds.get(name) if isinstance(previous_feeds, dict) else {}
+            prior_success = previous.get("last_success") if isinstance(previous, dict) else None
+            return {"ok": ok, "last_attempt": finished,
+                    "last_success": finished if ok else prior_success}
+        feeds = {
+            "ioc": feed_state("ioc", ok_ioc),
+            "kev": feed_state("kev", ok_kev),
+            "rulepacks": feed_state("rulepacks", ok_rulepacks),
+        }
         if ok_ioc and ok_kev and ok_rulepacks:
-            _write_marker(forensics_core=forensics_core)
+            marker_ok = _write_marker(forensics_core=forensics_core)
+            _write_state(status="healthy" if marker_ok else "degraded",
+                         last_success=finished if marker_ok else _load_state().get("last_success"),
+                         last_attempt=started, duration_ms=int((finished - started) * 1000),
+                         feeds=feeds, marker_written=marker_ok,
+                         run_id=run_id,
+                         last_error=None if marker_ok else "success marker write failed")
         else:
             _log("refresh incomplete — success marker not updated")
+            failed = [name for name, result in feeds.items() if not result["ok"]]
+            _write_state(status="degraded", last_attempt=started,
+                         duration_ms=int((finished - started) * 1000), feeds=feeds,
+                         marker_written=False, run_id=run_id,
+                         last_error="failed feeds: " + ", ".join(failed))
         _log(f"refresh done (ioc={ok_ioc}, kev={ok_kev}, rulepacks={ok_rulepacks})")
     finally:
-        _release_lock(lock_fd)
-        try:
+        if _alarm_armed:
             signal.alarm(0)
-        except (AttributeError, OSError):
-            pass
+        _release_lock(lock_fd)
+
+
+def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if "--self-check" in argv:
+        return 0 if self_check() else 1
+    if "--worker" not in argv:
+        try:
+            completed = subprocess.run(
+                [sys.executable, os.path.abspath(__file__), "--worker"],
+                stdin=subprocess.DEVNULL, timeout=REFRESH_HARD_CAP_SEC,
+                check=False,
+            )
+            return completed.returncode
+        except subprocess.TimeoutExpired:
+            now = time.time()
+            _log("refresh timeout — worker terminated by supervisor")
+            _write_state(status="timeout", last_attempt=now,
+                         last_error=f"hard cap exceeded ({REFRESH_HARD_CAP_SEC}s)")
+            return 0
+    _worker_main()
+    return 0
 
 
 if __name__ == "__main__":
     try:
-        main()
+        exit_code = main()
     except SystemExit:
         raise
     except BaseException as e:
         _log(f"top-level exception: {type(e).__name__}: {e}")
-    sys.exit(0)
+        _write_state(status="error", last_error=f"{type(e).__name__}: {e}")
+        exit_code = 0
+    sys.exit(exit_code)

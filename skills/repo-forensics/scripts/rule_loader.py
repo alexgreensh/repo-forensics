@@ -294,6 +294,9 @@ def _run_with_sigalrm(func, timeout):
         signal.alarm(0)
         signal.signal(signal.SIGALRM, prev_handler)
         # Restore the caller's hard cap, debited for the time we consumed.
+        # If the debt has exhausted the caller's window, deliver the overdue
+        # alarm on the soonest tick (1s) rather than alarm(0), which would
+        # CANCEL it and silently drop the caller's timeout altogether.
         if prev > 0:
             elapsed = int(time.monotonic() - start)
             signal.alarm(max(1, prev - elapsed))
@@ -724,39 +727,47 @@ def _verified_cache_bundle(cache_dir=None):
     root = cache_dir if cache_dir is not None else CACHE_RULEPACK_DIR
     bundle_path = os.path.join(root, _CACHE_BUNDLE_FILE)
     sig_path = os.path.join(root, _CACHE_BUNDLE_SIG_FILE)
-    if not (os.path.isfile(bundle_path) and os.path.isfile(sig_path)):
-        return None  # no cache at all -> not degraded, shipped is the norm
+    previous_bundle_path = os.path.join(root, "bundle.previous.json")
+    previous_sig_path = os.path.join(root, "bundle.previous.json.sig")
+    if not ((os.path.isfile(bundle_path) and os.path.isfile(sig_path))
+            or (os.path.isfile(previous_bundle_path) and os.path.isfile(previous_sig_path))):
+        return None  # no complete generation at all -> shipped is the norm
     try:
-        st = os.stat(bundle_path)
-        memo_key = (bundle_path, st.st_mtime, st.st_size)
+        stats = []
+        for path in (bundle_path, sig_path, previous_bundle_path, previous_sig_path):
+            try:
+                st = os.stat(path)
+                stats.append((path, st.st_mtime_ns, st.st_size))
+            except OSError:
+                stats.append((path, None, None))
+        memo_key = tuple(stats)
     except OSError:
         _set_degraded(True)
         return None
     if memo_key in _BUNDLE_VERIFY_MEMO:
         return _BUNDLE_VERIFY_MEMO[memo_key]
-    try:
-        with open(bundle_path, "rb") as f:
-            raw = f.read()
-        with open(sig_path, "rb") as f:
-            sig = f.read()
-    except OSError:
-        _set_degraded(True)
-        return None
     # Import the verify chokepoint lazily (rulepack_feed -> _ed25519). KTD-14:
     # rulepack_feed/_ed25519 do NOT import rule_loader's aggregation consumers,
     # so this stays leaf-safe (it is the feed/crypto layer, not aggregation).
     try:
         import rulepack_feed
-        ok = rulepack_feed.verify_raw_bundle(raw, sig)
+        current_pair = rulepack_feed._read_verified_pair(bundle_path, sig_path)
+        pair = current_pair or rulepack_feed.read_verified_cached_pair(root)
     except Exception as e:  # never let a feed-module issue crash a scan
         _warn(f"cache bundle verify error: {e}")
-        ok = False
-    if not ok:
+        pair = None
+        current_pair = None
+    if pair is None:
         _warn("cached rule-pack bundle signature INVALID — ignoring cache, "
               "using shipped packs (rule-pack-degraded)")
         _set_degraded(True)
         _BUNDLE_VERIFY_MEMO[memo_key] = None
         return None
+    raw, _sig = pair
+    if current_pair is None:
+        _warn("cached rule-pack current generation incomplete/invalid — using "
+              "last-known-good signed generation")
+        _set_degraded(True)
     try:
         bundle = json.loads(raw.decode("utf-8"))
         if not isinstance(bundle, dict):

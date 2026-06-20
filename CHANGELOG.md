@@ -2,6 +2,35 @@
 
 All notable changes to repo-forensics. Versions follow semver.
 
+## [2.11.5] - 2026-06-20
+
+### Fixed — verified, cross-platform refresh automation
+
+- Fixed the reproduced stale-marker incident: an unchanged, valid signed
+  rule-pack is now accepted as current after cache expiry; equal-version changed
+  content remains rejected as equivocation and lower versions as rollback.
+- IOC refresh now verifies the detached Ed25519 signature before replacing the
+  cache or reporting success. KEV refresh rejects truncated catalogs below the
+  reader's 100-CVE safety floor. Only immediately usable feed data advances
+  freshness.
+- Added one cross-platform refresh controller with machine-readable status,
+  per-feed results, retry throttling, persistent disable/enable, exact scheduler
+  repair, and stable integrity-checked payload promotion.
+- Added native per-user scheduling for macOS launchd, Linux systemd timers, and
+  Windows Task Scheduler, with an observable detached fallback when native
+  scheduling is unavailable.
+- Scheduler ownership is now agent-neutral and monotonic across Claude Code,
+  Codex, and OpenClaw. A stale agent cannot downgrade the stable active payload;
+  v2 scheduler names isolate migration from the v2.11.4 legacy job.
+- Removed cross-marketplace executable-code fallback, the predictable `/tmp`
+  diagnostics file, destructive `kickstart -k`, inherited-PATH command lookup,
+  and versioned-cache scheduler targets.
+- OpenClaw upgrades now recognize managed hooks after a checkout move, and both
+  OpenClaw/Codex installers fail closed instead of overwriting malformed JSON.
+- Added required macOS/Linux/Windows refresh-contract CI and deterministic
+  Codex mirror verification; write-capable badge automation now uses SHA-pinned
+  actions and does not persist checkout credentials.
+
 ## [2.11.4] - 2026-06-20
 
 ### Fixed — threat intelligence refresh self-healing

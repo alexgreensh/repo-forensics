@@ -37,6 +37,7 @@ verify-on-load overlay.
 Created by Alex Greenshpun.
 """
 
+import hashlib
 import json
 import os
 import sys
@@ -79,7 +80,10 @@ _STATE_ROOT = os.path.join(os.path.expanduser("~"), ".local", "state", "repo-for
 STATE_RULEPACK_DIR = os.path.join(_STATE_ROOT, "rulepacks")
 BUNDLE_FILENAME = "bundle.json"
 BUNDLE_SIG_FILENAME = "bundle.json.sig"
+PREVIOUS_BUNDLE_FILENAME = "bundle.previous.json"
+PREVIOUS_BUNDLE_SIG_FILENAME = "bundle.previous.json.sig"
 FLOOR_FILENAME = "floor.json"
+FLOOR_DIGEST_FILENAME = "floor-digests.json"
 _BUNDLE_CACHE_TTL_HOURS = 24
 
 # --- Acceptance gates -------------------------------------------------------
@@ -97,6 +101,14 @@ def _bundle_path(cache_dir=None):
 
 def _sig_path(cache_dir=None):
     return os.path.join(_cache_dir(cache_dir), BUNDLE_SIG_FILENAME)
+
+
+def _previous_bundle_path(cache_dir=None):
+    return os.path.join(_cache_dir(cache_dir), PREVIOUS_BUNDLE_FILENAME)
+
+
+def _previous_sig_path(cache_dir=None):
+    return os.path.join(_cache_dir(cache_dir), PREVIOUS_BUNDLE_SIG_FILENAME)
 
 
 def _state_dir(cache_dir=None):
@@ -118,6 +130,10 @@ def _state_dir(cache_dir=None):
 
 def _floor_path(cache_dir=None):
     return os.path.join(_state_dir(cache_dir), FLOOR_FILENAME)
+
+
+def _floor_digest_path(cache_dir=None):
+    return os.path.join(_state_dir(cache_dir), FLOOR_DIGEST_FILENAME)
 
 
 def _pubkey_bytes():
@@ -172,6 +188,32 @@ def _save_floor(floor, cache_dir=None):
     forensics_core.atomic_write_json(_floor_path(cache_dir), floor, mode=0o600)
 
 
+def _pack_digest(pack):
+    raw = json.dumps(pack, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def load_floor_digests(cache_dir=None):
+    try:
+        with open(_floor_digest_path(cache_dir), "r", encoding="utf-8") as handle:
+            value = json.load(handle)
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(value, dict):
+        return {}
+    return {name: digest for name, digest in value.items()
+            if isinstance(name, str) and isinstance(digest, str) and len(digest) == 64}
+
+
+def _save_floor_digests(bundle, cache_dir=None):
+    import forensics_core
+    _ensure_state_dir(cache_dir)
+    digests = {name: _pack_digest(pack)
+               for name, pack in bundle.get("packs", {}).items()
+               if isinstance(name, str) and isinstance(pack, dict)}
+    forensics_core.atomic_write_json(_floor_digest_path(cache_dir), digests, mode=0o600)
+
+
 # --- URL validation (mirror ioc_manager._validate_feed_url) -----------------
 
 def _validate_feed_url(url):
@@ -209,19 +251,71 @@ def _fetch_raw(url, max_bytes):
 
 # --- Verification over raw bytes (acceptance step 1) ------------------------
 
+def _trusted_ed25519():
+    """Load the Ed25519 verifier from THIS module's own directory by absolute
+    path, so it can never be shadowed by an earlier sys.path entry. The verifier
+    must come from trusted-installed code, never from a candidate payload."""
+    import importlib.util
+    trusted_path = os.path.join(_SCRIPTS_DIR, "_ed25519.py")
+    cached = sys.modules.get("_ed25519")
+    if cached is not None and getattr(cached, "__file__", None) == trusted_path:
+        return cached
+    spec = importlib.util.spec_from_file_location("_ed25519", trusted_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    sys.modules["_ed25519"] = module
+    return module
+
+
 def verify_raw_bundle(raw_bytes, sig_bytes, pubkey=None):
     """Verify the Ed25519 signature over the EXACT raw bundle bytes.
 
     This is the single chokepoint: callers MUST pass the literal fetched/cached
     bytes, never a parse-and-reserialize round-trip. Returns True/False.
     """
-    import _ed25519
     if not isinstance(raw_bytes, (bytes, bytearray)):
         return False
     if not isinstance(sig_bytes, (bytes, bytearray)):
         return False
     key = pubkey if pubkey is not None else _pubkey_bytes()
-    return _ed25519.verify(bytes(sig_bytes), bytes(raw_bytes), key)
+    return _trusted_ed25519().verify(bytes(sig_bytes), bytes(raw_bytes), key)
+
+
+def _read_verified_pair(bundle_path, sig_path, pubkey=None):
+    """Return exact bytes for one valid on-disk pair, else None."""
+    try:
+        raw = open(bundle_path, "rb").read(_FEED_MAX_BYTES + 1)
+        sig = open(sig_path, "rb").read(_SIG_MAX_BYTES + 1)
+    except OSError:
+        return None
+    if len(raw) > _FEED_MAX_BYTES or len(sig) > _SIG_MAX_BYTES:
+        return None
+    return (raw, sig) if verify_raw_bundle(raw, sig, pubkey=pubkey) else None
+
+
+def read_verified_cached_pair(cache_dir=None, pubkey=None, allow_previous=True):
+    """Read the current signed generation, falling back to last-known-good."""
+    pair = _read_verified_pair(_bundle_path(cache_dir), _sig_path(cache_dir), pubkey)
+    if pair is not None or not allow_previous:
+        return pair
+    return _read_verified_pair(
+        _previous_bundle_path(cache_dir), _previous_sig_path(cache_dir), pubkey
+    )
+
+
+def _restore_previous_pair(cache_dir=None, pubkey=None):
+    pair = _read_verified_pair(
+        _previous_bundle_path(cache_dir), _previous_sig_path(cache_dir), pubkey
+    )
+    if pair is None:
+        return False
+    raw, sig = pair
+    try:
+        _atomic_write_bytes(_bundle_path(cache_dir), raw, mode=0o600)
+        _atomic_write_bytes(_sig_path(cache_dir), sig, mode=0o600)
+        return True
+    except OSError:
+        return False
 
 
 # --- Acceptance chain (steps 2-6) -------------------------------------------
@@ -267,9 +361,14 @@ def _check_freshness(bundle, now=None):
     return True, ""
 
 
-def _check_floor(bundle, floor):
-    """Each pack's pack_version must be strictly greater than its persisted
-    floor (rollback guard). Mixed pack_versions across packs are expected."""
+def _check_floor(bundle, floor, cached_bundle=None, floor_digests=None):
+    """Reject rollback and equal-version equivocation.
+
+    A valid feed is commonly unchanged for several days.  Equal version with
+    byte-equivalent pack content is therefore a successful CURRENT result, not
+    rollback.  Equal version with different content is rejected because a
+    publisher must increment pack_version for every content change.
+    """
     packs = bundle.get("packs", {})
     if not isinstance(packs, dict) or not packs:
         return False, "bundle has no packs"
@@ -280,8 +379,25 @@ def _check_floor(bundle, floor):
         if isinstance(pv, bool) or not isinstance(pv, int):
             return False, f"pack {name!r} pack_version not an integer"
         floor_v = floor.get(name)
-        if floor_v is not None and pv <= floor_v:
-            return False, f"pack {name!r} v{pv} <= floor v{floor_v} (rollback rejected)"
+        if floor_v is not None and pv < floor_v:
+            return False, f"pack {name!r} v{pv} < floor v{floor_v} (rollback rejected)"
+        if floor_v is not None and pv == floor_v:
+            accepted_digest = (floor_digests or {}).get(name)
+            cached_pack = ((cached_bundle or {}).get("packs") or {}).get(name)
+            if accepted_digest is not None:
+                if _pack_digest(pack) != accepted_digest:
+                    return False, (f"pack {name!r} v{pv} equals floor but content digest differs "
+                                   "(equivocation rejected)")
+            elif cached_pack is not None:
+                if cached_pack != pack:
+                    return False, (f"pack {name!r} v{pv} equals floor but content differs "
+                                   "(equivocation rejected)")
+            else:
+                # Equal version but NO trusted reference (persisted digest or cached
+                # bundle) survives to prove content equivalence. Fail closed rather
+                # than accept a same-version pack whose content we cannot vouch for.
+                return False, (f"pack {name!r} v{pv} equals floor but no reference remains "
+                               "to verify content equivalence (equivocation rejected)")
     return True, ""
 
 
@@ -349,23 +465,42 @@ def accept_bundle(raw_bytes, sig_bytes, cache_dir=None, pubkey=None, now=None):
         return False, why, None
     # 5. persisted-floor rollback gate.
     floor = load_floor(cache_dir)
-    ok, why = _check_floor(bundle, floor)
+    cached_bundle = None
+    try:
+        with open(_bundle_path(cache_dir), "r", encoding="utf-8") as handle:
+            value = json.load(handle)
+        if isinstance(value, dict):
+            cached_bundle = value
+    except (OSError, ValueError):
+        pass
+    ok, why = _check_floor(bundle, floor, cached_bundle=cached_bundle,
+                           floor_digests=load_floor_digests(cache_dir))
     if not ok:
         return False, why, None
     # 6. per-pack example self-tests (incl. ReDoS timeout).
     ok, why = _self_test_bundle(bundle)
     if not ok:
         return False, why, None
-    # 7. atomic cache write + floor update.
+    # 7. transactional pair commit + floor update.
     _ensure_cache_dir(cache_dir)
+    current_pair = read_verified_cached_pair(cache_dir, pubkey=pubkey, allow_previous=False)
+    if current_pair is not None:
+        current_raw, current_sig = current_pair
+        _atomic_write_bytes(_previous_bundle_path(cache_dir), current_raw, mode=0o600)
+        _atomic_write_bytes(_previous_sig_path(cache_dir), current_sig, mode=0o600)
     # Persist the EXACT signed bytes (binary write, no decode/encode round-trip)
     # so rule_loader's verify-on-load sees byte-identical content. Routing these
     # through a text-mode writer would let Windows rewrite \n -> \r\n and break
     # the detached-signature check on a legitimate bundle.
-    _atomic_write_bytes(_bundle_path(cache_dir), bytes(raw_bytes), mode=0o600)
-    # signature is binary: write atomically via temp+rename ourselves.
-    _atomic_write_bytes(_sig_path(cache_dir), bytes(sig_bytes), mode=0o600)
+    try:
+        _atomic_write_bytes(_bundle_path(cache_dir), bytes(raw_bytes), mode=0o600)
+        # signature is binary: write atomically via temp+rename ourselves.
+        _atomic_write_bytes(_sig_path(cache_dir), bytes(sig_bytes), mode=0o600)
+    except OSError:
+        _restore_previous_pair(cache_dir, pubkey=pubkey)
+        raise
     _save_floor(_new_floor(bundle, floor), cache_dir)
+    _save_floor_digests(bundle, cache_dir)
     return True, f"rule-pack bundle accepted (bundle_version={bundle.get('bundle_version')})", bundle
 
 
@@ -414,7 +549,35 @@ def _cache_is_fresh(cache_dir=None, ttl_hours=None):
         return False
     age_hours = (time.time() - mtime) / 3600
     max_age = ttl_hours if ttl_hours is not None else _BUNDLE_CACHE_TTL_HOURS
-    return age_hours <= max_age
+    return 0 <= age_hours <= max_age
+
+
+def _validate_cached_bundle(cache_dir=None, pubkey=None, now=None):
+    """Prove the supposedly-fresh cache is signed, valid, and loadable."""
+    pair = read_verified_cached_pair(cache_dir, pubkey=pubkey)
+    if pair is None:
+        return False, "cached rule-pack pair unavailable or signature invalid"
+    raw, sig = pair
+    try:
+        bundle = json.loads(raw.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError) as exc:
+        return False, f"cached rule-pack JSON invalid: {exc}"
+    if not isinstance(bundle, dict):
+        return False, "cached rule-pack top-level not an object"
+    for check in (_check_schema,):
+        ok, why = check(bundle)
+        if not ok:
+            return False, why
+    ok, why = _check_freshness(bundle, now=now)
+    if not ok:
+        return False, why
+    ok, why = _self_test_bundle(bundle)
+    if not ok:
+        return False, why
+    floor = load_floor(cache_dir)
+    ok, why = _check_floor(bundle, floor, cached_bundle=bundle,
+                           floor_digests=load_floor_digests(cache_dir))
+    return (True, "cached rule-pack verified") if ok else (False, why)
 
 
 # --- Public entry point -----------------------------------------------------
@@ -433,7 +596,9 @@ def update_rulepacks(feed_url=None, sig_url=None, cache_dir=None,
     refresher within its lock + 60s hard-cap discipline.
     """
     if not force and _cache_is_fresh(cache_dir):
-        return True, "rule-pack cache fresh (skipped fetch)"
+        ok, why = _validate_cached_bundle(cache_dir, pubkey=pubkey, now=now)
+        if ok:
+            return True, "rule-pack cache current and verified (skipped fetch)"
 
     raw = _fetch_raw(feed_url or RULEPACK_FEED_URL, _FEED_MAX_BYTES)
     if raw is None:

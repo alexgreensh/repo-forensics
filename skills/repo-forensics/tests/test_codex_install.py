@@ -2,6 +2,8 @@ import importlib.util
 import json
 from pathlib import Path
 
+import pytest
+
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 CODEX_INSTALL = REPO_ROOT / "scripts" / "codex_install.py"
@@ -109,6 +111,11 @@ def test_codex_uninstall_removes_only_repo_forensics_nested_hooks(monkeypatch, t
     codex_home.mkdir()
     monkeypatch.setenv("CODEX_HOME", str(codex_home))
     codex_install = _load_codex_install()
+    lifecycle = []
+    monkeypatch.setattr(
+        codex_install, "_run_refresh_controller",
+        lambda command: lifecycle.append(command) or 0,
+    )
     external_pre = _external_hook()
     managed = codex_install._managed_hooks()
     (codex_home / "hooks.json").write_text(json.dumps({
@@ -123,6 +130,91 @@ def test_codex_uninstall_removes_only_repo_forensics_nested_hooks(monkeypatch, t
 
     data = _read_hooks(codex_home)
     assert data == {"hooks": {"PreToolUse": [external_pre]}}
+    assert lifecycle == ["uninstall"]
+
+
+def test_codex_same_basename_third_party_hook_survives_upgrade(monkeypatch, tmp_path):
+    codex_home = tmp_path / "codex"
+    codex_home.mkdir()
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    installer = _load_codex_install()
+    third_party = _external_hook('bash "/opt/acme/hooks/run_session_scan.sh"')
+    stale_ours = _external_hook(
+        'CLAUDE_PLUGIN_ROOT="/tmp/old-copy" '
+        'bash "/tmp/old-copy/hooks/run_session_scan.sh"'
+    )
+    (codex_home / "hooks.json").write_text(json.dumps({
+        "hooks": {"SessionStart": [third_party, stale_ours]},
+    }))
+
+    assert installer.install() == 0
+
+    entries = _read_hooks(codex_home)["hooks"]["SessionStart"]
+    assert third_party in entries
+    assert stale_ours not in entries
+    assert any(installer.OWNERSHIP_MARKER in json.dumps(entry) for entry in entries)
+
+
+def test_codex_third_party_command_survives_inside_shared_matcher(monkeypatch, tmp_path):
+    codex_home = tmp_path / "codex"
+    codex_home.mkdir()
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    installer = _load_codex_install()
+    third_party_command = {
+        "type": "command", "command": 'bash "/opt/acme/hooks/run_pre_scan.sh"'
+    }
+    owned_command = {
+        "type": "command",
+        "command": 'CLAUDE_PLUGIN_ROOT="/tmp/old" bash "/tmp/old/hooks/run_pre_scan.sh"',
+    }
+    shared = {"matcher": "Bash", "hooks": [third_party_command, owned_command]}
+    (codex_home / "hooks.json").write_text(json.dumps({"hooks": {"PreToolUse": [shared]}}))
+
+    assert installer.install() == 0
+    commands = [hook for entry in _read_hooks(codex_home)["hooks"]["PreToolUse"]
+                for hook in entry.get("hooks", [])]
+    assert third_party_command in commands
+    assert owned_command not in commands
+
+
+def test_codex_verify_rejects_stale_owned_command(monkeypatch, tmp_path):
+    codex_home = tmp_path / "codex"
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    installer = _load_codex_install()
+    assert installer.install() == 0
+    data = _read_hooks(codex_home)
+    command = data["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    data["hooks"]["PreToolUse"][0]["hooks"][0]["command"] = command.replace(
+        str(REPO_ROOT), "/tmp/old-repo-forensics"
+    )
+    (codex_home / "hooks.json").write_text(json.dumps(data))
+
+    assert installer.verify() == 1
+
+
+def test_codex_uninstall_controller_failure_preserves_hooks(monkeypatch, tmp_path):
+    codex_home = tmp_path / "codex"
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    installer = _load_codex_install()
+    assert installer.install() == 0
+    before = (codex_home / "hooks.json").read_text()
+    monkeypatch.setattr(installer, "_run_refresh_controller", lambda _command: 7)
+
+    assert installer.uninstall() == 1
+    assert (codex_home / "hooks.json").read_text() == before
+
+
+def test_codex_uninstall_without_hooks_still_removes_scheduler(monkeypatch, tmp_path):
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex"))
+    installer = _load_codex_install()
+    lifecycle = []
+    monkeypatch.setattr(
+        installer, "_run_refresh_controller",
+        lambda command: lifecycle.append(command) or 0,
+    )
+
+    assert installer.uninstall() == 0
+    assert lifecycle == ["uninstall"]
 
 
 def test_codex_plugin_manifest_points_to_nested_hooks_schema():
@@ -177,3 +269,17 @@ def test_codex_verify_can_require_registration_state(monkeypatch, tmp_path):
     (codex_home / "config.toml").write_text(state_blocks)
 
     assert codex_install.verify(require_registered=True) == 0
+
+
+def test_codex_invalid_json_is_preserved(monkeypatch, tmp_path):
+    codex_home = tmp_path / "codex"
+    codex_home.mkdir()
+    hooks = codex_home / "hooks.json"
+    hooks.write_text("{broken")
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    installer = _load_codex_install()
+
+    with pytest.raises(ValueError):
+        installer.install()
+
+    assert hooks.read_text() == "{broken"

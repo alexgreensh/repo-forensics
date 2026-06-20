@@ -19,6 +19,8 @@ import json
 import os
 import time
 
+import pytest
+
 import ioc_manager
 
 
@@ -481,6 +483,82 @@ class TestIocSignatureVerifyOnLoad:
         cached = ioc_manager._load_cache(cache_dir=str(tmp_path))
         assert cached is not None
         assert "extra-evil" in cached.get("malicious_npm_packages", [])
+
+
+class TestIocUpdateAcceptance:
+    def test_invalid_signature_fails_without_replacing_cache(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ioc_manager, "IOC_FEED_PUBKEY_HEX", _IOC_TEST_PUB.hex())
+        previous = b'{"version":"previous","malicious_domains":[]}'
+        (tmp_path / ioc_manager.CACHE_FILENAME).write_bytes(previous)
+        feed = {"version": "new", "malicious_domains": ["bad.example"]}
+        raw = json.dumps(feed, sort_keys=True).encode()
+        monkeypatch.setattr(ioc_manager, "fetch_remote_iocs",
+                            lambda *a, **k: (feed, raw))
+        monkeypatch.setattr(ioc_manager, "_fetch_url_bytes", lambda *a, **k: b"x" * 64)
+
+        ok, msg = ioc_manager.update_iocs(cache_dir=str(tmp_path))
+
+        assert not ok
+        assert "signature invalid" in msg
+        assert (tmp_path / ioc_manager.CACHE_FILENAME).read_bytes() == previous
+
+    def test_missing_signature_fails_without_unsigned_fallback(self, tmp_path, monkeypatch):
+        feed = {"version": "new", "malicious_domains": []}
+        raw = json.dumps(feed).encode()
+        monkeypatch.setattr(ioc_manager, "fetch_remote_iocs",
+                            lambda *a, **k: (feed, raw))
+        monkeypatch.setattr(ioc_manager, "_fetch_url_bytes", lambda *a, **k: None)
+
+        ok, msg = ioc_manager.update_iocs(cache_dir=str(tmp_path))
+
+        assert not ok
+        assert "signature missing" in msg
+        assert not (tmp_path / ioc_manager.CACHE_FILENAME).exists()
+
+    def test_interrupted_pair_commit_restores_last_known_good(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ioc_manager, "IOC_FEED_PUBKEY_HEX", _IOC_TEST_PUB.hex())
+        old = {"version": "old", "c2_ips": [], "malicious_domains": ["old.example"],
+               "malicious_npm_packages": [], "malicious_pypi_packages": []}
+        new = {"version": "new", "c2_ips": [], "malicious_domains": ["new.example"],
+               "malicious_npm_packages": [], "malicious_pypi_packages": []}
+        old_raw = json.dumps(old, sort_keys=True).encode()
+        new_raw = json.dumps(new, sort_keys=True).encode()
+        old_sig = _ed25519_sign.sign(old_raw, _IOC_TEST_PRIV, _IOC_TEST_PUB)
+        new_sig = _ed25519_sign.sign(new_raw, _IOC_TEST_PRIV, _IOC_TEST_PUB)
+        ioc_manager._save_signed_cache(old_raw, old_sig, str(tmp_path))
+
+        real_write = ioc_manager._atomic_write_bytes
+        failed = {"done": False}
+
+        def fail_current_signature_once(path, data, mode=0o600):
+            if path == ioc_manager._sig_cache_path(str(tmp_path)) and not failed["done"]:
+                failed["done"] = True
+                raise OSError("injected signature rename failure")
+            return real_write(path, data, mode=mode)
+
+        monkeypatch.setattr(ioc_manager, "_atomic_write_bytes", fail_current_signature_once)
+        with pytest.raises(OSError, match="injected"):
+            ioc_manager._save_signed_cache(new_raw, new_sig, str(tmp_path))
+
+        assert ioc_manager._verify_ioc_cache_signature(str(tmp_path)) is True
+        assert ioc_manager._load_cache(str(tmp_path))["version"] == "old"
+
+    def test_mismatched_current_pair_recovers_previous_after_crash(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ioc_manager, "IOC_FEED_PUBKEY_HEX", _IOC_TEST_PUB.hex())
+        old = {"version": "old", "c2_ips": [], "malicious_domains": [],
+               "malicious_npm_packages": [], "malicious_pypi_packages": []}
+        new = dict(old, version="new")
+        old_raw = json.dumps(old, sort_keys=True).encode()
+        new_raw = json.dumps(new, sort_keys=True).encode()
+        old_sig = _ed25519_sign.sign(old_raw, _IOC_TEST_PRIV, _IOC_TEST_PUB)
+        new_sig = _ed25519_sign.sign(new_raw, _IOC_TEST_PRIV, _IOC_TEST_PUB)
+        ioc_manager._save_signed_cache(old_raw, old_sig, str(tmp_path))
+        ioc_manager._save_signed_cache(new_raw, new_sig, str(tmp_path))
+        # Simulate power loss after the JSON rename but before its matching sig.
+        ioc_manager._atomic_write_bytes(ioc_manager._cache_path(str(tmp_path)), old_raw)
+
+        assert ioc_manager._verify_ioc_cache_signature(str(tmp_path)) is True
+        assert ioc_manager._load_cache(str(tmp_path))["version"] == "old"
 
 
 # ---------------------------------------------------------------------------

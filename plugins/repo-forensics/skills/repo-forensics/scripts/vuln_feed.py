@@ -235,6 +235,13 @@ def update_kev_cache(cache_dir=None):
         cid = v.get("cveID")
         if isinstance(cid, str) and _CVE_ID_RE.match(cid):
             cve_ids.append(cid.upper())
+    cve_ids = sorted(set(cve_ids))
+    # Producer and consumer must share the same acceptance invariant.  The
+    # public KEV catalog has 1000+ entries; fewer than 100 means truncated or
+    # poisoned data and must never replace the last known-good cache.
+    if len(cve_ids) < 100:
+        return False, (f"KEV catalog rejected as truncated/poisoned: "
+                       f"{len(cve_ids)} valid CVEs (last known-good cache preserved)")
     payload = {
         "_cached_at": time.time(),
         "catalogVersion": data.get("catalogVersion"),

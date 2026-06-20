@@ -180,7 +180,8 @@ def get_tracked_symlinks(repo_root, skill_root):
 def get_tracked_files(skill_root):
     """Get all files that should be integrity-checked."""
     skip_dirs = {'.git', '__pycache__', '.pytest_cache', 'tests', '.cache', '.ruff_cache'}
-    skip_files = {'.DS_Store', '.forensics-baseline.json', '.forensics-iocs.json', 'checksums.json'}
+    skip_files = {'.DS_Store', '.forensics-baseline.json', '.forensics-iocs.json',
+                  'checksums.json', 'checksums.json.sig'}
 
     # In a git repo, use git ls-files to avoid local-only artifacts
     try:

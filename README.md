@@ -183,11 +183,35 @@ Once installed as a plugin, repo-forensics runs automatically in the background.
 
 Claude Code v2.1.160+ may ask for an extra acceptEdits confirmation before writing package-manager and dev-environment config files such as `.npmrc`, `.yarnrc*`, `bunfig.toml`, `.bazelrc`, `.pre-commit-config.yaml`, and `.devcontainer/`. Repo Forensics scans these files normally; the extra prompt is Claude Code's own write-safety layer.
 
-Threat-feed refresh is self-healing after hook trust. On macOS, SessionStart
-installs or repairs a per-user LaunchAgent. On Linux and Windows, it starts a
-detached refresh when the last fully successful update is older than 24 hours.
-The freshness marker is updated only after IOC, CISA KEV, and signed rule-pack
-feeds all succeed; failed or partial updates remain visible as stale.
+Threat-feed refresh is self-healing after hook trust. SessionStart promotes an
+integrity-checked, agent-neutral payload into stable per-user storage and
+installs or repairs the native scheduler: launchd on macOS, a systemd user timer
+on Linux, and Task Scheduler on Windows. If a native scheduler is unavailable
+(for example, a Linux container without a user systemd instance), a locked,
+hour-throttled detached refresh remains as the observable fallback.
+
+Claude, Codex, and OpenClaw share one monotonic active version: an older agent
+install cannot downgrade the scheduler selected by a newer one. The legacy
+v2.11.4 LaunchAgent is retired during migration. Feed freshness advances only
+after the IOC signature verifies, the KEV catalog passes its truncation floor,
+and the signed rule pack is verified and usable. An unchanged signed rule pack
+is a healthy no-op, not a rollback failure.
+
+```bash
+# Human status or machine-readable health (scheduler, active version, each feed)
+python3 skills/repo-forensics/scripts/refresh_controller.py status
+python3 skills/repo-forensics/scripts/refresh_controller.py status --json
+
+# Idempotent repair, persistent disable, and re-enable
+python3 skills/repo-forensics/scripts/refresh_controller.py ensure --json
+python3 skills/repo-forensics/scripts/refresh_controller.py disable --json
+python3 skills/repo-forensics/scripts/refresh_controller.py enable --json
+```
+
+Existing pre-fix installations cannot execute code they have not downloaded.
+With marketplace auto-update enabled, the first trusted SessionStart after the
+upgrade migrates and repairs them automatically. If auto-update was disabled,
+update Repo Forensics once through the agent marketplace, then start a session.
 
 ---
 
@@ -249,7 +273,7 @@ Scanning never requires network access. The feed is a freshness layer on top of 
 
 ## Battle-Tested Against Real Attacks
 
-1,844 tests across 40+ test files. Not synthetic toy examples: detection patterns built from real supply chain campaigns that hit production systems.
+1,859 tests across 40+ test files. Not synthetic toy examples: detection patterns built from real supply chain campaigns that hit production systems.
 
 **Named attack campaigns in the IOC database:**
 
@@ -275,7 +299,7 @@ Scanning never requires network access. The feed is a freshness layer on top of 
 
 Every campaign above has version-pinned IOCs in `compromised_versions.json`, detection rules in the lifecycle and dependency scanners, and correlation rules for compound attack patterns.
 
-**The tests are safe to run.** All 1,844 tests use synthetic fixtures in temporary directories. No real malware is downloaded or executed. Pattern matching runs against fake package.json files containing attack signatures, the same way antivirus software tests against EICAR strings.
+**The tests are safe to run.** All 1,859 tests use synthetic fixtures in temporary directories. No real malware is downloaded or executed. Pattern matching runs against fake package.json files containing attack signatures, the same way antivirus software tests against EICAR strings.
 
 ---
 
@@ -570,7 +594,7 @@ Exit codes: `0` = clean, `1` = warn, `2` = block merge.
 | **IOC auto-update** | `--update-iocs` pulls latest C2 IPs, malicious domains, known-bad packages |
 | **Installation verification** | `--verify-install` checks repo-forensics itself for tampering |
 | **Manifest drift** | Declared vs actual imports, phantom deps, runtime installs |
-| **1,844 pytest tests** | Full coverage across 40+ test files |
+| **1,859 pytest tests** | Full coverage across 40+ test files |
 
 </details>
 
