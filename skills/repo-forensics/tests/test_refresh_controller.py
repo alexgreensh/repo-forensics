@@ -388,3 +388,39 @@ def test_controller_lock_excludes_same_process_reentry(monkeypatch, tmp_path):
     # Lock is fully released afterwards: a fresh acquisition now succeeds.
     with controller._ControllerLock():
         pass
+
+
+def test_ensure_selfheals_stale_uninstall_disable(monkeypatch, tmp_path):
+    # A "disabled by uninstall" marker must NOT survive a reinstall: ensure()
+    # runs only because the hook is installed, so it clears the stale marker and
+    # proceeds to (re)enable. This is the self-heal path for users who hit the
+    # refresh bug after an uninstall/reinstall cycle.
+    _redirect_state(monkeypatch, tmp_path)
+    controller.DISABLED_MARKER.parent.mkdir(parents=True, exist_ok=True)
+    controller.DISABLED_MARKER.write_text("disabled by uninstall\n")
+    monkeypatch.setattr(controller, "promote_payload",
+                        lambda *a, **k: {"version": "2.11.5", "refresh_script": "/x",
+                                         "controller": "/x"})
+    monkeypatch.setattr(controller, "_retire_legacy_scheduler", lambda: None)
+    monkeypatch.setattr(controller, "_ensure_scheduler", lambda a: (True, "macos", "ok"))
+    monkeypatch.setattr(controller, "_timestamp_is_due", lambda *a: False)
+    monkeypatch.setattr(controller, "_active_is_usable", lambda a: True)
+
+    result = controller.ensure()
+
+    assert result["status"] != "disabled"
+    assert not controller.DISABLED_MARKER.exists(), "stale uninstall marker must be cleared"
+
+
+def test_ensure_respects_explicit_user_disable(monkeypatch, tmp_path):
+    # An explicit `disable` is deliberate intent and MUST stay sticky across
+    # ensure() calls / updates — only an uninstall marker self-heals.
+    _redirect_state(monkeypatch, tmp_path)
+    controller.DISABLED_MARKER.parent.mkdir(parents=True, exist_ok=True)
+    controller.DISABLED_MARKER.write_text("disabled by user\n")
+    monkeypatch.setattr(controller, "_remove_all_schedulers", lambda: (True, "removed"))
+
+    result = controller.ensure()
+
+    assert result["status"] == "disabled"
+    assert controller.DISABLED_MARKER.exists(), "explicit user disable must persist"

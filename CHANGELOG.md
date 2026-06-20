@@ -6,6 +6,11 @@ All notable changes to repo-forensics. Versions follow semver.
 
 ### Fixed — verified, cross-platform refresh automation
 
+- Refresh now self-heals after a reinstall/update: a leftover "disabled by
+  uninstall" marker no longer keeps threat-DB refresh dark on a machine where the
+  plugin is installed again. The next session re-enables and refreshes
+  automatically, clearing any stale-DB warning with no manual step. An explicit
+  user `disable` (or the env kill switch) still stays sticky.
 - Fixed the reproduced stale-marker incident: an unchanged, valid signed
   rule-pack is now accepted as current after cache expiry; equal-version changed
   content remains rejected as equivocation and lower versions as rollback.

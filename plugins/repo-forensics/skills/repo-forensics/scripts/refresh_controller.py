@@ -774,15 +774,37 @@ def ensure(candidate_root: Optional[Path] = None) -> dict:
     # marker so the disable outlives the env var.
     disabled_by_env = (os.environ.get("REPO_FORENSICS_DISABLE_REFRESH", "")
                        .strip().lower() in DISABLE_VALUES)
-    if disabled_by_env or DISABLED_MARKER.exists():
-        if disabled_by_env:
-            CACHE_DIR.mkdir(parents=True, exist_ok=True)
-            os.chmod(CACHE_DIR, 0o700)
-            _atomic_write(DISABLED_MARKER, b"disabled by REPO_FORENSICS_DISABLE_REFRESH\n")
+    if disabled_by_env:
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        os.chmod(CACHE_DIR, 0o700)
+        _atomic_write(DISABLED_MARKER, b"disabled by REPO_FORENSICS_DISABLE_REFRESH\n")
         removed, detail = _remove_all_schedulers()
         return {"ok": removed, "operation_ok": removed, "status": "disabled",
                 "scheduler_healthy": False, "refresh_healthy": False,
                 "scheduler": detail, "platform": _platform_name()}
+    if DISABLED_MARKER.exists():
+        # Self-heal a stale uninstall-disable. ensure() runs only because the
+        # SessionStart hook is installed, which proves the plugin is present
+        # again — so a leftover "disabled by uninstall" marker from a prior
+        # removal must NOT keep a reinstalled/updated tool dark. Clear it and
+        # re-enable. An explicit user `disable` (or env kill switch) stays sticky
+        # because that reflects deliberate intent, not a bug or a stale uninstall.
+        try:
+            reason = DISABLED_MARKER.read_bytes()
+        except OSError:
+            reason = b""
+        if b"uninstall" not in reason:
+            removed, detail = _remove_all_schedulers()
+            return {"ok": removed, "operation_ok": removed, "status": "disabled",
+                    "scheduler_healthy": False, "refresh_healthy": False,
+                    "scheduler": detail, "platform": _platform_name()}
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        os.chmod(CACHE_DIR, 0o700)
+        try:
+            DISABLED_MARKER.unlink()
+        except OSError:
+            pass
+        _log("cleared stale uninstall-disable marker; re-enabling after reinstall")
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     os.chmod(CACHE_DIR, 0o700)
     try:
