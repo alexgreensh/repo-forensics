@@ -281,7 +281,13 @@ def promote_payload(candidate_root: Optional[Path] = None) -> dict:
     destination = VERSIONS_DIR / f"{candidate_version}-{manifest_digest[:12]}"
     previous = VERSIONS_DIR / f".{destination.name}.previous"
     if not destination.exists() and previous.exists():
+        # Crash recovery: the prior promote committed `previous` but died before
+        # restoring it as `destination`.
         os.replace(previous, destination)
+    elif destination.exists() and previous.exists():
+        # A valid destination already exists, so `previous` is a stale leftover
+        # from a promote that died before retiring it. Reclaim the disk.
+        shutil.rmtree(previous, ignore_errors=True)
     stage = VERSIONS_DIR / f".{destination.name}.tmp-{os.getpid()}"
     try:
         shutil.copytree(candidate_root, stage, symlinks=False, ignore=_copy_ignore)
@@ -347,9 +353,11 @@ class _ControllerLock:
         if not _PROCESS_LOCK.acquire(blocking=False):
             raise BlockingIOError("another refresh controller thread is active")
         self._holds_process_lock = True
-        CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        os.chmod(CACHE_DIR, 0o700)
         try:
+            # mkdir/chmod must live inside the guard: if either raises, the
+            # process lock would otherwise leak for the process lifetime.
+            CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            os.chmod(CACHE_DIR, 0o700)
             self.fd = os.open(CONTROLLER_LOCK, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
             try:
                 if os.name == "nt":
@@ -596,15 +604,17 @@ def _trigger_scheduler(platform_name: str) -> bool:
 
 
 # Interpreter-control variables that let a caller redirect imports or inject a
-# native library into a child Python. They are stripped before spawning any
-# refresh worker so the worker cannot be hijacked via a poisoned parent env —
-# the trusted-import guarantee on the controller side is worthless if the child
-# honours an attacker's PYTHONPATH/LD_PRELOAD.
+# native library into a child Python (or a shelled-out hook). They are stripped
+# before spawning any refresh worker so the worker cannot be hijacked via a
+# poisoned parent env — the trusted-import guarantee on the controller side is
+# worthless if the child honours an attacker's PYTHONPATH/LD_PRELOAD/BASH_ENV.
 _UNSAFE_CHILD_ENV = (
     "PYTHONPATH", "PYTHONSTARTUP", "PYTHONHOME", "PYTHONOPTIMIZE",
     "PYTHONDONTWRITEBYTECODE", "PYTHONEXECUTABLE",
     "LD_PRELOAD", "LD_LIBRARY_PATH", "LD_AUDIT",
     "DYLD_INSERT_LIBRARIES", "DYLD_LIBRARY_PATH", "DYLD_FRAMEWORK_PATH",
+    "DYLD_ROOT_PATH",
+    "BASH_ENV", "ENV",
 )
 
 
@@ -750,7 +760,7 @@ def _delegate_to_stable(candidate_root: Path) -> Optional[dict]:
             [sys.executable, str(stable_controller), "adopt", "--candidate",
              str(candidate_root), "--json"],
             stdin=subprocess.DEVNULL, capture_output=True, text=True,
-            timeout=45, check=False,
+            timeout=45, check=False, env=_sanitized_env(),
         )
         lines = [line for line in completed.stdout.splitlines() if line.strip()]
         result = json.loads(lines[-1]) if lines else {}
@@ -793,7 +803,10 @@ def ensure(candidate_root: Optional[Path] = None) -> dict:
             reason = DISABLED_MARKER.read_bytes()
         except OSError:
             reason = b""
-        if b"uninstall" not in reason:
+        # Exact sentinel match, not a substring: only the uninstall path self-heals.
+        # A user-authored or future marker that merely contains "uninstall" must
+        # not accidentally re-enable refresh against intent.
+        if reason.strip() != b"disabled by uninstall":
             removed, detail = _remove_all_schedulers()
             return {"ok": removed, "operation_ok": removed, "status": "disabled",
                     "scheduler_healthy": False, "refresh_healthy": False,

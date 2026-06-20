@@ -424,3 +424,35 @@ def test_ensure_respects_explicit_user_disable(monkeypatch, tmp_path):
 
     assert result["status"] == "disabled"
     assert controller.DISABLED_MARKER.exists(), "explicit user disable must persist"
+
+
+def test_ensure_selfheal_requires_exact_uninstall_sentinel(monkeypatch, tmp_path):
+    # A user-disable marker whose free text merely contains the word "uninstall"
+    # must NOT be self-healed — only the exact "disabled by uninstall" sentinel.
+    _redirect_state(monkeypatch, tmp_path)
+    controller.DISABLED_MARKER.parent.mkdir(parents=True, exist_ok=True)
+    controller.DISABLED_MARKER.write_text("no uninstall needed; user disabled\n")
+    monkeypatch.setattr(controller, "_remove_all_schedulers", lambda: (True, "removed"))
+
+    result = controller.ensure()
+
+    assert result["status"] == "disabled"
+    assert controller.DISABLED_MARKER.exists()
+
+
+def test_controller_lock_releases_process_lock_on_mkdir_failure(monkeypatch, tmp_path):
+    # Regression: mkdir/chmod raising inside __enter__ must not leak _PROCESS_LOCK.
+    _redirect_state(monkeypatch, tmp_path)
+
+    def boom(*a, **k):
+        raise OSError("cannot mkdir")
+    monkeypatch.setattr(controller.CACHE_DIR.__class__, "mkdir", boom)
+
+    try:
+        with controller._ControllerLock():
+            pass
+    except OSError:
+        pass
+    # The process lock must be free again — a subsequent acquire succeeds.
+    assert controller._PROCESS_LOCK.acquire(blocking=False)
+    controller._PROCESS_LOCK.release()

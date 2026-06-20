@@ -32,7 +32,8 @@ def _dq(value):
     every hook event; an unescaped `"`, `$`, or backtick would break the quoting
     and allow command injection if the repo lives at a hostile path."""
     return (str(value).replace("\\", "\\\\").replace('"', '\\"')
-            .replace("$", "\\$").replace("`", "\\`"))
+            .replace("$", "\\$").replace("`", "\\`")
+            .replace("\n", "\\n").replace("\r", "\\r"))
 
 
 def _atomic_write_config(path, config):
@@ -42,14 +43,21 @@ def _atomic_write_config(path, config):
     target = os.fspath(path)
     directory = os.path.dirname(target) or "."
     fd, tmp = tempfile.mkstemp(prefix=".repo-forensics.", dir=directory)
+    fd_owned = False
     try:
         with os.fdopen(fd, "w") as f:
+            fd_owned = True  # fdopen now owns fd; its context manager will close it
             json.dump(config, f, indent=2)
             f.write("\n")
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp, target)
     except BaseException:
+        if not fd_owned:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
         try:
             os.unlink(tmp)
         except OSError:

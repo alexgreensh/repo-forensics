@@ -31,7 +31,7 @@
     "scripts/ioc_manager.py": "74bf4df219ed5bb46681603f3e58bb15957f3078f14d2f0d5ac1ae09822eb0c4",
     "scripts/parse_pnpm_lock.py": "720f084e11cd759ab453bdfa161950111a49455ff2c6ba55ef5a9c3e32161f0c",
     "scripts/pre_scan.py": "8503b0e880ae57c7092b8897ce0de583c52685ae2d8604905b724cdd50088dd6",
-    "scripts/refresh_controller.py": "b18373f92ba8727511adbea90af7bd06642dc9d62057c043ac248f97f13543b5",
+    "scripts/refresh_controller.py": "696c91646c9b76388fb706878e17c4f2a492435fbf3f8fe6bf8a86628370920c",
     "scripts/refresh_threat_dbs.py": "f1dd2c4d2aa3ae47e722aad1575a7836794016c804dcf3e01baa90efbe963829",
     "scripts/rule_loader.py": "ba7a0ca13a40603fdf710ace1236ee58685115a4f59000718c9b6c86638f235b",
     "scripts/rulepack_feed.py": "f63781e4c909257c97c4dadf0018621c6f5455096bd51ae7be8eee106b8f66be",
