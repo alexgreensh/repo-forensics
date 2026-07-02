@@ -1,3 +1,9 @@
 # Integrity hashes cover raw bytes. Keep text payloads stable when Git checks
 # the marketplace out on Windows with core.autocrlf=true.
 * text=auto eol=lf
+
+# Ed25519 signatures are raw 64-byte blobs. They are NUL-free, so Git's
+# text=auto heuristic would treat them as text and could strip a stray CR from
+# a regenerated signature at commit time, silently corrupting self-verification.
+# Force them binary so they are never EOL-normalized.
+*.sig binary

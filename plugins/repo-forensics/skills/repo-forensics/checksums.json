@@ -35,7 +35,7 @@
     "scripts/refresh_threat_dbs.py": "f1dd2c4d2aa3ae47e722aad1575a7836794016c804dcf3e01baa90efbe963829",
     "scripts/rule_loader.py": "ba7a0ca13a40603fdf710ace1236ee58685115a4f59000718c9b6c86638f235b",
     "scripts/rulepack_feed.py": "f63781e4c909257c97c4dadf0018621c6f5455096bd51ae7be8eee106b8f66be",
-    "scripts/run_forensics.sh": "3076e9ee82059bf682aa1949a56c6b3a6af45813d7621a01e8ac8ae9283e1198",
+    "scripts/run_forensics.sh": "0bb52f0b4ee68ea4bf0f958cbaa117a20323bfed1597a78c6eec51da52e9d90a",
     "scripts/scan_agent_skills.py": "1037594101103df6ccb02e25e3a7cb95e5b50a9b651627b69ce4e1f7c06060cb",
     "scripts/scan_archive.py": "19b4468414cedf3c676a110c273475eb3b039400d09665c1ae44914b69d0095e",
     "scripts/scan_ast.py": "34a7f1fe1769784184224f21a54a6b38eda33f8604989936bfc5b0164f483c35",

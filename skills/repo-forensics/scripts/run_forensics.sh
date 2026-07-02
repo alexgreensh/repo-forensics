@@ -43,17 +43,24 @@ fi
 # indefinitely. The timeout wrapper is selected in priority order:
 #   1. timeout   (Linux, coreutils)
 #   2. gtimeout  (macOS with Homebrew coreutils)
-#   3. a Perl process-group supervisor (macOS ships /usr/bin/perl; Git for
-#      Windows commonly includes perl in its PATH)
+#   3. a Perl process-group supervisor (macOS ships /usr/bin/perl; the full Git
+#      for Windows installer bundles perl, though minimal distributions such as
+#      MinGit deliberately omit it)
 # Only if NONE of these are available does the probe run unbounded — a residual
-# risk limited to unusually minimal environments with no perl and no coreutils.
+# risk on minimal environments (e.g. MinGit, which ships neither perl nor
+# coreutils), where a hanging Store-alias stub could block the probe. Adding a
+# bash-only timeout tier is tracked as follow-up.
 #
-# This resolver intentionally differs from hooks/python-launcher.sh. This is an
-# interactive CLI run from the user's full shell PATH, where a bounded sentinel
-# probe is sufficient and the user's PATH is trusted. hooks/python-launcher.sh
-# runs in stripped/untrusted GUI hook PATH (Codex, GUI-launched agent apps), so it uses
-# a safe-prefix allowlist, size checks, WindowsApps timeouts, and direct-path
-# fallbacks. Do not collapse the two without accounting for that environment.
+# This resolver intentionally differs from hooks/python-launcher.sh, which runs
+# in a stripped/untrusted GUI hook PATH (Codex, GUI-launched agent apps) and so
+# uses a safe-prefix allowlist, size checks, WindowsApps timeouts, and
+# direct-path fallbacks. This resolver instead relies on a bounded sentinel
+# probe. Note run_forensics.sh is ALSO reachable from that hook PATH — session
+# hook deep scans (session_scan.py) spawn it via subprocess without a sanitized
+# env, so the probe inherits the caller's PATH rather than a guaranteed-trusted
+# one; the bounded sentinel + timeout is the safety boundary here. Extending the
+# launcher's allowlist to this path is tracked as follow-up. Do not collapse the
+# two without accounting for that environment.
 _rf_bounded() {
     # Run "$@" with a 5-second alarm. Uses timeout/gtimeout/perl in priority order.
     # Returns the candidate's exit status (124 if timed out).
