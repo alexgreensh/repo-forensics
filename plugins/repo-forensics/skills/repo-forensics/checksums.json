@@ -35,7 +35,7 @@
     "scripts/refresh_threat_dbs.py": "f1dd2c4d2aa3ae47e722aad1575a7836794016c804dcf3e01baa90efbe963829",
     "scripts/rule_loader.py": "ba7a0ca13a40603fdf710ace1236ee58685115a4f59000718c9b6c86638f235b",
     "scripts/rulepack_feed.py": "f63781e4c909257c97c4dadf0018621c6f5455096bd51ae7be8eee106b8f66be",
-    "scripts/run_forensics.sh": "d61ef83d58e00d95bf6f8cc2051484b62b19bf9aeb42d7b606c8249f2cc3d8dc",
+    "scripts/run_forensics.sh": "3076e9ee82059bf682aa1949a56c6b3a6af45813d7621a01e8ac8ae9283e1198",
     "scripts/scan_agent_skills.py": "1037594101103df6ccb02e25e3a7cb95e5b50a9b651627b69ce4e1f7c06060cb",
     "scripts/scan_archive.py": "19b4468414cedf3c676a110c273475eb3b039400d09665c1ae44914b69d0095e",
     "scripts/scan_ast.py": "34a7f1fe1769784184224f21a54a6b38eda33f8604989936bfc5b0164f483c35",
@@ -83,9 +83,9 @@
   },
   "hook_count": 9,
   "repo_manifests": {
-    ".claude-plugin/marketplace.json": "e83fe830120569fe9d0dbd2734e7fad5cb81a9be166f5572dad317fa727c0506",
-    ".claude-plugin/plugin.json": "7fcb6b2eac4d1e250ed7cea38ac4aff46a7e27a89b4cd920a6e52197b85d09bc",
-    ".codex-plugin/plugin.json": "35417614e5304731d8a86e2046094aeb1ba42e1121107a449d7ceda323cbdef6"
+    ".claude-plugin/marketplace.json": "241eba79c9a5807405940c5fc36a019e07869109b33ddfbd8f2756fe711e0a8a",
+    ".claude-plugin/plugin.json": "93eb6337da6d8664581068c0c9cc24947ad5af9b2096a7fe3564a3ce75c645cf",
+    ".codex-plugin/plugin.json": "c3a9a0597a0c0fc9d9b410d3205edf6ec8919786286169ece03d776a3c56ab53"
   },
   "manifest_count": 3,
   "repo_source_manifests": {

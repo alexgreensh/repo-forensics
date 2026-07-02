@@ -29,6 +29,91 @@ if [ -z "${1:-}" ]; then
     exit 1
 fi
 
+# Resolve one working Python 3 interpreter for the whole run. Executing each
+# candidate is intentional: Windows can expose zero-byte/App Execution Alias
+# stubs named python or python3 that exist on PATH but are not interpreters.
+#
+# The probe requires the candidate to emit a unique sentinel ("PY3OK") via
+# actual Python 3.8+ code. Exit status alone is insufficient: a zero-byte stub
+# is treated by bash as an empty shell script (exit 0), and a non-Python binary
+# can exit 0 without ever evaluating the -c argument. Only a real Python 3.8+
+# interpreter can print the sentinel, so impostors are rejected.
+#
+# A 5-second timeout prevents a hanging candidate from blocking the CLI
+# indefinitely. The timeout wrapper is selected in priority order:
+#   1. timeout   (Linux, coreutils)
+#   2. gtimeout  (macOS with Homebrew coreutils)
+#   3. a Perl process-group supervisor (macOS ships /usr/bin/perl; Git for
+#      Windows commonly includes perl in its PATH)
+# Only if NONE of these are available does the probe run unbounded — a residual
+# risk limited to unusually minimal environments with no perl and no coreutils.
+#
+# This resolver intentionally differs from hooks/python-launcher.sh. This is an
+# interactive CLI run from the user's full shell PATH, where a bounded sentinel
+# probe is sufficient and the user's PATH is trusted. hooks/python-launcher.sh
+# runs in stripped/untrusted GUI hook PATH (Codex, GUI-launched agent apps), so it uses
+# a safe-prefix allowlist, size checks, WindowsApps timeouts, and direct-path
+# fallbacks. Do not collapse the two without accounting for that environment.
+_rf_bounded() {
+    # Run "$@" with a 5-second alarm. Uses timeout/gtimeout/perl in priority order.
+    # Returns the candidate's exit status (124 if timed out).
+    if [ -n "$_RF_TIMEOUT_CMD" ]; then
+        "$_RF_TIMEOUT_CMD" 5 "$@"
+    elif [ -n "$_RF_USE_PERL" ]; then
+        # Perl supervisor: fork child into its own process group, alarm in
+        # parent, TERM then KILL the whole process group on timeout. This
+        # kills the candidate AND any children it spawned (e.g. a shell stub
+        # that runs sleep). Plain alarm+exec only kills the exec'd process,
+        # leaving orphaned children holding the capture pipe open.
+        perl -e '
+use POSIX qw(setpgid);
+my $s=shift; my $p=fork;
+if(!defined $p){die"fork:$!"}
+if($p==0){setpgid(0,0)||die"setpgid:$!";exec @ARGV or die"exec:$!"}
+$SIG{ALRM}=sub{kill 15,-$p;select undef,undef,undef,0.5;kill 9,-$p;exit 124};
+alarm $s;
+waitpid($p,0);
+alarm 0;
+exit($?&127?128+($?&127):$?>>8)
+' 5 "$@"
+    else
+        "$@"  # residual unbounded fallback (no timeout utility available)
+    fi
+}
+_RF_TIMEOUT_CMD=""
+if command -v timeout >/dev/null 2>&1; then
+    _RF_TIMEOUT_CMD="timeout"
+elif command -v gtimeout >/dev/null 2>&1; then
+    _RF_TIMEOUT_CMD="gtimeout"
+fi
+_RF_USE_PERL=""
+if [ -z "$_RF_TIMEOUT_CMD" ] && command -v perl >/dev/null 2>&1; then
+    _RF_USE_PERL=1
+fi
+_PY_PROBE='import sys; print("PY3OK") if sys.version_info >= (3, 8) else print("NO")'
+_py_check() {
+    # $1 = candidate command (single word like python3)
+    local out
+    out=$(_rf_bounded "$1" -c "$_PY_PROBE" 2>/dev/null) || return 1
+    [ "$out" = "PY3OK" ]
+}
+PYTHON=()
+for candidate in python3 python; do
+    if command -v "$candidate" >/dev/null 2>&1 && _py_check "$candidate"; then
+        PYTHON=("$candidate")
+        break
+    fi
+done
+if [ ${#PYTHON[@]} -eq 0 ] && command -v py >/dev/null 2>&1; then
+    if _rf_bounded py -3 -c "$_PY_PROBE" 2>/dev/null | grep -q '^PY3OK$'; then
+        PYTHON=(py -3)
+    fi
+fi
+if [ ${#PYTHON[@]} -eq 0 ]; then
+    echo "[repo-forensics] ERROR: Python 3.8+ not found (tried python3, python, py -3)" >&2
+    exit 127
+fi
+
 # Check for --inventory before consuming positional arg
 if [ "$1" = "--inventory" ]; then
     shift
@@ -46,7 +131,7 @@ if [ "$1" = "--inventory" ]; then
         echo "Error: forensify scripts not found at $SCRIPT_DIR/../../forensify/scripts" >&2
         exit 1
     }
-    exec python3 "$FORENSIFY_DIR/build_inventory.py" "${INVENTORY_ARGS[@]}"
+    exec "${PYTHON[@]}" "$FORENSIFY_DIR/build_inventory.py" "${INVENTORY_ARGS[@]}"
 fi
 
 REPO_PATH=$(realpath "$1")
@@ -113,20 +198,20 @@ fi
 
 # Handle --verify-install (standalone, exits after)
 if $VERIFY_INSTALL; then
-    python3 "$SKILL_DIR/verify_install.py" --verify
+    "${PYTHON[@]}" "$SKILL_DIR/verify_install.py" --verify
     exit $?
 fi
 
 # Handle --update-iocs before scanning
 if $UPDATE_IOCS; then
     echo "[*] Updating IOC database..."
-    python3 "$SKILL_DIR/ioc_manager.py" --update || echo "[!] IOC update failed, scanning with cached data" >&2
+    "${PYTHON[@]}" "$SKILL_DIR/ioc_manager.py" --update || echo "[!] IOC update failed, scanning with cached data" >&2
 fi
 
 # Handle --update-vulns (CISA KEV) before scanning
 if $UPDATE_VULNS && ! $OFFLINE; then
     echo "[*] Updating CISA KEV catalog..."
-    python3 "$SKILL_DIR/vuln_feed.py" --update || true
+    "${PYTHON[@]}" "$SKILL_DIR/vuln_feed.py" --update || true
 fi
 TMPDIR=$(mktemp -d)
 # shellcheck disable=SC2329  # invoked indirectly via trap
@@ -224,9 +309,9 @@ run_scanner() {
     fi
 
     if [ -n "$TIMEOUT_CMD" ]; then
-        $TIMEOUT_CMD "$SCANNER_TIMEOUT" python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$internal_format" ${scanner_args[@]+"${scanner_args[@]}"} 3>&- > "$output_file" 2>> "$error_file"
+        $TIMEOUT_CMD "$SCANNER_TIMEOUT" "${PYTHON[@]}" "$SKILL_DIR/$script" "$REPO_PATH" --format "$internal_format" ${scanner_args[@]+"${scanner_args[@]}"} 3>&- > "$output_file" 2>> "$error_file"
     else
-        python3 "$SKILL_DIR/$script" "$REPO_PATH" --format "$internal_format" ${scanner_args[@]+"${scanner_args[@]}"} 3>&- > "$output_file" 2>> "$error_file"
+        "${PYTHON[@]}" "$SKILL_DIR/$script" "$REPO_PATH" --format "$internal_format" ${scanner_args[@]+"${scanner_args[@]}"} 3>&- > "$output_file" 2>> "$error_file"
     fi
     local exit_code=$?
     echo "$exit_code" > "$exit_file"
@@ -236,7 +321,7 @@ run_scanner() {
         local elapsed=$(( $(date +%s) - start_time ))
         local findings=0
         if [ -f "$output_file" ] && [ -s "$output_file" ]; then
-            findings=$(python3 -c "
+            findings=$("${PYTHON[@]}" -c "
 import json, sys
 try:
     d = json.load(open('$output_file'))
@@ -324,12 +409,12 @@ EXIT_CODE_FILE="$TMPDIR/aggregate.exit"
 echo "99" > "$EXIT_CODE_FILE"
 
 if [ "$FORMAT" = "json" ]; then
-    if ! python3 "$SKILL_DIR/aggregate_json.py" "$TMPDIR" "$REPO_PATH" "$SKILL_SCAN" "$EXIT_CODE_FILE"; then
+    if ! "${PYTHON[@]}" "$SKILL_DIR/aggregate_json.py" "$TMPDIR" "$REPO_PATH" "$SKILL_SCAN" "$EXIT_CODE_FILE"; then
         :
     fi
 else
     # text and summary modes both use text output from the aggregator
-    if ! python3 "$SKILL_DIR/aggregate_json.py" --text "$TMPDIR" "$REPO_PATH" "$SKILL_SCAN" "$EXIT_CODE_FILE"; then
+    if ! "${PYTHON[@]}" "$SKILL_DIR/aggregate_json.py" --text "$TMPDIR" "$REPO_PATH" "$SKILL_SCAN" "$EXIT_CODE_FILE"; then
         :
     fi
 fi

@@ -1,0 +1,3 @@
+# Integrity hashes cover raw bytes. Keep text payloads stable when Git checks
+# the marketplace out on Windows with core.autocrlf=true.
+* text=auto eol=lf

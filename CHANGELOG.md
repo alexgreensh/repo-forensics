@@ -2,6 +2,18 @@
 
 All notable changes to repo-forensics. Versions follow semver.
 
+## [2.11.6] - 2026-07-02
+
+### Fixed — native Windows marketplace installs
+
+- Preserve LF bytes in Git checkouts on Windows so signed installation
+  integrity checks no longer report nearly every plugin file as tampered when
+  `core.autocrlf=true`.
+- Resolve and probe `python3`, `python`, then `py -3` once for CLI scans,
+  skipping Microsoft Store execution aliases that exist on `PATH` but are not
+  usable interpreters. Adapted from the Windows work contributed by Diane
+  Whiddon in #28.
+
 ## [2.11.5] - 2026-06-20
 
 ### Fixed — verified, cross-platform refresh automation
