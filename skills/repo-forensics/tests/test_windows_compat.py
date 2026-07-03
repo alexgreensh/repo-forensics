@@ -6,6 +6,85 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 RUN_FORENSICS = REPO_ROOT / "skills" / "repo-forensics" / "scripts" / "run_forensics.sh"
+PYTHON_LAUNCHER = REPO_ROOT / "hooks" / "python-launcher.sh"
+
+
+def _write_shim(path: Path, banner: str | None, *, executable: bool = True) -> None:
+    """Write a fake interpreter. If banner is None it exits 0 on --version but
+    prints nothing (the non-Python exit-0 pretender); otherwise it echoes the
+    banner. Any non --version invocation just marks that it ran."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    version_line = f'echo "{banner}"' if banner is not None else "true"
+    path.write_text(
+        "#!/bin/bash\n"
+        f'[ "$1" = "--version" ] && {{ {version_line}; exit 0; }}\n'
+        'echo "SHIM_RAN:$*"\n'
+    )
+    if executable:
+        path.chmod(0o755)
+
+
+def _run_codex_finder(env: dict) -> subprocess.CompletedProcess:
+    """Source only the launcher's function defs (not its exec tail) and call
+    find_codex_runtime_python in isolation, so the Codex-runtime fallback is
+    exercised without the machine's real system Python short-circuiting it."""
+    script = (
+        'set -u\n'
+        f'''eval "$(sed -n '1,/^if py3=/p' "{PYTHON_LAUNCHER}" | sed '$d')"\n'''
+        'set +e\n'
+        'out=$(find_codex_runtime_python); rc=$?\n'
+        'printf "OUT=%s\\nRC=%s\\n" "$out" "$rc"\n'
+    )
+    return subprocess.run(
+        ["/bin/bash", "-c", script],
+        text=True, capture_output=True, env=env, timeout=20, check=False,
+    )
+
+
+def test_codex_runtime_fallback_finds_bundled_python(tmp_path):
+    """Codex Desktop's bundled Python (never on PATH) is discovered under the
+    user's cache dir derived from HOME."""
+    py = tmp_path / ".cache/codex-runtimes/rt/dependencies/python/python.exe"
+    _write_shim(py, "Python 3.12.13")
+    env = {"HOME": str(tmp_path), "XDG_CACHE_HOME": "", "LOCALAPPDATA": "",
+           "CODEX_RUNTIME_PYTHON": "", "PATH": "/usr/bin:/bin"}
+    result = _run_codex_finder(env)
+    assert f"OUT={py}" in result.stdout, result.stdout + result.stderr
+    assert "RC=0" in result.stdout
+
+
+def test_codex_runtime_rejects_exit0_non_python(tmp_path):
+    """A planted binary that exits 0 on --version but is NOT Python must be
+    rejected — the fallback searches user-writable dirs outside the safe-prefix
+    whitelist, so exit-zero alone must never stand in for the interpreter."""
+    evil = tmp_path / ".cache/codex-runtimes/rt/dependencies/python/python3"
+    _write_shim(evil, None)  # exits 0, prints no Python banner
+    env = {"HOME": str(tmp_path), "XDG_CACHE_HOME": "", "LOCALAPPDATA": "",
+           "CODEX_RUNTIME_PYTHON": "", "PATH": "/usr/bin:/bin"}
+    result = _run_codex_finder(env)
+    assert "RC=1" in result.stdout, result.stdout + result.stderr
+    assert "OUT=\n" in result.stdout or "OUT=" == result.stdout.splitlines()[0]
+
+
+def test_codex_runtime_handles_space_in_home(tmp_path):
+    """Windows home dirs contain spaces (C:\\Users\\First Last); the fallback
+    must not word-split them into garbage and silently find nothing."""
+    home = tmp_path / "First Last"
+    py = home / ".cache/codex-runtimes/rt/dependencies/python/python.exe"
+    _write_shim(py, "Python 3.11.9")
+    env = {"HOME": str(home), "XDG_CACHE_HOME": "", "LOCALAPPDATA": "",
+           "CODEX_RUNTIME_PYTHON": "", "PATH": "/usr/bin:/bin"}
+    result = _run_codex_finder(env)
+    assert f"OUT={py}" in result.stdout, result.stdout + result.stderr
+    assert "RC=0" in result.stdout
+
+
+def test_codex_runtime_absent_returns_nonzero(tmp_path):
+    """No bundled runtime and unset cache vars: clean non-zero, no set -u abort."""
+    env = {"HOME": str(tmp_path), "XDG_CACHE_HOME": "", "LOCALAPPDATA": "",
+           "CODEX_RUNTIME_PYTHON": "", "PATH": "/usr/bin:/bin"}
+    result = _run_codex_finder(env)
+    assert "RC=1" in result.stdout, result.stdout + result.stderr
 
 
 def test_git_checkout_keeps_integrity_tracked_text_as_lf(tmp_path):

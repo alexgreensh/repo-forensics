@@ -75,7 +75,7 @@
     "hooks/first-run-nudge.sh": "75e223642d0266d7fd097a1b572775a61084245c1ba00558549930ef56776126",
     "hooks/hooks.json": "e209ede63b2f5be5af09cea75b5504e542ebfa0f3f798c50bbf18c1c4d6f94a4",
     "hooks/install_refresh_daemon.sh": "9f41be0ea8df35f824a3a4ee3f766b9f34c67026ff016f601de1bdeedb216db2",
-    "hooks/python-launcher.sh": "c7c344b05c1134a464b10a95f57ad7ae8368c04f34150773dc5877d7c2aaafa5",
+    "hooks/python-launcher.sh": "fe1975f6d877b53e8ed37f19d62b92d4d492216ea2229147aa07771db8cbc56b",
     "hooks/run_auto_scan.sh": "8acb8c4e6eb2a75a1c00d46a4aaca49bd75847f9f251803c89cbe24c6f10279c",
     "hooks/run_pre_scan.sh": "fad2e9a784e0b8d7ee2ea8b1c0566e07e897e5a5a1edaf36f57747e456b68c5f",
     "hooks/run_session_scan.sh": "72792f801bfe3f21651224e64e4eb4eb024d99a94369be26c4a05f723949b2e7",
@@ -83,9 +83,9 @@
   },
   "hook_count": 9,
   "repo_manifests": {
-    ".claude-plugin/marketplace.json": "241eba79c9a5807405940c5fc36a019e07869109b33ddfbd8f2756fe711e0a8a",
-    ".claude-plugin/plugin.json": "93eb6337da6d8664581068c0c9cc24947ad5af9b2096a7fe3564a3ce75c645cf",
-    ".codex-plugin/plugin.json": "c3a9a0597a0c0fc9d9b410d3205edf6ec8919786286169ece03d776a3c56ab53"
+    ".claude-plugin/marketplace.json": "7c2d6e2b63cdb4c15aff37edc21b1b94c69c03f96252bfa67e9040dcfce87d48",
+    ".claude-plugin/plugin.json": "0a3ee6bb761bce458b5eb9d61faa0d6ffe0a3be8227b5456224041d453a76627",
+    ".codex-plugin/plugin.json": "973c6c4bd2ec2e22f49c0ea1187a9a049c6507a85a791094ce18f26c1546f53b"
   },
   "manifest_count": 3,
   "repo_source_manifests": {

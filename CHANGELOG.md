@@ -2,6 +2,24 @@
 
 All notable changes to repo-forensics. Versions follow semver.
 
+## [2.11.7] - 2026-07-03
+
+### Fixed — Codex Desktop bundled-Python discovery
+
+- The auto-scan and pre-scan hooks now find the Python that Codex Desktop
+  bundles inside its runtime cache (e.g.
+  `~/.cache/codex-runtimes/<runtime>/dependencies/python/python.exe`). That
+  interpreter is never on `PATH`, so on Windows/Codex the hooks previously
+  failed with `no usable Python 3 interpreter found` and the automatic scan on
+  clone/install did not run. `python-launcher.sh` now derives search roots from
+  `XDG_CACHE_HOME`, `HOME`, and `LOCALAPPDATA` (no hardcoded user path), probes
+  each candidate with an executable + `--version` check before use, and honors
+  an explicit `CODEX_RUNTIME_PYTHON` override. Real system interpreters are
+  still preferred; the bundled runtime is a last resort. This closes the gap
+  that forced a local launcher patch, which in turn broke `--verify-install`
+  integrity (the shipped launcher now works unpatched, so checksums verify
+  clean on a fresh install).
+
 ## [2.11.6] - 2026-07-02
 
 ### Fixed — native Windows marketplace installs
