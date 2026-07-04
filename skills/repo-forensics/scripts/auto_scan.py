@@ -336,6 +336,7 @@ def run_targeted_scan(repo_path):
         'scan_provenance.py',
         'scan_archive.py',
         'scan_bytecode.py',
+        'scan_dead_anchors.py',
     ]
 
     from concurrent.futures import ThreadPoolExecutor, as_completed

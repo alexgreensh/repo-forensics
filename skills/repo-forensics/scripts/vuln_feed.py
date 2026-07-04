@@ -168,7 +168,7 @@ def _load_cache(path, max_age_hours):
 # HTTPS fetch (hardened)
 # ========================================================================
 
-def _https_fetch(url, max_bytes, body=None):
+def _https_fetch(url, max_bytes, body=None, opener=None, timeout=None):
     """Hardened HTTPS fetch. Returns bytes or raises urllib.error.URLError.
 
     Hard rules (defense-in-depth, not negotiable):
@@ -176,6 +176,15 @@ def _https_fetch(url, max_bytes, body=None):
       - Response is read with an explicit byte cap; oversize responses raise.
       - A fixed User-Agent and a tight timeout are always applied.
       - Method is inferred: POST iff body is given, else GET.
+
+    Optional (added for the dead_anchors scanner's SSRF/redirect hardening; all
+    pre-existing callers keep the historical behavior via the defaults):
+      - opener: a urllib.request.OpenerDirector to use instead of the default
+        global opener (e.g. a no-redirect / bounded-redirect opener). When None
+        the module-global opener is used exactly as before.
+      - timeout: per-call socket timeout in seconds. When None the module-wide
+        NETWORK_TIMEOUT_SEC is used. Callers pass min(NETWORK_TIMEOUT_SEC,
+        remaining_deadline) so one probe can never overrun the whole-pass budget.
     """
     if not isinstance(url, str) or not url.startswith("https://"):
         raise urllib.error.URLError(f"refusing non-https URL: {url!r}")
@@ -188,8 +197,10 @@ def _https_fetch(url, max_bytes, body=None):
         headers["Content-Type"] = "application/json"
         method = "POST"
 
+    to = NETWORK_TIMEOUT_SEC if timeout is None else max(0.001, float(timeout))
+    open_fn = opener.open if opener is not None else urllib.request.urlopen
     req = urllib.request.Request(url, headers=headers, data=data, method=method)
-    with urllib.request.urlopen(req, timeout=NETWORK_TIMEOUT_SEC) as resp:
+    with open_fn(req, timeout=to) as resp:
         # read(N+1) lets us detect overflow without loading more than needed
         raw = resp.read(max_bytes + 1)
         if len(raw) > max_bytes:

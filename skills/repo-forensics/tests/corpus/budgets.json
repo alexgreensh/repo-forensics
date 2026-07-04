@@ -79,5 +79,13 @@
     "medium": 0,
     "low": 0,
     "_comment": "Multi-stage Dockerfile with ARG for non-sensitive build metadata (APP_VERSION, BUILD_DATE, GIT_COMMIT) and ENV for non-sensitive runtime config (APP_ENV, PORT, PYTHONDONTWRITEBYTECODE). No passwords, keys, or tokens in ARG/ENV. Verifies the Dockerfile scanner does not fire on normal build/runtime parameters."
+  },
+
+  "benign/dead_anchors_live_refs.md": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "_comment": "Dead-anchor fixture: live GitHub owner/repo + github: shorthand, live npm (lodash) / PyPI (requests) install commands, safe-allowlisted docs domains. The committed-corpus gate runs the per-file scan_file scanners (secrets/sast/skill_threats/…) on it and they must stay at zero. dead_anchors itself is a scan_repo scanner (not in _SCAN_FILE_MODULES) so its LO-branch silence is asserted separately in test_scan_dead_anchors.py (test_benign_corpus_all_lo_zero_findings) with the network mocked to 200/registered — never a real request in CI."
   }
 }

@@ -75,6 +75,10 @@ EXPECTED_BASE_SCANNER_NAMES = {
     # split-stream reassembly and artifact provenance are standalone scanners.
     "splitstream",
     "provenance",
+    # 2026-07 Skilljacking gap (AIR research): external-anchor claimability
+    # (repojacking / phantom package / expired domain / dangling cloud slug).
+    # Standalone algorithmic scanner, network-touching, silent-by-default.
+    "dead_anchors",
 }
 
 # Synthetic scanner entries injected by aggregate_json.py AFTER the real

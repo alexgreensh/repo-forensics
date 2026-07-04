@@ -1,0 +1,183 @@
+{
+  "schema_version": "1.0",
+  "generated": "2026-07-04",
+  "pack": "dead_anchors",
+  "pack_version": 1,
+  "_comment": "Dead-Anchor / Repojacking scanner extraction rules + static lists. NOTE FOR MAINTAINERS: gen_rule_ids.py mints ids by AST-scraping module-level *_PATTERNS tables in scanner source; scan_dead_anchors.py has NONE (all its patterns live here), so 'DA' will emit ZERO rows in data/rule_ids.csv. That is expected, not a bug. The four extraction regexes (DA-GH-001/002, DA-PK-001, DA-DM-001) and the four data lists (DA-CL-001 cloud suffixes, DA-RW-001 reserved words, DA-SD-001 safe domains, DA-TLD-001 multi-part TLDs) are authored here directly (skill_threats.json convention). Provider fingerprints live under the top-level 'fingerprints' object (structured suffix->[{s,confidence}] data that no rule_loader type models); the scanner reads them directly. All lists are refreshed ONLY by the signed refresh_threat_dbs.py overlay; the scanner never writes this file.",
+  "rules": [
+    {
+      "id": "DA-GH-001",
+      "type": "regex",
+      "pattern": "(?:https?://)?github\\.com/([A-Za-z0-9][A-Za-z0-9._-]*)/([A-Za-z0-9][A-Za-z0-9._-]*)",
+      "title": "GitHub owner/repo URL anchor",
+      "severity": "info",
+      "confidence": 0.0,
+      "category": "dead-anchor-extract",
+      "explanation": "Extracts a github.com/<owner>/<repo> reference for claimability probing (repojacking). Reserved-word owners are filtered downstream (DA-RW-001).",
+      "examples": {
+        "match": [
+          "see github.com/torvalds/linux for source",
+          "clone https://github.com/hexiaochun/seedance2-api"
+        ],
+        "no_match": [
+          "see our github page for details",
+          "just visit github.com for docs"
+        ]
+      }
+    },
+    {
+      "id": "DA-GH-002",
+      "type": "regex",
+      "pattern": "github:([A-Za-z0-9][A-Za-z0-9._-]*)/([A-Za-z0-9][A-Za-z0-9._-]*)",
+      "title": "GitHub owner/repo shorthand anchor",
+      "severity": "info",
+      "confidence": 0.0,
+      "category": "dead-anchor-extract",
+      "explanation": "Extracts a github:<owner>/<repo> shorthand (the npx-skills install form AIR's seedance2-api case used) for claimability probing.",
+      "examples": {
+        "match": [
+          "install github:hexiaochun/seedance2-api",
+          "github:torvalds/linux"
+        ],
+        "no_match": [
+          "github: see the docs folder",
+          "on github the repo is public"
+        ]
+      }
+    },
+    {
+      "id": "DA-PK-001",
+      "type": "regex",
+      "pattern": "\\b(?:pip3?|npm|yarn|pnpm|gem|cargo|bundle)\\s+(?:install|add|i|get)\\s+(?:-\\S+\\s+)*([A-Za-z0-9@][A-Za-z0-9@/._-]*)",
+      "title": "Prose package-install anchor",
+      "severity": "info",
+      "confidence": 0.0,
+      "category": "dead-anchor-extract",
+      "explanation": "Extracts the package name from a prose install command (pip/npm/yarn/pnpm). Version specifiers and flags are stripped downstream; gem/cargo/bundle are extracted but not probed in P0.",
+      "examples": {
+        "match": [
+          "run pip install requests==2.31.0 first",
+          "npm install --save lodash@^4.17.0",
+          "pip3 install django"
+        ],
+        "no_match": [
+          "npx skills hexiaochun/seedance2-api",
+          "we install the software manually"
+        ]
+      }
+    },
+    {
+      "id": "DA-DM-001",
+      "type": "regex",
+      "pattern": "https?://([A-Za-z0-9][A-Za-z0-9.-]*\\.[A-Za-z][A-Za-z0-9.-]*)",
+      "flags": ["IGNORECASE"],
+      "title": "Bare-domain / cloud-subdomain URL anchor",
+      "severity": "info",
+      "confidence": 0.0,
+      "category": "dead-anchor-extract",
+      "explanation": "General URL host capture. Reduced to eTLD+1 for RDAP domain claimability, or routed to the cloud-subdomain probe when the host ends in a free-tier suffix (DA-CL-001). Safe-domain allowlist (DA-SD-001) is skipped.",
+      "examples": {
+        "match": [
+          "docs at https://myapp.vercel.app/home",
+          "see http://example.co.uk/page"
+        ],
+        "no_match": [
+          "email me at user@example.com",
+          "the path is /usr/local/bin"
+        ]
+      }
+    },
+    {
+      "id": "DA-CL-001",
+      "type": "keyword",
+      "values": [
+        "vercel.app", "railway.app", "netlify.app", "onrender.com", "fly.dev",
+        "herokuapp.com", "pages.dev", "web.app", "firebaseapp.com", "surge.sh",
+        "glitch.me", "replit.app", "github.io", "azurewebsites.net",
+        "pythonanywhere.com", "deno.dev", "workers.dev", "streamlit.app",
+        "ngrok-free.app"
+      ],
+      "title": "Free-tier cloud-hosting suffixes",
+      "severity": "info",
+      "confidence": 0.0,
+      "category": "dead-anchor-data",
+      "explanation": "Suffixes whose subdomains are trivially reclaimable once the app/project is deleted (DA-05/DA-09). First 6 named in AIR/Circus-of-Skills research; the rest are supplementary. Consumed via rule.values.",
+      "examples": {
+        "match": ["myapp.vercel.app", "user.github.io"],
+        "no_match": ["example.com", "docs.python.org"]
+      }
+    },
+    {
+      "id": "DA-RW-001",
+      "type": "keyword",
+      "values": [
+        "about", "apps", "blog", "collections", "contact", "dashboard",
+        "enterprise", "events", "explore", "features", "gist", "help", "home",
+        "issues", "join", "login", "logout", "marketplace", "mobile", "new",
+        "notifications", "organizations", "orgs", "plans", "pricing", "pulls",
+        "security", "sessions", "settings", "sponsors", "stars", "styleguide",
+        "topics", "trending", "watching"
+      ],
+      "title": "GitHub reserved-word owners (never probed)",
+      "severity": "info",
+      "confidence": 0.0,
+      "category": "dead-anchor-data",
+      "explanation": "First path segment values that are GitHub platform routes, not user/org names. A github.com/<reserved>/<x> reference is not a repojackable owner. Consumed via rule.values (exact-match against the owner, lowercased).",
+      "examples": {
+        "match": ["about", "marketplace"],
+        "no_match": ["torvalds", "hexiaochun"]
+      }
+    },
+    {
+      "id": "DA-SD-001",
+      "type": "keyword",
+      "values": [
+        "github.com", "githubusercontent.com", "npmjs.org", "registry.npmjs.org",
+        "pypi.org", "python.org", "nodejs.org", "docs.python.org",
+        "developer.mozilla.org", "stackoverflow.com", "wikipedia.org",
+        "anthropic.com", "claude.ai", "owasp.org", "w3.org", "ietf.org",
+        "rfc-editor.org"
+      ],
+      "title": "Safe-domain allowlist (never probed)",
+      "severity": "info",
+      "confidence": 0.0,
+      "category": "dead-anchor-data",
+      "explanation": "Stable platform domains that are never claimable and must not be RDAP-probed. Matched against the reduced eTLD+1. Consumed via rule.values.",
+      "examples": {
+        "match": ["github.com", "pypi.org"],
+        "no_match": ["evil-abandoned-domain.com", "myapp.vercel.app"]
+      }
+    },
+    {
+      "id": "DA-TLD-001",
+      "type": "keyword",
+      "values": [
+        "co.uk", "org.uk", "gov.uk", "ac.uk", "me.uk", "ltd.uk", "plc.uk",
+        "com.au", "net.au", "org.au", "edu.au", "gov.au",
+        "co.nz", "org.nz", "co.jp", "or.jp", "ne.jp", "ac.jp", "go.jp",
+        "co.in", "net.in", "org.in", "co.za", "org.za",
+        "com.br", "com.mx", "com.sg", "com.cn", "com.tr", "co.il", "com.hk"
+      ],
+      "title": "Multi-part TLDs for eTLD+1 reduction",
+      "severity": "info",
+      "confidence": 0.0,
+      "category": "dead-anchor-data",
+      "explanation": "Small vendored compound-TLD list (NOT a full Public Suffix List, to stay zero-non-stdlib-dep). Used to reduce a host to its registrable domain; obscure ccTLD reductions may be imprecise (documented). Consumed via rule.values.",
+      "examples": {
+        "match": ["example.co.uk", "shop.com.au"],
+        "no_match": ["example.com", "site.io"]
+      }
+    }
+  ],
+  "fingerprints": {
+    "_comment": "Provider dangling-slug fingerprints. ONLY entries marked \"strict\": true fire CONFIRMED-CLAIMABLE (DA-05), matched on non-alphanumeric token boundaries (not a loose substring anywhere in the body). Generic phrases that collide with live apps' own 404 copy were REMOVED after torture-room review: Cloudflare Pages 'project not found' and Railway 'Application not found' produced false CRITICALs against live, owned apps and are gone. Netlify/Render/Surge remain deliberately ABSENT for the same reason. A resolving host with no strict fingerprint stays LO (silent); only DNS NXDOMAIN is a stand-alone high-confidence claimable signal. Confidence feeds the Finding confidence.",
+    "github.io": [{"s": "There isn't a GitHub Pages site here", "confidence": 0.8, "strict": true}],
+    "herokuapp.com": [{"s": "There's nothing here, yet.", "confidence": 0.8, "strict": true}],
+    "web.app": [{"s": "Site Not Found", "confidence": 0.8, "strict": true}],
+    "firebaseapp.com": [{"s": "Site Not Found", "confidence": 0.8, "strict": true}],
+    "vercel.app": [
+      {"s": "DEPLOYMENT_NOT_FOUND", "confidence": 0.8, "strict": true},
+      {"s": "This deployment could not be found", "confidence": 0.8, "strict": true}
+    ]
+  }
+}

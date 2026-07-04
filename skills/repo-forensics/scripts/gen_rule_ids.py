@@ -54,6 +54,11 @@ _SCANNER_ABBREV = {
     "scan_dependencies.py": "DP",
     "scan_devcontainer.py": "DC",
     "_shared_patterns.py": "SH",
+    # dead_anchors authors all its rule ids directly in
+    # data/rulepacks/dead_anchors.json (no module-level *_PATTERNS tables to
+    # scrape), so this abbrev emits ZERO rows in rule_ids.csv — registration for
+    # completeness only. Expected, not a bug.
+    "scan_dead_anchors.py": "DA",
 }
 
 # Table-name fragment -> CATEGORY abbreviation. First matching fragment wins.

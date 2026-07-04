@@ -77,6 +77,25 @@ This skill's AI agent threat detection capabilities are informed by published se
 - **Resource**: OWASP formal taxonomy of MCP vulnerability classes
 - **Coverage in this skill**: MCP01 (Prompt Injection), MCP05 (Tool Poisoning), MCP06 (Insecure Tool Design), MCP09 (Supply Chain)
 
+## Dead-Anchor / Repojacking Research (Skilljacking)
+
+### AIR Security: Skilljacking
+- **Finding**: A skill's prose/manifest/docs can reference an external anchor (a GitHub owner/repo, an npm/PyPI package named in an install command, a domain, or a free-tier cloud subdomain) that was live when the skill was authored but has since been deleted, renamed, or expired — leaving it **claimable by an attacker** with zero change to the file content.
+- **Key insight**: Because the content never changes (no injected instruction, no secret, no malicious code), every existing content-scanner "tripped nothing at all" — the gap is *anchor claimability*, not content.
+- **Attack vectors**: (1) deleted/renamed GitHub user/org → re-registerable username; (2) phantom/removed npm/PyPI package → squattable name; (3) unregistered/expired domain; (4) dangling free-tier cloud subdomain (Vercel/Railway/etc.) whose app was deleted.
+- **Impact on this skill**: Motivated `scan_dead_anchors.py` (DA-01..DA-05, DA-09 free-tier flag, DA-10 owner-trust signals). Claimability is confirmed via read-only GitHub API / npm & PyPI registry / RDAP / DNS+fingerprint probes; a finding fires only on a confirmed-claimable anchor, never on a live one or a network hiccup.
+
+### Circus of Skills: free-tier hosting suffixes
+- **Finding**: 98 skills / ~1.6M installs referenced apps on trivially-reclaimable free-tier suffixes (`vercel.app`, `github.io`, …).
+- **Impact on this skill**: The free-tier-suffix flag (DA-09) and the cloud-subdomain suffix list in `data/rulepacks/dead_anchors.json`.
+
+### Snyk ToxicSkills — 8 live-malicious IOC URLs (negative control)
+- **Use**: The ToxicSkills malicious IOC URLs (e.g. `clawhub.ai/...`) belong in `ioc_manager.py`'s signed IOC feed, and serve as negative-control fixtures confirming `scan_dead_anchors.py` does not double-fire or conflict with the existing IOC flag on the same anchor (IOC-badness ≠ claimability).
+
+### SkillSieve dataset (test corpus, security-gated)
+- **Resource**: `github.com/xiaohou521/skillsieve` — 49,592 skills + 400 labeled, permissively licensed; the most usable public dataset for benign/malicious fixtures.
+- **Handling**: Extraction of any labeled folder into `tests/corpus/` is gated behind a mandatory repo-forensics-first scan of an isolated clone (Alex's standing external-code rule applied to the test data itself). Not automated; see `tests/corpus/DEAD_ANCHORS_CORPUS.md`.
+
 ## Note on Originality
 
 Detection patterns in this skill are original work, informed by the threat intelligence published in the above research. No code was copied from any of the referenced tools or research. Regular expressions, detection logic, severity scoring, and correlation rules were all written from scratch based on documented attack techniques and indicators of compromise.
