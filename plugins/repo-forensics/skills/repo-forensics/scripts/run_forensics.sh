@@ -10,8 +10,8 @@ if [ -z "${1:-}" ]; then
     echo "Usage: $0 <repo_path> [options]"
     echo ""
     echo "Modes:"
-    echo "  (default)              Full audit - all 25 scanners"
-    echo "  --skill-scan           Focused on AI skill threats (15 scanners, faster)"
+    echo "  (default)              Full audit - all 26 scanners"
+    echo "  --skill-scan           Focused on AI skill threats (16 scanners, faster)"
     echo "  --inventory            Enumerate installed AI-agent stacks (zero-LLM, JSON output)"
     echo ""
     echo "Options:"
@@ -315,6 +315,12 @@ run_scanner() {
         $OFFLINE && scanner_args+=("--offline")
     fi
 
+    # dead_anchors is network-touching; honor the global --offline flag so a
+    # sandboxed/offline full scan degrades every anchor to couldn't-check.
+    if [ "$name" = "dead_anchors" ]; then
+        $OFFLINE && scanner_args+=("--offline")
+    fi
+
     if [ -n "$TIMEOUT_CMD" ]; then
         $TIMEOUT_CMD "$SCANNER_TIMEOUT" "${PYTHON[@]}" "$SKILL_DIR/$script" "$REPO_PATH" --format "$internal_format" ${scanner_args[@]+"${scanner_args[@]}"} 3>&- > "$output_file" 2>> "$error_file"
     else
@@ -348,7 +354,7 @@ if $SKILL_SCAN; then
     # Focused mode: 10 scanners most relevant to vetting skills
     if [ "$FORMAT" != "json" ]; then
         echo ""
-        echo "[*] Running focused skill scan (15 scanners)..."
+        echo "[*] Running focused skill scan (16 scanners)..."
     fi
 
     throttled_run run_scanner "skill_threats" "scan_skill_threats.py" &
@@ -366,13 +372,14 @@ if $SKILL_SCAN; then
     throttled_run run_scanner "archive" "scan_archive.py" &
     throttled_run run_scanner "splitstream" "scan_splitstream.py" &
     throttled_run run_scanner "provenance" "scan_provenance.py" &
+    throttled_run run_scanner "dead_anchors" "scan_dead_anchors.py" &
     wait
 
 else
     # Full audit: all scanners in parallel
     if [ "$FORMAT" != "json" ]; then
         echo ""
-        echo "[*] Running all 25 scanners in parallel..."
+        echo "[*] Running all 26 scanners in parallel..."
     fi
     throttled_run run_scanner "entropy" "scan_entropy.py" &
     throttled_run run_scanner "binary" "scan_binary.py" &
@@ -403,6 +410,7 @@ else
     throttled_run run_scanner "archive" "scan_archive.py" &
     throttled_run run_scanner "splitstream" "scan_splitstream.py" &
     throttled_run run_scanner "provenance" "scan_provenance.py" &
+    throttled_run run_scanner "dead_anchors" "scan_dead_anchors.py" &
     wait
 fi
 

@@ -120,7 +120,7 @@ Nobody does. The vetting step doesn't exist. [1,184 malicious skills](https://ww
 
 You won't feel it. There are no symptoms.
 
-**Repo Forensics is the vetting step.** Audit any repo, skill, MCP server, or plugin before it touches your machine. Works across the AI agent ecosystem: Claude Code, OpenClaw, Codex, Cursor, NanoClaw, or anything that installs third-party code. 25 scanners, runtime behavior prediction, ClawHavoc campaign detection. Runs in seconds.
+**Repo Forensics is the vetting step.** Audit any repo, skill, MCP server, or plugin before it touches your machine. Works across the AI agent ecosystem: Claude Code, OpenClaw, Codex, Cursor, NanoClaw, or anything that installs third-party code. 26 scanners, runtime behavior prediction, ClawHavoc campaign detection. Runs in seconds.
 
 **Your code never leaves your machine.** Zero dependencies. No cloud API. No telemetry. Unlike mcp-scan, nothing is uploaded anywhere.
 
@@ -149,7 +149,7 @@ No pip install. No API keys. No Docker. No dependencies.
 <summary>More options: skill-scan, watch mode, CI/CD, IOC updates</summary>
 
 ```bash
-./skills/repo-forensics/scripts/run_forensics.sh /path/to/skill --skill-scan    # Focused AI skill/MCP scan (15 scanners)
+./skills/repo-forensics/scripts/run_forensics.sh /path/to/skill --skill-scan    # Focused AI skill/MCP scan (16 scanners)
 ./skills/repo-forensics/scripts/run_forensics.sh /path/to/repo --watch           # Track file integrity between scans
 ./skills/repo-forensics/scripts/run_forensics.sh /path/to/repo --update-iocs     # Pull latest threat indicators
 ./skills/repo-forensics/scripts/run_forensics.sh /path/to/repo --format json     # CI/CD machine-readable output
@@ -169,7 +169,7 @@ Once installed as a plugin, repo-forensics runs automatically in the background.
 | Hook | Trigger | What It Does |
 |------|---------|-------------|
 | **PreToolUse** | Before any `npm install`, `pip install`, shell command | Blocks known-malicious packages before execution. IOC-only, <10ms. |
-| **PostToolUse** | After `git clone`, `git pull`, `npm install`, `brew upgrade`, etc. | Full 25-scanner audit on the cloned/installed code. |
+| **PostToolUse** | After `git clone`, `git pull`, `npm install`, `brew upgrade`, etc. | Full 26-scanner audit on the cloned/installed code. |
 | **SessionStart** | Every new session | Detects changed plugins, skills, and MCP servers since last session. Bootstraps/repairs daily IOC, CISA KEV, and signed rule-pack refresh. |
 
 **Platform support:**
@@ -255,10 +255,10 @@ $ ./run_forensics.sh ./trusted-library
 ## How It Works
 
 <p align="center">
-  <img src="diagrams/pipeline.svg" alt="Scanning pipeline: input to 25 scanners to correlation to verdict" width="900"/>
+  <img src="diagrams/pipeline.svg" alt="Scanning pipeline: input to 26 scanners to correlation to verdict" width="900"/>
 </p>
 
-Point it at any repository. 25 scanners run in parallel, each checking a different attack surface: prompt injection, supply chain, credential theft, runtime behavior, infrastructure misconfiguration, and more. The correlation engine then cross-references findings across 41 rules to detect compound threats that no single scanner would catch. A dynamic import paired with a network fetch becomes a deferred payload loading finding. An environment variable read combined with an outbound POST becomes a data exfiltration finding.
+Point it at any repository. 26 scanners run in parallel, each checking a different attack surface: prompt injection, supply chain, credential theft, runtime behavior, infrastructure misconfiguration, and more. The correlation engine then cross-references findings across 41 rules to detect compound threats that no single scanner would catch. A dynamic import paired with a network fetch becomes a deferred payload loading finding. An environment variable read combined with an outbound POST becomes a data exfiltration finding.
 
 Every finding carries a confidence score alongside severity, surfaced through four verdict tiers: BLOCK, WARN, INFO, and SUPPRESSED. Ambiguous WARN-tier findings can be adjudicated by the host agent (Claude Code, Codex, etc.) under a prompt-injection-safe protocol -- sanitized snippets, metadata-first, no code fences -- so context that the scanner can't infer is factored in without creating a new attack surface.
 
@@ -278,7 +278,7 @@ Scanning never requires network access. The feed is a freshness layer on top of 
 
 ## Battle-Tested Against Real Attacks
 
-1,899 tests across 40+ test files. Not synthetic toy examples: detection patterns built from real supply chain campaigns that hit production systems.
+1,988 tests across 40+ test files. Not synthetic toy examples: detection patterns built from real supply chain campaigns that hit production systems.
 
 **Named attack campaigns in the IOC database:**
 
@@ -304,7 +304,7 @@ Scanning never requires network access. The feed is a freshness layer on top of 
 
 Every campaign above has version-pinned IOCs in `compromised_versions.json`, detection rules in the lifecycle and dependency scanners, and correlation rules for compound attack patterns.
 
-**The tests are safe to run.** All 1,899 tests use synthetic fixtures in temporary directories. No real malware is downloaded or executed. Pattern matching runs against fake package.json files containing attack signatures, the same way antivirus software tests against EICAR strings.
+**The tests are safe to run.** All 1,988 tests use synthetic fixtures in temporary directories. No real malware is downloaded or executed. Pattern matching runs against fake package.json files containing attack signatures, the same way antivirus software tests against EICAR strings.
 
 ---
 
@@ -320,7 +320,7 @@ Every campaign above has version-pinned IOCs in `compromised_versions.json`, det
 | VirusTotal + ClawHub | ClawHub signature scanning | Surface-level. Signature-based, not structural. No prompt injection detection, no taint tracking. |
 | Manual review | Reading code | Misses zero-width unicode, cross-file taint flows, tool description injection. |
 
-**repo-forensics:** 25 scanners. Zero dependencies. Fully offline. Runtime behavior prediction. Post-incident forensics. Built for the AI agent ecosystem.
+**repo-forensics:** 26 scanners. Zero dependencies. Fully offline. Runtime behavior prediction. Post-incident forensics. Built for the AI agent ecosystem.
 
 ---
 
@@ -332,12 +332,12 @@ Every campaign above has version-pinned IOCs in `compromised_versions.json`, det
 
 ---
 
-## The 25 Scanners
+## The 26 Scanners
 
 Each scanner targets a distinct attack surface. Together they cover the full threat landscape for AI agent code.
 
 <p align="center">
-  <img src="diagrams/scanner-map.svg" alt="25-scanner attack surface map showing all scanners organized by threat category" width="900"/>
+  <img src="diagrams/scanner-map.svg" alt="26-scanner attack surface map showing all scanners organized by threat category" width="900"/>
 </p>
 
 | Scanner | What It Detects | Approach |
@@ -350,7 +350,7 @@ Each scanner targets a distinct attack surface. Together they cover the full thr
 | **binary** | Executables disguised as images/text/docs, **audio steganography** (executable payloads in WAV/MP3/FLAC), **embedded PE detection** (polyglot files with MZ+PE at non-zero offset) | Magic number detection, audio data section analysis, PE signature validation |
 
 <details>
-<summary>Show all 25 scanners</summary>
+<summary>Show all 26 scanners</summary>
 
 | Scanner | What It Detects | Approach |
 |---------|----------------|----------|
@@ -373,6 +373,7 @@ Each scanner targets a distinct attack surface. Together they cover the full thr
 | **oversize** | Payloads padded past the 10 MB scan cap, and whitespace-inflation that pushes a payload past the cap or hides it after a long whitespace run | Head+tail window scan of oversized files, vectorized whitespace analysis, wall-clock bounded |
 | **splitstream** | Payloads split into inert base64/base85/base32/hex fragments scattered across unrelated files (no import edge) and concatenated at runtime -- evades per-file and cross-file taint checks | Single O(n) pass, fragments fingerprinted by alphabet + length-band and grouped, reassembled per group and decode-rescanned; member/size/wall-clock bounded |
 | **provenance** | Artifacts whose present signature/attestation **fails** verification -- the tampering signal (modified after signing, or signed by an untrusted key) | Shells out to cosign / gh / npm / pip when on PATH (zero added deps), timeout-bounded, never networks or hard-fails; the universal unsigned state is deliberately not alarmed -- only real tampering surfaces, as CRITICAL |
+| **dead_anchors** | Dead/claimable external anchors a skill references -- **SkillJacking** (repojacking of deleted GitHub owners/repos, phantom npm/PyPI packages, expired domains, dangling cloud-hosting subdomains) -- that an attacker can register to hijack the trust chain | GitHub / registry / RDAP / DNS probes with a per-host circuit breaker; three-tier verdict (only CONFIRMED-CLAIMABLE emits; LIVE-AND-OWNED and COULDNT-CHECK stay silent); `--offline` opt-out, zero non-stdlib deps |
 
 </details>
 
@@ -599,7 +600,7 @@ Exit codes: `0` = clean, `1` = warn, `2` = block merge.
 | **IOC auto-update** | `--update-iocs` pulls latest C2 IPs, malicious domains, known-bad packages |
 | **Installation verification** | `--verify-install` checks repo-forensics itself for tampering |
 | **Manifest drift** | Declared vs actual imports, phantom deps, runtime installs |
-| **1,899 pytest tests** | Full coverage across 40+ test files |
+| **1,988 pytest tests** | Full coverage across 40+ test files |
 
 </details>
 
@@ -639,6 +640,7 @@ Detection patterns are original work informed by published research:
 | [Checkmarx: 11 MCP Risks](https://checkmarx.com/zero-post/11-emerging-ai-security-risks-with-mcp-model-context-protocol/) | 2025 | Comprehensive MCP attack taxonomy (tool poisoning, rug pulls, context poisoning) | mcp_security |
 | TeamPCP campaign | 2026 | Cascading supply chain: Trivy -> Checkmarx Actions -> Bitwarden npm worm, WAV steganography | infra, dependencies, binary, skill_threats |
 | [Checkmarx: Shai-Hulud](https://checkmarx.com/zero-post/inside-shai-huluds-maw-how-the-npm-worm-exploits-and-propagates/) | 2025 | First NPM worm, destructive fallback, self-hosted runner backdoor | sast, skill_threats, dependencies |
+| SkillJacking / dead anchors | 2026 | A skill references an external anchor (GitHub owner/repo, npm/PyPI package, domain, cloud subdomain) that has gone dead and is now claimable, letting an attacker register it and hijack the trust chain | dead_anchors |
 
 </details>
 

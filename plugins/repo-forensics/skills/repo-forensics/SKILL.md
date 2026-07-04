@@ -181,6 +181,34 @@ JSON output for automation:
 | **oversize** | Files padded past the 10 MB scan cap (head+tail window scan) and whitespace-inflation padding that hides a payload after a long whitespace run | skill + full |
 | **bytecode** | Python `.pyc` bytecode: dangerous-call primitives (os.system/subprocess/exec), embedded URLs / credential paths, orphan bytecode, and **bytecode poisoning** (benign source + malicious `.pyc`) detected by a raw-marker source diff with no unmarshalling or execution (cross-version-safe). Disassembly is unmarshalled in an isolated subprocess so hostile bytecode cannot crash the scan, and is enrichment only — never load-bearing for the verdict | skill + full |
 | **archive** | Payloads hidden inside `.zip/.docx/.xlsx/.pptx/.jar/.whl/.tar.*` and other archives, including archives **renamed/forged to dodge extension gating** (detected by magic bytes + `is_zipfile`) and **scripts/executables smuggled inside an OOXML document** (HIGH structural flag). Members are read in memory (never written to disk) and run through the SAST / trifecta / secret / skill-threat detectors; bomb-, fan-out-, and tar-link-safe | skill + full |
+| **dead_anchors** | External-anchor **claimability**: repojackable GitHub owner/repo, phantom/removed npm & PyPI packages named in prose install commands, unregistered/expired domains (RDAP), and dangling free-tier cloud subdomains (Vercel/Railway/GitHub Pages/… via DNS + provider fingerprint). Closes the **Skilljacking** gap AIR's research says "tripped nothing at all" — the reference is dead and *claimable by an attacker* while the file content never changed. Network-touching but never-hard-fail: emits **only** on a confirmed-claimable anchor; live-and-owned and couldn't-check are silent. `--offline` degrades every anchor to silent. | skill + full |
+
+### Dead-anchor coverage and known scope (Skilljacking / repojacking)
+
+`dead_anchors` (motivated by AIR's *Skilljacking* research, plus the *Circus of
+Skills* free-tier-suffix study, Snyk's *ToxicSkills* IOCs, and the *SkillSieve*
+dataset — logged in `references/research_sources.md`) is precise, not total.
+Known limits, surfaced honestly rather than implied as covered:
+
+- **Rate-limit budget:** unauthenticated GitHub API is 60 req/hr/IP, so GH calls
+  are hard-capped (~20/scan, ~40 if `GITHUB_TOKEN` is set — read, never
+  required, never prompted) and a total per-scan probe ceiling (~50) plus a
+  wall-clock deadline bound the whole pass. Over-budget anchors degrade to
+  couldn't-check (silent, safe-by-design), never a false clear.
+- **RDAP ccTLD gaps:** `rdap.org`'s bootstrap covers gTLDs well; some ccTLDs
+  degrade to couldn't-check rather than a verdict.
+- **Multi-part-TLD heuristic:** a small vendored compound-TLD list (not a full
+  Public Suffix List, to stay zero-non-stdlib-dep), so some obscure ccTLD
+  domain reductions are imprecise.
+- **Fingerprint rot:** cloud-provider "deleted app" page strings change over
+  time; the fingerprint list is pack-driven (`data/rulepacks/dead_anchors.json`,
+  refreshed by the signed `refresh_threat_dbs.py` overlay) so it can be updated
+  without a code change. Netlify/Render/Surge deleted-app pages are generic 404
+  copy and are deliberately NOT fingerprinted (stay live-and-owned, never
+  guessed).
+- **Deferred:** verdict-decay / time-based recheck (a link live today can go
+  claimable later with zero file change) needs new persistent per-anchor state
+  and is a Phase-2 item, not built here.
 
 ### Bypass coverage and known scope (archive / oversize / bytecode)
 

@@ -2,6 +2,25 @@
 
 All notable changes to repo-forensics. Versions follow semver.
 
+## [2.12.0] - 2026-07-05
+
+### Added — dead_anchors scanner (SkillJacking defense)
+
+- New 26th scanner, `dead_anchors`, detects dead/claimable external anchors a
+  skill references — GitHub owner/repo names, npm/PyPI package names, domains,
+  and cloud-hosting subdomains — that have gone dead and are therefore claimable
+  by an attacker (the SkillJacking / repojacking / dangling-reference attack
+  class). Probes GitHub, package registries, RDAP, and DNS with a per-host
+  circuit breaker and a three-tier verdict: only CONFIRMED-CLAIMABLE emits a
+  finding; LIVE-AND-OWNED and COULDNT-CHECK stay silent to avoid noise. Ships
+  an `--offline` opt-out and adds zero non-stdlib dependencies. Reuses the
+  Windows-hardened atomic-write and threaded-timeout DNS helpers, so no new
+  platform-sensitive primitives are introduced.
+- Wired into `--skill-scan` (now 16 scanners) and the full audit (now 26
+  scanners), the PostToolUse auto-scan targeted list, and the Codex marketplace
+  mirror. Detection rules live as data in `data/rulepacks/dead_anchors.json`
+  (8 self-tested rules).
+
 ## [2.11.7] - 2026-07-03
 
 ### Fixed — Codex Desktop bundled-Python discovery
