@@ -34,7 +34,12 @@ sys.path.insert(0, SCRIPTS_DIR)
 # here, update auto_scan.py too (and vice versa).
 
 INSTALL_PATTERNS = [
+    # uv/pnpm must precede pip/npm: the patterns are unanchored, so
+    # 'uv pip install x' / 'pnpm install x' substring-match the pip/npm entries.
+    (re.compile(r'uv\s+(?:add|pip\s+install|tool\s+install)\s+(.+)'), 'uv_install'),
     (re.compile(r'pip3?\s+install\s+(.+)'), 'pip_install'),
+    (re.compile(r'pnpm\s+(?:install|i|add|update)\s+(.+)'), 'pnpm_install'),
+    (re.compile(r'bun\s+(?:install|i|add|update)\s+(.+)'), 'bun_install'),
     (re.compile(r'npm\s+(?:install|i)\s+(.+)'), 'npm_install'),
     (re.compile(r'npm\s+update\s+(.+)'), 'npm_install'),
     (re.compile(r'yarn\s+add\s+(.+)'), 'yarn_add'),
@@ -107,12 +112,13 @@ def extract_package_names(pattern_type, match):
     if not match:
         return []
     if pattern_type not in ('pip_install', 'npm_install', 'yarn_add', 'gem_install',
-                            'cargo_install', 'go_install', 'brew_install', 'openclaw_install'):
+                            'cargo_install', 'go_install', 'brew_install', 'openclaw_install',
+                            'uv_install', 'bun_install', 'pnpm_install'):
         return []
     raw = match.group(1)
     cleaned = INSTALL_FLAGS.sub('', raw).strip()
     names = [n.strip() for n in cleaned.split() if n.strip() and not n.startswith('-')]
-    if pattern_type == 'pip_install':
+    if pattern_type in ('pip_install', 'uv_install'):
         names = [re.split(r'[>=<!\[\];@]', n)[0] for n in names]
     return names
 

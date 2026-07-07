@@ -180,6 +180,17 @@ class TestDetectInstallCommand:
         ("openclaw plugins update my-plugin", "openclaw_install"),
         ("clawhub install my-pkg", "openclaw_install"),
         ("clawhub publish my-pkg", "openclaw_install"),
+        ("uv add requests", "uv_install"),
+        ("uv pip install flask", "uv_install"),
+        ("uv tool install ruff", "uv_install"),
+        ("pnpm install express", "pnpm_install"),
+        ("pnpm i lodash", "pnpm_install"),
+        ("pnpm add react", "pnpm_install"),
+        ("pnpm update webpack", "pnpm_install"),
+        ("bun install express", "bun_install"),
+        ("bun i lodash", "bun_install"),
+        ("bun add react", "bun_install"),
+        ("bun update webpack", "bun_install"),
     ])
     def test_install_patterns(self, cmd, expected_type):
         ptype, match = pre_scan.detect_install_command(cmd)
@@ -223,6 +234,26 @@ class TestExtractPackageNames:
         _, match = pre_scan.detect_install_command("pip install --upgrade requests")
         names = pre_scan.extract_package_names('pip_install', match)
         assert 'requests' in names
+
+    def test_uv_add_strips_flags(self):
+        _, match = pre_scan.detect_install_command("uv add requests --dev")
+        names = pre_scan.extract_package_names('uv_install', match)
+        assert names == ['requests']
+
+    def test_uv_add_with_version_specifier(self):
+        _, match = pre_scan.detect_install_command("uv add flask>=2.0")
+        names = pre_scan.extract_package_names('uv_install', match)
+        assert names == ['flask']
+
+    def test_pnpm_scoped_package(self):
+        _, match = pre_scan.detect_install_command("pnpm add @scope/pkg")
+        names = pre_scan.extract_package_names('pnpm_install', match)
+        assert names == ['@scope/pkg']
+
+    def test_bun_multiple_packages(self):
+        _, match = pre_scan.detect_install_command("bun add react react-dom")
+        names = pre_scan.extract_package_names('bun_install', match)
+        assert set(names) == {'react', 'react-dom'}
 
 
 # --- check_ioc_packages ---
@@ -320,6 +351,15 @@ class TestMain:
         """Simulate IOC match by monkeypatching check_ioc_packages."""
         monkeypatch.setattr(pre_scan, 'check_ioc_packages', lambda pkgs: ['evil-pkg'])
         payload = json.dumps(make_bash_payload("pip install evil-pkg"))
+        code, out = self._run_main(payload, monkeypatch, capsys)
+        assert code == 2
+        assert out["decision"] == "block"
+        assert "evil-pkg" in out["reason"]
+
+    def test_ioc_match_blocks_uv(self, monkeypatch, capsys):
+        """uv add reaches the IOC gate like pip install does."""
+        monkeypatch.setattr(pre_scan, 'check_ioc_packages', lambda pkgs: ['evil-pkg'])
+        payload = json.dumps(make_bash_payload("uv add evil-pkg"))
         code, out = self._run_main(payload, monkeypatch, capsys)
         assert code == 2
         assert out["decision"] == "block"
