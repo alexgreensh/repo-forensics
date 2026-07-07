@@ -26,8 +26,18 @@ INSTALL_PATTERNS = [
     (re.compile(r'git\s+clone\s+(?:--[^\s]+\s+)*(?:https?://|git@)([^\s]+)(?:\s+([^\s]+))?'), 'git_clone'),
     # git pull (update — scans CWD after pull)
     (re.compile(r'git\s+pull(?:\s|$)'), 'git_pull'),
+    # uv add / uv pip install / uv tool install — must precede pip: patterns are
+    # unanchored, so 'uv pip install x' substring-matches the pip entry
+    (re.compile(r'uv\s+(?:add|pip\s+install|tool\s+install)\s+(.+)'), 'uv_install'),
+    # uv sync (lockfile install — scans CWD after sync, like git_pull)
+    (re.compile(r'uv\s+sync(?:\s|$)'), 'uv_sync'),
     # pip install (with package names) — also catches --upgrade
     (re.compile(r'pip3?\s+install\s+(.+)'), 'pip_install'),
+    # pnpm install/add/update — must precede npm: 'pnpm install x'
+    # substring-matches the npm entry
+    (re.compile(r'pnpm\s+(?:install|i|add|update)\s+(.+)'), 'pnpm_install'),
+    # bun install/add/update
+    (re.compile(r'bun\s+(?:install|i|add|update)\s+(.+)'), 'bun_install'),
     # npm install (with package names)
     (re.compile(r'npm\s+(?:install|i)\s+(.+)'), 'npm_install'),
     # npm update (missed update commands)
@@ -123,7 +133,7 @@ def extract_package_names(pattern_type, match):
     """Extract package names from install command match."""
     if pattern_type in ('pip_install', 'npm_install', 'yarn_add', 'gem_install',
                         'cargo_install', 'go_install', 'brew_install', 'openclaw_install',
-                        'claude_plugin_install'):
+                        'claude_plugin_install', 'uv_install', 'bun_install', 'pnpm_install'):
         raw = match.group(1)
         # Strip flags
         cleaned = INSTALL_FLAGS.sub('', raw).strip()
@@ -131,7 +141,7 @@ def extract_package_names(pattern_type, match):
         names = [n.strip() for n in cleaned.split() if n.strip() and not n.startswith('-')]
         # Strip version specifiers for pip; .strip() handles `pkg @ url` form
         # which leaves trailing whitespace after the @ split.
-        if pattern_type == 'pip_install':
+        if pattern_type in ('pip_install', 'uv_install'):
             names = [re.split(r'[>=<!\[\];@]', n)[0].strip() for n in names]
             names = [n for n in names if n]
         return names
@@ -520,16 +530,17 @@ def main():
             scan_findings = run_targeted_scan(clone_dir)
             all_findings.extend(scan_findings)
 
-    # For git pull: scan CWD (repo was updated with potentially changed code)
-    if pattern_type == 'git_pull':
+    # For git pull / uv sync: scan CWD (repo or its deps were updated in place)
+    if pattern_type in ('git_pull', 'uv_sync'):
         cwd = os.getcwd()
         if os.path.isdir(cwd) and _is_safe_scan_path(cwd):
             scanned_target = cwd
             scan_findings = run_targeted_scan(cwd)
             all_findings.extend(scan_findings)
 
-    # For pip/npm install with a local path: scan it (with path containment)
-    if pattern_type in ('pip_install', 'npm_install'):
+    # For pip/npm-style install with a local path: scan it (with path containment)
+    if pattern_type in ('pip_install', 'npm_install', 'uv_install', 'bun_install',
+                        'pnpm_install'):
         for pkg in package_names:
             pkg_path = os.path.realpath(pkg)
             if os.path.isdir(pkg_path) and _is_safe_scan_path(pkg_path):

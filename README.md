@@ -53,7 +53,7 @@ Audit untrusted repos before they touch your agent. Fully local, self-updating d
 /plugin install repo-forensics@alexgreensh-repo-forensics
 ```
 
-Hooks auto-wire on install. Every `git clone`, `npm install`, `pip install` is scanned automatically. Known-malicious packages are blocked before execution.
+Hooks auto-wire on install. Every `git clone`, `npm install`, `pip install`, `uv add`, `bun install`, `pnpm add` is scanned automatically. Known-malicious packages are blocked before execution.
 
 </details>
 
@@ -124,7 +124,7 @@ You won't feel it. There are no symptoms.
 
 **Your code never leaves your machine.** Zero dependencies. No cloud API. No telemetry. Unlike mcp-scan, nothing is uploaded anywhere.
 
-**It doesn't stop at install.** Every `git pull`, `npm update`, `gem update`, `brew upgrade`, and plugin update is monitored too. Known-malicious packages are blocked before the command even runs. A clean install today doesn't mean a clean update tomorrow -- repo-forensics watches both.
+**It doesn't stop at install.** Every `git pull`, `npm update`, `pnpm update`, `bun update`, `uv sync`, `gem update`, `brew upgrade`, and plugin update is monitored too. Known-malicious packages are blocked before the command even runs. A clean install today doesn't mean a clean update tomorrow -- repo-forensics watches both.
 
 **Already installed something you're not sure about?** Run it on your existing projects too. The post-incident scanner checks npm cache, install logs, node_modules, and your machine for traces of known supply chain attacks (axios RAT, liteLLM .pth injection, SANDWORM campaign) even after the malware has cleaned up after itself.
 
@@ -168,8 +168,8 @@ Once installed as a plugin, repo-forensics runs automatically in the background.
 
 | Hook | Trigger | What It Does |
 |------|---------|-------------|
-| **PreToolUse** | Before any `npm install`, `pip install`, shell command | Blocks known-malicious packages before execution. IOC-only, <10ms. |
-| **PostToolUse** | After `git clone`, `git pull`, `npm install`, `brew upgrade`, etc. | Full 26-scanner audit on the cloned/installed code. |
+| **PreToolUse** | Before any `npm install`, `pip install`, `uv add`, `bun install`, `pnpm add`, shell command | Blocks known-malicious packages before execution. IOC-only, <10ms. |
+| **PostToolUse** | After `git clone`, `git pull`, `npm install`, `uv sync`, `brew upgrade`, etc. | Full 26-scanner audit on the cloned/installed code. |
 | **SessionStart** | Every new session | Detects changed plugins, skills, and MCP servers since last session. Bootstraps/repairs daily IOC, CISA KEV, and signed rule-pack refresh. |
 
 **Platform support:**
@@ -479,7 +479,7 @@ python3 skills/repo-forensics/scripts/vuln_feed.py --query npm lodash 4.17.20   
 
 Install once, protected forever. Three hooks run automatically:
 
-- **PostToolUse**: Scans every `git clone`, `npm install`, `pip install`, `brew upgrade` automatically. <10ms for non-matching commands.
+- **PostToolUse**: Scans every `git clone`, `npm install`, `pip install`, `uv add`, `bun install`, `pnpm add`, `brew upgrade` automatically. <10ms for non-matching commands.
 - **PreToolUse**: Blocks known-malicious packages **before** they run. IOC check in <200ms.
 - **SessionStart**: Detects changes to plugins, skills, and MCP servers between sessions. Sub-1ms when nothing changed.
 
