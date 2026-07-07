@@ -42,7 +42,7 @@ Deep security auditing for repositories, AI agent skills, and MCP servers.
   metadata appears before content, the block is capped at 5 findings sorted by
   confidence descending. Verdict choices: confirm / downgrade / escalate. See
   "Adjudication Protocol" section for the full protocol.
-- **Auto-scan hook** (v2): PostToolUse hook auto-triggers on `git clone`, `git pull`, `pip install`, `npm install/update`, `gem install/update`, `brew install/upgrade`, etc. Zero-overhead for non-matching commands.
+- **Auto-scan hook** (v2): PostToolUse hook auto-triggers on `git clone`, `git pull`, `pip install`, `npm install/update`, `uv add/sync`, `bun install/add`, `pnpm install/add`, `gem install/update`, `brew install/upgrade`, etc. Zero-overhead for non-matching commands.
 - **Pre-execution gate** (v2.6): PreToolUse hook blocks known-malicious packages and pipe-to-shell commands BEFORE execution. IOC-only, <10ms latency, no subprocess calls.
 - **Session security scanner** (v2.6.3): SessionStart hook detects updated plugins/skills/MCP servers, refreshes threat databases daily, runs fast IOC check + full 25-scanner deep scan on changed items. Sub-1ms when nothing changed.
 - **.pth file injection detection** (v2): Detects liteLLM-style Python startup injection attacks (exec/eval/base64/known IOC filenames)

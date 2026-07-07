@@ -21,27 +21,50 @@ sys.path.insert(0, SCRIPTS_DIR)
 
 # --- Install/Clone Pattern Detection ---
 
+# Optional package-manager flags that can sit between the tool name and its
+# subcommand, e.g. `pnpm -r add x`, `pnpm --filter web add x`,
+# `uv --project /p add x`. Each unit is one -flag (whose first char after the
+# leading dash(es) is a non-dash — this makes dash runs fail fast and avoids
+# ReDoS) plus an OPTIONAL value token that must NOT itself be a subcommand
+# keyword (the lookahead stops a flag value from swallowing `add`/`install`).
+# Kept identical in pre_scan.py — update both.
+_PM_FLAGS = (
+    r'(?:-{1,2}[^-\s]\S*'
+    r'(?:\s+(?!(?:install|i|add|update|sync|pip|tool|remove|run)\b)[^-\s]\S*)?'
+    r'\s+)*'
+)
+
 INSTALL_PATTERNS = [
     # git clone
     (re.compile(r'git\s+clone\s+(?:--[^\s]+\s+)*(?:https?://|git@)([^\s]+)(?:\s+([^\s]+))?'), 'git_clone'),
     # git pull (update — scans CWD after pull)
     (re.compile(r'git\s+pull(?:\s|$)'), 'git_pull'),
     # uv add / uv pip install / uv tool install — must precede pip: patterns are
-    # unanchored, so 'uv pip install x' substring-matches the pip entry
-    (re.compile(r'uv\s+(?:add|pip\s+install|tool\s+install)\s+(.+)'), 'uv_install'),
+    # unanchored, so 'uv pip install x' substring-matches the pip entry.
+    # _PM_FLAGS allows global options before the subcommand (`uv --project p add x`).
+    (re.compile(r'uv\s+' + _PM_FLAGS + r'(?:add|pip\s+install|tool\s+install)\s+(.+)'), 'uv_install'),
     # uv sync (lockfile install — scans CWD after sync, like git_pull)
     (re.compile(r'uv\s+sync(?:\s|$)'), 'uv_sync'),
     # pip install (with package names) — also catches --upgrade
     (re.compile(r'pip3?\s+install\s+(.+)'), 'pip_install'),
     # pnpm install/add/update — must precede npm: 'pnpm install x'
-    # substring-matches the npm entry
-    (re.compile(r'pnpm\s+(?:install|i|add|update)\s+(.+)'), 'pnpm_install'),
+    # substring-matches the npm entry. _PM_FLAGS covers monorepo/workspace
+    # forms: `pnpm -r add x`, `pnpm --filter web add x`.
+    (re.compile(r'pnpm\s+' + _PM_FLAGS + r'(?:install|i|add|update)\s+(.+)'), 'pnpm_install'),
     # bun install/add/update
-    (re.compile(r'bun\s+(?:install|i|add|update)\s+(.+)'), 'bun_install'),
+    (re.compile(r'bun\s+' + _PM_FLAGS + r'(?:install|i|add|update)\s+(.+)'), 'bun_install'),
     # npm install (with package names)
     (re.compile(r'npm\s+(?:install|i)\s+(.+)'), 'npm_install'),
     # npm update (missed update commands)
     (re.compile(r'npm\s+update\s+(.+)'), 'npm_install'),
+    # Bare lockfile installs (no package args) — scan CWD like uv_sync/git_pull.
+    # MUST come after the with-args npm/pnpm/bun entries above so
+    # 'pnpm install express' still classifies as pnpm_install. Anchored to
+    # end-of-command (optionally trailing flags) so it only fires for the
+    # arg-less form: `npm install`, `npm ci`, `pnpm install --frozen-lockfile`,
+    # `bun install`, and `cd app && pnpm install`.
+    (re.compile(r'(?:npm|pnpm|bun)\s+(?:ci|install|i)(?:\s+--?\S+)*\s*$'), 'lockfile_install'),
+    (re.compile(r'yarn(?:\s+install)?(?:\s+--?\S+)*\s*$'), 'lockfile_install'),
     # yarn add
     (re.compile(r'yarn\s+add\s+(.+)'), 'yarn_add'),
     # gem install
@@ -530,8 +553,15 @@ def main():
             scan_findings = run_targeted_scan(clone_dir)
             all_findings.extend(scan_findings)
 
-    # For git pull / uv sync: scan CWD (repo or its deps were updated in place)
-    if pattern_type in ('git_pull', 'uv_sync'):
+    # For git pull / uv sync / bare lockfile install: scan CWD (repo or its
+    # deps were updated in place from the lockfile — no package args to target).
+    # A with-args install that extracted zero packages is also a lockfile
+    # install: its args were all flags (`pnpm install --frozen-lockfile`,
+    # `npm install --production`) — deps still changed, so scan CWD.
+    _lockfile_like = pattern_type in ('git_pull', 'uv_sync', 'lockfile_install') or (
+        pattern_type in ('pip_install', 'npm_install', 'uv_install',
+                         'bun_install', 'pnpm_install') and not package_names)
+    if _lockfile_like:
         cwd = os.getcwd()
         if os.path.isdir(cwd) and _is_safe_scan_path(cwd):
             scanned_target = cwd

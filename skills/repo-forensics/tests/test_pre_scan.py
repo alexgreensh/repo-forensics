@@ -191,6 +191,13 @@ class TestDetectInstallCommand:
         ("bun i lodash", "bun_install"),
         ("bun add react", "bun_install"),
         ("bun update webpack", "bun_install"),
+        # monorepo / global-option forms (flags between tool and subcommand)
+        ("pnpm -r add lodash", "pnpm_install"),
+        ("pnpm --filter web add react", "pnpm_install"),
+        ("pnpm --filter=web add react", "pnpm_install"),
+        ("pnpm -w add typescript", "pnpm_install"),
+        ("uv --project /p add flask", "uv_install"),
+        ("bun --cwd app add esbuild", "bun_install"),
     ])
     def test_install_patterns(self, cmd, expected_type):
         ptype, match = pre_scan.detect_install_command(cmd)
@@ -364,3 +371,14 @@ class TestMain:
         assert code == 2
         assert out["decision"] == "block"
         assert "evil-pkg" in out["reason"]
+
+    def test_ioc_match_blocks_pnpm_monorepo(self, monkeypatch, capsys):
+        """A malicious package added via a monorepo form (`pnpm -r add evil`,
+        `pnpm --filter web add evil`) still reaches the IOC pre-block gate."""
+        monkeypatch.setattr(pre_scan, 'check_ioc_packages', lambda pkgs: ['evil-pkg'])
+        for cmd in ("pnpm -r add evil-pkg", "pnpm --filter web add evil-pkg"):
+            payload = json.dumps(make_bash_payload(cmd))
+            code, out = self._run_main(payload, monkeypatch, capsys)
+            assert code == 2, cmd
+            assert out["decision"] == "block"
+            assert "evil-pkg" in out["reason"]

@@ -2,6 +2,30 @@
 
 All notable changes to repo-forensics. Versions follow semver.
 
+## [2.12.1] - 2026-07-07
+
+### Added — uv / bun / pnpm install triggers (thanks @noamloewenstern)
+
+- The auto-scan (PostToolUse) and pre-scan (PreToolUse) hooks now trigger on
+  `uv`, `bun`, and `pnpm` install commands, so these package managers get the
+  same IOC pre-block and post-install scanning as pip/npm/yarn. `uv sync`
+  scans the working directory like `git pull`. New patterns are ordered before
+  pip/npm because the matchers are unanchored (`pnpm install x` substring-
+  matches `npm install x`); regression tests pin the ordering. Contributed by
+  @noamloewenstern (#33, #34).
+
+### Hardened — monorepo forms and bare lockfile installs
+
+- The `uv`/`pnpm`/`bun` matchers now accept package-manager flags between the
+  tool and its subcommand, so monorepo/workspace forms are covered:
+  `pnpm -r add x`, `pnpm --filter web add x`, `uv --project /p add x`. The
+  flag prefix is written to fail fast on dash runs (no catastrophic
+  backtracking; a ReDoS-timing test guards it).
+- Bare lockfile installs now scan the working directory: `npm install`,
+  `npm ci`, `pnpm install`, `bun install`, `yarn`, and the all-flags forms
+  (`pnpm install --frozen-lockfile`, `npm install --production`) — previously
+  the most common post-clone command triggered no scan at all.
+
 ## [2.12.0] - 2026-07-05
 
 ### Added — dead_anchors scanner (SkillJacking defense)

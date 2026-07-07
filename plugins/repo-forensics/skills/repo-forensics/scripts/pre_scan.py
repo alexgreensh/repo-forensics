@@ -33,8 +33,25 @@ sys.path.insert(0, SCRIPTS_DIR)
 # to guarantee <10ms latency and zero recursion risk. If you update patterns
 # here, update auto_scan.py too (and vice versa).
 
+# Optional package-manager flags between the tool name and its subcommand
+# (`pnpm -r add x`, `pnpm --filter web add x`, `uv --project /p add x`). Each
+# unit is one -flag (first char after the dash(es) is a non-dash, so dash runs
+# fail fast — no ReDoS) plus an optional value token that must NOT be a
+# subcommand keyword. Kept identical in auto_scan.py — update both.
+_PM_FLAGS = (
+    r'(?:-{1,2}[^-\s]\S*'
+    r'(?:\s+(?!(?:install|i|add|update|sync|pip|tool|remove|run)\b)[^-\s]\S*)?'
+    r'\s+)*'
+)
+
 INSTALL_PATTERNS = [
+    # uv/pnpm must precede pip/npm: the patterns are unanchored, so
+    # 'uv pip install x' / 'pnpm install x' substring-match the pip/npm entries.
+    # _PM_FLAGS covers flags between the tool and subcommand (monorepo forms).
+    (re.compile(r'uv\s+' + _PM_FLAGS + r'(?:add|pip\s+install|tool\s+install)\s+(.+)'), 'uv_install'),
     (re.compile(r'pip3?\s+install\s+(.+)'), 'pip_install'),
+    (re.compile(r'pnpm\s+' + _PM_FLAGS + r'(?:install|i|add|update)\s+(.+)'), 'pnpm_install'),
+    (re.compile(r'bun\s+' + _PM_FLAGS + r'(?:install|i|add|update)\s+(.+)'), 'bun_install'),
     (re.compile(r'npm\s+(?:install|i)\s+(.+)'), 'npm_install'),
     (re.compile(r'npm\s+update\s+(.+)'), 'npm_install'),
     (re.compile(r'yarn\s+add\s+(.+)'), 'yarn_add'),
@@ -107,12 +124,13 @@ def extract_package_names(pattern_type, match):
     if not match:
         return []
     if pattern_type not in ('pip_install', 'npm_install', 'yarn_add', 'gem_install',
-                            'cargo_install', 'go_install', 'brew_install', 'openclaw_install'):
+                            'cargo_install', 'go_install', 'brew_install', 'openclaw_install',
+                            'uv_install', 'bun_install', 'pnpm_install'):
         return []
     raw = match.group(1)
     cleaned = INSTALL_FLAGS.sub('', raw).strip()
     names = [n.strip() for n in cleaned.split() if n.strip() and not n.startswith('-')]
-    if pattern_type == 'pip_install':
+    if pattern_type in ('pip_install', 'uv_install'):
         names = [re.split(r'[>=<!\[\];@]', n)[0] for n in names]
     return names
 

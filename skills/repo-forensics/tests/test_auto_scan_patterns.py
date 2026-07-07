@@ -58,6 +58,22 @@ class TestDetectInstallCommand:
         ("bun i lodash", "bun_install"),
         ("bun add react", "bun_install"),
         ("bun update webpack", "bun_install"),
+        # monorepo / global-option forms (flags between tool and subcommand)
+        ("pnpm -r add lodash", "pnpm_install"),
+        ("pnpm --filter web add react", "pnpm_install"),
+        ("pnpm --filter=web add react", "pnpm_install"),
+        ("pnpm -w add typescript", "pnpm_install"),
+        ("uv --project /p add flask", "uv_install"),
+        ("bun --cwd app add esbuild", "bun_install"),
+        # bare lockfile installs (no package args) -> lockfile_install
+        ("npm install", "lockfile_install"),
+        ("npm ci", "lockfile_install"),
+        ("pnpm install", "lockfile_install"),
+        ("bun install", "lockfile_install"),
+        ("yarn", "lockfile_install"),
+        ("yarn install", "lockfile_install"),
+        ("pnpm install --frozen-lockfile", "pnpm_install"),  # all-flags: pnpm_install w/ empty pkgs
+        ("cd app && pnpm install", "lockfile_install"),
     ])
     def test_install_patterns(self, cmd, expected_type):
         ptype, match = auto_scan.detect_install_command(cmd)
@@ -74,6 +90,31 @@ class TestDetectInstallCommand:
         the uv pattern must win (list order)."""
         ptype, _ = auto_scan.detect_install_command("uv pip install requests")
         assert ptype == 'uv_install'
+
+    def test_bare_install_after_with_args_ordering(self):
+        """'pnpm install express' keeps the with-args type; only the arg-less
+        form falls through to lockfile_install."""
+        assert auto_scan.detect_install_command("pnpm install express")[0] == 'pnpm_install'
+        assert auto_scan.detect_install_command("pnpm install")[0] == 'lockfile_install'
+
+    def test_flag_prefix_extracts_real_package(self):
+        """Monorepo flags must not leak into the extracted package list."""
+        _, m = auto_scan.detect_install_command("pnpm --filter web add react react-dom")
+        assert set(auto_scan.extract_package_names('pnpm_install', m)) == {'react', 'react-dom'}
+        _, m = auto_scan.detect_install_command("uv --project /p add flask>=2.0")
+        assert auto_scan.extract_package_names('uv_install', m) == ['flask']
+
+    @pytest.mark.parametrize("cmd", [
+        "pnpm " + "-" * 4000 + " x",
+        "pnpm " + "-a " * 3000 + "z",
+        "uv " + "-" * 4000 + " add",
+    ])
+    def test_flag_prefix_no_catastrophic_backtracking(self, cmd):
+        """_PM_FLAGS must stay linear on adversarial dash runs (ReDoS guard)."""
+        import time
+        start = time.perf_counter()
+        auto_scan.detect_install_command(cmd)
+        assert (time.perf_counter() - start) < 0.5
 
 
 # --- extract_package_names ---
