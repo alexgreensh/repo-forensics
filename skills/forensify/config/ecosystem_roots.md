@@ -126,7 +126,7 @@ walks three paths in order:
 
 1. **`NANOCLAW_DIR` environment variable** — primary override
 2. **Common clone paths** — `~/NanoClaw`, `~/nanoclaw`, `~/code/nanoclaw`,
-   `~/CascadeProjects/*nanoclaw*`, `~/projects/nanoclaw`, and case variants
+   `~/projects/nanoclaw`, and case variants
 3. **Signature scan** — any directory under the common paths containing
    ALL of `scripts/claw`, `container/skills`, and `package.json`, AND whose
    `package.json` content matches `"name":"nanoclaw*"` or contains

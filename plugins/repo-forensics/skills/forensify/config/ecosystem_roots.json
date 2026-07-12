@@ -416,8 +416,6 @@
           "~/nanoclaw",
           "~/code/nanoclaw",
           "~/code/NanoClaw",
-          "~/CascadeProjects/*nanoclaw*",
-          "~/CascadeProjects/*NanoClaw*",
           "~/projects/nanoclaw",
           "~/projects/NanoClaw"
         ],
