@@ -201,6 +201,9 @@
       "severity": "critical",
       "confidence": 0.8,
       "category": "tool-shadowing",
+      "attacker": "malicious skill/tool definer",
+      "boundary": "tool name/description",
+      "asset": "user-requested action",
       "explanation": "Tool shadowing: hijack instruction targeting another tool action.",
       "examples": {
         "match": [

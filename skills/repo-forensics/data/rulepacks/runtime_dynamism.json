@@ -12,6 +12,9 @@
       "severity": "high",
       "confidence": 0.7,
       "category": "dynamic-import",
+      "attacker": "runtime payload or environment",
+      "boundary": "runtime import boundary",
+      "asset": "loaded code",
       "explanation": "importlib.import_module() with variable argument.",
       "examples": {
         "match": [

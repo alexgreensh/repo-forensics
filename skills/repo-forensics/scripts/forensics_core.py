@@ -55,6 +55,9 @@ class Finding:
     category: str      # "secret", "injection", "exfiltration", etc.
     rule_id: str = ""      # Stable rule id (e.g. "ST-PI-001"); "" for code-baked findings
     confidence: float = 0.0  # 0.0-1.0; 0.0/None means "fill from severity map"
+    attacker: str = ""     # Threat-model precondition: who the attacker is
+    boundary: str = ""     # Threat-model precondition: trust boundary crossed
+    asset: str = ""        # Threat-model precondition: asset at risk
 
     def __post_init__(self):
         # Defensive type coercion at the trust boundary between the in-process
@@ -74,7 +77,8 @@ class Finding:
             self.severity = self.severity.lower()
         # Guard the remaining string fields so downstream .lower() / slicing
         # can never NoneError.
-        for _field in ("scanner", "title", "description", "file", "snippet", "category"):
+        for _field in ("scanner", "title", "description", "file", "snippet", "category",
+                       "attacker", "boundary", "asset"):
             if getattr(self, _field) is None:
                 setattr(self, _field, "")
         # rule_id is a plain string identifier; coerce non-strings/None to "".
@@ -851,6 +855,11 @@ def findings_from_dicts_iter(dicts):
                 line=d.get("line", 0),
                 snippet=d.get("snippet", ""),
                 category=d.get("category", ""),
+                rule_id=d.get("rule_id", ""),
+                confidence=d.get("confidence", 0.0),
+                attacker=d.get("attacker", ""),
+                boundary=d.get("boundary", ""),
+                asset=d.get("asset", ""),
             )
         except (TypeError, ValueError):
             continue
@@ -1730,6 +1739,9 @@ def scan_rule_patterns(content, rel_path, rules, category, default_severity, sca
                     category=category,
                     rule_id=rule.id,
                     confidence=rule.confidence,
+                    attacker=getattr(rule, "attacker", ""),
+                    boundary=getattr(rule, "boundary", ""),
+                    asset=getattr(rule, "asset", ""),
                 ))
     return findings
 

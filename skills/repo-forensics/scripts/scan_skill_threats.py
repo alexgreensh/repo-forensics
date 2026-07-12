@@ -760,6 +760,9 @@ def _scan_authority_framing(content, rel_path):
                     category="authority-framing",
                     rule_id=rule.id,
                     confidence=rule.confidence,
+                    attacker=rule.attacker,
+                    boundary=rule.boundary,
+                    asset=rule.asset,
                 ))
                 break
     return findings

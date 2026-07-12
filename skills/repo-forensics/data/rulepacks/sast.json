@@ -15,6 +15,9 @@
       "severity": "high",
       "confidence": 0.7,
       "category": "code-execution",
+      "attacker": "malicious user input",
+      "boundary": "code/data boundary",
+      "asset": "server runtime",
       "explanation": "Dangerous Eval (code-execution) detected in a .py file.",
       "examples": {
         "match": [

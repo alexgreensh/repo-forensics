@@ -12,6 +12,9 @@
       "severity": "critical",
       "confidence": 0.85,
       "category": "prompt-injection",
+      "attacker": "skill user or hidden content",
+      "boundary": "user/system instruction",
+      "asset": "agent behavior",
       "explanation": "Instruction override directive.",
       "examples": {
         "match": [

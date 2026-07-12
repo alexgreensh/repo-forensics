@@ -442,6 +442,54 @@ _FRESHNESS_STATE = {
 }
 
 
+def _enrichment_status_findings():
+    """Emit scanner-level enrichment-degraded findings.
+
+    These are routed as findings in the `enrichment-degraded` category so the
+    aggregator can build `enrichment_status` without `aggregate_json.py` ever
+    importing `rule_loader` (leaf-law).
+    """
+    findings = []
+
+    if _VULN_STATE["offline"]:
+        findings.append(core.Finding(
+            scanner=SCANNER_NAME, severity="low",
+            title="Vulnerability enrichment offline (`--offline`)",
+            description=("Network fetches are disabled; OSV + CISA KEV "
+                         "vulnerability enrichment was not performed."),
+            file="", line=0, snippet="",
+            category="enrichment-degraded",
+            confidence=0.0,
+        ))
+    elif not _VULN_STATE["enabled"]:
+        findings.append(core.Finding(
+            scanner=SCANNER_NAME, severity="low",
+            title="Vulnerability enrichment disabled (`--no-vulns`)",
+            description=("Vulnerability enrichment was explicitly disabled; "
+                         "OSV + CISA KEV checks were not performed."),
+            file="", line=0, snippet="",
+            category="enrichment-degraded",
+            confidence=0.0,
+        ))
+
+    try:
+        import rule_loader
+        if rule_loader.get_rulepack_degraded():
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="low",
+                title="Rulepack feed degraded",
+                description=("A cached rulepack bundle is present but failed "
+                             "verification or overlay. Pack updates may be stale."),
+                file="", line=0, snippet="",
+                category="enrichment-degraded",
+                confidence=0.0,
+            ))
+    except (ImportError, OSError):
+        pass
+
+    return findings
+
+
 def _check_vulns(ecosystem, pkg_versions, rel_path):
     """Enrich findings with OSV + CISA KEV data for each (pkg, version) seen.
 
@@ -2232,6 +2280,10 @@ def main():
         elif basename in ('requirements.txt', 'requirements-dev.txt', 'requirements-test.txt',
                           'constraints.txt', 'pyproject.toml', 'Pipfile'):
             all_findings.extend(scan_python_deps(file_path, rel_path))
+
+    # Surface enrichment state (offline/no-vulns/rulepack-degraded) as
+    # a scanner-emitted finding, never as a cross-import from aggregate_json.
+    all_findings.extend(_enrichment_status_findings())
 
     core.output_findings(all_findings, args.format, SCANNER_NAME)
 
