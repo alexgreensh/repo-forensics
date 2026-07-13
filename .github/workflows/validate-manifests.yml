@@ -1,0 +1,13 @@
+name: Validate manifests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate plugin manifests
+        run: python3 skills/repo-forensics/scripts/validate_manifests.py

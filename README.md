@@ -112,6 +112,12 @@ Works standalone on any machine with Python 3.8+. No pip install, no API keys, n
 
 Then run `/repo-forensics /path/to/repo` before installing a new skill, plugin, MCP server, or dependency.
 
+### Troubleshooting install / plugin-manifest errors
+
+- `author: Invalid input: expected object, received string` (or `invalid manifest file`) means Claude Code has a stale cached plugin version. Run `/plugin marketplace update alexgreensh-repo-forensics`, then uninstall and reinstall the plugin. If it persists, run `/plugin marketplace remove alexgreensh-repo-forensics` followed by `/plugin marketplace add https://github.com/alexgreensh/repo-forensics`, or delete the stale version folder from the Claude plugin cache. You can also use Claude Code's **f to fix with Claude** prompt shown on the error screen.
+- If a relative-path install fails, add the marketplace from its Git URL: `/plugin marketplace add https://github.com/alexgreensh/repo-forensics`. Do not add a direct `marketplace.json` URL: relative `source: "./"` works only for Git or local marketplaces.
+- On Windows, `EPERM` during rename/extraction is a known Claude Code platform issue. Update Claude Code, then remove and re-add the marketplace using the GitHub URL above.
+
 That npm package Cursor added to your lockfile. The GitHub Actions workflow someone contributed in a PR. The MCP server with 500 downloads. The Claude Code skill someone linked in Discord. The ClawHub extension your OpenClaw agent auto-installed. The Codex plugin you grabbed from GitHub.
 
 Did you vet any of them?
@@ -278,7 +284,7 @@ Scanning never requires network access. The feed is a freshness layer on top of 
 
 ## Battle-Tested Against Real Attacks
 
-2,145 tests across 40+ test files. Not synthetic toy examples: detection patterns built from real supply chain campaigns that hit production systems.
+2,154 tests across 40+ test files. Not synthetic toy examples: detection patterns built from real supply chain campaigns that hit production systems.
 
 **Named attack campaigns in the IOC database:**
 
@@ -304,7 +310,7 @@ Scanning never requires network access. The feed is a freshness layer on top of 
 
 Every campaign above has version-pinned IOCs in `compromised_versions.json`, detection rules in the lifecycle and dependency scanners, and correlation rules for compound attack patterns.
 
-**The tests are safe to run.** All 2,145 tests use synthetic fixtures in temporary directories. No real malware is downloaded or executed. Pattern matching runs against fake package.json files containing attack signatures, the same way antivirus software tests against EICAR strings.
+**The tests are safe to run.** All 2,154 tests use synthetic fixtures in temporary directories. No real malware is downloaded or executed. Pattern matching runs against fake package.json files containing attack signatures, the same way antivirus software tests against EICAR strings.
 
 ---
 
@@ -600,7 +606,7 @@ Exit codes: `0` = clean, `1` = warn, `2` = block merge.
 | **IOC auto-update** | `--update-iocs` pulls latest C2 IPs, malicious domains, known-bad packages |
 | **Installation verification** | `--verify-install` checks repo-forensics itself for tampering |
 | **Manifest drift** | Declared vs actual imports, phantom deps, runtime installs |
-| **2,145 pytest tests** | Full coverage across 40+ test files |
+| **2,154 pytest tests** | Full coverage across 40+ test files |
 
 </details>
 

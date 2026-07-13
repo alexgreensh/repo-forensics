@@ -2,7 +2,7 @@
   "id": "repo-forensics-openclaw",
   "name": "Repo Forensics",
   "description": "Security scanner for AI agent plugins, skills, and MCP servers. 26 scanners, zero dependencies, fully offline.",
-  "version": "2.12.2",
+  "version": "2.12.3",
   "skills": [
     "skills/repo-forensics"
   ],

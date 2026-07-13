@@ -7,13 +7,13 @@
   },
   "metadata": {
     "description": "Zero-dependency security scanner for AI agent ecosystems",
-    "version": "2.12.2"
+    "version": "2.12.3"
   },
   "plugins": [
     {
       "name": "repo-forensics",
       "description": "Offline security scanner for AI-agent repos, skills, plugins, and MCP servers. 26 scanners detect prompt injection, MCP tool poisoning, credential exposure, malicious lifecycle hooks, package IOCs, CVEs, CISA KEV exposure, and post-incident traces. Zero dependencies. Zero telemetry.",
-      "version": "2.12.2",
+      "version": "2.12.3",
       "author": {
         "name": "Alex Greenshpun",
         "url": "https://linkedin.com/in/alexgreensh"
