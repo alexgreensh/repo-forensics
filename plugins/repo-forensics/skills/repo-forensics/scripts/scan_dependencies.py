@@ -442,6 +442,83 @@ _FRESHNESS_STATE = {
 }
 
 
+def _enrichment_status_findings():
+    """Emit scanner-level enrichment-degraded findings.
+
+    These are routed as findings in the `enrichment-degraded` category so the
+    aggregator can build `enrichment_status` without `aggregate_json.py` ever
+    importing `rule_loader` (leaf-law).
+    """
+    findings = []
+
+    if _VULN_STATE["offline"]:
+        findings.append(core.Finding(
+            scanner=SCANNER_NAME, severity="low",
+            title="Vulnerability enrichment offline (`--offline`)",
+            description=("Network fetches are disabled; OSV + CISA KEV "
+                         "vulnerability enrichment was not performed."),
+            file="", line=0, snippet="",
+            category="enrichment-degraded",
+            confidence=0.0,
+        ))
+    elif not _VULN_STATE["enabled"]:
+        findings.append(core.Finding(
+            scanner=SCANNER_NAME, severity="low",
+            title="Vulnerability enrichment disabled (`--no-vulns`)",
+            description=("Vulnerability enrichment was explicitly disabled; "
+                         "OSV + CISA KEV checks were not performed."),
+            file="", line=0, snippet="",
+            category="enrichment-degraded",
+            confidence=0.0,
+        ))
+
+    try:
+        import rule_loader
+        if rule_loader.get_rulepack_degraded():
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="low",
+                title="Rulepack feed degraded",
+                description=("A cached rulepack bundle is present but failed "
+                             "verification or overlay. Pack updates may be stale."),
+                file="", line=0, snippet="",
+                category="enrichment-degraded",
+                confidence=0.0,
+            ))
+    except (ImportError, OSError):
+        pass
+
+    return findings
+
+
+def _vuln_cache_freshness_status():
+    """Return the worst freshness status across the KEV and OSV caches.
+
+    Mirrors `cache_freshness` semantics: missing/unparseable cache is
+    RECHECK_REQUIRED; stale-but-present is STALE; otherwise empty string.
+    """
+    try:
+        import vuln_feed
+    except ImportError:
+        return ""
+    try:
+        kev = vuln_feed.cache_freshness(
+            vuln_feed._cache_path(vuln_feed.KEV_CACHE_FILENAME),
+            vuln_feed.KEV_CACHE_MAX_AGE_HOURS,
+        )
+        osv = vuln_feed.cache_freshness(
+            vuln_feed._cache_path(vuln_feed.OSV_CACHE_FILENAME),
+            vuln_feed.OSV_CACHE_MAX_AGE_HOURS,
+        )
+    except (OSError, ValueError, TypeError):
+        return ""
+    statuses = [kev.get("status", ""), osv.get("status", "")]
+    if "RECHECK_REQUIRED" in statuses:
+        return "RECHECK_REQUIRED"
+    if "STALE" in statuses:
+        return "STALE"
+    return ""
+
+
 def _check_vulns(ecosystem, pkg_versions, rel_path):
     """Enrich findings with OSV + CISA KEV data for each (pkg, version) seen.
 
@@ -2232,6 +2309,18 @@ def main():
         elif basename in ('requirements.txt', 'requirements-dev.txt', 'requirements-test.txt',
                           'constraints.txt', 'pyproject.toml', 'Pipfile'):
             all_findings.extend(scan_python_deps(file_path, rel_path))
+
+    # Surface enrichment state (offline/no-vulns/rulepack-degraded) as
+    # a scanner-emitted finding, never as a cross-import from aggregate_json.
+    all_findings.extend(_enrichment_status_findings())
+
+    # Surface vuln-feed cache freshness on each CVE finding so the aggregator
+    # can set enrichment_status.vulns without importing vuln_feed.
+    vuln_freshness = _vuln_cache_freshness_status()
+    if vuln_freshness:
+        for f in all_findings:
+            if f.category in ("cve", "cve-kev"):
+                f.freshness_status = vuln_freshness
 
     core.output_findings(all_findings, args.format, SCANNER_NAME)
 

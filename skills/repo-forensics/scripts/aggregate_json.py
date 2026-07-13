@@ -8,6 +8,7 @@ builds a machine-readable aggregate document, and writes a fail-closed exit code
 
 import json
 import os
+import subprocess
 import sys
 
 # Make forensics_core importable so we can run the correlation engine on
@@ -502,6 +503,59 @@ def build_core_verdict(summary, verdicts, exit_code):
     }
 
 
+def _invoke_adjudication_bridge(all_findings):
+    """Run scripts/adjudication_bridge.py out-of-process when adjudication
+    commands are configured.  Returns a JSON result dict or None when the
+    feature is not enabled (env vars unset).  Failures are swallowed and
+    reported as status='unavailable' so they never affect exit code."""
+    confirm_cmd = os.environ.get("REPO_FORENSICS_CONFIRM_COMMAND")
+    refute_cmd = os.environ.get("REPO_FORENSICS_REFUTE_COMMAND")
+    if not confirm_cmd and not refute_cmd:
+        return None
+
+    bridge_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               "adjudication_bridge.py")
+    if not os.path.exists(bridge_path):
+        return {"status": "unavailable", "annotations": []}
+
+    payload = json.dumps({"findings": all_findings}, separators=(",", ":"))
+    # Sanitized environment: PATH plus the two opt-in command variables.
+    env = {"PATH": os.environ.get("PATH", "")}
+    if confirm_cmd:
+        env["REPO_FORENSICS_CONFIRM_COMMAND"] = confirm_cmd
+    if refute_cmd:
+        env["REPO_FORENSICS_REFUTE_COMMAND"] = refute_cmd
+
+    try:
+        proc = subprocess.run(
+            [sys.executable, bridge_path],
+            input=payload, capture_output=True, text=True,
+            timeout=30, env=env,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        print(f"[!] Adjudication bridge failed: {exc}", file=sys.stderr)
+        return {"status": "unavailable", "annotations": []}
+
+    if proc.returncode != 0:
+        return {"status": "unavailable", "annotations": []}
+
+    try:
+        result = json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        return {"status": "unavailable", "annotations": []}
+
+    if not isinstance(result, dict):
+        return {"status": "unavailable", "annotations": []}
+
+    annotations = result.get("annotations", [])
+    if not isinstance(annotations, list):
+        annotations = []
+    return {
+        "status": result.get("status", "unavailable"),
+        "annotations": annotations,
+    }
+
+
 def build_enrichment_status(scanners, all_findings):
     """Aggregate scanner-level enrichment-degraded signals into a report key.
 
@@ -574,12 +628,41 @@ def build_enrichment_status(scanners, all_findings):
         freshness = finding.get("freshness_status")
         if freshness in ("STALE", "RECHECK_REQUIRED"):
             add_gap(finding.get("scanner", "unknown"), freshness.lower(), "freshness")
-            if finding.get("scanner") == "dead_anchors":
+            scanner = finding.get("scanner", "unknown")
+            if scanner == "dead_anchors":
                 dead_anchors = freshness
+            elif scanner == "dependencies" and vulns != "offline":
+                vulns = freshness
 
     needs_adjudication = any(f.get("needs_adjudication") for f in all_findings)
     adjudication = "pending" if needs_adjudication else "available"
     advisory_annotations = []
+
+    if needs_adjudication:
+        bridge_result = _invoke_adjudication_bridge(all_findings)
+        if bridge_result is not None:
+            advisory_annotations = bridge_result.get("annotations", []) or []
+            bridge_status = bridge_result.get("status", "unavailable")
+            if bridge_status == "unavailable":
+                adjudication = "unavailable"
+                advisory_annotations = []
+            elif any(
+                any(lane.get("error") == "unavailable"
+                    for lane in a.get("lanes", {}).values())
+                for a in advisory_annotations
+            ):
+                # One or both advisory lanes failed (command absent / non-zero /
+                # timeout / JSON parse failure). Treat the whole bridge as
+                # unavailable and discard the partial error annotations.
+                adjudication = "unavailable"
+                advisory_annotations = []
+            elif bridge_status == "available" and advisory_annotations:
+                if any(a.get("outcome") == "agree_real" for a in advisory_annotations):
+                    adjudication = "available"
+                else:
+                    adjudication = "unresolved"
+            else:
+                adjudication = "unresolved"
 
     if vulns == "offline" or dead_anchors == "offline":
         overall = "OFFLINE"

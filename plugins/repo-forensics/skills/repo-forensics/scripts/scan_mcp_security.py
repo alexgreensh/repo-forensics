@@ -331,6 +331,9 @@ def scan_tool_shadowing(content, rel_path):
                     category="tool-shadowing",
                     rule_id=rule.id,
                     confidence=rule.confidence,
+                    attacker=rule.attacker,
+                    boundary=rule.boundary,
+                    asset=rule.asset,
                 ))
     return findings
 

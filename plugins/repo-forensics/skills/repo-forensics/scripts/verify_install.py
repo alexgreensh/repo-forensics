@@ -218,7 +218,11 @@ def get_tracked_files(skill_root):
             fp = os.path.join(root, f)
             if os.path.islink(fp):
                 continue
-            rel = os.path.relpath(fp, skill_root)
+            # Normalize to forward slashes so checksum keys match the shipped
+            # manifest on Windows (os.path.relpath yields backslashes there,
+            # which would fail integrity verification during marketplace/plugin
+            # installs — the non-git code path). No-op on POSIX.
+            rel = os.path.relpath(fp, skill_root).replace(os.sep, '/')
             tracked.append(rel)
 
     return sorted(tracked)

@@ -8,6 +8,7 @@ builds a machine-readable aggregate document, and writes a fail-closed exit code
 
 import json
 import os
+import subprocess
 import sys
 
 # Make forensics_core importable so we can run the correlation engine on
@@ -191,7 +192,9 @@ def apply_suppressions(all_findings, repo_path):
         matched = None
         if rule_id:
             for supp in suppressions:
-                if core.suppression_matches(supp, rule_id, finding.get("file", "")):
+                if core.suppression_matches(
+                    supp, rule_id, finding.get("file", ""), repo_path=repo_path
+                ):
                     matched = supp
                     break
         if matched is not None:
@@ -202,6 +205,20 @@ def apply_suppressions(all_findings, repo_path):
             active.append(finding)
 
     guard_findings = []
+
+    invalid_structured = [s for s in suppressions if s.get("structured") and not any(
+        core.suppression_matches(s, s.get("rule_id", ""), f.get("file", ""), repo_path=repo_path)
+        for f in all_findings
+    )]
+    for suppression in invalid_structured:
+        guard_findings.append({
+            "scanner": "meta", "severity": "high",
+            "title": ".forensicsignore: Invalid Structured Suppression",
+            "description": "A structured suppression is expired, unsigned, out of scope, or content-mismatched.",
+            "file": ".forensicsignore", "line": 0,
+            "snippet": suppression.get("raw", "")[:120],
+            "category": "configuration", "rule_id": "", "confidence": 0.80,
+        })
 
     # Guard 1: suppression of a critical-severity rule = tampering (CRITICAL).
     for rule_id in sorted(critical_rules_suppressed):
@@ -302,6 +319,367 @@ def calculate_report_exit_code(summary, scanners):
     if summary["high"] > 0 or summary["medium"] > 0:
         return 1
     return 0
+
+
+# Coverage-honesty categories. These categories are emitted by scanners
+# when they cannot fully inspect the target. They are classified into two tiers:
+#   UNSUPPORTED = the format/surface is not analysable by this scanner
+#   INCOMPLETE  = the scanner started but hit a budget/cap/depth/uncheckable
+#                 limit before finishing, or the subprocess produced no JSON /
+#                 an unexpected exit code.
+_UNSUPPORTED_COVERAGE_CATEGORIES = {
+    "unsupported-archive-type",
+    "opaque-archive",
+    "unanalyzable-bytecode",
+    "opaque-bytecode-with-source",
+    "unsupported-file-type",
+}
+
+_INCOMPLETE_COVERAGE_CATEGORIES = {
+    "archive-scan-incomplete",
+    "decode-scan-incomplete",
+    "decode-max-depth",
+    "scan-incomplete",
+    "provenance-unchecked",
+    "nc",
+    "NC",
+    "unchecked",
+}
+
+# Prefix shorthands so the registry is closed under future scanner additions.
+_COVERAGE_UNSUPPORTED_PREFIXES = ("unsupported-", "opaque-")
+_COVERAGE_INCOMPLETE_SUFFIXES = ("-incomplete", "-max-depth")
+
+# Scanners that do not follow the per-file scan_file contract and whose own
+# finding categories are not coverage-honesty signals. They are still marked
+# INCOMPLETE if the subprocess itself fails or produces an unexpected exit code.
+_NO_COVERAGE_SCANNER_NAMES = {"dast", "dependencies"}
+
+
+def _coverage_status_for_category(category):
+    """Classify a finding category into a coverage tier.
+
+    Returns one of ("UNSUPPORTED", "INCOMPLETE", None).
+    """
+    if category in _UNSUPPORTED_COVERAGE_CATEGORIES:
+        return "UNSUPPORTED"
+    if category in _INCOMPLETE_COVERAGE_CATEGORIES:
+        return "INCOMPLETE"
+    cat = category.lower()
+    if any(cat.startswith(p) for p in _COVERAGE_UNSUPPORTED_PREFIXES):
+        return "UNSUPPORTED"
+    if any(cat.endswith(s) for s in _COVERAGE_INCOMPLETE_SUFFIXES):
+        return "INCOMPLETE"
+    if cat in ("nc", "unchecked"):
+        return "INCOMPLETE"
+    return None
+
+
+def build_coverage_status(scanners, all_findings):
+    """Aggregate per-scanner coverage honesty into a report-level coverage_status.
+
+    coverage_status is purely additive: it never changes exit_code, summary, or
+    the findings list. It reports COMPLETE/INCOMPLETE/UNSUPPORTED per scanner and
+    overall, with a gaps[] list of (scanner, category, human_reason).
+
+    Args:
+        scanners: the per-run scanner info list from load_scanner_results().
+        all_findings: flat list of finding dicts (used only to sanity-check
+                      scanner entry counts; per-scanner status is built from
+                      scanner["findings"]).
+
+    Returns:
+        dict with keys: overall, per_scanner, gaps.
+    """
+    del all_findings  # intentional; status is per scanner
+
+    per_scanner = {}
+    gaps = []
+    overall = "COMPLETE"
+
+    # Severity ordering: UNSUPPORTED > INCOMPLETE > COMPLETE.
+    status_rank = {"COMPLETE": 0, "INCOMPLETE": 1, "UNSUPPORTED": 2}
+
+    for scanner in scanners:
+        name = scanner["name"]
+        findings = scanner.get("findings", [])
+        parse_error = scanner.get("parse_error")
+        exit_code = scanner.get("exit_code", 1)
+
+        # Subprocess-level failure is always an INCOMPLETE coverage signal.
+        if parse_error is not None:
+            gaps.append({
+                "scanner": name,
+                "category": "parse-error",
+                "reason": f"Scanner produced no parseable JSON: {parse_error}",
+            })
+            per_scanner[name] = {"status": "INCOMPLETE", "reasons": ["parse-error"]}
+            overall = _worse_status(overall, "INCOMPLETE", status_rank)
+            continue
+
+        if exit_code not in VALID_EXIT_CODES:
+            gaps.append({
+                "scanner": name,
+                "category": "unexpected-exit",
+                "reason": f"Scanner exited with unexpected code {exit_code}",
+            })
+            per_scanner[name] = {"status": "INCOMPLETE", "reasons": ["unexpected-exit"]}
+            overall = _worse_status(overall, "INCOMPLETE", status_rank)
+            continue
+
+        # DAST and dependencies don't follow the scan_file contract; their own
+        # finding categories are findings, not coverage-honesty gaps.
+        if name in _NO_COVERAGE_SCANNER_NAMES:
+            per_scanner[name] = {"status": "COMPLETE", "reasons": []}
+            continue
+
+        reasons = []
+        scanner_status = "COMPLETE"
+
+        for finding in findings:
+            category = finding.get("category", "")
+            tier = _coverage_status_for_category(category)
+            if tier is None:
+                continue
+            if tier == "UNSUPPORTED":
+                scanner_status = _worse_status(scanner_status, "UNSUPPORTED", status_rank)
+                if category not in reasons:
+                    reasons.append(category)
+                gaps.append({
+                    "scanner": name,
+                    "category": category,
+                    "reason": f"Scanner could not analyse {category} surface",
+                })
+            elif tier == "INCOMPLETE":
+                scanner_status = _worse_status(scanner_status, "INCOMPLETE", status_rank)
+                if category not in reasons:
+                    reasons.append(category)
+                gaps.append({
+                    "scanner": name,
+                    "category": category,
+                    "reason": f"Scanner hit a budget/cap/uncheckable limit: {category}",
+                })
+
+        per_scanner[name] = {"status": scanner_status, "reasons": reasons}
+        overall = _worse_status(overall, scanner_status, status_rank)
+
+    return {
+        "overall": overall,
+        "per_scanner": per_scanner,
+        "gaps": gaps,
+    }
+
+
+def _worse_status(a, b, rank):
+    """Return the worse of two coverage status strings."""
+    return a if rank.get(a, 0) >= rank.get(b, 0) else b
+
+
+def build_core_verdict(summary, verdicts, exit_code):
+    """Re-express the deterministic verdict as an additive top-level key.
+
+    `core_verdict` is a *view* of the already-computed deterministic result.
+    It grants no new authority: the `exit_code` is the same value that appears
+    at the report level, and the counts come from the existing `verdicts` dict.
+    The tier is derived from the deterministic exit_code so it always matches
+    the fail-closed 0/1/2/99 contract.
+    """
+    if exit_code == 0:
+        tier = "clean"
+    elif exit_code == 1:
+        tier = "warn"
+    else:
+        # 2 (critical) or 99 (scanner failure) are both deterministic BLOCKs.
+        tier = "block"
+
+    return {
+        "tier": tier,
+        "exit_code": exit_code,
+        "block": verdicts.get("block", 0),
+        "warn": verdicts.get("warn", 0),
+        "info": verdicts.get("info", 0),
+        "suppressed": verdicts.get("suppressed", 0),
+        "total": summary.get("total", 0),
+    }
+
+
+def _invoke_adjudication_bridge(all_findings):
+    """Run scripts/adjudication_bridge.py out-of-process when adjudication
+    commands are configured.  Returns a JSON result dict or None when the
+    feature is not enabled (env vars unset).  Failures are swallowed and
+    reported as status='unavailable' so they never affect exit code."""
+    confirm_cmd = os.environ.get("REPO_FORENSICS_CONFIRM_COMMAND")
+    refute_cmd = os.environ.get("REPO_FORENSICS_REFUTE_COMMAND")
+    if not confirm_cmd and not refute_cmd:
+        return None
+
+    bridge_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               "adjudication_bridge.py")
+    if not os.path.exists(bridge_path):
+        return {"status": "unavailable", "annotations": []}
+
+    payload = json.dumps({"findings": all_findings}, separators=(",", ":"))
+    # Sanitized environment: PATH plus the two opt-in command variables.
+    env = {"PATH": os.environ.get("PATH", "")}
+    if confirm_cmd:
+        env["REPO_FORENSICS_CONFIRM_COMMAND"] = confirm_cmd
+    if refute_cmd:
+        env["REPO_FORENSICS_REFUTE_COMMAND"] = refute_cmd
+
+    try:
+        proc = subprocess.run(
+            [sys.executable, bridge_path],
+            input=payload, capture_output=True, text=True,
+            timeout=30, env=env,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        print(f"[!] Adjudication bridge failed: {exc}", file=sys.stderr)
+        return {"status": "unavailable", "annotations": []}
+
+    if proc.returncode != 0:
+        return {"status": "unavailable", "annotations": []}
+
+    try:
+        result = json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        return {"status": "unavailable", "annotations": []}
+
+    if not isinstance(result, dict):
+        return {"status": "unavailable", "annotations": []}
+
+    annotations = result.get("annotations", [])
+    if not isinstance(annotations, list):
+        annotations = []
+    return {
+        "status": result.get("status", "unavailable"),
+        "annotations": annotations,
+    }
+
+
+def build_enrichment_status(scanners, all_findings):
+    """Aggregate scanner-level enrichment-degraded signals into a report key.
+
+    enrichment_status is advisory and additive: it may escalate or annotate, but
+    it must never downgrade a BLOCK, clear a finding, or lower exit_code.
+    It surfaces dependency-vuln and rulepack-feed degradation.
+    """
+    vulns = "complete"
+    rulepack_feed = "ok"
+    dead_anchors = "complete"
+    capability_gaps = []
+    seen_gaps = set()
+
+    gap_categories = {
+        "NC", "nc", "unchecked", "provenance-unchecked",
+        "unsupported-archive-type", "archive-scan-incomplete",
+        "decode-scan-incomplete", "unanalyzable-bytecode",
+        "opaque-bytecode-with-source", "opaque-archive",
+    }
+
+    def add_gap(scanner, reason, category="capability"):
+        key = (str(scanner), str(reason), str(category))
+        if key in seen_gaps:
+            return
+        seen_gaps.add(key)
+        capability_gaps.append({
+            "scanner": key[0], "reason": key[1], "category": key[2],
+        })
+
+    for scanner in scanners:
+        name = scanner.get("name", "unknown")
+        if scanner.get("parse_error"):
+            add_gap(name, scanner["parse_error"], "scanner-error")
+        stderr = (scanner.get("stderr") or "").lower()
+        for marker, reason in (
+            ("rate limit", "rate-limited"), ("429", "rate-limited"),
+            ("github_token", "missing-github-token"),
+            ("not found", "missing-tool"), ("offline", "offline"),
+        ):
+            if marker in stderr:
+                add_gap(name, reason)
+
+    degraded_findings = [
+        f for f in all_findings
+        if f.get("category") == "enrichment-degraded"
+    ]
+
+    for f in degraded_findings:
+        title = (f.get("title") or "").lower()
+        desc = (f.get("description") or "").lower()
+        scanner = f.get("scanner", "unknown")
+        add_gap(scanner, f.get("title", "enrichment degraded"), f.get("category"))
+
+        if "offline" in title or "offline" in desc:
+            vulns = "offline"
+        elif "vulnerability" in title or "vulnerability" in desc:
+            vulns = "degraded"
+        if "rulepack" in title or "rulepack" in desc:
+            rulepack_feed = "degraded"
+        if "dead" in title or "dead-anchor" in title or "dead_anchor" in title:
+            dead_anchors = "offline"
+
+    for finding in all_findings:
+        category = finding.get("category", "")
+        description = (finding.get("description") or "").lower()
+        if category in gap_categories:
+            add_gap(finding.get("scanner", "unknown"), category, category)
+        elif "couldn't check" in description or "could not check" in description:
+            add_gap(finding.get("scanner", "unknown"), "could-not-check", category or "capability")
+        freshness = finding.get("freshness_status")
+        if freshness in ("STALE", "RECHECK_REQUIRED"):
+            add_gap(finding.get("scanner", "unknown"), freshness.lower(), "freshness")
+            scanner = finding.get("scanner", "unknown")
+            if scanner == "dead_anchors":
+                dead_anchors = freshness
+            elif scanner == "dependencies" and vulns != "offline":
+                vulns = freshness
+
+    needs_adjudication = any(f.get("needs_adjudication") for f in all_findings)
+    adjudication = "pending" if needs_adjudication else "available"
+    advisory_annotations = []
+
+    if needs_adjudication:
+        bridge_result = _invoke_adjudication_bridge(all_findings)
+        if bridge_result is not None:
+            advisory_annotations = bridge_result.get("annotations", []) or []
+            bridge_status = bridge_result.get("status", "unavailable")
+            if bridge_status == "unavailable":
+                adjudication = "unavailable"
+                advisory_annotations = []
+            elif any(
+                any(lane.get("error") == "unavailable"
+                    for lane in a.get("lanes", {}).values())
+                for a in advisory_annotations
+            ):
+                # One or both advisory lanes failed (command absent / non-zero /
+                # timeout / JSON parse failure). Treat the whole bridge as
+                # unavailable and discard the partial error annotations.
+                adjudication = "unavailable"
+                advisory_annotations = []
+            elif bridge_status == "available" and advisory_annotations:
+                if any(a.get("outcome") == "agree_real" for a in advisory_annotations):
+                    adjudication = "available"
+                else:
+                    adjudication = "unresolved"
+            else:
+                adjudication = "unresolved"
+
+    if vulns == "offline" or dead_anchors == "offline":
+        overall = "OFFLINE"
+    elif capability_gaps or vulns != "complete" or rulepack_feed != "ok" or dead_anchors != "complete":
+        overall = "DEGRADED"
+    else:
+        overall = "COMPLETE"
+
+    return {
+        "overall": overall,
+        "vulns": vulns,
+        "rulepack_feed": rulepack_feed,
+        "dead_anchors": dead_anchors,
+        "adjudication": adjudication,
+        "adjudication_annotations": advisory_annotations,
+        "capability_gaps": capability_gaps,
+    }
 
 
 def run_correlation_pass(all_findings):
@@ -422,6 +800,11 @@ def build_report(tmpdir, repo_path, skill_scan):
     verdicts = build_verdicts(all_findings, suppressed_findings)
     exit_code = calculate_report_exit_code(summary, scanners)
 
+    # Purely additive coverage/enrichment verdicts.
+    coverage_status = build_coverage_status(scanners, all_findings)
+    core_verdict = build_core_verdict(summary, verdicts, exit_code)
+    enrichment_status = build_enrichment_status(scanners, all_findings)
+
     return {
         "target": repo_path,
         "mode": "skill" if skill_scan == "true" else "full",
@@ -432,6 +815,9 @@ def build_report(tmpdir, repo_path, skill_scan):
         "exit_code": exit_code,
         "findings": all_findings,
         "suppressed": suppressed_findings,
+        "coverage_status": coverage_status,
+        "core_verdict": core_verdict,
+        "enrichment_status": enrichment_status,
     }
 
 
@@ -485,6 +871,15 @@ def format_report_as_text(report):
                 snip = f.get("snippet", "")
                 if snip:
                     lines.append(f"         {_sanitize(snip, max_len=120)}")
+                tm = []
+                if f.get("attacker"):
+                    tm.append(f"attacker={f['attacker']}")
+                if f.get("boundary"):
+                    tm.append(f"boundary={f['boundary']}")
+                if f.get("asset"):
+                    tm.append(f"asset={f['asset']}")
+                if tm:
+                    lines.append(f"         threat model: {' | '.join(tm)}")
     summary = report["summary"]
     lines.append("")
     lines.append("==========================================")
@@ -493,6 +888,37 @@ def format_report_as_text(report):
         f"({summary['critical']} critical, {summary['high']} high, "
         f"{summary['medium']} medium, {summary['low']} low)"
     )
+
+    core_verdict = report.get("core_verdict")
+    if core_verdict:
+        lines.append(
+            f"  CORE VERDICT: {core_verdict['tier']} "
+            f"(exit_code={core_verdict['exit_code']})"
+        )
+
+    coverage_status = report.get("coverage_status")
+    if coverage_status:
+        overall = coverage_status["overall"]
+        lines.append(f"  COVERAGE: {overall}")
+        for name, status in coverage_status.get("per_scanner", {}).items():
+            lines.append(f"    {name}: {status['status']}")
+        if overall not in ("COMPLETE",):
+            guidance = "  Deep scan guidance: re-run with the full pipeline"
+            if overall == "UNSUPPORTED":
+                guidance += " after extracting unsupported archives"
+            elif overall == "INCOMPLETE":
+                guidance += " after removing budget caps or expanding file support"
+            lines.append(guidance)
+
+    enrichment_status = report.get("enrichment_status")
+    if enrichment_status:
+        lines.append(f"  ENRICHMENT: {enrichment_status['overall']}")
+        es = enrichment_status
+        lines.append(
+            f"    vulns={es['vulns']} rulepack_feed={es['rulepack_feed']} "
+            f"dead_anchors={es['dead_anchors']} adjudication={es['adjudication']}"
+        )
+
     exit_code = report["exit_code"]
     if exit_code == 2:
         lines.append("  EXIT CODE: 2 (critical findings)")
@@ -533,6 +959,15 @@ def main(argv):
         )
 
     report = build_report(tmpdir, repo_path, skill_scan)
+
+    if os.environ.get("REPO_FORENSICS_HISTORY") == "1":
+        try:
+            import scan_history
+            scan_history.record_report_safely(
+                repo_path, report, os.environ.get("REPO_FORENSICS_HISTORY_DB")
+            )
+        except ImportError as exc:
+            print(f"[!] Scan history unavailable: {exc}", file=sys.stderr)
 
     if text_mode:
         print(format_report_as_text(report))

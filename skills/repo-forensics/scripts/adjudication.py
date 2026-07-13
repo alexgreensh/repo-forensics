@@ -298,9 +298,12 @@ def build_advisory_annotations(findings, runner=None):
         for role in ("confirm", "refute"):
             try:
                 raw = runner(role, _prompt(evidence, role))
+                response, error = _validated_response(raw, evidence)
             except Exception:
-                raw = None
-            response, error = _validated_response(raw, evidence)
+                # Runner exception (command absent, non-zero, timeout, parse failure)
+                # is an advisory-lane service failure, not an adjudicated decision.
+                response = None
+                error = "unavailable"
             lanes[role] = response or {"error": error or "unavailable"}
             compromised = compromised or error == "canary-compromised"
         confirm = lanes["confirm"].get("decision")

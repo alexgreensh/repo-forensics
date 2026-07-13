@@ -31,6 +31,7 @@ Created by Alex Greenshpun
 import os
 import sys
 import json
+import time
 
 _SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
 if _SCRIPTS_DIR not in sys.path:
@@ -39,6 +40,8 @@ if _SCRIPTS_DIR not in sys.path:
 import forensics_core as core
 import dead_anchors_extract as extract
 import dead_anchors_probe as probe
+import scan_history
+from dead_anchors_extract import normalize_npm_name, normalize_pypi_name
 
 SCANNER_NAME = "dead_anchors"
 
@@ -68,6 +71,43 @@ def _snippet(anchor):
     return raw[:120]
 
 
+_EVIDENCE_TTL_SECONDS = 24 * 3600
+
+
+def _evidence_status(verdict):
+    return {"CC": "CLAIMABLE", "LO": "LIVE"}.get(verdict, "UNCHECKED")
+
+
+def _record_evidence(key, verdict, anchor):
+    """Persist per-anchor last-checked state; failures are swallowed."""
+    scan_history.put_evidence_state_safely(
+        key, "dead_anchor", _evidence_status(verdict), time.time(),
+        _EVIDENCE_TTL_SECONDS,
+        {"type": anchor.type, "target": anchor.target, "verdict": verdict},
+    )
+
+
+def _evidence_key(anchor, verdict=None, repo=None):
+    """Stable key for an evidence_state row.  `repo` is used for GitHub repo-level keys."""
+    if anchor.type == "github":
+        owner = (anchor.owner or "").lower()
+        if repo is not None:
+            return f"dead_anchor:github:repo:{owner}/{repo.lower()}"
+        return f"dead_anchor:github:owner:{owner}"
+    if anchor.type == "package":
+        eco, _, name = anchor.target.partition(":")
+        if eco == "npm":
+            name = normalize_npm_name(name)
+        elif eco == "PyPI":
+            name = normalize_pypi_name(name)
+        return f"dead_anchor:package:{eco}:{name}"
+    if anchor.type == "domain":
+        return f"dead_anchor:domain:{anchor.target.lower()}"
+    if anchor.type == "cloud":
+        return f"dead_anchor:cloud:{anchor.target.lower()}"
+    return f"dead_anchor:{anchor.type}:{anchor.target.lower()}"
+
+
 def scan_repo(repo_path, ignore_patterns=None, offline=False):
     """Extract anchors, probe claimability, emit a Finding only on CC.
 
@@ -95,6 +135,18 @@ def scan_repo(repo_path, ignore_patterns=None, offline=False):
     except Exception:
         return findings
 
+    # Evidence-freshness map: previous per-anchor checks that are now stale
+    # or require a recheck.  DB failures are swallowed; no env means empty map.
+    try:
+        freshness_rows = scan_history.evidence_freshness_safely()
+        freshness_by_key = {
+            r["key"]: r["status"]
+            for r in freshness_rows
+            if r["status"] in ("STALE", "RECHECK_REQUIRED")
+        }
+    except Exception:
+        freshness_by_key = {}
+
     owner_verdicts = {}   # owner -> (verdict, meta)  memo (dedup owner probes)
     emitted_da01 = set()  # owners already reported claimable
     probed = 0
@@ -103,7 +155,8 @@ def scan_repo(repo_path, ignore_patterns=None, offline=False):
     for a in anchors:
         try:
             emitted, ok = _handle_anchor(
-                a, ctx, fingerprints, findings, owner_verdicts, emitted_da01)
+                a, ctx, fingerprints, findings, owner_verdicts, emitted_da01,
+                freshness_by_key)
         except Exception:
             # A single anchor blowing up must never sink the scan.
             skipped += 1
@@ -122,17 +175,22 @@ def scan_repo(repo_path, ignore_patterns=None, offline=False):
 scan_repo._last_summary = (0, 0, 0)
 
 
-def _handle_anchor(a, ctx, fingerprints, findings, owner_verdicts, emitted_da01):
+def _handle_anchor(a, ctx, fingerprints, findings, owner_verdicts, emitted_da01,
+                   freshness_by_key=None):
     """Probe one anchor and append any Finding. Returns (emitted, checked) where
     `checked` is False when the verdict was NC (couldn't-check / skipped)."""
+    freshness_by_key = freshness_by_key or {}
     if a.type == "github":
-        return _handle_github(a, ctx, findings, owner_verdicts, emitted_da01)
+        return _handle_github(a, ctx, findings, owner_verdicts, emitted_da01,
+                             freshness_by_key)
     if a.type == "package":
         verdict, _meta = (
             probe.probe_npm(a.target.split(":", 1)[1], ctx)
             if a.ecosystem == "npm" else
             probe.probe_pypi(a.target.split(":", 1)[1], ctx)
         )
+        key = _evidence_key(a)
+        _record_evidence(key, verdict, a)
         if verdict == "CC":
             name = a.target.split(":", 1)[1]
             findings.append(core.Finding(
@@ -147,11 +205,14 @@ def _handle_anchor(a, ctx, fingerprints, findings, owner_verdicts, emitted_da01)
                 ),
                 file=a.file, line=a.line, snippet=_snippet(a),
                 category="dead-anchor", rule_id="", confidence=0.90,
+                freshness_status=freshness_by_key.get(key, ""),
             ))
             return True, True
         return False, verdict != "NC"
     if a.type == "domain":
         verdict, extra = probe.probe_domain_rdap(a.target, ctx)
+        key = _evidence_key(a)
+        _record_evidence(key, verdict, a)
         if verdict == "CC":
             is_target = bool(a.fetch_context)
             findings.append(core.Finding(
@@ -167,12 +228,15 @@ def _handle_anchor(a, ctx, fingerprints, findings, owner_verdicts, emitted_da01)
                 ),
                 file=a.file, line=a.line, snippet=_snippet(a),
                 category="dead-anchor", rule_id="", confidence=0.85,
+                freshness_status=freshness_by_key.get(key, ""),
             ))
             return True, True
         return False, verdict != "NC"
     if a.type == "cloud":
         verdict, extra = probe.probe_cloud_subdomain(
             a.target, a.suffix, ctx, fingerprints=fingerprints)
+        key = _evidence_key(a)
+        _record_evidence(key, verdict, a)
         if verdict == "CC":
             reason = (extra or {}).get("reason")
             if reason == "nxdomain":
@@ -193,23 +257,28 @@ def _handle_anchor(a, ctx, fingerprints, findings, owner_verdicts, emitted_da01)
                 ),
                 file=a.file, line=a.line, snippet=_snippet(a),
                 category="dead-anchor", rule_id="", confidence=conf,
+                freshness_status=freshness_by_key.get(key, ""),
             ))
             return True, True
         return False, verdict != "NC"
     return False, False
 
 
-def _handle_github(a, ctx, findings, owner_verdicts, emitted_da01):
+def _handle_github(a, ctx, findings, owner_verdicts, emitted_da01,
+                   freshness_by_key=None):
+    freshness_by_key = freshness_by_key or {}
     owner, repo = a.owner, a.repo
     # GitHub identity is case-insensitive: memoize the owner verdict and the
     # emitted-finding set on the lowercased owner so case variants dedup to one
     # probe and one CRITICAL (code-review F3).
     okey = (owner or "").lower()
+    owner_evidence_key = _evidence_key(a)
     if okey in owner_verdicts:
         overdict, ometa = owner_verdicts[okey]
     else:
         overdict, ometa = probe.probe_github_user(owner, ctx)
         owner_verdicts[okey] = (overdict, ometa)
+    _record_evidence(owner_evidence_key, overdict, a)
 
     if overdict == "CC":
         # DA-01: the whole owner/org is re-registerable. One finding per owner.
@@ -227,6 +296,7 @@ def _handle_github(a, ctx, findings, owner_verdicts, emitted_da01):
                 ),
                 file=a.file, line=a.line, snippet=_snippet(a),
                 category="dead-anchor", rule_id="", confidence=0.90,
+                freshness_status=freshness_by_key.get(owner_evidence_key, ""),
             ))
             return True, True
         return False, True
@@ -234,6 +304,8 @@ def _handle_github(a, ctx, findings, owner_verdicts, emitted_da01):
     if overdict == "LO":
         # DA-02: owner lives, but the specific repo may be gone (weaker signal).
         rverdict, _rmeta = probe.probe_github_repo(owner, repo, ctx)
+        repo_evidence_key = _evidence_key(a, repo=repo)
+        _record_evidence(repo_evidence_key, rverdict, a)
         if rverdict == "CC":
             desc = (
                 f"The repo '{owner}/{repo}' returns 404 while the owner "
@@ -251,6 +323,7 @@ def _handle_github(a, ctx, findings, owner_verdicts, emitted_da01):
                 description=desc,
                 file=a.file, line=a.line, snippet=_snippet(a),
                 category="dead-anchor", rule_id="", confidence=0.55,
+                freshness_status=freshness_by_key.get(repo_evidence_key, ""),
             ))
             return True, True
         return False, rverdict != "NC"

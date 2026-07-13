@@ -58,6 +58,7 @@ class Finding:
     attacker: str = ""     # Threat-model precondition: who the attacker is
     boundary: str = ""     # Threat-model precondition: trust boundary crossed
     asset: str = ""        # Threat-model precondition: asset at risk
+    freshness_status: str = ""  # Evidence freshness signal (STALE/RECHECK_REQUIRED)
 
     def __post_init__(self):
         # Defensive type coercion at the trust boundary between the in-process
@@ -903,6 +904,7 @@ def findings_from_dicts_iter(dicts):
                 attacker=d.get("attacker", ""),
                 boundary=d.get("boundary", ""),
                 asset=d.get("asset", ""),
+                freshness_status=d.get("freshness_status", ""),
             )
         except (TypeError, ValueError):
             continue

@@ -164,6 +164,23 @@ def _load_cache(path, max_age_hours):
         return None
 
 
+def cache_freshness(path, max_age_hours, now=None):
+    """Describe cache age without treating unavailable evidence as clean."""
+    now = time.time() if now is None else now
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+        checked_at = float(data.get("_cached_at", 0))
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return {"status": "RECHECK_REQUIRED", "checked_at": None}
+    age = max(0.0, now - checked_at)
+    return {
+        "status": "FRESH" if age <= max_age_hours * 3600 else "STALE",
+        "checked_at": checked_at,
+        "age_seconds": age,
+    }
+
+
 # ========================================================================
 # HTTPS fetch (hardened)
 # ========================================================================

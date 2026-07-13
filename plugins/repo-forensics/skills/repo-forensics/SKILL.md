@@ -33,15 +33,25 @@ Deep security auditing for repositories, AI agent skills, and MCP servers.
   Four verdict tiers shape output and agent routing: BLOCK (>= 0.92), WARN (>= 0.60),
   INFO (>= 0.30), SUPPRESSED (< 0.30 or user-suppressed). Severity still drives exit
   codes (0/1/2/99) unchanged.
+- **Separated trust signals**: JSON reports expose `core_verdict`,
+  `coverage_status`, and `enrichment_status`. `core_verdict` is the deterministic
+  install gate. Coverage and enrichment report what could not be checked and may
+  add warnings or context, but they cannot remove findings, reduce severity, or
+  lower the deterministic exit code.
+- **Local scan attestations**: `--history` stores content-addressed attestations in
+  a private local SQLite database. Storage and deferred retries stay off the
+  verdict path; storage failure does not change scan output or exit behavior.
 - **Offline benign-corpus FP gate** (v2.10): A committed corpus of tricky-but-clean
   content (emoji-rich markdown, legitimate postinstall scripts, `.env.example`, OAuth
   docs, clean SKILL.md) runs in pytest. Any rule change that raises new false positives
   on the corpus fails the test before it can ship.
-- **LLM adjudication** (v2.10): WARN-tier findings include an injection-safe
+- **Advisory adjudication** (v2.10): WARN-tier findings include an injection-safe
   adjudication block. Snippets are prefixed with `> SNIPPET: ` (not in code fences),
   metadata appears before content, the block is capped at 5 findings sorted by
   confidence descending. Verdict choices: confirm / downgrade / escalate. See
-  "Adjudication Protocol" section for the full protocol.
+  "Adjudication Protocol" section for the full protocol. Confirm and refute
+  responses are annotations only. Disagreement, invalid output, containment
+  failure, or unavailable service remains unresolved and never gates the verdict.
 - **Auto-scan hook** (v2): PostToolUse hook auto-triggers on `git clone`, `git pull`, `pip install`, `npm install/update`, `uv add/sync`, `bun install/add`, `pnpm install/add`, `gem install/update`, `brew install/upgrade`, etc. Zero-overhead for non-matching commands.
 - **Pre-execution gate** (v2.6): PreToolUse hook blocks known-malicious packages and pipe-to-shell commands BEFORE execution. IOC-only, <10ms latency, no subprocess calls.
 - **Session security scanner** (v2.6.3): SessionStart hook detects updated plugins/skills/MCP servers, refreshes threat databases daily, runs fast IOC check + full 25-scanner deep scan on changed items. Sub-1ms when nothing changed.

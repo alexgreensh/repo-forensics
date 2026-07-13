@@ -142,6 +142,9 @@ def scan_file(file_path, rel_path):
                             category=rule.category,
                             rule_id=rule.id,
                             confidence=rule.confidence,
+                            attacker=rule.attacker,
+                            boundary=rule.boundary,
+                            asset=rule.asset,
                         ))
     except (OSError, UnicodeDecodeError) as e:
         print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)
@@ -192,6 +195,9 @@ def scan_text(text, rel_path, ext=None):
                     category=rule.category,
                     rule_id=rule.id,
                     confidence=rule.confidence,
+                    attacker=rule.attacker,
+                    boundary=rule.boundary,
+                    asset=rule.asset,
                 ))
     return findings
 

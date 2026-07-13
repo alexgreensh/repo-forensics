@@ -55,6 +55,10 @@ class Finding:
     category: str      # "secret", "injection", "exfiltration", etc.
     rule_id: str = ""      # Stable rule id (e.g. "ST-PI-001"); "" for code-baked findings
     confidence: float = 0.0  # 0.0-1.0; 0.0/None means "fill from severity map"
+    attacker: str = ""     # Threat-model precondition: who the attacker is
+    boundary: str = ""     # Threat-model precondition: trust boundary crossed
+    asset: str = ""        # Threat-model precondition: asset at risk
+    freshness_status: str = ""  # Evidence freshness signal (STALE/RECHECK_REQUIRED)
 
     def __post_init__(self):
         # Defensive type coercion at the trust boundary between the in-process
@@ -74,7 +78,8 @@ class Finding:
             self.severity = self.severity.lower()
         # Guard the remaining string fields so downstream .lower() / slicing
         # can never NoneError.
-        for _field in ("scanner", "title", "description", "file", "snippet", "category"):
+        for _field in ("scanner", "title", "description", "file", "snippet", "category",
+                       "attacker", "boundary", "asset"):
             if getattr(self, _field) is None:
                 setattr(self, _field, "")
         # rule_id is a plain string identifier; coerce non-strings/None to "".
@@ -174,7 +179,19 @@ def load_rule_suppressions(repo_path):
         with open(ignore_file, 'r', encoding='utf-8') as f:
             for line in f:
                 line = line.strip()
-                if not line or line.startswith('#') or not line.startswith('rule:'):
+                if not line or line.startswith('#'):
+                    continue
+                if line.startswith('suppress:'):
+                    try:
+                        entry = json.loads(line[len('suppress:'):])
+                    except json.JSONDecodeError:
+                        suppressions.append({"invalid": "malformed-json", "raw": line})
+                        continue
+                    entry["raw"] = line
+                    entry["structured"] = True
+                    suppressions.append(entry)
+                    continue
+                if not line.startswith('rule:'):
                     continue
                 body = line[len('rule:'):]
                 # Split id from optional glob on the FIRST colon.
@@ -194,7 +211,17 @@ def load_rule_suppressions(repo_path):
     return suppressions
 
 
-def suppression_matches(suppression, rule_id, file_path):
+def suppression_signature(suppression):
+    """Return an integrity signature for the stable suppression fields."""
+    stable = {
+        key: suppression.get(key, "")
+        for key in ("rule_id", "scope", "author", "reason", "expiry", "content_hash")
+    }
+    payload = json.dumps(stable, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def suppression_matches(suppression, rule_id, file_path, repo_path=None, now=None):
     """Return True if a suppression directive applies to a finding.
 
     Match semantics (U5/U8 build on this):
@@ -204,11 +231,32 @@ def suppression_matches(suppression, rule_id, file_path):
         that glob via fnmatch (forward-slash normalized for cross-platform
         consistency). A finding with no rule_id never matches.
     """
-    if not rule_id:
+    if not rule_id or suppression.get("invalid"):
         return False
     if suppression.get("rule_id") != rule_id:
         return False
-    glob = suppression.get("glob")
+    if suppression.get("structured"):
+        required = ("author", "reason", "expiry", "content_hash", "signature")
+        if any(not suppression.get(key) for key in required):
+            return False
+        if suppression_signature(suppression) != suppression.get("signature"):
+            return False
+        try:
+            if float(suppression["expiry"]) <= (time.time() if now is None else now):
+                return False
+        except (TypeError, ValueError):
+            return False
+        if not repo_path:
+            return False
+        candidate = os.path.join(repo_path, file_path)
+        try:
+            with open(candidate, "rb") as handle:
+                actual_hash = hashlib.sha256(handle.read()).hexdigest()
+        except OSError:
+            return False
+        if actual_hash != suppression["content_hash"]:
+            return False
+    glob = suppression.get("scope") if suppression.get("structured") else suppression.get("glob")
     if not glob:
         return True
     path = (file_path or "").replace(os.sep, "/")
@@ -851,6 +899,12 @@ def findings_from_dicts_iter(dicts):
                 line=d.get("line", 0),
                 snippet=d.get("snippet", ""),
                 category=d.get("category", ""),
+                rule_id=d.get("rule_id", ""),
+                confidence=d.get("confidence", 0.0),
+                attacker=d.get("attacker", ""),
+                boundary=d.get("boundary", ""),
+                asset=d.get("asset", ""),
+                freshness_status=d.get("freshness_status", ""),
             )
         except (TypeError, ValueError):
             continue
@@ -1730,6 +1784,9 @@ def scan_rule_patterns(content, rel_path, rules, category, default_severity, sca
                     category=category,
                     rule_id=rule.id,
                     confidence=rule.confidence,
+                    attacker=getattr(rule, "attacker", ""),
+                    boundary=getattr(rule, "boundary", ""),
+                    asset=getattr(rule, "asset", ""),
                 ))
     return findings
 

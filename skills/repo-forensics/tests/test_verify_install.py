@@ -372,3 +372,40 @@ class TestPluginManifestTracking:
         report_text = "\n".join(report)
         assert "SYMLINK SKIPPED" in report_text
         assert "SOURCE MANIFEST SKIPPED" in report_text
+
+
+class TestWindowsPathNormalization:
+    """The non-git fallback in get_tracked_files must emit forward-slash keys.
+
+    On Windows os.path.relpath returns backslash-separated paths. The shipped
+    checksums.json is generated with forward slashes, so unnormalized backslash
+    keys make integrity verification fail during a marketplace/plugin install --
+    the plugin will not install on Windows. get_tracked_files normalizes to '/'.
+    """
+
+    def test_nested_file_keys_use_forward_slashes(self, tmp_path):
+        skill_root = _build_fake_repo(tmp_path, include_symlink=False)
+        nested = os.path.join(skill_root, "data", "rulepacks")
+        os.makedirs(nested, exist_ok=True)
+        with open(os.path.join(nested, "sast.json"), "w") as fh:
+            fh.write("{}")
+        files = verify_install.get_tracked_files(str(skill_root))
+        assert "data/rulepacks/sast.json" in files
+        assert not any("\\" in f for f in files), files
+
+    def test_windows_backslash_relpath_is_normalized(self, tmp_path, monkeypatch):
+        skill_root = _build_fake_repo(tmp_path, include_symlink=False)
+        nested = os.path.join(skill_root, "data")
+        os.makedirs(nested, exist_ok=True)
+        with open(os.path.join(nested, "x.txt"), "w") as fh:
+            fh.write("x")
+        # Simulate Windows: os.sep is a backslash and relpath returns backslashes.
+        real_relpath = os.path.relpath
+        monkeypatch.setattr(verify_install.os, "sep", "\\")
+        monkeypatch.setattr(
+            verify_install.os.path, "relpath",
+            lambda p, start: real_relpath(p, start).replace("/", "\\"),
+        )
+        files = verify_install.get_tracked_files(str(skill_root))
+        assert not any("\\" in f for f in files), files
+        assert any(f.endswith("data/x.txt") for f in files), files

@@ -346,12 +346,13 @@ class CompiledRule:
     __slots__ = (
         "id", "type", "title", "severity", "confidence", "category",
         "explanation", "examples", "regex", "extensions", "values",
-        "codepoints", "mapping",
+        "codepoints", "mapping", "attacker", "boundary", "asset",
     )
 
     def __init__(self, *, id, type, title, severity, confidence, category,
                  explanation, examples, regex=None, extensions=None,
-                 values=None, codepoints=None, mapping=None):
+                 values=None, codepoints=None, mapping=None,
+                 attacker="", boundary="", asset=""):
         self.id = id
         self.type = type
         self.title = title
@@ -365,6 +366,9 @@ class CompiledRule:
         self.values = values          # tuple[str] (keyword)
         self.codepoints = codepoints  # frozenset[int] (charset)
         self.mapping = mapping        # dict[str, str] (map)
+        self.attacker = attacker
+        self.boundary = boundary
+        self.asset = asset
 
     def __repr__(self):
         return f"<CompiledRule {self.id} type={self.type} sev={self.severity}>"
@@ -518,6 +522,9 @@ def _compile_rule(raw):
         id=rule_id, type=rtype, title=str(title), severity=severity,
         confidence=confidence, category=str(category),
         explanation=str(explanation), examples=examples,
+        attacker=str(raw.get("attacker", "")),
+        boundary=str(raw.get("boundary", "")),
+        asset=str(raw.get("asset", "")),
     )
 
     if rtype == "regex":
