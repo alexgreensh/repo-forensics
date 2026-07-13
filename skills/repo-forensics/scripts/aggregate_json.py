@@ -191,7 +191,9 @@ def apply_suppressions(all_findings, repo_path):
         matched = None
         if rule_id:
             for supp in suppressions:
-                if core.suppression_matches(supp, rule_id, finding.get("file", "")):
+                if core.suppression_matches(
+                    supp, rule_id, finding.get("file", ""), repo_path=repo_path
+                ):
                     matched = supp
                     break
         if matched is not None:
@@ -202,6 +204,20 @@ def apply_suppressions(all_findings, repo_path):
             active.append(finding)
 
     guard_findings = []
+
+    invalid_structured = [s for s in suppressions if s.get("structured") and not any(
+        core.suppression_matches(s, s.get("rule_id", ""), f.get("file", ""), repo_path=repo_path)
+        for f in all_findings
+    )]
+    for suppression in invalid_structured:
+        guard_findings.append({
+            "scanner": "meta", "severity": "high",
+            "title": ".forensicsignore: Invalid Structured Suppression",
+            "description": "A structured suppression is expired, unsigned, out of scope, or content-mismatched.",
+            "file": ".forensicsignore", "line": 0,
+            "snippet": suppression.get("raw", "")[:120],
+            "category": "configuration", "rule_id": "", "confidence": 0.80,
+        })
 
     # Guard 1: suppression of a critical-severity rule = tampering (CRITICAL).
     for rule_id in sorted(critical_rules_suppressed):
@@ -493,12 +509,40 @@ def build_enrichment_status(scanners, all_findings):
     it must never downgrade a BLOCK, clear a finding, or lower exit_code.
     It surfaces dependency-vuln and rulepack-feed degradation.
     """
-    del scanners  # status is driven by the finding stream (leaf-law: this path must not import rule_loader)
-
     vulns = "complete"
     rulepack_feed = "ok"
     dead_anchors = "complete"
     capability_gaps = []
+    seen_gaps = set()
+
+    gap_categories = {
+        "NC", "nc", "unchecked", "provenance-unchecked",
+        "unsupported-archive-type", "archive-scan-incomplete",
+        "decode-scan-incomplete", "unanalyzable-bytecode",
+        "opaque-bytecode-with-source", "opaque-archive",
+    }
+
+    def add_gap(scanner, reason, category="capability"):
+        key = (str(scanner), str(reason), str(category))
+        if key in seen_gaps:
+            return
+        seen_gaps.add(key)
+        capability_gaps.append({
+            "scanner": key[0], "reason": key[1], "category": key[2],
+        })
+
+    for scanner in scanners:
+        name = scanner.get("name", "unknown")
+        if scanner.get("parse_error"):
+            add_gap(name, scanner["parse_error"], "scanner-error")
+        stderr = (scanner.get("stderr") or "").lower()
+        for marker, reason in (
+            ("rate limit", "rate-limited"), ("429", "rate-limited"),
+            ("github_token", "missing-github-token"),
+            ("not found", "missing-tool"), ("offline", "offline"),
+        ):
+            if marker in stderr:
+                add_gap(name, reason)
 
     degraded_findings = [
         f for f in all_findings
@@ -509,9 +553,7 @@ def build_enrichment_status(scanners, all_findings):
         title = (f.get("title") or "").lower()
         desc = (f.get("description") or "").lower()
         scanner = f.get("scanner", "unknown")
-        gap = f"{scanner}: {f.get('title', 'enrichment degraded')}"
-        if gap not in capability_gaps:
-            capability_gaps.append(gap)
+        add_gap(scanner, f.get("title", "enrichment degraded"), f.get("category"))
 
         if "offline" in title or "offline" in desc:
             vulns = "offline"
@@ -522,12 +564,26 @@ def build_enrichment_status(scanners, all_findings):
         if "dead" in title or "dead-anchor" in title or "dead_anchor" in title:
             dead_anchors = "offline"
 
+    for finding in all_findings:
+        category = finding.get("category", "")
+        description = (finding.get("description") or "").lower()
+        if category in gap_categories:
+            add_gap(finding.get("scanner", "unknown"), category, category)
+        elif "couldn't check" in description or "could not check" in description:
+            add_gap(finding.get("scanner", "unknown"), "could-not-check", category or "capability")
+        freshness = finding.get("freshness_status")
+        if freshness in ("STALE", "RECHECK_REQUIRED"):
+            add_gap(finding.get("scanner", "unknown"), freshness.lower(), "freshness")
+            if finding.get("scanner") == "dead_anchors":
+                dead_anchors = freshness
+
     needs_adjudication = any(f.get("needs_adjudication") for f in all_findings)
     adjudication = "pending" if needs_adjudication else "available"
+    advisory_annotations = []
 
     if vulns == "offline" or dead_anchors == "offline":
         overall = "OFFLINE"
-    elif vulns != "complete" or rulepack_feed != "ok" or dead_anchors != "complete":
+    elif capability_gaps or vulns != "complete" or rulepack_feed != "ok" or dead_anchors != "complete":
         overall = "DEGRADED"
     else:
         overall = "COMPLETE"
@@ -538,6 +594,7 @@ def build_enrichment_status(scanners, all_findings):
         "rulepack_feed": rulepack_feed,
         "dead_anchors": dead_anchors,
         "adjudication": adjudication,
+        "adjudication_annotations": advisory_annotations,
         "capability_gaps": capability_gaps,
     }
 
@@ -819,6 +876,15 @@ def main(argv):
         )
 
     report = build_report(tmpdir, repo_path, skill_scan)
+
+    if os.environ.get("REPO_FORENSICS_HISTORY") == "1":
+        try:
+            import scan_history
+            scan_history.record_report_safely(
+                repo_path, report, os.environ.get("REPO_FORENSICS_HISTORY_DB")
+            )
+        except ImportError as exc:
+            print(f"[!] Scan history unavailable: {exc}", file=sys.stderr)
 
     if text_mode:
         print(format_report_as_text(report))

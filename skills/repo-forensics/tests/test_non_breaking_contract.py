@@ -31,6 +31,9 @@ REQUIRED_TOP_LEVEL_KEYS = {
     "summary",
     "exit_code",
     "findings",
+    "core_verdict",
+    "coverage_status",
+    "enrichment_status",
 }
 
 REQUIRED_SUMMARY_KEYS = {"critical", "high", "medium", "low", "total"}

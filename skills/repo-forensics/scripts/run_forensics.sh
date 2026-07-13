@@ -23,6 +23,7 @@ if [ -z "${1:-}" ]; then
     echo "  --no-vulns             Skip OSV + KEV vulnerability enrichment"
     echo "  --offline              No network fetches (use cached KEV/OSV data only)"
     echo "  --watch                Enable file integrity baseline tracking"
+    echo "  --history              Store a local content-addressed attestation"
     echo "  --package-list=FILE    Load user-supplied IOC list (absolute path, see docs)"
     echo "  --include-shadows      Include shadow surfaces in inventory (backups, caches)"
     echo "  --max-jobs=N           Max parallel scanners (default: clamp(ncpu, 4, 8), env: REPO_FORENSICS_MAX_JOBS)"
@@ -153,6 +154,7 @@ NO_VULNS=false
 OFFLINE=false
 WATCH_MODE=false
 VERIFY_INSTALL=false
+HISTORY=false
 PACKAGE_LIST_FILE=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -164,6 +166,7 @@ while [[ $# -gt 0 ]]; do
         --offline) OFFLINE=true; shift ;;
         --watch) WATCH_MODE=true; shift ;;
         --verify-install) VERIFY_INSTALL=true; shift ;;
+        --history) HISTORY=true; shift ;;
         --package-list=*) PACKAGE_LIST_FILE="${1#*=}"; shift ;;
         --package-list)
             [[ $# -ge 2 ]] || { echo "Error: --package-list requires a FILE argument"; exit 1; }
@@ -422,6 +425,10 @@ fi
 
 EXIT_CODE_FILE="$TMPDIR/aggregate.exit"
 echo "99" > "$EXIT_CODE_FILE"
+
+if $HISTORY; then
+    export REPO_FORENSICS_HISTORY=1
+fi
 
 if [ "$FORMAT" = "json" ]; then
     if ! "${PYTHON[@]}" "$SKILL_DIR/aggregate_json.py" "$TMPDIR" "$REPO_PATH" "$SKILL_SCAN" "$EXIT_CODE_FILE"; then

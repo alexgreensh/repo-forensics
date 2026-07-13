@@ -178,7 +178,19 @@ def load_rule_suppressions(repo_path):
         with open(ignore_file, 'r', encoding='utf-8') as f:
             for line in f:
                 line = line.strip()
-                if not line or line.startswith('#') or not line.startswith('rule:'):
+                if not line or line.startswith('#'):
+                    continue
+                if line.startswith('suppress:'):
+                    try:
+                        entry = json.loads(line[len('suppress:'):])
+                    except json.JSONDecodeError:
+                        suppressions.append({"invalid": "malformed-json", "raw": line})
+                        continue
+                    entry["raw"] = line
+                    entry["structured"] = True
+                    suppressions.append(entry)
+                    continue
+                if not line.startswith('rule:'):
                     continue
                 body = line[len('rule:'):]
                 # Split id from optional glob on the FIRST colon.
@@ -198,7 +210,17 @@ def load_rule_suppressions(repo_path):
     return suppressions
 
 
-def suppression_matches(suppression, rule_id, file_path):
+def suppression_signature(suppression):
+    """Return an integrity signature for the stable suppression fields."""
+    stable = {
+        key: suppression.get(key, "")
+        for key in ("rule_id", "scope", "author", "reason", "expiry", "content_hash")
+    }
+    payload = json.dumps(stable, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def suppression_matches(suppression, rule_id, file_path, repo_path=None, now=None):
     """Return True if a suppression directive applies to a finding.
 
     Match semantics (U5/U8 build on this):
@@ -208,11 +230,32 @@ def suppression_matches(suppression, rule_id, file_path):
         that glob via fnmatch (forward-slash normalized for cross-platform
         consistency). A finding with no rule_id never matches.
     """
-    if not rule_id:
+    if not rule_id or suppression.get("invalid"):
         return False
     if suppression.get("rule_id") != rule_id:
         return False
-    glob = suppression.get("glob")
+    if suppression.get("structured"):
+        required = ("author", "reason", "expiry", "content_hash", "signature")
+        if any(not suppression.get(key) for key in required):
+            return False
+        if suppression_signature(suppression) != suppression.get("signature"):
+            return False
+        try:
+            if float(suppression["expiry"]) <= (time.time() if now is None else now):
+                return False
+        except (TypeError, ValueError):
+            return False
+        if not repo_path:
+            return False
+        candidate = os.path.join(repo_path, file_path)
+        try:
+            with open(candidate, "rb") as handle:
+                actual_hash = hashlib.sha256(handle.read()).hexdigest()
+        except OSError:
+            return False
+        if actual_hash != suppression["content_hash"]:
+            return False
+    glob = suppression.get("scope") if suppression.get("structured") else suppression.get("glob")
     if not glob:
         return True
     path = (file_path or "").replace(os.sep, "/")
