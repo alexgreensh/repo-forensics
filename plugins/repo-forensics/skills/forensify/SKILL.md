@@ -17,7 +17,7 @@ metadata:
   version: 1.0.0
 allowed-tools: Bash Read Glob Grep
 user-invocable: true
-argument-hint: [--target PATH] [--inventory] [--domains NAMES] [--list-runs] [--dry-run] [--format md|json|both] [--include-shadows]
+argument-hint: "[--target PATH] [--inventory] [--domains NAMES] [--list-runs] [--dry-run] [--format md|json|both] [--include-shadows]"
 ---
 
 # Forensify
