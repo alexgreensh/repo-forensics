@@ -527,7 +527,7 @@ def test_c1_all_shipped_packs_load_fully():
     expected = {
         "secrets": 46,
         "sast": 121,
-        "skill_threats": 119,
+        "skill_threats": 124,
         "mcp_security": 44,
         "shared": 5,
         "runtime_dynamism": 60,

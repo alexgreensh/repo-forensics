@@ -492,6 +492,107 @@ def scan_memory_poisoning(repo_path):
     return findings
 
 
+# ============================================================
+# Cat 10: Memory + Network Co-occurrence (high)
+# Detects skills that both access user memory/data AND make
+# outbound network requests — the exfiltration primitive from
+# The Memory Heist (Ayush Paul, July 2026).
+#
+# The attack: an agent with memory access + web_fetch can be
+# tricked by fetched content into encoding user PII (stored in
+# memory) into URL paths that the attacker logs server-side.
+# The memory store itself is secure; the vulnerability is the
+# COMBINATION of memory access + any outbound channel.
+# ============================================================
+
+# Memory/data access signals — patterns indicating the skill reads
+# from user memory, knowledge bases, conversation history, or PII stores.
+_MEMORY_ACCESS_SIGNALS = [
+    re.compile(r'(?i)\b(?:total.?recall|recall|memory|knowledge.?base|rag|vector.?store)\b'),
+    re.compile(r'(?i)\b(?:conversation.?search|memory.?search|recall.?search)\b'),
+    re.compile(r'(?i)\b(?:read.?memory|fetch.?memory|get.?memory|load.?memory|query.?memory)\b'),
+    re.compile(r'(?i)\b(?:user.?profile|user.?data|user.?context|personal.?info|PII)\b'),
+    re.compile(r'(?i)\b(?:sqlite|\.db\b|database|indexeddb|leveldb)\b'),
+    re.compile(r'(?i)\b(?:mcp__recall|mcp__memory|mcp__knowledge)\b'),
+]
+
+# Outbound network signals — patterns indicating the skill makes
+# outbound HTTP requests, web fetches, or delegates to external services.
+_NETWORK_ACCESS_SIGNALS = [
+    re.compile(r'(?i)\b(?:web_fetch|web_search|fetch|requests?\.get|requests?\.post)\b'),
+    re.compile(r'(?i)\b(?:http\.get|http\.post|http\.request|axios|got\(|node.?fetch)\b'),
+    re.compile(r'(?i)\b(?:curl|wget|urllib|urlopen)\b'),
+    re.compile(r'(?i)\bhttps?://[^\s\'"]{10,}'),
+    re.compile(r'(?i)\b(?:outsource|delegate|openrouter|api\.openai|api\.anthropic)\b'),
+    re.compile(r'(?i)\b(?:mcp__.*fetch|mcp__.*search|mcp__.*web)\b'),
+]
+
+_COOCCURRENCE_SCAN_EXTS = {'.md', '.txt', '.py', '.js', '.ts', '.json', '.yml', '.yaml', '.sh', '.bash', '.toml'}
+
+
+def scan_memory_exfil_cooccurrence(repo_path):
+    """Cat 10: Detect skills that combine memory access with outbound network.
+
+    Scans all files in the skill repo for both memory-access signals and
+    network-access signals. If both are present, emits a HIGH finding
+    describing the co-occurrence as an exfiltration risk.
+
+    This is a WARN, not a BLOCK — many legitimate skills combine memory
+    with network (e.g., research tools that recall context then fetch
+    web pages). The finding prompts human review of what data flows
+    from memory to the network channel.
+
+    Source: The Memory Heist (Ayush Paul, July 2026)
+    """
+    findings = []
+    memory_hits = []   # (rel_path, line, signal_text)
+    network_hits = []  # (rel_path, line, signal_text)
+
+    for fpath, rel in core.walk_repo(repo_path, skip_binary=True):
+        ext = os.path.splitext(fpath)[1].lower()
+        if ext not in _COOCCURRENCE_SCAN_EXTS:
+            continue
+        content = _read(fpath)
+        if not content:
+            continue
+        for i, line in enumerate(content.split('\n')):
+            if len(line) > core.MAX_LINE_LENGTH:
+                continue
+            for pat in _MEMORY_ACCESS_SIGNALS:
+                m = pat.search(line)
+                if m:
+                    memory_hits.append((rel, i + 1, m.group(0)))
+                    break
+            for pat in _NETWORK_ACCESS_SIGNALS:
+                m = pat.search(line)
+                if m:
+                    network_hits.append((rel, i + 1, m.group(0)))
+                    break
+
+    if memory_hits and network_hits:
+        # Deduplicate by file
+        memory_files = sorted(set(h[0] for h in memory_hits))
+        network_files = sorted(set(h[0] for h in network_hits))
+        memory_sample = memory_hits[0]
+        network_sample = network_hits[0]
+        findings.append(_F(
+            SCANNER_NAME, "high",
+            "Memory + Network co-occurrence: exfiltration risk (Memory Heist, July 2026)",
+            (f"This skill accesses user memory/data in {len(memory_files)} file(s) "
+             f"and makes outbound network requests in {len(network_files)} file(s). "
+             f"An attacker who controls fetched web content can trick the agent into "
+             f"encoding memory-derived PII into URL paths (The Memory Heist, Ayush Paul, "
+             f"July 2026). Review what data flows from memory to the network channel. "
+             f"Memory signal: '{memory_sample[2]}' in {memory_sample[0]}:{memory_sample[1]}. "
+             f"Network signal: '{network_sample[2]}' in {network_sample[0]}:{network_sample[1]}."),
+            memory_sample[0], memory_sample[1],
+            f"memory={memory_sample[2]} network={network_sample[2]}",
+            "memory-exfil-cooccurrence"
+        ))
+
+    return findings
+
+
 def main(args):
     """Run all agent skill checks. Returns list[Finding].
     Args can be a namespace with .repo_path or a string path (for testing).
@@ -512,6 +613,7 @@ def main(args):
     findings.extend(scan_config_write_requests(repo_path))
     findings.extend(scan_reference_chains(repo_path))
     findings.extend(scan_memory_poisoning(repo_path))
+    findings.extend(scan_memory_exfil_cooccurrence(repo_path))
     return findings
 
 

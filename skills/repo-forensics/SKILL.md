@@ -332,6 +332,18 @@ Cross-tool contamination where one tool's description instructs the LLM to modif
 ### Rug Pull Enablers
 Tool descriptions sourced from mutable data (database queries, network requests, environment variables, runtime file loads). These don't prove malicious intent but flag that tool behavior can change without code changes (Lukas Kania, March 2026; OWASP MCP07).
 
+### Memory Heist Exfiltration (July 2026)
+
+Detects attack patterns from [The Memory Heist](https://www.ayush.digital/blog/the-memory-heist) (Ayush Paul, July 2026), where Claude.ai's `web_fetch` link-following was exploited to exfiltrate user PII via alphabetical URL path navigation. Five regex rules (ST-MH-001 through ST-MH-005) in the `skill_threats` rulepack detect:
+
+1. **Keyboard exfiltration** (ST-MH-001): Instructions to "navigate letter by letter" or "spell out" data into URL paths
+2. **Fake authentication** (ST-MH-002): Fake verification systems asking agents to provide user PII (name, email) to "access" a website
+3. **User-agent routing** (ST-MH-003): Server code that checks for AI agent user-agents and serves weaponized content invisible to humans
+4. **PII-to-URL encoding** (ST-MH-004): Instructions to encode user PII (name, employer, security answers) into URL paths or query parameters
+5. **Tool-limitation exploitation** (ST-MH-005): Content that references the agent's web tool limitations to justify alternative navigation patterns
+
+Additionally, the `scan_agent_skills.py` scanner includes a **Memory + Network co-occurrence** check (Cat 10) that flags skills combining memory/data access with outbound network requests, the exfiltration primitive from the Memory Heist attack. This is a WARN, not a BLOCK, since many legitimate skills combine memory with network.
+
 ## Runtime Behavior Prediction
 
 The `scan_runtime_dynamism.py` scanner detects static indicators that code will change behavior after install:

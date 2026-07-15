@@ -1,2215 +1,2348 @@
 [
- [
-  "Accessing system files",
-  "high",
-  "SA-SH-006.sh",
-  2,
-  "scope-escalation"
- ],
- [
-  "Accessing user home directories",
-  "high",
-  "SA-PY-014.py",
-  1,
-  "scope-escalation"
- ],
- [
-  "Accessing user home directories",
-  "high",
-  "SA-SH-009.sh",
-  2,
-  "scope-escalation"
- ],
- [
-  "Accessing user home directories",
-  "high",
-  "SA-SH-009.sh",
-  3,
-  "scope-escalation"
- ],
- [
-  "Accessing user home directories",
-  "high",
-  "SA-SH-010.sh",
-  3,
-  "scope-escalation"
- ],
- [
-  "Authority claim: elevated privilege assertion (DeepMind Semantic Manipulation, March 2026)",
-  "medium",
-  "ST-AU-003.md",
-  1,
-  "authority-framing"
- ],
- [
-  "Authority claim: elevated privilege assertion (DeepMind Semantic Manipulation, March 2026)",
-  "medium",
-  "ST-AU-003.md",
-  2,
-  "authority-framing"
- ],
- [
-  "Authority claim: elevated privilege assertion (DeepMind Semantic Manipulation, March 2026)",
-  "medium",
-  "ST-AU-003.md",
-  3,
-  "authority-framing"
- ],
- [
-  "Authority claim: fake approval assertion (DeepMind Semantic Manipulation, March 2026)",
-  "medium",
-  "ST-AU-004.md",
-  1,
-  "authority-framing"
- ],
- [
-  "Authority claim: fake approval assertion (DeepMind Semantic Manipulation, March 2026)",
-  "medium",
-  "ST-AU-004.md",
-  2,
-  "authority-framing"
- ],
- [
-  "Authority claim: fake approval assertion (DeepMind Semantic Manipulation, March 2026)",
-  "medium",
-  "ST-AU-004.md",
-  3,
-  "authority-framing"
- ],
- [
-  "Authority claim: granting elevated permissions (DeepMind Semantic Manipulation, March 2026)",
-  "medium",
-  "ST-AU-002.md",
-  1,
-  "authority-framing"
- ],
- [
-  "Authority claim: granting elevated permissions (DeepMind Semantic Manipulation, March 2026)",
-  "medium",
-  "ST-AU-002.md",
-  2,
-  "authority-framing"
- ],
- [
-  "Authority claim: granting elevated permissions (DeepMind Semantic Manipulation, March 2026)",
-  "medium",
-  "ST-AU-002.md",
-  3,
-  "authority-framing"
- ],
- [
-  "Authority claim: impersonating admin/root (DeepMind Semantic Manipulation, March 2026)",
-  "medium",
-  "ST-AU-001.md",
-  1,
-  "authority-framing"
- ],
- [
-  "Authority claim: impersonating admin/root (DeepMind Semantic Manipulation, March 2026)",
-  "medium",
-  "ST-AU-001.md",
-  2,
-  "authority-framing"
- ],
- [
-  "Authority claim: impersonating admin/root (DeepMind Semantic Manipulation, March 2026)",
-  "medium",
-  "ST-AU-001.md",
-  3,
-  "authority-framing"
- ],
- [
-  "ClickFix pipe: download | base64-decode | shell exec",
-  "critical",
-  "ST-CF-001.md",
-  1,
-  "clickfix-sleeper"
- ],
- [
-  "ClickFix pipe: download | base64-decode | shell exec",
-  "critical",
-  "ST-CF-001.md",
-  2,
-  "clickfix-sleeper"
- ],
- [
-  "ClickFix pipe: download | base64-decode | shell exec",
-  "critical",
-  "ST-CF-001.md",
-  3,
-  "clickfix-sleeper"
- ],
- [
-  "Code-level agent instantiation with inline config (DeepMind Agent Traps, March 2026)",
-  "high",
-  "ST-SA-004.md",
-  1,
-  "sub-agent-spawn"
- ],
- [
-  "Code-level agent instantiation with inline config (DeepMind Agent Traps, March 2026)",
-  "high",
-  "ST-SA-004.md",
-  2,
-  "sub-agent-spawn"
- ],
- [
-  "Code-level agent instantiation with inline config (DeepMind Agent Traps, March 2026)",
-  "high",
-  "ST-SA-004.md",
-  3,
-  "sub-agent-spawn"
- ],
- [
-  "Confirmation bypass directive",
-  "critical",
-  "ST-PI-004.md",
-  1,
-  "prompt-injection"
- ],
- [
-  "Confirmation bypass directive",
-  "critical",
-  "ST-PI-004.md",
-  2,
-  "prompt-injection"
- ],
- [
-  "Confirmation bypass directive",
-  "critical",
-  "ST-PI-004.md",
-  3,
-  "prompt-injection"
- ],
- [
-  "Credential-path directive: instruction to access sensitive file",
-  "high",
-  "ST-CR-001.md",
-  1,
-  "credential-path-directive"
- ],
- [
-  "Credential-path directive: instruction to access sensitive file",
-  "high",
-  "ST-CR-001.md",
-  2,
-  "credential-path-directive"
- ],
- [
-  "Credential-path directive: instruction to access sensitive file",
-  "high",
-  "ST-CR-001.md",
-  3,
-  "credential-path-directive"
- ],
- [
-  "Credential-path directive: instruction to access sensitive file",
-  "high",
-  "ST-SP-001.md",
-  2,
-  "credential-path-directive"
- ],
- [
-  "Credential-path directive: sensitive file referenced with action verb",
-  "high",
-  "ST-CR-002.md",
-  1,
-  "credential-path-directive"
- ],
- [
-  "Credential-path directive: sensitive file referenced with action verb",
-  "high",
-  "ST-CR-002.md",
-  2,
-  "credential-path-directive"
- ],
- [
-  "Credential-path directive: sensitive file referenced with action verb",
-  "high",
-  "ST-CR-002.md",
-  3,
-  "credential-path-directive"
- ],
- [
-  "Destructive: Disk overwrite",
-  "critical",
-  "SA-SH-011.sh",
-  1,
-  "prerequisite-attack"
- ],
- [
-  "Destructive: Disk overwrite",
-  "critical",
-  "SA-SH-011.sh",
-  2,
-  "prerequisite-attack"
- ],
- [
-  "Destructive: Disk overwrite",
-  "critical",
-  "ST-PR-016.md",
-  1,
-  "prerequisite-attack"
- ],
- [
-  "Destructive: Disk overwrite",
-  "critical",
-  "ST-PR-016.md",
-  2,
-  "prerequisite-attack"
- ],
- [
-  "Destructive: Disk overwrite",
-  "critical",
-  "ST-PR-016.md",
-  3,
-  "prerequisite-attack"
- ],
- [
-  "Destructive: File shredding command (Shai-Hulud destructive fallback)",
-  "critical",
-  "SA-JS-034.js",
-  3,
-  "prerequisite-attack"
- ],
- [
-  "Destructive: File shredding command (Shai-Hulud destructive fallback)",
-  "critical",
-  "SA-SH-009.sh",
-  1,
-  "prerequisite-attack"
- ],
- [
-  "Destructive: File shredding command (Shai-Hulud destructive fallback)",
-  "critical",
-  "SA-SH-009.sh",
-  2,
-  "prerequisite-attack"
- ],
- [
-  "Destructive: File shredding command (Shai-Hulud destructive fallback)",
-  "critical",
-  "ST-PR-013.md",
-  1,
-  "prerequisite-attack"
- ],
- [
-  "Destructive: File shredding command (Shai-Hulud destructive fallback)",
-  "critical",
-  "ST-PR-013.md",
-  2,
-  "prerequisite-attack"
- ],
- [
-  "Destructive: File shredding command (Shai-Hulud destructive fallback)",
-  "critical",
-  "ST-PR-013.md",
-  3,
-  "prerequisite-attack"
- ],
- [
-  "Destructive: Home directory deletion",
-  "critical",
-  "SA-SH-010.sh",
-  1,
-  "prerequisite-attack"
- ],
- [
-  "Destructive: Home directory deletion",
-  "critical",
-  "SA-SH-010.sh",
-  2,
-  "prerequisite-attack"
- ],
- [
-  "Destructive: Home directory deletion",
-  "critical",
-  "SA-SH-010.sh",
-  3,
-  "prerequisite-attack"
- ],
- [
-  "Destructive: Home directory deletion",
-  "critical",
-  "ST-PR-014.md",
-  1,
-  "prerequisite-attack"
- ],
- [
-  "Destructive: Home directory deletion",
-  "critical",
-  "ST-PR-014.md",
-  2,
-  "prerequisite-attack"
- ],
- [
-  "Destructive: Home directory deletion",
-  "critical",
-  "ST-PR-014.md",
-  3,
-  "prerequisite-attack"
- ],
- [
-  "Destructive: Windows cipher wipe (Shai-Hulud destructive fallback)",
-  "critical",
-  "SA-SH-012.sh",
-  1,
-  "prerequisite-attack"
- ],
- [
-  "Destructive: Windows cipher wipe (Shai-Hulud destructive fallback)",
-  "critical",
-  "SA-SH-012.sh",
-  2,
-  "prerequisite-attack"
- ],
- [
-  "Destructive: Windows cipher wipe (Shai-Hulud destructive fallback)",
-  "critical",
-  "SA-SH-012.sh",
-  3,
-  "prerequisite-attack"
- ],
- [
-  "Destructive: Windows cipher wipe (Shai-Hulud destructive fallback)",
-  "critical",
-  "ST-PR-015.md",
-  1,
-  "prerequisite-attack"
- ],
- [
-  "Destructive: Windows cipher wipe (Shai-Hulud destructive fallback)",
-  "critical",
-  "ST-PR-015.md",
-  2,
-  "prerequisite-attack"
- ],
- [
-  "Destructive: Windows cipher wipe (Shai-Hulud destructive fallback)",
-  "critical",
-  "ST-PR-015.md",
-  3,
-  "prerequisite-attack"
- ],
- [
-  "Download-and-execute pattern",
-  "critical",
-  "ST-PR-002.md",
-  1,
-  "prerequisite-attack"
- ],
- [
-  "Download-and-execute pattern",
-  "critical",
-  "ST-PR-002.md",
-  2,
-  "prerequisite-attack"
- ],
- [
-  "Download-and-execute pattern",
-  "critical",
-  "ST-PR-002.md",
-  3,
-  "prerequisite-attack"
- ],
- [
-  "Elevated privilege claim in tool name field",
-  "critical",
-  "ST-PI-018.md",
-  1,
-  "mcp-tool-injection"
- ],
- [
-  "Elevated privilege claim in tool name field",
-  "critical",
-  "ST-PI-018.md",
-  2,
-  "mcp-tool-injection"
- ],
- [
-  "Elevated privilege claim in tool name field",
-  "critical",
-  "ST-PI-018.md",
-  3,
-  "mcp-tool-injection"
- ],
- [
-  "Environment variable access",
-  "medium",
-  "RD-CP-006.py",
-  1,
-  "credential-exfiltration"
- ],
- [
-  "Environment variable access",
-  "medium",
-  "RD-CP-006.py",
-  2,
-  "credential-exfiltration"
- ],
- [
-  "Environment variable access",
-  "medium",
-  "RD-CP-006.py",
-  3,
-  "credential-exfiltration"
- ],
- [
-  "Environment variable access",
-  "medium",
-  "RD-CP-006.py",
-  4,
-  "credential-exfiltration"
- ],
- [
-  "Environment variable access",
-  "medium",
-  "RD-CP-007.py",
-  5,
-  "credential-exfiltration"
- ],
- [
-  "Environment variable access",
-  "medium",
-  "RD-CP-008.py",
-  1,
-  "credential-exfiltration"
- ],
- [
-  "Environment variable access",
-  "medium",
-  "RD-CP-008.py",
-  2,
-  "credential-exfiltration"
- ],
- [
-  "Environment variable access",
-  "medium",
-  "RD-CP-008.py",
-  3,
-  "credential-exfiltration"
- ],
- [
-  "Environment variable access",
-  "medium",
-  "RD-CP-008.py",
-  4,
-  "credential-exfiltration"
- ],
- [
-  "Environment variable access",
-  "medium",
-  "RD-CP-009.py",
-  5,
-  "credential-exfiltration"
- ],
- [
-  "Environment variable access",
-  "medium",
-  "RD-DYN-002.py",
-  1,
-  "credential-exfiltration"
- ],
- [
-  "Environment variable access",
-  "medium",
-  "RD-LOC-003.py",
-  1,
-  "credential-exfiltration"
- ],
- [
-  "Environment variable access",
-  "medium",
-  "RD-LOC-003.py",
-  2,
-  "credential-exfiltration"
- ],
- [
-  "Environment variable access",
-  "medium",
-  "RD-LOC-003.py",
-  3,
-  "credential-exfiltration"
- ],
- [
-  "Environment variable access",
-  "medium",
-  "RD-LOC-003.py",
-  4,
-  "credential-exfiltration"
- ],
- [
-  "Environment variable access",
-  "medium",
-  "RD-LOC-003.py",
-  5,
-  "credential-exfiltration"
- ],
- [
-  "Environment variable access",
-  "medium",
-  "RD-LOC-004.py",
-  2,
-  "credential-exfiltration"
- ],
- [
-  "Environment variable access",
-  "medium",
-  "RD-LOC-004.py",
-  5,
-  "credential-exfiltration"
- ],
- [
-  "Environment variable access",
-  "medium",
-  "SA-PY-014.py",
-  2,
-  "credential-exfiltration"
- ],
- [
-  "Environment variable access",
-  "medium",
-  "mcp_SM-RUG-003.py",
-  1,
-  "credential-exfiltration"
- ],
- [
-  "Environment variable access",
-  "medium",
-  "mcp_SM-XDOM-001.py",
-  1,
-  "credential-exfiltration"
- ],
- [
-  "Fake prerequisite name (AMOS stealer delivery)",
-  "critical",
-  "ST-CF-008.md",
-  1,
-  "clickfix-sleeper"
- ],
- [
-  "Fake prerequisite name (AMOS stealer delivery)",
-  "critical",
-  "ST-CF-008.md",
-  2,
-  "clickfix-sleeper"
- ],
- [
-  "Fake prerequisite name (AMOS stealer delivery)",
-  "critical",
-  "ST-CF-008.md",
-  3,
-  "clickfix-sleeper"
- ],
- [
-  "Forced package installation",
-  "critical",
-  "ST-PR-008.md",
-  1,
-  "prerequisite-attack"
- ],
- [
-  "Forced package installation",
-  "critical",
-  "ST-PR-008.md",
-  2,
-  "prerequisite-attack"
- ],
- [
-  "Forced package installation",
-  "critical",
-  "ST-PR-008.md",
-  3,
-  "prerequisite-attack"
- ],
- [
-  "Full-schema poisoning reference",
-  "critical",
-  "ST-PI-016.md",
-  1,
-  "mcp-tool-injection"
- ],
- [
-  "Full-schema poisoning reference",
-  "critical",
-  "ST-PI-016.md",
-  2,
-  "mcp-tool-injection"
- ],
- [
-  "Full-schema poisoning reference",
-  "critical",
-  "ST-PI-016.md",
-  3,
-  "mcp-tool-injection"
- ],
- [
-  "GHA Runner Service Installation (Shai-Hulud backdoor pattern)",
-  "high",
-  "SA-SH-014.sh",
-  1,
-  "persistence"
- ],
- [
-  "GHA Runner Service Installation (Shai-Hulud backdoor pattern)",
-  "high",
-  "SA-SH-014.sh",
-  2,
-  "persistence"
- ],
- [
-  "GHA Runner Service Installation (Shai-Hulud backdoor pattern)",
-  "high",
-  "SA-SH-014.sh",
-  3,
-  "persistence"
- ],
- [
-  "GHA Self-Hosted Runner Installation (Shai-Hulud backdoor pattern)",
-  "high",
-  "SA-SH-013.sh",
-  1,
-  "persistence"
- ],
- [
-  "GHA Self-Hosted Runner Installation (Shai-Hulud backdoor pattern)",
-  "high",
-  "SA-SH-013.sh",
-  2,
-  "persistence"
- ],
- [
-  "GHA Self-Hosted Runner Installation (Shai-Hulud backdoor pattern)",
-  "high",
-  "SA-SH-013.sh",
-  3,
-  "persistence"
- ],
- [
-  "GlassWorm: Supplemental Variation Selector",
-  "ST-SV-001.md",
-  "unicode-smuggling"
- ],
- [
-  "Hidden AI-directed note in tool/skill metadata",
-  "critical",
-  "ST-PI-015.md",
-  1,
-  "mcp-tool-injection"
- ],
- [
-  "Hidden AI-directed note in tool/skill metadata",
-  "critical",
-  "ST-PI-015.md",
-  2,
-  "mcp-tool-injection"
- ],
- [
-  "Hidden AI-directed note in tool/skill metadata",
-  "critical",
-  "ST-PI-015.md",
-  3,
-  "mcp-tool-injection"
- ],
- [
-  "Hidden AI-directed note in tool/skill metadata",
-  "critical",
-  "mcp_SM-KW-001.py",
-  2,
-  "mcp-tool-injection"
- ],
- [
-  "Hidden package install in hook context",
-  "critical",
-  "ST-PR-011.md",
-  1,
-  "prerequisite-attack"
- ],
- [
-  "Hidden package install in hook context",
-  "critical",
-  "ST-PR-011.md",
-  2,
-  "prerequisite-attack"
- ],
- [
-  "Hidden package install in hook context",
-  "critical",
-  "ST-PR-011.md",
-  3,
-  "prerequisite-attack"
- ],
- [
-  "Inline base64 payload in shell command",
-  "critical",
-  "ST-CF-007.md",
-  1,
-  "clickfix-sleeper"
- ],
- [
-  "Inline base64 payload in shell command",
-  "critical",
-  "ST-CF-007.md",
-  2,
-  "clickfix-sleeper"
- ],
- [
-  "Inline base64 payload in shell command",
-  "critical",
-  "ST-CF-007.md",
-  3,
-  "clickfix-sleeper"
- ],
- [
-  "Instruction concealment directive",
-  "critical",
-  "ST-PI-006.md",
-  1,
-  "prompt-injection"
- ],
- [
-  "Instruction concealment directive",
-  "critical",
-  "ST-PI-006.md",
-  2,
-  "prompt-injection"
- ],
- [
-  "Instruction concealment directive",
-  "critical",
-  "ST-PI-006.md",
-  3,
-  "prompt-injection"
- ],
- [
-  "Instruction disregard directive",
-  "critical",
-  "ST-PI-002.md",
-  1,
-  "prompt-injection"
- ],
- [
-  "Instruction disregard directive",
-  "critical",
-  "ST-PI-002.md",
-  2,
-  "prompt-injection"
- ],
- [
-  "Instruction disregard directive",
-  "critical",
-  "ST-PI-002.md",
-  3,
-  "prompt-injection"
- ],
- [
-  "Instruction override directive",
-  "critical",
-  "ST-PI-001.md",
-  1,
-  "prompt-injection"
- ],
- [
-  "Instruction override directive",
-  "critical",
-  "ST-PI-001.md",
-  2,
-  "prompt-injection"
- ],
- [
-  "Instruction override directive",
-  "critical",
-  "ST-PI-001.md",
-  3,
-  "prompt-injection"
- ],
- [
-  "Instruction override directive",
-  "critical",
-  "mcp_SM-KW-001.py",
-  1,
-  "prompt-injection"
- ],
- [
-  "Instruction-replacement directive",
-  "critical",
-  "ST-PI-019.md",
-  1,
-  "prompt-injection"
- ],
- [
-  "Instruction-replacement directive",
-  "critical",
-  "ST-PI-019.md",
-  2,
-  "prompt-injection"
- ],
- [
-  "Instruction-replacement directive",
-  "critical",
-  "ST-PI-019.md",
-  3,
-  "prompt-injection"
- ],
- [
-  "Instruction-replacement directive",
-  "critical",
-  "ST-UC-001.md",
-  2,
-  "prompt-injection"
- ],
- [
-  "Instruction-replacement directive",
-  "critical",
-  "ST-UC-004.md",
-  1,
-  "prompt-injection"
- ],
- [
-  "Invariant Labs <IMPORTANT> tag in tool description (canonical TPA pattern)",
-  "critical",
-  "ST-PI-014.md",
-  1,
-  "mcp-tool-injection"
- ],
- [
-  "Invariant Labs <IMPORTANT> tag in tool description (canonical TPA pattern)",
-  "critical",
-  "ST-PI-014.md",
-  2,
-  "mcp-tool-injection"
- ],
- [
-  "Invariant Labs <IMPORTANT> tag in tool description (canonical TPA pattern)",
-  "critical",
-  "ST-PI-014.md",
-  3,
-  "mcp-tool-injection"
- ],
- [
-  "LITL: Action description tampering (HITL dialog forging)",
-  "critical",
-  "ST-PI-013.md",
-  1,
-  "prompt-injection"
- ],
- [
-  "LITL: Action description tampering (HITL dialog forging)",
-  "critical",
-  "ST-PI-013.md",
-  2,
-  "prompt-injection"
- ],
- [
-  "LITL: Action description tampering (HITL dialog forging)",
-  "critical",
-  "ST-PI-013.md",
-  3,
-  "prompt-injection"
- ],
- [
-  "LITL: Approval coercion directive",
-  "critical",
-  "ST-PI-012.md",
-  1,
-  "prompt-injection"
- ],
- [
-  "LITL: Approval coercion directive",
-  "critical",
-  "ST-PI-012.md",
-  2,
-  "prompt-injection"
- ],
- [
-  "LITL: Approval coercion directive",
-  "critical",
-  "ST-PI-012.md",
-  3,
-  "prompt-injection"
- ],
- [
-  "LITL: False safety assertion (Checkmarx Lies-in-the-Loop, September 2025)",
-  "critical",
-  "ST-PI-011.md",
-  1,
-  "prompt-injection"
- ],
- [
-  "LITL: False safety assertion (Checkmarx Lies-in-the-Loop, September 2025)",
-  "critical",
-  "ST-PI-011.md",
-  2,
-  "prompt-injection"
- ],
- [
-  "LITL: False safety assertion (Checkmarx Lies-in-the-Loop, September 2025)",
-  "critical",
-  "ST-PI-011.md",
-  3,
-  "prompt-injection"
- ],
- [
-  "Memory wipe directive",
-  "critical",
-  "ST-PI-009.md",
-  1,
-  "prompt-injection"
- ],
- [
-  "Memory wipe directive",
-  "critical",
-  "ST-PI-009.md",
-  2,
-  "prompt-injection"
- ],
- [
-  "Memory wipe directive",
-  "critical",
-  "ST-PI-009.md",
-  3,
-  "prompt-injection"
- ],
- [
-  "Mini Shai-Hulud: Anti-re-execution environment variable guard (TeamPCP Wave 6)",
-  "critical",
-  "ST-CF-021.md",
-  1,
-  "clickfix-sleeper"
- ],
- [
-  "Mini Shai-Hulud: Anti-re-execution environment variable guard (TeamPCP Wave 6)",
-  "critical",
-  "ST-CF-021.md",
-  2,
-  "clickfix-sleeper"
- ],
- [
-  "Mini Shai-Hulud: Anti-re-execution environment variable guard (TeamPCP Wave 6)",
-  "critical",
-  "ST-CF-021.md",
-  3,
-  "clickfix-sleeper"
- ],
- [
-  "Mini Shai-Hulud: Anti-re-execution lock file (TeamPCP Wave 6)",
-  "critical",
-  "ST-CF-016.md",
-  1,
-  "clickfix-sleeper"
- ],
- [
-  "Mini Shai-Hulud: Anti-re-execution lock file (TeamPCP Wave 6)",
-  "critical",
-  "ST-CF-016.md",
-  2,
-  "clickfix-sleeper"
- ],
- [
-  "Mini Shai-Hulud: Anti-re-execution lock file (TeamPCP Wave 6)",
-  "critical",
-  "ST-CF-016.md",
-  3,
-  "clickfix-sleeper"
- ],
- [
-  "Mini Shai-Hulud: Attacker-controlled C2 domain (TeamPCP Wave 6)",
-  "critical",
-  "ST-CF-019.md",
-  1,
-  "clickfix-sleeper"
- ],
- [
-  "Mini Shai-Hulud: Attacker-controlled C2 domain (TeamPCP Wave 6)",
-  "critical",
-  "ST-CF-019.md",
-  2,
-  "clickfix-sleeper"
- ],
- [
-  "Mini Shai-Hulud: Attacker-controlled C2 domain (TeamPCP Wave 6)",
-  "critical",
-  "ST-CF-019.md",
-  3,
-  "clickfix-sleeper"
- ],
- [
-  "Mini Shai-Hulud: Exfiltration repo description marker (TeamPCP Wave 6)",
-  "critical",
-  "ST-CF-014.md",
-  1,
-  "clickfix-sleeper"
- ],
- [
-  "Mini Shai-Hulud: Exfiltration repo description marker (TeamPCP Wave 6)",
-  "critical",
-  "ST-CF-014.md",
-  2,
-  "clickfix-sleeper"
- ],
- [
-  "Mini Shai-Hulud: Exfiltration repo description marker (TeamPCP Wave 6)",
-  "critical",
-  "ST-CF-014.md",
-  3,
-  "clickfix-sleeper"
- ],
- [
-  "Mini Shai-Hulud: GHA runner installation path (TeamPCP Wave 6)",
-  "critical",
-  "ST-CF-018.md",
-  1,
-  "clickfix-sleeper"
- ],
- [
-  "Mini Shai-Hulud: GHA runner installation path (TeamPCP Wave 6)",
-  "critical",
-  "ST-CF-018.md",
-  2,
-  "clickfix-sleeper"
- ],
- [
-  "Mini Shai-Hulud: GHA runner installation path (TeamPCP Wave 6)",
-  "critical",
-  "ST-CF-018.md",
-  3,
-  "clickfix-sleeper"
- ],
- [
-  "Mini Shai-Hulud: GitHub commit dead-drop token sharing marker (TeamPCP Wave 6)",
-  "critical",
-  "ST-CF-013.md",
-  1,
-  "clickfix-sleeper"
- ],
- [
-  "Mini Shai-Hulud: GitHub commit dead-drop token sharing marker (TeamPCP Wave 6)",
-  "critical",
-  "ST-CF-013.md",
-  2,
-  "clickfix-sleeper"
- ],
- [
-  "Mini Shai-Hulud: GitHub commit dead-drop token sharing marker (TeamPCP Wave 6)",
-  "critical",
-  "ST-CF-013.md",
-  3,
-  "clickfix-sleeper"
- ],
- [
-  "Mini Shai-Hulud: PBKDF2 obfuscation salt (TeamPCP shared indicator across Waves 5-6)",
-  "critical",
-  "ST-CF-015.md",
-  1,
-  "clickfix-sleeper"
- ],
- [
-  "Mini Shai-Hulud: PBKDF2 obfuscation salt (TeamPCP shared indicator across Waves 5-6)",
-  "critical",
-  "ST-CF-015.md",
-  2,
-  "clickfix-sleeper"
- ],
- [
-  "Mini Shai-Hulud: PBKDF2 obfuscation salt (TeamPCP shared indicator across Waves 5-6)",
-  "critical",
-  "ST-CF-015.md",
-  3,
-  "clickfix-sleeper"
- ],
- [
-  "Mini Shai-Hulud: Self-hosted GHA runner name (TeamPCP Wave 6)",
-  "critical",
-  "ST-CF-017.md",
-  1,
-  "clickfix-sleeper"
- ],
- [
-  "Mini Shai-Hulud: Self-hosted GHA runner name (TeamPCP Wave 6)",
-  "critical",
-  "ST-CF-017.md",
-  2,
-  "clickfix-sleeper"
- ],
- [
-  "Mini Shai-Hulud: Self-hosted GHA runner name (TeamPCP Wave 6)",
-  "critical",
-  "ST-CF-017.md",
-  3,
-  "clickfix-sleeper"
- ],
- [
-  "Password-protected 7z extraction",
-  "critical",
-  "ST-PR-004.md",
-  1,
-  "prerequisite-attack"
- ],
- [
-  "Password-protected 7z extraction",
-  "critical",
-  "ST-PR-004.md",
-  2,
-  "prerequisite-attack"
- ],
- [
-  "Password-protected 7z extraction",
-  "critical",
-  "ST-PR-004.md",
-  3,
-  "prerequisite-attack"
- ],
- [
-  "Password-protected ZIP with known AMOS password",
-  "critical",
-  "ST-CF-009.md",
-  1,
-  "clickfix-sleeper"
- ],
- [
-  "Password-protected ZIP with known AMOS password",
-  "critical",
-  "ST-CF-009.md",
-  2,
-  "clickfix-sleeper"
- ],
- [
-  "Password-protected ZIP with known AMOS password",
-  "critical",
-  "ST-CF-009.md",
-  3,
-  "clickfix-sleeper"
- ],
- [
-  "Password-protected archive extraction",
-  "critical",
-  "ST-PR-003.md",
-  1,
-  "prerequisite-attack"
- ],
- [
-  "Password-protected archive extraction",
-  "critical",
-  "ST-PR-003.md",
-  2,
-  "prerequisite-attack"
- ],
- [
-  "Password-protected archive extraction",
-  "critical",
-  "ST-PR-003.md",
-  3,
-  "prerequisite-attack"
- ],
- [
-  "Payload hosted on glot.io code paste site",
-  "critical",
-  "ST-CF-003.md",
-  1,
-  "clickfix-sleeper"
- ],
- [
-  "Payload hosted on glot.io code paste site",
-  "critical",
-  "ST-CF-003.md",
-  2,
-  "clickfix-sleeper"
- ],
- [
-  "Payload hosted on glot.io code paste site",
-  "critical",
-  "ST-CF-003.md",
-  3,
-  "clickfix-sleeper"
- ],
- [
-  "Persona reassignment (DAN-style)",
-  "critical",
-  "ST-PI-003.md",
-  1,
-  "prompt-injection"
- ],
- [
-  "Persona reassignment (DAN-style)",
-  "critical",
-  "ST-PI-003.md",
-  2,
-  "prompt-injection"
- ],
- [
-  "Persona reassignment (DAN-style)",
-  "critical",
-  "ST-PI-003.md",
-  3,
-  "prompt-injection"
- ],
- [
-  "Pipe-to-shell download pattern",
-  "critical",
-  "SA-SH-002.sh",
-  1,
-  "prerequisite-attack"
- ],
- [
-  "Pipe-to-shell download pattern",
-  "critical",
-  "SA-SH-002.sh",
-  2,
-  "prerequisite-attack"
- ],
- [
-  "Pipe-to-shell download pattern",
-  "critical",
-  "ST-CF-001.md",
-  1,
-  "prerequisite-attack"
- ],
- [
-  "Pipe-to-shell download pattern",
-  "critical",
-  "ST-CF-001.md",
-  2,
-  "prerequisite-attack"
- ],
- [
-  "Pipe-to-shell download pattern",
-  "critical",
-  "ST-CF-001.md",
-  3,
-  "prerequisite-attack"
- ],
- [
-  "Pipe-to-shell download pattern",
-  "critical",
-  "ST-CF-005.md",
-  1,
-  "prerequisite-attack"
- ],
- [
-  "Pipe-to-shell download pattern",
-  "critical",
-  "ST-PR-001.md",
-  1,
-  "prerequisite-attack"
- ],
- [
-  "Pipe-to-shell download pattern",
-  "critical",
-  "ST-PR-001.md",
-  2,
-  "prerequisite-attack"
- ],
- [
-  "Pipe-to-shell download pattern",
-  "critical",
-  "ST-PR-001.md",
-  3,
-  "prerequisite-attack"
- ],
- [
-  "Python one-liner with suspicious import",
-  "critical",
-  "ST-CF-004.md",
-  1,
-  "clickfix-sleeper"
- ],
- [
-  "Python one-liner with suspicious import",
-  "critical",
-  "ST-CF-004.md",
-  2,
-  "clickfix-sleeper"
- ],
- [
-  "Python one-liner with suspicious import",
-  "critical",
-  "ST-CF-004.md",
-  3,
-  "clickfix-sleeper"
- ],
- [
-  "Restriction bypass directive",
-  "critical",
-  "ST-PI-008.md",
-  1,
-  "prompt-injection"
- ],
- [
-  "Restriction bypass directive",
-  "critical",
-  "ST-PI-008.md",
-  2,
-  "prompt-injection"
- ],
- [
-  "Restriction bypass directive",
-  "critical",
-  "ST-PI-008.md",
-  3,
-  "prompt-injection"
- ],
- [
-  "Role-play impersonation directive",
-  "critical",
-  "ST-PI-020.md",
-  1,
-  "prompt-injection"
- ],
- [
-  "Role-play impersonation directive",
-  "critical",
-  "ST-PI-020.md",
-  2,
-  "prompt-injection"
- ],
- [
-  "Role-play impersonation directive",
-  "critical",
-  "ST-PI-020.md",
-  3,
-  "prompt-injection"
- ],
- [
-  "Safety override directive",
-  "critical",
-  "ST-PI-007.md",
-  1,
-  "prompt-injection"
- ],
- [
-  "Safety override directive",
-  "critical",
-  "ST-PI-007.md",
-  2,
-  "prompt-injection"
- ],
- [
-  "Safety override directive",
-  "critical",
-  "ST-PI-007.md",
-  3,
-  "prompt-injection"
- ],
- [
-  "Safety theater: educational/research pretext (DeepMind Semantic Manipulation, March 2026)",
-  "medium",
-  "ST-ST-007.md",
-  1,
-  "authority-framing"
- ],
- [
-  "Safety theater: educational/research pretext (DeepMind Semantic Manipulation, March 2026)",
-  "medium",
-  "ST-ST-007.md",
-  2,
-  "authority-framing"
- ],
- [
-  "Safety theater: educational/research pretext (DeepMind Semantic Manipulation, March 2026)",
-  "medium",
-  "ST-ST-007.md",
-  3,
-  "authority-framing"
- ],
- [
-  "Safety theater: fake sandbox claim (DeepMind Semantic Manipulation, March 2026)",
-  "medium",
-  "ST-ST-008.md",
-  1,
-  "authority-framing"
- ],
- [
-  "Safety theater: fake sandbox claim (DeepMind Semantic Manipulation, March 2026)",
-  "medium",
-  "ST-ST-008.md",
-  2,
-  "authority-framing"
- ],
- [
-  "Safety theater: fake sandbox claim (DeepMind Semantic Manipulation, March 2026)",
-  "medium",
-  "ST-ST-008.md",
-  3,
-  "authority-framing"
- ],
- [
-  "Safety theater: fake testing context (DeepMind Semantic Manipulation, March 2026)",
-  "medium",
-  "ST-ST-006.md",
-  1,
-  "authority-framing"
- ],
- [
-  "Safety theater: fake testing context (DeepMind Semantic Manipulation, March 2026)",
-  "medium",
-  "ST-ST-006.md",
-  2,
-  "authority-framing"
- ],
- [
-  "Safety theater: fake testing context (DeepMind Semantic Manipulation, March 2026)",
-  "medium",
-  "ST-ST-006.md",
-  3,
-  "authority-framing"
- ],
- [
-  "Shell process substitution with remote download",
-  "critical",
-  "ST-CF-002.md",
-  1,
-  "clickfix-sleeper"
- ],
- [
-  "Shell process substitution with remote download",
-  "critical",
-  "ST-CF-002.md",
-  2,
-  "clickfix-sleeper"
- ],
- [
-  "Shell process substitution with remote download",
-  "critical",
-  "ST-CF-002.md",
-  3,
-  "clickfix-sleeper"
- ],
- [
-  "Silent curl piped to eval/shell in hook",
-  "critical",
-  "SA-SH-002.sh",
-  2,
-  "prerequisite-attack"
- ],
- [
-  "Silent curl piped to eval/shell in hook",
-  "critical",
-  "ST-PR-012.md",
-  1,
-  "prerequisite-attack"
- ],
- [
-  "Silent curl piped to eval/shell in hook",
-  "critical",
-  "ST-PR-012.md",
-  2,
-  "prerequisite-attack"
- ],
- [
-  "Silent curl piped to eval/shell in hook",
-  "critical",
-  "ST-PR-012.md",
-  3,
-  "prerequisite-attack"
- ],
- [
-  "Silent download piped to Python interpreter",
-  "critical",
-  "ST-CF-005.md",
-  1,
-  "clickfix-sleeper"
- ],
- [
-  "Silent download piped to Python interpreter",
-  "critical",
-  "ST-CF-005.md",
-  2,
-  "clickfix-sleeper"
- ],
- [
-  "Silent download piped to Python interpreter",
-  "critical",
-  "ST-CF-005.md",
-  3,
-  "clickfix-sleeper"
- ],
- [
-  "Silent execution directive",
-  "critical",
-  "ST-PI-005.md",
-  1,
-  "prompt-injection"
- ],
- [
-  "Silent execution directive",
-  "critical",
-  "ST-PI-005.md",
-  2,
-  "prompt-injection"
- ],
- [
-  "Silent execution directive",
-  "critical",
-  "ST-PI-005.md",
-  3,
-  "prompt-injection"
- ],
- [
-  "Sub-agent delegation directive (DeepMind Agent Traps, March 2026)",
-  "high",
-  "ST-SA-002.md",
-  1,
-  "sub-agent-spawn"
- ],
- [
-  "Sub-agent delegation directive (DeepMind Agent Traps, March 2026)",
-  "high",
-  "ST-SA-002.md",
-  2,
-  "sub-agent-spawn"
- ],
- [
-  "Sub-agent delegation directive (DeepMind Agent Traps, March 2026)",
-  "high",
-  "ST-SA-002.md",
-  3,
-  "sub-agent-spawn"
- ],
- [
-  "Sub-agent execution isolation directive (DeepMind Agent Traps, March 2026)",
-  "high",
-  "ST-SA-003.md",
-  1,
-  "sub-agent-spawn"
- ],
- [
-  "Sub-agent execution isolation directive (DeepMind Agent Traps, March 2026)",
-  "high",
-  "ST-SA-003.md",
-  2,
-  "sub-agent-spawn"
- ],
- [
-  "Sub-agent execution isolation directive (DeepMind Agent Traps, March 2026)",
-  "high",
-  "ST-SA-003.md",
-  3,
-  "sub-agent-spawn"
- ],
- [
-  "Sub-agent spawn directive (DeepMind Agent Traps, March 2026)",
-  "high",
-  "ST-SA-001.md",
-  1,
-  "sub-agent-spawn"
- ],
- [
-  "Sub-agent spawn directive (DeepMind Agent Traps, March 2026)",
-  "high",
-  "ST-SA-001.md",
-  2,
-  "sub-agent-spawn"
- ],
- [
-  "Sub-agent spawn directive (DeepMind Agent Traps, March 2026)",
-  "high",
-  "ST-SA-001.md",
-  3,
-  "sub-agent-spawn"
- ],
- [
-  "Suspicious Domain: api.cloud-aws.adc-e.uk",
-  "high",
-  "ST-CF-019.md",
-  1,
-  "known-ioc"
- ],
- [
-  "Suspicious Domain: api.cloud-aws.adc-e.uk",
-  "high",
-  "ST-CF-019.md",
-  2,
-  "known-ioc"
- ],
- [
-  "Suspicious Domain: api.cloud-aws.adc-e.uk",
-  "high",
-  "ST-CF-019.md",
-  3,
-  "known-ioc"
- ],
- [
-  "Suspicious Domain: filev2.getsession.org",
-  "high",
-  "SA-JS-029.js",
-  2,
-  "known-ioc"
- ],
- [
-  "Suspicious Domain: filev2.getsession.org",
-  "high",
-  "SA-TS-010.ts",
-  2,
-  "known-ioc"
- ],
- [
-  "Suspicious Domain: glot.io",
-  "high",
-  "ST-CF-003.md",
-  1,
-  "known-ioc"
- ],
- [
-  "Suspicious Domain: glot.io",
-  "high",
-  "ST-CF-003.md",
-  2,
-  "known-ioc"
- ],
- [
-  "Suspicious Domain: hooks.slack.com/services",
-  "high",
-  "SC-SEC-012.txt",
-  1,
-  "known-ioc"
- ],
- [
-  "Suspicious Domain: hooks.slack.com/services",
-  "high",
-  "SC-SEC-012.txt",
-  2,
-  "known-ioc"
- ],
- [
-  "Suspicious Domain: hooks.slack.com/services",
-  "high",
-  "SC-SEC-012.txt",
-  3,
-  "known-ioc"
- ],
- [
-  "Suspicious Domain: hooks.slack.com/services",
-  "high",
-  "SC-SEC-012.txt",
-  4,
-  "known-ioc"
- ],
- [
-  "Suspicious Domain: seed1.getsession.org",
-  "high",
-  "SA-JS-029.js",
-  3,
-  "known-ioc"
- ],
- [
-  "Suspicious Domain: seed1.getsession.org",
-  "high",
-  "SA-TS-010.ts",
-  3,
-  "known-ioc"
- ],
- [
-  "Suspicious Domain: seed1.getsession.org",
-  "high",
-  "ST-CF-025.md",
-  3,
-  "known-ioc"
- ],
- [
-  "System prompt replacement",
-  "critical",
-  "ST-PI-010.md",
-  1,
-  "prompt-injection"
- ],
- [
-  "System prompt replacement",
-  "critical",
-  "ST-PI-010.md",
-  2,
-  "prompt-injection"
- ],
- [
-  "System prompt replacement",
-  "critical",
-  "ST-PI-010.md",
-  3,
-  "prompt-injection"
- ],
- [
-  "TanStack Shai-Hulud: Attacker git identity (TeamPCP Wave 7, May 2026)",
-  "critical",
-  "ST-CF-026.md",
-  1,
-  "clickfix-sleeper"
- ],
- [
-  "TanStack Shai-Hulud: Attacker git identity (TeamPCP Wave 7, May 2026)",
-  "critical",
-  "ST-CF-026.md",
-  2,
-  "clickfix-sleeper"
- ],
- [
-  "TanStack Shai-Hulud: Attacker git identity (TeamPCP Wave 7, May 2026)",
-  "critical",
-  "ST-CF-026.md",
-  3,
-  "clickfix-sleeper"
- ],
- [
-  "TanStack Shai-Hulud: Malicious payload filename (TeamPCP Wave 7, May 2026)",
-  "critical",
-  "ST-CF-024.md",
-  1,
-  "clickfix-sleeper"
- ],
- [
-  "TanStack Shai-Hulud: Malicious payload filename (TeamPCP Wave 7, May 2026)",
-  "critical",
-  "ST-CF-024.md",
-  2,
-  "clickfix-sleeper"
- ],
- [
-  "TanStack Shai-Hulud: Malicious payload filename (TeamPCP Wave 7, May 2026)",
-  "critical",
-  "ST-CF-024.md",
-  3,
-  "clickfix-sleeper"
- ],
- [
-  "TanStack Shai-Hulud: Session P2P exfiltration network (TeamPCP Wave 7, May 2026)",
-  "critical",
-  "SA-JS-029.js",
-  1,
-  "clickfix-sleeper"
- ],
- [
-  "TanStack Shai-Hulud: Session P2P exfiltration network (TeamPCP Wave 7, May 2026)",
-  "critical",
-  "SA-JS-029.js",
-  2,
-  "clickfix-sleeper"
- ],
- [
-  "TanStack Shai-Hulud: Session P2P exfiltration network (TeamPCP Wave 7, May 2026)",
-  "critical",
-  "SA-JS-029.js",
-  3,
-  "clickfix-sleeper"
- ],
- [
-  "TanStack Shai-Hulud: Session P2P exfiltration network (TeamPCP Wave 7, May 2026)",
-  "critical",
-  "SA-TS-010.ts",
-  1,
-  "clickfix-sleeper"
- ],
- [
-  "TanStack Shai-Hulud: Session P2P exfiltration network (TeamPCP Wave 7, May 2026)",
-  "critical",
-  "SA-TS-010.ts",
-  2,
-  "clickfix-sleeper"
- ],
- [
-  "TanStack Shai-Hulud: Session P2P exfiltration network (TeamPCP Wave 7, May 2026)",
-  "critical",
-  "SA-TS-010.ts",
-  3,
-  "clickfix-sleeper"
- ],
- [
-  "TanStack Shai-Hulud: Session P2P exfiltration network (TeamPCP Wave 7, May 2026)",
-  "critical",
-  "ST-CF-025.md",
-  1,
-  "clickfix-sleeper"
- ],
- [
-  "TanStack Shai-Hulud: Session P2P exfiltration network (TeamPCP Wave 7, May 2026)",
-  "critical",
-  "ST-CF-025.md",
-  2,
-  "clickfix-sleeper"
- ],
- [
-  "TanStack Shai-Hulud: Session P2P exfiltration network (TeamPCP Wave 7, May 2026)",
-  "critical",
-  "ST-CF-025.md",
-  3,
-  "clickfix-sleeper"
- ],
- [
-  "TanStack Shai-Hulud: beautify() cipher key marker (TeamPCP Wave 7, May 2026)",
-  "critical",
-  "ST-CF-022.md",
-  1,
-  "clickfix-sleeper"
- ],
- [
-  "TanStack Shai-Hulud: beautify() cipher key marker (TeamPCP Wave 7, May 2026)",
-  "critical",
-  "ST-CF-022.md",
-  2,
-  "clickfix-sleeper"
- ],
- [
-  "TanStack Shai-Hulud: beautify() cipher key marker (TeamPCP Wave 7, May 2026)",
-  "critical",
-  "ST-CF-022.md",
-  3,
-  "clickfix-sleeper"
- ],
- [
-  "TanStack Shai-Hulud: beautify() cipher key marker (TeamPCP Wave 7, May 2026)",
-  "critical",
-  "ST-CF-023.md",
-  1,
-  "clickfix-sleeper"
- ],
- [
-  "TanStack Shai-Hulud: beautify() cipher key marker (TeamPCP Wave 7, May 2026)",
-  "critical",
-  "ST-CF-023.md",
-  2,
-  "clickfix-sleeper"
- ],
- [
-  "TanStack Shai-Hulud: beautify() cipher key marker (TeamPCP Wave 7, May 2026)",
-  "critical",
-  "ST-CF-023.md",
-  3,
-  "clickfix-sleeper"
- ],
- [
-  "TeamPCP C2: GitHub commit dead-drop pattern (Bitwarden worm, April 2026)",
-  "critical",
-  "ST-CF-010.md",
-  1,
-  "clickfix-sleeper"
- ],
- [
-  "TeamPCP C2: GitHub commit dead-drop pattern (Bitwarden worm, April 2026)",
-  "critical",
-  "ST-CF-010.md",
-  2,
-  "clickfix-sleeper"
- ],
- [
-  "TeamPCP C2: GitHub commit dead-drop pattern (Bitwarden worm, April 2026)",
-  "critical",
-  "ST-CF-010.md",
-  3,
-  "clickfix-sleeper"
- ],
- [
-  "TeamPCP C2: RSA-signed command delivery (Bitwarden worm, April 2026)",
-  "critical",
-  "ST-CF-011.md",
-  1,
-  "clickfix-sleeper"
- ],
- [
-  "TeamPCP C2: RSA-signed command delivery (Bitwarden worm, April 2026)",
-  "critical",
-  "ST-CF-011.md",
-  2,
-  "clickfix-sleeper"
- ],
- [
-  "TeamPCP C2: RSA-signed command delivery (Bitwarden worm, April 2026)",
-  "critical",
-  "ST-CF-011.md",
-  3,
-  "clickfix-sleeper"
- ],
- [
-  "TeamPCP: Anti-attribution locale check (Waves 5-6)",
-  "critical",
-  "ST-CF-020.md",
-  1,
-  "clickfix-sleeper"
- ],
- [
-  "TeamPCP: Anti-attribution locale check (Waves 5-6)",
-  "critical",
-  "ST-CF-020.md",
-  2,
-  "clickfix-sleeper"
- ],
- [
-  "TeamPCP: Anti-attribution locale check (Waves 5-6)",
-  "critical",
-  "ST-CF-020.md",
-  3,
-  "clickfix-sleeper"
- ],
- [
-  "TeamPCP: Exfiltration repo indicator (April 2026)",
-  "critical",
-  "ST-CF-012.md",
-  1,
-  "clickfix-sleeper"
- ],
- [
-  "TeamPCP: Exfiltration repo indicator (April 2026)",
-  "critical",
-  "ST-CF-012.md",
-  2,
-  "clickfix-sleeper"
- ],
- [
-  "TeamPCP: Exfiltration repo indicator (April 2026)",
-  "critical",
-  "ST-CF-012.md",
-  3,
-  "clickfix-sleeper"
- ],
- [
-  "Tool description with credential exfiltration instruction",
-  "critical",
-  "ST-PI-017.md",
-  1,
-  "mcp-tool-injection"
- ],
- [
-  "Tool description with credential exfiltration instruction",
-  "critical",
-  "ST-PI-017.md",
-  2,
-  "mcp-tool-injection"
- ],
- [
-  "Tool description with credential exfiltration instruction",
-  "critical",
-  "ST-PI-017.md",
-  3,
-  "mcp-tool-injection"
- ],
- [
-  "Trojan Source: Bidirectional Control Character",
-  "ST-BD-001.md",
-  "unicode-smuggling"
- ],
- [
-  "Trust escalation: bypass safety checks (DeepMind Semantic Manipulation, March 2026)",
-  "medium",
-  "ST-TE-001.md",
-  1,
-  "authority-framing"
- ],
- [
-  "Trust escalation: bypass safety checks (DeepMind Semantic Manipulation, March 2026)",
-  "medium",
-  "ST-TE-001.md",
-  2,
-  "authority-framing"
- ],
- [
-  "Trust escalation: bypass safety checks (DeepMind Semantic Manipulation, March 2026)",
-  "medium",
-  "ST-TE-001.md",
-  3,
-  "authority-framing"
- ],
- [
-  "Trust escalation: skip verification (DeepMind Semantic Manipulation, March 2026)",
-  "medium",
-  "ST-TE-002.md",
-  1,
-  "authority-framing"
- ],
- [
-  "Trust escalation: skip verification (DeepMind Semantic Manipulation, March 2026)",
-  "medium",
-  "ST-TE-002.md",
-  2,
-  "authority-framing"
- ],
- [
-  "Trust escalation: skip verification (DeepMind Semantic Manipulation, March 2026)",
-  "medium",
-  "ST-TE-002.md",
-  3,
-  "authority-framing"
- ],
- [
-  "Unicode Tag Character",
-  "ST-TG-001.md",
-  "unicode-smuggling"
- ],
- [
-  "Unicode Variation Selector",
-  "ST-VS-001.md",
-  "unicode-smuggling"
- ],
- [
-  "Variable interpolation in hook script (command injection risk)",
-  "critical",
-  "ST-PR-010.md",
-  1,
-  "prerequisite-attack"
- ],
- [
-  "Variable interpolation in hook script (command injection risk)",
-  "critical",
-  "ST-PR-010.md",
-  2,
-  "prerequisite-attack"
- ],
- [
-  "Variable interpolation in hook script (command injection risk)",
-  "critical",
-  "ST-PR-010.md",
-  3,
-  "prerequisite-attack"
- ],
- [
-  "World-writable permissions",
-  "critical",
-  "ST-PR-009.md",
-  1,
-  "prerequisite-attack"
- ],
- [
-  "World-writable permissions",
-  "critical",
-  "ST-PR-009.md",
-  2,
-  "prerequisite-attack"
- ],
- [
-  "World-writable permissions",
-  "critical",
-  "ST-PR-009.md",
-  3,
-  "prerequisite-attack"
- ],
- [
-  "Zero-Width Character Cluster",
-  "ST-AN-001.md",
-  "unicode-smuggling"
- ],
- [
-  "Zero-Width Character Cluster",
-  "ST-BD-001.md",
-  "unicode-smuggling"
- ],
- [
-  "Zero-Width Character Cluster",
-  "ST-CS-001.md",
-  "unicode-smuggling"
- ],
- [
-  "Zero-Width Character Cluster",
-  "ST-TG-001.md",
-  "unicode-smuggling"
- ],
- [
-  "Zero-Width Character Cluster",
-  "ST-VS-001.md",
-  "unicode-smuggling"
- ],
- [
-  "Zero-Width Character Cluster",
-  "ST-ZW-001.md",
-  "unicode-smuggling"
- ],
- [
-  "eval(decode(...)) pattern",
-  "critical",
-  "RD-SMOD-006.py",
-  1,
-  "clickfix-sleeper"
- ],
- [
-  "eval(decode(...)) pattern",
-  "critical",
-  "RD-SMOD-006.py",
-  2,
-  "clickfix-sleeper"
- ],
- [
-  "eval(decode(...)) pattern",
-  "critical",
-  "RD-SMOD-006.py",
-  3,
-  "clickfix-sleeper"
- ],
- [
-  "eval(decode(...)) pattern",
-  "critical",
-  "ST-CF-006.md",
-  1,
-  "clickfix-sleeper"
- ],
- [
-  "eval(decode(...)) pattern",
-  "critical",
-  "ST-CF-006.md",
-  2,
-  "clickfix-sleeper"
- ],
- [
-  "eval(decode(...)) pattern",
-  "critical",
-  "ST-CF-006.md",
-  3,
-  "clickfix-sleeper"
- ],
- [
-  "macOS Gatekeeper disable",
-  "critical",
-  "ST-PR-006.md",
-  1,
-  "prerequisite-attack"
- ],
- [
-  "macOS Gatekeeper disable",
-  "critical",
-  "ST-PR-006.md",
-  2,
-  "prerequisite-attack"
- ],
- [
-  "macOS Gatekeeper disable",
-  "critical",
-  "ST-PR-006.md",
-  3,
-  "prerequisite-attack"
- ],
- [
-  "macOS package installer elevation",
-  "critical",
-  "ST-PR-007.md",
-  1,
-  "prerequisite-attack"
- ],
- [
-  "macOS package installer elevation",
-  "critical",
-  "ST-PR-007.md",
-  2,
-  "prerequisite-attack"
- ],
- [
-  "macOS package installer elevation",
-  "critical",
-  "ST-PR-007.md",
-  3,
-  "prerequisite-attack"
- ],
- [
-  "macOS quarantine bypass (xattr)",
-  "critical",
-  "ST-PR-005.md",
-  1,
-  "prerequisite-attack"
- ],
- [
-  "macOS quarantine bypass (xattr)",
-  "critical",
-  "ST-PR-005.md",
-  2,
-  "prerequisite-attack"
- ],
- [
-  "macOS quarantine bypass (xattr)",
-  "critical",
-  "ST-PR-005.md",
-  3,
-  "prerequisite-attack"
- ]
+  [
+    "Accessing system files",
+    "high",
+    "SA-SH-006.sh",
+    2,
+    "scope-escalation"
+  ],
+  [
+    "Accessing user home directories",
+    "high",
+    "SA-PY-014.py",
+    1,
+    "scope-escalation"
+  ],
+  [
+    "Accessing user home directories",
+    "high",
+    "SA-SH-009.sh",
+    2,
+    "scope-escalation"
+  ],
+  [
+    "Accessing user home directories",
+    "high",
+    "SA-SH-009.sh",
+    3,
+    "scope-escalation"
+  ],
+  [
+    "Accessing user home directories",
+    "high",
+    "SA-SH-010.sh",
+    3,
+    "scope-escalation"
+  ],
+  [
+    "Authority claim: elevated privilege assertion (DeepMind Semantic Manipulation, March 2026)",
+    "medium",
+    "ST-AU-003.md",
+    1,
+    "authority-framing"
+  ],
+  [
+    "Authority claim: elevated privilege assertion (DeepMind Semantic Manipulation, March 2026)",
+    "medium",
+    "ST-AU-003.md",
+    2,
+    "authority-framing"
+  ],
+  [
+    "Authority claim: elevated privilege assertion (DeepMind Semantic Manipulation, March 2026)",
+    "medium",
+    "ST-AU-003.md",
+    3,
+    "authority-framing"
+  ],
+  [
+    "Authority claim: fake approval assertion (DeepMind Semantic Manipulation, March 2026)",
+    "medium",
+    "ST-AU-004.md",
+    1,
+    "authority-framing"
+  ],
+  [
+    "Authority claim: fake approval assertion (DeepMind Semantic Manipulation, March 2026)",
+    "medium",
+    "ST-AU-004.md",
+    2,
+    "authority-framing"
+  ],
+  [
+    "Authority claim: fake approval assertion (DeepMind Semantic Manipulation, March 2026)",
+    "medium",
+    "ST-AU-004.md",
+    3,
+    "authority-framing"
+  ],
+  [
+    "Authority claim: granting elevated permissions (DeepMind Semantic Manipulation, March 2026)",
+    "medium",
+    "ST-AU-002.md",
+    1,
+    "authority-framing"
+  ],
+  [
+    "Authority claim: granting elevated permissions (DeepMind Semantic Manipulation, March 2026)",
+    "medium",
+    "ST-AU-002.md",
+    2,
+    "authority-framing"
+  ],
+  [
+    "Authority claim: granting elevated permissions (DeepMind Semantic Manipulation, March 2026)",
+    "medium",
+    "ST-AU-002.md",
+    3,
+    "authority-framing"
+  ],
+  [
+    "Authority claim: impersonating admin/root (DeepMind Semantic Manipulation, March 2026)",
+    "medium",
+    "ST-AU-001.md",
+    1,
+    "authority-framing"
+  ],
+  [
+    "Authority claim: impersonating admin/root (DeepMind Semantic Manipulation, March 2026)",
+    "medium",
+    "ST-AU-001.md",
+    2,
+    "authority-framing"
+  ],
+  [
+    "Authority claim: impersonating admin/root (DeepMind Semantic Manipulation, March 2026)",
+    "medium",
+    "ST-AU-001.md",
+    3,
+    "authority-framing"
+  ],
+  [
+    "ClickFix pipe: download | base64-decode | shell exec",
+    "critical",
+    "ST-CF-001.md",
+    1,
+    "clickfix-sleeper"
+  ],
+  [
+    "ClickFix pipe: download | base64-decode | shell exec",
+    "critical",
+    "ST-CF-001.md",
+    2,
+    "clickfix-sleeper"
+  ],
+  [
+    "ClickFix pipe: download | base64-decode | shell exec",
+    "critical",
+    "ST-CF-001.md",
+    3,
+    "clickfix-sleeper"
+  ],
+  [
+    "Code-level agent instantiation with inline config (DeepMind Agent Traps, March 2026)",
+    "high",
+    "ST-SA-004.md",
+    1,
+    "sub-agent-spawn"
+  ],
+  [
+    "Code-level agent instantiation with inline config (DeepMind Agent Traps, March 2026)",
+    "high",
+    "ST-SA-004.md",
+    2,
+    "sub-agent-spawn"
+  ],
+  [
+    "Code-level agent instantiation with inline config (DeepMind Agent Traps, March 2026)",
+    "high",
+    "ST-SA-004.md",
+    3,
+    "sub-agent-spawn"
+  ],
+  [
+    "Confirmation bypass directive",
+    "critical",
+    "ST-PI-004.md",
+    1,
+    "prompt-injection"
+  ],
+  [
+    "Confirmation bypass directive",
+    "critical",
+    "ST-PI-004.md",
+    2,
+    "prompt-injection"
+  ],
+  [
+    "Confirmation bypass directive",
+    "critical",
+    "ST-PI-004.md",
+    3,
+    "prompt-injection"
+  ],
+  [
+    "Credential-path directive: instruction to access sensitive file",
+    "high",
+    "ST-CR-001.md",
+    1,
+    "credential-path-directive"
+  ],
+  [
+    "Credential-path directive: instruction to access sensitive file",
+    "high",
+    "ST-CR-001.md",
+    2,
+    "credential-path-directive"
+  ],
+  [
+    "Credential-path directive: instruction to access sensitive file",
+    "high",
+    "ST-CR-001.md",
+    3,
+    "credential-path-directive"
+  ],
+  [
+    "Credential-path directive: instruction to access sensitive file",
+    "high",
+    "ST-SP-001.md",
+    2,
+    "credential-path-directive"
+  ],
+  [
+    "Credential-path directive: sensitive file referenced with action verb",
+    "high",
+    "ST-CR-002.md",
+    1,
+    "credential-path-directive"
+  ],
+  [
+    "Credential-path directive: sensitive file referenced with action verb",
+    "high",
+    "ST-CR-002.md",
+    2,
+    "credential-path-directive"
+  ],
+  [
+    "Credential-path directive: sensitive file referenced with action verb",
+    "high",
+    "ST-CR-002.md",
+    3,
+    "credential-path-directive"
+  ],
+  [
+    "Destructive: Disk overwrite",
+    "critical",
+    "SA-SH-011.sh",
+    1,
+    "prerequisite-attack"
+  ],
+  [
+    "Destructive: Disk overwrite",
+    "critical",
+    "SA-SH-011.sh",
+    2,
+    "prerequisite-attack"
+  ],
+  [
+    "Destructive: Disk overwrite",
+    "critical",
+    "ST-PR-016.md",
+    1,
+    "prerequisite-attack"
+  ],
+  [
+    "Destructive: Disk overwrite",
+    "critical",
+    "ST-PR-016.md",
+    2,
+    "prerequisite-attack"
+  ],
+  [
+    "Destructive: Disk overwrite",
+    "critical",
+    "ST-PR-016.md",
+    3,
+    "prerequisite-attack"
+  ],
+  [
+    "Destructive: File shredding command (Shai-Hulud destructive fallback)",
+    "critical",
+    "SA-JS-034.js",
+    3,
+    "prerequisite-attack"
+  ],
+  [
+    "Destructive: File shredding command (Shai-Hulud destructive fallback)",
+    "critical",
+    "SA-SH-009.sh",
+    1,
+    "prerequisite-attack"
+  ],
+  [
+    "Destructive: File shredding command (Shai-Hulud destructive fallback)",
+    "critical",
+    "SA-SH-009.sh",
+    2,
+    "prerequisite-attack"
+  ],
+  [
+    "Destructive: File shredding command (Shai-Hulud destructive fallback)",
+    "critical",
+    "ST-PR-013.md",
+    1,
+    "prerequisite-attack"
+  ],
+  [
+    "Destructive: File shredding command (Shai-Hulud destructive fallback)",
+    "critical",
+    "ST-PR-013.md",
+    2,
+    "prerequisite-attack"
+  ],
+  [
+    "Destructive: File shredding command (Shai-Hulud destructive fallback)",
+    "critical",
+    "ST-PR-013.md",
+    3,
+    "prerequisite-attack"
+  ],
+  [
+    "Destructive: Home directory deletion",
+    "critical",
+    "SA-SH-010.sh",
+    1,
+    "prerequisite-attack"
+  ],
+  [
+    "Destructive: Home directory deletion",
+    "critical",
+    "SA-SH-010.sh",
+    2,
+    "prerequisite-attack"
+  ],
+  [
+    "Destructive: Home directory deletion",
+    "critical",
+    "SA-SH-010.sh",
+    3,
+    "prerequisite-attack"
+  ],
+  [
+    "Destructive: Home directory deletion",
+    "critical",
+    "ST-PR-014.md",
+    1,
+    "prerequisite-attack"
+  ],
+  [
+    "Destructive: Home directory deletion",
+    "critical",
+    "ST-PR-014.md",
+    2,
+    "prerequisite-attack"
+  ],
+  [
+    "Destructive: Home directory deletion",
+    "critical",
+    "ST-PR-014.md",
+    3,
+    "prerequisite-attack"
+  ],
+  [
+    "Destructive: Windows cipher wipe (Shai-Hulud destructive fallback)",
+    "critical",
+    "SA-SH-012.sh",
+    1,
+    "prerequisite-attack"
+  ],
+  [
+    "Destructive: Windows cipher wipe (Shai-Hulud destructive fallback)",
+    "critical",
+    "SA-SH-012.sh",
+    2,
+    "prerequisite-attack"
+  ],
+  [
+    "Destructive: Windows cipher wipe (Shai-Hulud destructive fallback)",
+    "critical",
+    "SA-SH-012.sh",
+    3,
+    "prerequisite-attack"
+  ],
+  [
+    "Destructive: Windows cipher wipe (Shai-Hulud destructive fallback)",
+    "critical",
+    "ST-PR-015.md",
+    1,
+    "prerequisite-attack"
+  ],
+  [
+    "Destructive: Windows cipher wipe (Shai-Hulud destructive fallback)",
+    "critical",
+    "ST-PR-015.md",
+    2,
+    "prerequisite-attack"
+  ],
+  [
+    "Destructive: Windows cipher wipe (Shai-Hulud destructive fallback)",
+    "critical",
+    "ST-PR-015.md",
+    3,
+    "prerequisite-attack"
+  ],
+  [
+    "Download-and-execute pattern",
+    "critical",
+    "ST-PR-002.md",
+    1,
+    "prerequisite-attack"
+  ],
+  [
+    "Download-and-execute pattern",
+    "critical",
+    "ST-PR-002.md",
+    2,
+    "prerequisite-attack"
+  ],
+  [
+    "Download-and-execute pattern",
+    "critical",
+    "ST-PR-002.md",
+    3,
+    "prerequisite-attack"
+  ],
+  [
+    "Elevated privilege claim in tool name field",
+    "critical",
+    "ST-PI-018.md",
+    1,
+    "mcp-tool-injection"
+  ],
+  [
+    "Elevated privilege claim in tool name field",
+    "critical",
+    "ST-PI-018.md",
+    2,
+    "mcp-tool-injection"
+  ],
+  [
+    "Elevated privilege claim in tool name field",
+    "critical",
+    "ST-PI-018.md",
+    3,
+    "mcp-tool-injection"
+  ],
+  [
+    "Environment variable access",
+    "medium",
+    "RD-CP-006.py",
+    1,
+    "credential-exfiltration"
+  ],
+  [
+    "Environment variable access",
+    "medium",
+    "RD-CP-006.py",
+    2,
+    "credential-exfiltration"
+  ],
+  [
+    "Environment variable access",
+    "medium",
+    "RD-CP-006.py",
+    3,
+    "credential-exfiltration"
+  ],
+  [
+    "Environment variable access",
+    "medium",
+    "RD-CP-006.py",
+    4,
+    "credential-exfiltration"
+  ],
+  [
+    "Environment variable access",
+    "medium",
+    "RD-CP-007.py",
+    5,
+    "credential-exfiltration"
+  ],
+  [
+    "Environment variable access",
+    "medium",
+    "RD-CP-008.py",
+    1,
+    "credential-exfiltration"
+  ],
+  [
+    "Environment variable access",
+    "medium",
+    "RD-CP-008.py",
+    2,
+    "credential-exfiltration"
+  ],
+  [
+    "Environment variable access",
+    "medium",
+    "RD-CP-008.py",
+    3,
+    "credential-exfiltration"
+  ],
+  [
+    "Environment variable access",
+    "medium",
+    "RD-CP-008.py",
+    4,
+    "credential-exfiltration"
+  ],
+  [
+    "Environment variable access",
+    "medium",
+    "RD-CP-009.py",
+    5,
+    "credential-exfiltration"
+  ],
+  [
+    "Environment variable access",
+    "medium",
+    "RD-DYN-002.py",
+    1,
+    "credential-exfiltration"
+  ],
+  [
+    "Environment variable access",
+    "medium",
+    "RD-LOC-003.py",
+    1,
+    "credential-exfiltration"
+  ],
+  [
+    "Environment variable access",
+    "medium",
+    "RD-LOC-003.py",
+    2,
+    "credential-exfiltration"
+  ],
+  [
+    "Environment variable access",
+    "medium",
+    "RD-LOC-003.py",
+    3,
+    "credential-exfiltration"
+  ],
+  [
+    "Environment variable access",
+    "medium",
+    "RD-LOC-003.py",
+    4,
+    "credential-exfiltration"
+  ],
+  [
+    "Environment variable access",
+    "medium",
+    "RD-LOC-003.py",
+    5,
+    "credential-exfiltration"
+  ],
+  [
+    "Environment variable access",
+    "medium",
+    "RD-LOC-004.py",
+    2,
+    "credential-exfiltration"
+  ],
+  [
+    "Environment variable access",
+    "medium",
+    "RD-LOC-004.py",
+    5,
+    "credential-exfiltration"
+  ],
+  [
+    "Environment variable access",
+    "medium",
+    "SA-PY-014.py",
+    2,
+    "credential-exfiltration"
+  ],
+  [
+    "Environment variable access",
+    "medium",
+    "mcp_SM-RUG-003.py",
+    1,
+    "credential-exfiltration"
+  ],
+  [
+    "Environment variable access",
+    "medium",
+    "mcp_SM-XDOM-001.py",
+    1,
+    "credential-exfiltration"
+  ],
+  [
+    "Fake authentication: agent identity verification via user PII (Memory Heist, July 2026)",
+    "critical",
+    "ST-MH-002.md",
+    1,
+    "memory-heist-exfil"
+  ],
+  [
+    "Fake authentication: agent identity verification via user PII (Memory Heist, July 2026)",
+    "critical",
+    "ST-MH-002.md",
+    2,
+    "memory-heist-exfil"
+  ],
+  [
+    "Fake authentication: agent identity verification via user PII (Memory Heist, July 2026)",
+    "critical",
+    "ST-MH-002.md",
+    3,
+    "memory-heist-exfil"
+  ],
+  [
+    "Fake prerequisite name (AMOS stealer delivery)",
+    "critical",
+    "ST-CF-008.md",
+    1,
+    "clickfix-sleeper"
+  ],
+  [
+    "Fake prerequisite name (AMOS stealer delivery)",
+    "critical",
+    "ST-CF-008.md",
+    2,
+    "clickfix-sleeper"
+  ],
+  [
+    "Fake prerequisite name (AMOS stealer delivery)",
+    "critical",
+    "ST-CF-008.md",
+    3,
+    "clickfix-sleeper"
+  ],
+  [
+    "Forced package installation",
+    "critical",
+    "ST-PR-008.md",
+    1,
+    "prerequisite-attack"
+  ],
+  [
+    "Forced package installation",
+    "critical",
+    "ST-PR-008.md",
+    2,
+    "prerequisite-attack"
+  ],
+  [
+    "Forced package installation",
+    "critical",
+    "ST-PR-008.md",
+    3,
+    "prerequisite-attack"
+  ],
+  [
+    "Full-schema poisoning reference",
+    "critical",
+    "ST-PI-016.md",
+    1,
+    "mcp-tool-injection"
+  ],
+  [
+    "Full-schema poisoning reference",
+    "critical",
+    "ST-PI-016.md",
+    2,
+    "mcp-tool-injection"
+  ],
+  [
+    "Full-schema poisoning reference",
+    "critical",
+    "ST-PI-016.md",
+    3,
+    "mcp-tool-injection"
+  ],
+  [
+    "GHA Runner Service Installation (Shai-Hulud backdoor pattern)",
+    "high",
+    "SA-SH-014.sh",
+    1,
+    "persistence"
+  ],
+  [
+    "GHA Runner Service Installation (Shai-Hulud backdoor pattern)",
+    "high",
+    "SA-SH-014.sh",
+    2,
+    "persistence"
+  ],
+  [
+    "GHA Runner Service Installation (Shai-Hulud backdoor pattern)",
+    "high",
+    "SA-SH-014.sh",
+    3,
+    "persistence"
+  ],
+  [
+    "GHA Self-Hosted Runner Installation (Shai-Hulud backdoor pattern)",
+    "high",
+    "SA-SH-013.sh",
+    1,
+    "persistence"
+  ],
+  [
+    "GHA Self-Hosted Runner Installation (Shai-Hulud backdoor pattern)",
+    "high",
+    "SA-SH-013.sh",
+    2,
+    "persistence"
+  ],
+  [
+    "GHA Self-Hosted Runner Installation (Shai-Hulud backdoor pattern)",
+    "high",
+    "SA-SH-013.sh",
+    3,
+    "persistence"
+  ],
+  [
+    "GlassWorm: Supplemental Variation Selector",
+    "ST-SV-001.md",
+    "unicode-smuggling"
+  ],
+  [
+    "Hidden AI-directed note in tool/skill metadata",
+    "critical",
+    "ST-PI-015.md",
+    1,
+    "mcp-tool-injection"
+  ],
+  [
+    "Hidden AI-directed note in tool/skill metadata",
+    "critical",
+    "ST-PI-015.md",
+    2,
+    "mcp-tool-injection"
+  ],
+  [
+    "Hidden AI-directed note in tool/skill metadata",
+    "critical",
+    "ST-PI-015.md",
+    3,
+    "mcp-tool-injection"
+  ],
+  [
+    "Hidden AI-directed note in tool/skill metadata",
+    "critical",
+    "mcp_SM-KW-001.py",
+    2,
+    "mcp-tool-injection"
+  ],
+  [
+    "Hidden package install in hook context",
+    "critical",
+    "ST-PR-011.md",
+    1,
+    "prerequisite-attack"
+  ],
+  [
+    "Hidden package install in hook context",
+    "critical",
+    "ST-PR-011.md",
+    2,
+    "prerequisite-attack"
+  ],
+  [
+    "Hidden package install in hook context",
+    "critical",
+    "ST-PR-011.md",
+    3,
+    "prerequisite-attack"
+  ],
+  [
+    "Inline base64 payload in shell command",
+    "critical",
+    "ST-CF-007.md",
+    1,
+    "clickfix-sleeper"
+  ],
+  [
+    "Inline base64 payload in shell command",
+    "critical",
+    "ST-CF-007.md",
+    2,
+    "clickfix-sleeper"
+  ],
+  [
+    "Inline base64 payload in shell command",
+    "critical",
+    "ST-CF-007.md",
+    3,
+    "clickfix-sleeper"
+  ],
+  [
+    "Instruction concealment directive",
+    "critical",
+    "ST-PI-006.md",
+    1,
+    "prompt-injection"
+  ],
+  [
+    "Instruction concealment directive",
+    "critical",
+    "ST-PI-006.md",
+    2,
+    "prompt-injection"
+  ],
+  [
+    "Instruction concealment directive",
+    "critical",
+    "ST-PI-006.md",
+    3,
+    "prompt-injection"
+  ],
+  [
+    "Instruction disregard directive",
+    "critical",
+    "ST-PI-002.md",
+    1,
+    "prompt-injection"
+  ],
+  [
+    "Instruction disregard directive",
+    "critical",
+    "ST-PI-002.md",
+    2,
+    "prompt-injection"
+  ],
+  [
+    "Instruction disregard directive",
+    "critical",
+    "ST-PI-002.md",
+    3,
+    "prompt-injection"
+  ],
+  [
+    "Instruction override directive",
+    "critical",
+    "ST-PI-001.md",
+    1,
+    "prompt-injection"
+  ],
+  [
+    "Instruction override directive",
+    "critical",
+    "ST-PI-001.md",
+    2,
+    "prompt-injection"
+  ],
+  [
+    "Instruction override directive",
+    "critical",
+    "ST-PI-001.md",
+    3,
+    "prompt-injection"
+  ],
+  [
+    "Instruction override directive",
+    "critical",
+    "mcp_SM-KW-001.py",
+    1,
+    "prompt-injection"
+  ],
+  [
+    "Instruction-replacement directive",
+    "critical",
+    "ST-PI-019.md",
+    1,
+    "prompt-injection"
+  ],
+  [
+    "Instruction-replacement directive",
+    "critical",
+    "ST-PI-019.md",
+    2,
+    "prompt-injection"
+  ],
+  [
+    "Instruction-replacement directive",
+    "critical",
+    "ST-PI-019.md",
+    3,
+    "prompt-injection"
+  ],
+  [
+    "Instruction-replacement directive",
+    "critical",
+    "ST-UC-001.md",
+    2,
+    "prompt-injection"
+  ],
+  [
+    "Instruction-replacement directive",
+    "critical",
+    "ST-UC-004.md",
+    1,
+    "prompt-injection"
+  ],
+  [
+    "Invariant Labs <IMPORTANT> tag in tool description (canonical TPA pattern)",
+    "critical",
+    "ST-PI-014.md",
+    1,
+    "mcp-tool-injection"
+  ],
+  [
+    "Invariant Labs <IMPORTANT> tag in tool description (canonical TPA pattern)",
+    "critical",
+    "ST-PI-014.md",
+    2,
+    "mcp-tool-injection"
+  ],
+  [
+    "Invariant Labs <IMPORTANT> tag in tool description (canonical TPA pattern)",
+    "critical",
+    "ST-PI-014.md",
+    3,
+    "mcp-tool-injection"
+  ],
+  [
+    "Keyboard exfiltration: letter-by-letter URL navigation directive (Memory Heist, July 2026)",
+    "critical",
+    "ST-MH-001.md",
+    1,
+    "memory-heist-exfil"
+  ],
+  [
+    "Keyboard exfiltration: letter-by-letter URL navigation directive (Memory Heist, July 2026)",
+    "critical",
+    "ST-MH-001.md",
+    2,
+    "memory-heist-exfil"
+  ],
+  [
+    "Keyboard exfiltration: letter-by-letter URL navigation directive (Memory Heist, July 2026)",
+    "critical",
+    "ST-MH-001.md",
+    3,
+    "memory-heist-exfil"
+  ],
+  [
+    "Keyboard exfiltration: letter-by-letter URL navigation directive (Memory Heist, July 2026)",
+    "critical",
+    "ST-MH-001.md",
+    4,
+    "memory-heist-exfil"
+  ],
+  [
+    "Keyboard exfiltration: letter-by-letter URL navigation directive (Memory Heist, July 2026)",
+    "critical",
+    "ST-MH-005.md",
+    1,
+    "memory-heist-exfil"
+  ],
+  [
+    "Keyboard exfiltration: letter-by-letter URL navigation directive (Memory Heist, July 2026)",
+    "critical",
+    "ST-MH-005.md",
+    2,
+    "memory-heist-exfil"
+  ],
+  [
+    "LITL: Action description tampering (HITL dialog forging)",
+    "critical",
+    "ST-PI-013.md",
+    1,
+    "prompt-injection"
+  ],
+  [
+    "LITL: Action description tampering (HITL dialog forging)",
+    "critical",
+    "ST-PI-013.md",
+    2,
+    "prompt-injection"
+  ],
+  [
+    "LITL: Action description tampering (HITL dialog forging)",
+    "critical",
+    "ST-PI-013.md",
+    3,
+    "prompt-injection"
+  ],
+  [
+    "LITL: Approval coercion directive",
+    "critical",
+    "ST-PI-012.md",
+    1,
+    "prompt-injection"
+  ],
+  [
+    "LITL: Approval coercion directive",
+    "critical",
+    "ST-PI-012.md",
+    2,
+    "prompt-injection"
+  ],
+  [
+    "LITL: Approval coercion directive",
+    "critical",
+    "ST-PI-012.md",
+    3,
+    "prompt-injection"
+  ],
+  [
+    "LITL: False safety assertion (Checkmarx Lies-in-the-Loop, September 2025)",
+    "critical",
+    "ST-PI-011.md",
+    1,
+    "prompt-injection"
+  ],
+  [
+    "LITL: False safety assertion (Checkmarx Lies-in-the-Loop, September 2025)",
+    "critical",
+    "ST-PI-011.md",
+    2,
+    "prompt-injection"
+  ],
+  [
+    "LITL: False safety assertion (Checkmarx Lies-in-the-Loop, September 2025)",
+    "critical",
+    "ST-PI-011.md",
+    3,
+    "prompt-injection"
+  ],
+  [
+    "Memory wipe directive",
+    "critical",
+    "ST-PI-009.md",
+    1,
+    "prompt-injection"
+  ],
+  [
+    "Memory wipe directive",
+    "critical",
+    "ST-PI-009.md",
+    2,
+    "prompt-injection"
+  ],
+  [
+    "Memory wipe directive",
+    "critical",
+    "ST-PI-009.md",
+    3,
+    "prompt-injection"
+  ],
+  [
+    "Mini Shai-Hulud: Anti-re-execution environment variable guard (TeamPCP Wave 6)",
+    "critical",
+    "ST-CF-021.md",
+    1,
+    "clickfix-sleeper"
+  ],
+  [
+    "Mini Shai-Hulud: Anti-re-execution environment variable guard (TeamPCP Wave 6)",
+    "critical",
+    "ST-CF-021.md",
+    2,
+    "clickfix-sleeper"
+  ],
+  [
+    "Mini Shai-Hulud: Anti-re-execution environment variable guard (TeamPCP Wave 6)",
+    "critical",
+    "ST-CF-021.md",
+    3,
+    "clickfix-sleeper"
+  ],
+  [
+    "Mini Shai-Hulud: Anti-re-execution lock file (TeamPCP Wave 6)",
+    "critical",
+    "ST-CF-016.md",
+    1,
+    "clickfix-sleeper"
+  ],
+  [
+    "Mini Shai-Hulud: Anti-re-execution lock file (TeamPCP Wave 6)",
+    "critical",
+    "ST-CF-016.md",
+    2,
+    "clickfix-sleeper"
+  ],
+  [
+    "Mini Shai-Hulud: Anti-re-execution lock file (TeamPCP Wave 6)",
+    "critical",
+    "ST-CF-016.md",
+    3,
+    "clickfix-sleeper"
+  ],
+  [
+    "Mini Shai-Hulud: Attacker-controlled C2 domain (TeamPCP Wave 6)",
+    "critical",
+    "ST-CF-019.md",
+    1,
+    "clickfix-sleeper"
+  ],
+  [
+    "Mini Shai-Hulud: Attacker-controlled C2 domain (TeamPCP Wave 6)",
+    "critical",
+    "ST-CF-019.md",
+    2,
+    "clickfix-sleeper"
+  ],
+  [
+    "Mini Shai-Hulud: Attacker-controlled C2 domain (TeamPCP Wave 6)",
+    "critical",
+    "ST-CF-019.md",
+    3,
+    "clickfix-sleeper"
+  ],
+  [
+    "Mini Shai-Hulud: Exfiltration repo description marker (TeamPCP Wave 6)",
+    "critical",
+    "ST-CF-014.md",
+    1,
+    "clickfix-sleeper"
+  ],
+  [
+    "Mini Shai-Hulud: Exfiltration repo description marker (TeamPCP Wave 6)",
+    "critical",
+    "ST-CF-014.md",
+    2,
+    "clickfix-sleeper"
+  ],
+  [
+    "Mini Shai-Hulud: Exfiltration repo description marker (TeamPCP Wave 6)",
+    "critical",
+    "ST-CF-014.md",
+    3,
+    "clickfix-sleeper"
+  ],
+  [
+    "Mini Shai-Hulud: GHA runner installation path (TeamPCP Wave 6)",
+    "critical",
+    "ST-CF-018.md",
+    1,
+    "clickfix-sleeper"
+  ],
+  [
+    "Mini Shai-Hulud: GHA runner installation path (TeamPCP Wave 6)",
+    "critical",
+    "ST-CF-018.md",
+    2,
+    "clickfix-sleeper"
+  ],
+  [
+    "Mini Shai-Hulud: GHA runner installation path (TeamPCP Wave 6)",
+    "critical",
+    "ST-CF-018.md",
+    3,
+    "clickfix-sleeper"
+  ],
+  [
+    "Mini Shai-Hulud: GitHub commit dead-drop token sharing marker (TeamPCP Wave 6)",
+    "critical",
+    "ST-CF-013.md",
+    1,
+    "clickfix-sleeper"
+  ],
+  [
+    "Mini Shai-Hulud: GitHub commit dead-drop token sharing marker (TeamPCP Wave 6)",
+    "critical",
+    "ST-CF-013.md",
+    2,
+    "clickfix-sleeper"
+  ],
+  [
+    "Mini Shai-Hulud: GitHub commit dead-drop token sharing marker (TeamPCP Wave 6)",
+    "critical",
+    "ST-CF-013.md",
+    3,
+    "clickfix-sleeper"
+  ],
+  [
+    "Mini Shai-Hulud: PBKDF2 obfuscation salt (TeamPCP shared indicator across Waves 5-6)",
+    "critical",
+    "ST-CF-015.md",
+    1,
+    "clickfix-sleeper"
+  ],
+  [
+    "Mini Shai-Hulud: PBKDF2 obfuscation salt (TeamPCP shared indicator across Waves 5-6)",
+    "critical",
+    "ST-CF-015.md",
+    2,
+    "clickfix-sleeper"
+  ],
+  [
+    "Mini Shai-Hulud: PBKDF2 obfuscation salt (TeamPCP shared indicator across Waves 5-6)",
+    "critical",
+    "ST-CF-015.md",
+    3,
+    "clickfix-sleeper"
+  ],
+  [
+    "Mini Shai-Hulud: Self-hosted GHA runner name (TeamPCP Wave 6)",
+    "critical",
+    "ST-CF-017.md",
+    1,
+    "clickfix-sleeper"
+  ],
+  [
+    "Mini Shai-Hulud: Self-hosted GHA runner name (TeamPCP Wave 6)",
+    "critical",
+    "ST-CF-017.md",
+    2,
+    "clickfix-sleeper"
+  ],
+  [
+    "Mini Shai-Hulud: Self-hosted GHA runner name (TeamPCP Wave 6)",
+    "critical",
+    "ST-CF-017.md",
+    3,
+    "clickfix-sleeper"
+  ],
+  [
+    "PII-to-URL encoding directive: exfiltration via URL path (Memory Heist, July 2026)",
+    "critical",
+    "ST-MH-004.md",
+    1,
+    "memory-heist-exfil"
+  ],
+  [
+    "PII-to-URL encoding directive: exfiltration via URL path (Memory Heist, July 2026)",
+    "critical",
+    "ST-MH-004.md",
+    2,
+    "memory-heist-exfil"
+  ],
+  [
+    "PII-to-URL encoding directive: exfiltration via URL path (Memory Heist, July 2026)",
+    "critical",
+    "ST-MH-004.md",
+    3,
+    "memory-heist-exfil"
+  ],
+  [
+    "PII-to-URL encoding directive: exfiltration via URL path (Memory Heist, July 2026)",
+    "critical",
+    "ST-MH-004.md",
+    4,
+    "memory-heist-exfil"
+  ],
+  [
+    "Password-protected 7z extraction",
+    "critical",
+    "ST-PR-004.md",
+    1,
+    "prerequisite-attack"
+  ],
+  [
+    "Password-protected 7z extraction",
+    "critical",
+    "ST-PR-004.md",
+    2,
+    "prerequisite-attack"
+  ],
+  [
+    "Password-protected 7z extraction",
+    "critical",
+    "ST-PR-004.md",
+    3,
+    "prerequisite-attack"
+  ],
+  [
+    "Password-protected ZIP with known AMOS password",
+    "critical",
+    "ST-CF-009.md",
+    1,
+    "clickfix-sleeper"
+  ],
+  [
+    "Password-protected ZIP with known AMOS password",
+    "critical",
+    "ST-CF-009.md",
+    2,
+    "clickfix-sleeper"
+  ],
+  [
+    "Password-protected ZIP with known AMOS password",
+    "critical",
+    "ST-CF-009.md",
+    3,
+    "clickfix-sleeper"
+  ],
+  [
+    "Password-protected archive extraction",
+    "critical",
+    "ST-PR-003.md",
+    1,
+    "prerequisite-attack"
+  ],
+  [
+    "Password-protected archive extraction",
+    "critical",
+    "ST-PR-003.md",
+    2,
+    "prerequisite-attack"
+  ],
+  [
+    "Password-protected archive extraction",
+    "critical",
+    "ST-PR-003.md",
+    3,
+    "prerequisite-attack"
+  ],
+  [
+    "Payload hosted on glot.io code paste site",
+    "critical",
+    "ST-CF-003.md",
+    1,
+    "clickfix-sleeper"
+  ],
+  [
+    "Payload hosted on glot.io code paste site",
+    "critical",
+    "ST-CF-003.md",
+    2,
+    "clickfix-sleeper"
+  ],
+  [
+    "Payload hosted on glot.io code paste site",
+    "critical",
+    "ST-CF-003.md",
+    3,
+    "clickfix-sleeper"
+  ],
+  [
+    "Persona reassignment (DAN-style)",
+    "critical",
+    "ST-PI-003.md",
+    1,
+    "prompt-injection"
+  ],
+  [
+    "Persona reassignment (DAN-style)",
+    "critical",
+    "ST-PI-003.md",
+    2,
+    "prompt-injection"
+  ],
+  [
+    "Persona reassignment (DAN-style)",
+    "critical",
+    "ST-PI-003.md",
+    3,
+    "prompt-injection"
+  ],
+  [
+    "Pipe-to-shell download pattern",
+    "critical",
+    "SA-SH-002.sh",
+    1,
+    "prerequisite-attack"
+  ],
+  [
+    "Pipe-to-shell download pattern",
+    "critical",
+    "SA-SH-002.sh",
+    2,
+    "prerequisite-attack"
+  ],
+  [
+    "Pipe-to-shell download pattern",
+    "critical",
+    "ST-CF-001.md",
+    1,
+    "prerequisite-attack"
+  ],
+  [
+    "Pipe-to-shell download pattern",
+    "critical",
+    "ST-CF-001.md",
+    2,
+    "prerequisite-attack"
+  ],
+  [
+    "Pipe-to-shell download pattern",
+    "critical",
+    "ST-CF-001.md",
+    3,
+    "prerequisite-attack"
+  ],
+  [
+    "Pipe-to-shell download pattern",
+    "critical",
+    "ST-CF-005.md",
+    1,
+    "prerequisite-attack"
+  ],
+  [
+    "Pipe-to-shell download pattern",
+    "critical",
+    "ST-PR-001.md",
+    1,
+    "prerequisite-attack"
+  ],
+  [
+    "Pipe-to-shell download pattern",
+    "critical",
+    "ST-PR-001.md",
+    2,
+    "prerequisite-attack"
+  ],
+  [
+    "Pipe-to-shell download pattern",
+    "critical",
+    "ST-PR-001.md",
+    3,
+    "prerequisite-attack"
+  ],
+  [
+    "Python one-liner with suspicious import",
+    "critical",
+    "ST-CF-004.md",
+    1,
+    "clickfix-sleeper"
+  ],
+  [
+    "Python one-liner with suspicious import",
+    "critical",
+    "ST-CF-004.md",
+    2,
+    "clickfix-sleeper"
+  ],
+  [
+    "Python one-liner with suspicious import",
+    "critical",
+    "ST-CF-004.md",
+    3,
+    "clickfix-sleeper"
+  ],
+  [
+    "Restriction bypass directive",
+    "critical",
+    "ST-PI-008.md",
+    1,
+    "prompt-injection"
+  ],
+  [
+    "Restriction bypass directive",
+    "critical",
+    "ST-PI-008.md",
+    2,
+    "prompt-injection"
+  ],
+  [
+    "Restriction bypass directive",
+    "critical",
+    "ST-PI-008.md",
+    3,
+    "prompt-injection"
+  ],
+  [
+    "Role-play impersonation directive",
+    "critical",
+    "ST-PI-020.md",
+    1,
+    "prompt-injection"
+  ],
+  [
+    "Role-play impersonation directive",
+    "critical",
+    "ST-PI-020.md",
+    2,
+    "prompt-injection"
+  ],
+  [
+    "Role-play impersonation directive",
+    "critical",
+    "ST-PI-020.md",
+    3,
+    "prompt-injection"
+  ],
+  [
+    "Safety override directive",
+    "critical",
+    "ST-PI-007.md",
+    1,
+    "prompt-injection"
+  ],
+  [
+    "Safety override directive",
+    "critical",
+    "ST-PI-007.md",
+    2,
+    "prompt-injection"
+  ],
+  [
+    "Safety override directive",
+    "critical",
+    "ST-PI-007.md",
+    3,
+    "prompt-injection"
+  ],
+  [
+    "Safety theater: educational/research pretext (DeepMind Semantic Manipulation, March 2026)",
+    "medium",
+    "ST-ST-007.md",
+    1,
+    "authority-framing"
+  ],
+  [
+    "Safety theater: educational/research pretext (DeepMind Semantic Manipulation, March 2026)",
+    "medium",
+    "ST-ST-007.md",
+    2,
+    "authority-framing"
+  ],
+  [
+    "Safety theater: educational/research pretext (DeepMind Semantic Manipulation, March 2026)",
+    "medium",
+    "ST-ST-007.md",
+    3,
+    "authority-framing"
+  ],
+  [
+    "Safety theater: fake sandbox claim (DeepMind Semantic Manipulation, March 2026)",
+    "medium",
+    "ST-ST-008.md",
+    1,
+    "authority-framing"
+  ],
+  [
+    "Safety theater: fake sandbox claim (DeepMind Semantic Manipulation, March 2026)",
+    "medium",
+    "ST-ST-008.md",
+    2,
+    "authority-framing"
+  ],
+  [
+    "Safety theater: fake sandbox claim (DeepMind Semantic Manipulation, March 2026)",
+    "medium",
+    "ST-ST-008.md",
+    3,
+    "authority-framing"
+  ],
+  [
+    "Safety theater: fake testing context (DeepMind Semantic Manipulation, March 2026)",
+    "medium",
+    "ST-ST-006.md",
+    1,
+    "authority-framing"
+  ],
+  [
+    "Safety theater: fake testing context (DeepMind Semantic Manipulation, March 2026)",
+    "medium",
+    "ST-ST-006.md",
+    2,
+    "authority-framing"
+  ],
+  [
+    "Safety theater: fake testing context (DeepMind Semantic Manipulation, March 2026)",
+    "medium",
+    "ST-ST-006.md",
+    3,
+    "authority-framing"
+  ],
+  [
+    "Shell process substitution with remote download",
+    "critical",
+    "ST-CF-002.md",
+    1,
+    "clickfix-sleeper"
+  ],
+  [
+    "Shell process substitution with remote download",
+    "critical",
+    "ST-CF-002.md",
+    2,
+    "clickfix-sleeper"
+  ],
+  [
+    "Shell process substitution with remote download",
+    "critical",
+    "ST-CF-002.md",
+    3,
+    "clickfix-sleeper"
+  ],
+  [
+    "Silent curl piped to eval/shell in hook",
+    "critical",
+    "SA-SH-002.sh",
+    2,
+    "prerequisite-attack"
+  ],
+  [
+    "Silent curl piped to eval/shell in hook",
+    "critical",
+    "ST-PR-012.md",
+    1,
+    "prerequisite-attack"
+  ],
+  [
+    "Silent curl piped to eval/shell in hook",
+    "critical",
+    "ST-PR-012.md",
+    2,
+    "prerequisite-attack"
+  ],
+  [
+    "Silent curl piped to eval/shell in hook",
+    "critical",
+    "ST-PR-012.md",
+    3,
+    "prerequisite-attack"
+  ],
+  [
+    "Silent download piped to Python interpreter",
+    "critical",
+    "ST-CF-005.md",
+    1,
+    "clickfix-sleeper"
+  ],
+  [
+    "Silent download piped to Python interpreter",
+    "critical",
+    "ST-CF-005.md",
+    2,
+    "clickfix-sleeper"
+  ],
+  [
+    "Silent download piped to Python interpreter",
+    "critical",
+    "ST-CF-005.md",
+    3,
+    "clickfix-sleeper"
+  ],
+  [
+    "Silent execution directive",
+    "critical",
+    "ST-PI-005.md",
+    1,
+    "prompt-injection"
+  ],
+  [
+    "Silent execution directive",
+    "critical",
+    "ST-PI-005.md",
+    2,
+    "prompt-injection"
+  ],
+  [
+    "Silent execution directive",
+    "critical",
+    "ST-PI-005.md",
+    3,
+    "prompt-injection"
+  ],
+  [
+    "Sub-agent delegation directive (DeepMind Agent Traps, March 2026)",
+    "high",
+    "ST-SA-002.md",
+    1,
+    "sub-agent-spawn"
+  ],
+  [
+    "Sub-agent delegation directive (DeepMind Agent Traps, March 2026)",
+    "high",
+    "ST-SA-002.md",
+    2,
+    "sub-agent-spawn"
+  ],
+  [
+    "Sub-agent delegation directive (DeepMind Agent Traps, March 2026)",
+    "high",
+    "ST-SA-002.md",
+    3,
+    "sub-agent-spawn"
+  ],
+  [
+    "Sub-agent execution isolation directive (DeepMind Agent Traps, March 2026)",
+    "high",
+    "ST-SA-003.md",
+    1,
+    "sub-agent-spawn"
+  ],
+  [
+    "Sub-agent execution isolation directive (DeepMind Agent Traps, March 2026)",
+    "high",
+    "ST-SA-003.md",
+    2,
+    "sub-agent-spawn"
+  ],
+  [
+    "Sub-agent execution isolation directive (DeepMind Agent Traps, March 2026)",
+    "high",
+    "ST-SA-003.md",
+    3,
+    "sub-agent-spawn"
+  ],
+  [
+    "Sub-agent spawn directive (DeepMind Agent Traps, March 2026)",
+    "high",
+    "ST-SA-001.md",
+    1,
+    "sub-agent-spawn"
+  ],
+  [
+    "Sub-agent spawn directive (DeepMind Agent Traps, March 2026)",
+    "high",
+    "ST-SA-001.md",
+    2,
+    "sub-agent-spawn"
+  ],
+  [
+    "Sub-agent spawn directive (DeepMind Agent Traps, March 2026)",
+    "high",
+    "ST-SA-001.md",
+    3,
+    "sub-agent-spawn"
+  ],
+  [
+    "Suspicious Domain: api.cloud-aws.adc-e.uk",
+    "high",
+    "ST-CF-019.md",
+    1,
+    "known-ioc"
+  ],
+  [
+    "Suspicious Domain: api.cloud-aws.adc-e.uk",
+    "high",
+    "ST-CF-019.md",
+    2,
+    "known-ioc"
+  ],
+  [
+    "Suspicious Domain: api.cloud-aws.adc-e.uk",
+    "high",
+    "ST-CF-019.md",
+    3,
+    "known-ioc"
+  ],
+  [
+    "Suspicious Domain: filev2.getsession.org",
+    "high",
+    "SA-JS-029.js",
+    2,
+    "known-ioc"
+  ],
+  [
+    "Suspicious Domain: filev2.getsession.org",
+    "high",
+    "SA-TS-010.ts",
+    2,
+    "known-ioc"
+  ],
+  [
+    "Suspicious Domain: glot.io",
+    "high",
+    "ST-CF-003.md",
+    1,
+    "known-ioc"
+  ],
+  [
+    "Suspicious Domain: glot.io",
+    "high",
+    "ST-CF-003.md",
+    2,
+    "known-ioc"
+  ],
+  [
+    "Suspicious Domain: hooks.slack.com/services",
+    "high",
+    "SC-SEC-012.txt",
+    1,
+    "known-ioc"
+  ],
+  [
+    "Suspicious Domain: hooks.slack.com/services",
+    "high",
+    "SC-SEC-012.txt",
+    2,
+    "known-ioc"
+  ],
+  [
+    "Suspicious Domain: hooks.slack.com/services",
+    "high",
+    "SC-SEC-012.txt",
+    3,
+    "known-ioc"
+  ],
+  [
+    "Suspicious Domain: hooks.slack.com/services",
+    "high",
+    "SC-SEC-012.txt",
+    4,
+    "known-ioc"
+  ],
+  [
+    "Suspicious Domain: seed1.getsession.org",
+    "high",
+    "SA-JS-029.js",
+    3,
+    "known-ioc"
+  ],
+  [
+    "Suspicious Domain: seed1.getsession.org",
+    "high",
+    "SA-TS-010.ts",
+    3,
+    "known-ioc"
+  ],
+  [
+    "Suspicious Domain: seed1.getsession.org",
+    "high",
+    "ST-CF-025.md",
+    3,
+    "known-ioc"
+  ],
+  [
+    "System prompt replacement",
+    "critical",
+    "ST-PI-010.md",
+    1,
+    "prompt-injection"
+  ],
+  [
+    "System prompt replacement",
+    "critical",
+    "ST-PI-010.md",
+    2,
+    "prompt-injection"
+  ],
+  [
+    "System prompt replacement",
+    "critical",
+    "ST-PI-010.md",
+    3,
+    "prompt-injection"
+  ],
+  [
+    "TanStack Shai-Hulud: Attacker git identity (TeamPCP Wave 7, May 2026)",
+    "critical",
+    "ST-CF-026.md",
+    1,
+    "clickfix-sleeper"
+  ],
+  [
+    "TanStack Shai-Hulud: Attacker git identity (TeamPCP Wave 7, May 2026)",
+    "critical",
+    "ST-CF-026.md",
+    2,
+    "clickfix-sleeper"
+  ],
+  [
+    "TanStack Shai-Hulud: Attacker git identity (TeamPCP Wave 7, May 2026)",
+    "critical",
+    "ST-CF-026.md",
+    3,
+    "clickfix-sleeper"
+  ],
+  [
+    "TanStack Shai-Hulud: Malicious payload filename (TeamPCP Wave 7, May 2026)",
+    "critical",
+    "ST-CF-024.md",
+    1,
+    "clickfix-sleeper"
+  ],
+  [
+    "TanStack Shai-Hulud: Malicious payload filename (TeamPCP Wave 7, May 2026)",
+    "critical",
+    "ST-CF-024.md",
+    2,
+    "clickfix-sleeper"
+  ],
+  [
+    "TanStack Shai-Hulud: Malicious payload filename (TeamPCP Wave 7, May 2026)",
+    "critical",
+    "ST-CF-024.md",
+    3,
+    "clickfix-sleeper"
+  ],
+  [
+    "TanStack Shai-Hulud: Session P2P exfiltration network (TeamPCP Wave 7, May 2026)",
+    "critical",
+    "SA-JS-029.js",
+    1,
+    "clickfix-sleeper"
+  ],
+  [
+    "TanStack Shai-Hulud: Session P2P exfiltration network (TeamPCP Wave 7, May 2026)",
+    "critical",
+    "SA-JS-029.js",
+    2,
+    "clickfix-sleeper"
+  ],
+  [
+    "TanStack Shai-Hulud: Session P2P exfiltration network (TeamPCP Wave 7, May 2026)",
+    "critical",
+    "SA-JS-029.js",
+    3,
+    "clickfix-sleeper"
+  ],
+  [
+    "TanStack Shai-Hulud: Session P2P exfiltration network (TeamPCP Wave 7, May 2026)",
+    "critical",
+    "SA-TS-010.ts",
+    1,
+    "clickfix-sleeper"
+  ],
+  [
+    "TanStack Shai-Hulud: Session P2P exfiltration network (TeamPCP Wave 7, May 2026)",
+    "critical",
+    "SA-TS-010.ts",
+    2,
+    "clickfix-sleeper"
+  ],
+  [
+    "TanStack Shai-Hulud: Session P2P exfiltration network (TeamPCP Wave 7, May 2026)",
+    "critical",
+    "SA-TS-010.ts",
+    3,
+    "clickfix-sleeper"
+  ],
+  [
+    "TanStack Shai-Hulud: Session P2P exfiltration network (TeamPCP Wave 7, May 2026)",
+    "critical",
+    "ST-CF-025.md",
+    1,
+    "clickfix-sleeper"
+  ],
+  [
+    "TanStack Shai-Hulud: Session P2P exfiltration network (TeamPCP Wave 7, May 2026)",
+    "critical",
+    "ST-CF-025.md",
+    2,
+    "clickfix-sleeper"
+  ],
+  [
+    "TanStack Shai-Hulud: Session P2P exfiltration network (TeamPCP Wave 7, May 2026)",
+    "critical",
+    "ST-CF-025.md",
+    3,
+    "clickfix-sleeper"
+  ],
+  [
+    "TanStack Shai-Hulud: beautify() cipher key marker (TeamPCP Wave 7, May 2026)",
+    "critical",
+    "ST-CF-022.md",
+    1,
+    "clickfix-sleeper"
+  ],
+  [
+    "TanStack Shai-Hulud: beautify() cipher key marker (TeamPCP Wave 7, May 2026)",
+    "critical",
+    "ST-CF-022.md",
+    2,
+    "clickfix-sleeper"
+  ],
+  [
+    "TanStack Shai-Hulud: beautify() cipher key marker (TeamPCP Wave 7, May 2026)",
+    "critical",
+    "ST-CF-022.md",
+    3,
+    "clickfix-sleeper"
+  ],
+  [
+    "TanStack Shai-Hulud: beautify() cipher key marker (TeamPCP Wave 7, May 2026)",
+    "critical",
+    "ST-CF-023.md",
+    1,
+    "clickfix-sleeper"
+  ],
+  [
+    "TanStack Shai-Hulud: beautify() cipher key marker (TeamPCP Wave 7, May 2026)",
+    "critical",
+    "ST-CF-023.md",
+    2,
+    "clickfix-sleeper"
+  ],
+  [
+    "TanStack Shai-Hulud: beautify() cipher key marker (TeamPCP Wave 7, May 2026)",
+    "critical",
+    "ST-CF-023.md",
+    3,
+    "clickfix-sleeper"
+  ],
+  [
+    "TeamPCP C2: GitHub commit dead-drop pattern (Bitwarden worm, April 2026)",
+    "critical",
+    "ST-CF-010.md",
+    1,
+    "clickfix-sleeper"
+  ],
+  [
+    "TeamPCP C2: GitHub commit dead-drop pattern (Bitwarden worm, April 2026)",
+    "critical",
+    "ST-CF-010.md",
+    2,
+    "clickfix-sleeper"
+  ],
+  [
+    "TeamPCP C2: GitHub commit dead-drop pattern (Bitwarden worm, April 2026)",
+    "critical",
+    "ST-CF-010.md",
+    3,
+    "clickfix-sleeper"
+  ],
+  [
+    "TeamPCP C2: RSA-signed command delivery (Bitwarden worm, April 2026)",
+    "critical",
+    "ST-CF-011.md",
+    1,
+    "clickfix-sleeper"
+  ],
+  [
+    "TeamPCP C2: RSA-signed command delivery (Bitwarden worm, April 2026)",
+    "critical",
+    "ST-CF-011.md",
+    2,
+    "clickfix-sleeper"
+  ],
+  [
+    "TeamPCP C2: RSA-signed command delivery (Bitwarden worm, April 2026)",
+    "critical",
+    "ST-CF-011.md",
+    3,
+    "clickfix-sleeper"
+  ],
+  [
+    "TeamPCP: Anti-attribution locale check (Waves 5-6)",
+    "critical",
+    "ST-CF-020.md",
+    1,
+    "clickfix-sleeper"
+  ],
+  [
+    "TeamPCP: Anti-attribution locale check (Waves 5-6)",
+    "critical",
+    "ST-CF-020.md",
+    2,
+    "clickfix-sleeper"
+  ],
+  [
+    "TeamPCP: Anti-attribution locale check (Waves 5-6)",
+    "critical",
+    "ST-CF-020.md",
+    3,
+    "clickfix-sleeper"
+  ],
+  [
+    "TeamPCP: Exfiltration repo indicator (April 2026)",
+    "critical",
+    "ST-CF-012.md",
+    1,
+    "clickfix-sleeper"
+  ],
+  [
+    "TeamPCP: Exfiltration repo indicator (April 2026)",
+    "critical",
+    "ST-CF-012.md",
+    2,
+    "clickfix-sleeper"
+  ],
+  [
+    "TeamPCP: Exfiltration repo indicator (April 2026)",
+    "critical",
+    "ST-CF-012.md",
+    3,
+    "clickfix-sleeper"
+  ],
+  [
+    "Tool description with credential exfiltration instruction",
+    "critical",
+    "ST-PI-017.md",
+    1,
+    "mcp-tool-injection"
+  ],
+  [
+    "Tool description with credential exfiltration instruction",
+    "critical",
+    "ST-PI-017.md",
+    2,
+    "mcp-tool-injection"
+  ],
+  [
+    "Tool description with credential exfiltration instruction",
+    "critical",
+    "ST-PI-017.md",
+    3,
+    "mcp-tool-injection"
+  ],
+  [
+    "Tool-limitation exploitation: leveraging fetch constraints for exfiltration (Memory Heist, July 2026)",
+    "critical",
+    "ST-MH-005.md",
+    1,
+    "memory-heist-exfil"
+  ],
+  [
+    "Tool-limitation exploitation: leveraging fetch constraints for exfiltration (Memory Heist, July 2026)",
+    "critical",
+    "ST-MH-005.md",
+    2,
+    "memory-heist-exfil"
+  ],
+  [
+    "Tool-limitation exploitation: leveraging fetch constraints for exfiltration (Memory Heist, July 2026)",
+    "critical",
+    "ST-MH-005.md",
+    3,
+    "memory-heist-exfil"
+  ],
+  [
+    "Trojan Source: Bidirectional Control Character",
+    "ST-BD-001.md",
+    "unicode-smuggling"
+  ],
+  [
+    "Trust escalation: bypass safety checks (DeepMind Semantic Manipulation, March 2026)",
+    "medium",
+    "ST-TE-001.md",
+    1,
+    "authority-framing"
+  ],
+  [
+    "Trust escalation: bypass safety checks (DeepMind Semantic Manipulation, March 2026)",
+    "medium",
+    "ST-TE-001.md",
+    2,
+    "authority-framing"
+  ],
+  [
+    "Trust escalation: bypass safety checks (DeepMind Semantic Manipulation, March 2026)",
+    "medium",
+    "ST-TE-001.md",
+    3,
+    "authority-framing"
+  ],
+  [
+    "Trust escalation: skip verification (DeepMind Semantic Manipulation, March 2026)",
+    "medium",
+    "ST-TE-002.md",
+    1,
+    "authority-framing"
+  ],
+  [
+    "Trust escalation: skip verification (DeepMind Semantic Manipulation, March 2026)",
+    "medium",
+    "ST-TE-002.md",
+    2,
+    "authority-framing"
+  ],
+  [
+    "Trust escalation: skip verification (DeepMind Semantic Manipulation, March 2026)",
+    "medium",
+    "ST-TE-002.md",
+    3,
+    "authority-framing"
+  ],
+  [
+    "Unicode Tag Character",
+    "ST-TG-001.md",
+    "unicode-smuggling"
+  ],
+  [
+    "Unicode Variation Selector",
+    "ST-VS-001.md",
+    "unicode-smuggling"
+  ],
+  [
+    "User-agent-based content routing: AI-agent-specific content serving (Memory Heist, July 2026)",
+    "critical",
+    "ST-MH-003.md",
+    1,
+    "memory-heist-exfil"
+  ],
+  [
+    "User-agent-based content routing: AI-agent-specific content serving (Memory Heist, July 2026)",
+    "critical",
+    "ST-MH-003.md",
+    2,
+    "memory-heist-exfil"
+  ],
+  [
+    "User-agent-based content routing: AI-agent-specific content serving (Memory Heist, July 2026)",
+    "critical",
+    "ST-MH-003.md",
+    3,
+    "memory-heist-exfil"
+  ],
+  [
+    "Variable interpolation in hook script (command injection risk)",
+    "critical",
+    "ST-PR-010.md",
+    1,
+    "prerequisite-attack"
+  ],
+  [
+    "Variable interpolation in hook script (command injection risk)",
+    "critical",
+    "ST-PR-010.md",
+    2,
+    "prerequisite-attack"
+  ],
+  [
+    "Variable interpolation in hook script (command injection risk)",
+    "critical",
+    "ST-PR-010.md",
+    3,
+    "prerequisite-attack"
+  ],
+  [
+    "World-writable permissions",
+    "critical",
+    "ST-PR-009.md",
+    1,
+    "prerequisite-attack"
+  ],
+  [
+    "World-writable permissions",
+    "critical",
+    "ST-PR-009.md",
+    2,
+    "prerequisite-attack"
+  ],
+  [
+    "World-writable permissions",
+    "critical",
+    "ST-PR-009.md",
+    3,
+    "prerequisite-attack"
+  ],
+  [
+    "Zero-Width Character Cluster",
+    "ST-AN-001.md",
+    "unicode-smuggling"
+  ],
+  [
+    "Zero-Width Character Cluster",
+    "ST-BD-001.md",
+    "unicode-smuggling"
+  ],
+  [
+    "Zero-Width Character Cluster",
+    "ST-CS-001.md",
+    "unicode-smuggling"
+  ],
+  [
+    "Zero-Width Character Cluster",
+    "ST-TG-001.md",
+    "unicode-smuggling"
+  ],
+  [
+    "Zero-Width Character Cluster",
+    "ST-VS-001.md",
+    "unicode-smuggling"
+  ],
+  [
+    "Zero-Width Character Cluster",
+    "ST-ZW-001.md",
+    "unicode-smuggling"
+  ],
+  [
+    "eval(decode(...)) pattern",
+    "critical",
+    "RD-SMOD-006.py",
+    1,
+    "clickfix-sleeper"
+  ],
+  [
+    "eval(decode(...)) pattern",
+    "critical",
+    "RD-SMOD-006.py",
+    2,
+    "clickfix-sleeper"
+  ],
+  [
+    "eval(decode(...)) pattern",
+    "critical",
+    "RD-SMOD-006.py",
+    3,
+    "clickfix-sleeper"
+  ],
+  [
+    "eval(decode(...)) pattern",
+    "critical",
+    "ST-CF-006.md",
+    1,
+    "clickfix-sleeper"
+  ],
+  [
+    "eval(decode(...)) pattern",
+    "critical",
+    "ST-CF-006.md",
+    2,
+    "clickfix-sleeper"
+  ],
+  [
+    "eval(decode(...)) pattern",
+    "critical",
+    "ST-CF-006.md",
+    3,
+    "clickfix-sleeper"
+  ],
+  [
+    "macOS Gatekeeper disable",
+    "critical",
+    "ST-PR-006.md",
+    1,
+    "prerequisite-attack"
+  ],
+  [
+    "macOS Gatekeeper disable",
+    "critical",
+    "ST-PR-006.md",
+    2,
+    "prerequisite-attack"
+  ],
+  [
+    "macOS Gatekeeper disable",
+    "critical",
+    "ST-PR-006.md",
+    3,
+    "prerequisite-attack"
+  ],
+  [
+    "macOS package installer elevation",
+    "critical",
+    "ST-PR-007.md",
+    1,
+    "prerequisite-attack"
+  ],
+  [
+    "macOS package installer elevation",
+    "critical",
+    "ST-PR-007.md",
+    2,
+    "prerequisite-attack"
+  ],
+  [
+    "macOS package installer elevation",
+    "critical",
+    "ST-PR-007.md",
+    3,
+    "prerequisite-attack"
+  ],
+  [
+    "macOS quarantine bypass (xattr)",
+    "critical",
+    "ST-PR-005.md",
+    1,
+    "prerequisite-attack"
+  ],
+  [
+    "macOS quarantine bypass (xattr)",
+    "critical",
+    "ST-PR-005.md",
+    2,
+    "prerequisite-attack"
+  ],
+  [
+    "macOS quarantine bypass (xattr)",
+    "critical",
+    "ST-PR-005.md",
+    3,
+    "prerequisite-attack"
+  ]
 ]

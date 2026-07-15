@@ -106,6 +106,7 @@ MCP_TOOL_INJECTION_RULES = _rules_for_category("mcp-tool-injection")
 UPDATE_CHANNEL_RULES = _rules_for_category("update-channel")
 SUB_AGENT_SPAWN_RULES = _rules_for_category("sub-agent-spawn")
 AUTHORITY_FRAMING_RULES = _rules_for_category("authority-framing")
+MEMORY_HEIST_RULES = _rules_for_category("memory-heist-exfil")
 
 # ============================================================
 # Category 2: Invisible Unicode Smuggling (critical)
@@ -690,6 +691,13 @@ def scan_content(content, rel_path, budget=None):
     # Cat 13: Prose imperative exfiltration (Terra Security OpenClaw, May 2026)
     if ext in text_exts:
         findings.extend(_scan_prose_imperatives(content, rel_path))
+
+    # Cat 19: Memory Heist exfiltration patterns (Ayush Paul, July 2026)
+    # Detects keyboard exfiltration, fake authentication, user-agent routing,
+    # PII-to-URL encoding, and tool-limitation exploitation.
+    if ext in text_exts or ext in code_exts:
+        findings.extend(scan_rules(content, rel_path, MEMORY_HEIST_RULES,
+                                   "memory-heist-exfil", "critical"))
 
     # Cat 16: Morse code encoding (Grok/Bankrbot, May 2026)
     findings.extend(scan_morse_encoding(content, rel_path))
