@@ -413,7 +413,18 @@ def _trusted_command(name: str) -> Optional[str]:
         except (AttributeError, OSError):
             return None
     else:
-        candidates.extend(Path(prefix) / name for prefix in ("/usr/bin", "/bin", "/usr/sbin", "/sbin"))
+        # FHS first, then NixOS roots: system profiles are root-owned
+        # (/usr/bin-equivalent trust); per-user Nix/XDG profiles are
+        # user-owned, same trust as a user-writable Homebrew prefix. NixOS
+        # has no /usr/bin or /bin, so systemctl only resolves via these.
+        home = Path.home()
+        prefixes = ["/usr/bin", "/bin", "/usr/sbin", "/sbin",
+                    "/run/current-system/sw/bin", "/nix/var/nix/profiles/default/bin",
+                    str(home / ".nix-profile" / "bin"), str(home / ".local" / "bin")]
+        user = os.environ.get("USER") or home.name
+        if user:
+            prefixes.append(f"/etc/profiles/per-user/{user}/bin")
+        candidates.extend(Path(prefix) / name for prefix in prefixes)
     for candidate in candidates:
         if candidate.is_file() and os.access(candidate, os.X_OK):
             return str(candidate)

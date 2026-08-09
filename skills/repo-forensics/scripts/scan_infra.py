@@ -10,6 +10,7 @@ Created by Alex Greenshpun
 import json
 import os
 import re
+import shutil
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -655,7 +656,12 @@ def scan_npmrc(file_path, rel_path):
             git_match = re.match(r'git\s*=\s*(.+)', stripped)
             if git_match:
                 git_path = git_match.group(1).strip()
-                system_git_paths = ('/usr/bin/git', '/usr/local/bin/git', '/opt/homebrew/bin/git', 'git')
+                # Allowlist of "system" git locations, including non-FHS
+                # systems (NixOS has no /usr/bin) and the git on this
+                # machine's PATH, so a legit git= line isn't flagged.
+                system_git_paths = {'/usr/bin/git', '/usr/local/bin/git', '/opt/homebrew/bin/git',
+                                    '/run/current-system/sw/bin/git', 'git', shutil.which('git')}
+                system_git_paths.discard(None)
                 if git_path not in system_git_paths:
                     findings.append(core.Finding(
                         scanner=SCANNER_NAME, severity="critical",

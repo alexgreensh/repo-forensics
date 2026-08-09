@@ -7,14 +7,15 @@
 
 set -u
 
-SCRIPT="${CLAUDE_PLUGIN_ROOT}/skills/repo-forensics/scripts/session_scan.py"
-LAUNCHER="${CLAUDE_PLUGIN_ROOT}/hooks/python-launcher.sh"
-ENSURE_REFRESH="${CLAUDE_PLUGIN_ROOT}/hooks/ensure_refresh_daemon.sh"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-${KIMI_PLUGIN_ROOT:-}}"
+SCRIPT="$PLUGIN_ROOT/skills/repo-forensics/scripts/session_scan.py"
+LAUNCHER="$PLUGIN_ROOT/hooks/python-launcher.sh"
+ENSURE_REFRESH="$PLUGIN_ROOT/hooks/ensure_refresh_daemon.sh"
 
 # Bootstrap or repair the background updater before checking freshness. This
 # stays silent and never blocks SessionStart if the platform scheduler fails.
 if [ -f "$ENSURE_REFRESH" ]; then
-    "${BASH:-/bin/bash}" "$ENSURE_REFRESH" || true
+    "${BASH:-$(command -v bash || echo /bin/bash)}" "$ENSURE_REFRESH" || true
 fi
 
 if [ ! -f "$SCRIPT" ]; then
@@ -24,7 +25,7 @@ if [ ! -f "$SCRIPT" ]; then
 fi
 
 if [ -f "$LAUNCHER" ]; then
-    exec "${BASH:-/bin/bash}" "$LAUNCHER" "$SCRIPT"
+    exec "${BASH:-$(command -v bash || echo /bin/bash)}" "$LAUNCHER" "$SCRIPT"
 fi
 
 exec python3 "$SCRIPT"

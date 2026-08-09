@@ -609,9 +609,56 @@ def _is_non_downgradable(finding):
     return False
 
 
+def _parse_capability_yaml(text):
+    """Parse the restricted YAML subset of a .forensics-capabilities file:
+    a top-level `capabilities:` list of {name, reason} string maps.
+
+    Zero-dependency fallback used only when PyYAML is not installed (same
+    trade-off as parse_pnpm_lock.py). Returns the dict yaml.safe_load would
+    have produced for such a file. Raises ValueError on anything outside
+    the subset so the caller reports an invalid declaration instead of
+    silently misreading it.
+    """
+    capabilities = []
+    current = None
+    in_caps = False
+    for raw_line in text.splitlines():
+        stripped = raw_line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if in_caps and (stripped == "-" or stripped.startswith("- ")):
+            current = {}
+            capabilities.append(current)
+            stripped = stripped[1:].strip()
+            if not stripped:
+                continue
+        else:
+            indent = len(raw_line) - len(raw_line.lstrip())
+            if indent == 0:
+                # `capabilities:` opens the block; any other top-level key
+                # closes it.
+                in_caps = stripped == "capabilities:"
+                current = None
+                continue
+            if not in_caps or current is None:
+                raise ValueError(f"unexpected line: {stripped!r}")
+        key, sep, value = stripped.partition(":")
+        if not sep or not key.strip():
+            raise ValueError(f"unexpected line: {stripped!r}")
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
+            value = value[1:-1]
+        current[key.strip()] = value
+    return {"capabilities": capabilities}
+
+
 def load_capability_declaration(repo_path):
     """Load and validate a .forensics-capabilities.json or .forensics-capabilities.yml
     file from the repo root.
+
+    YAML files are parsed with PyYAML when it is installed; otherwise a
+    zero-dependency subset parser (_parse_capability_yaml) handles the
+    standard declaration shape so the ledger works in minimal environments.
 
     Returns a dict with:
       - "capabilities": list of {"name": str, "reason": str}
@@ -642,7 +689,11 @@ def load_capability_declaration(repo_path):
             with open(yml_path, "r", encoding="utf-8") as fh:
                 raw_data = _yaml.safe_load(fh)
         except ImportError:
-            error = f"{source} found but PyYAML is not installed"
+            try:
+                with open(yml_path, "r", encoding="utf-8") as fh:
+                    raw_data = _parse_capability_yaml(fh.read())
+            except Exception as exc:
+                error = f"Invalid YAML in {source}: {exc}"
         except Exception as exc:
             error = f"Invalid YAML in {source}: {exc}"
     elif os.path.exists(yaml_path):
@@ -652,7 +703,11 @@ def load_capability_declaration(repo_path):
             with open(yaml_path, "r", encoding="utf-8") as fh:
                 raw_data = _yaml.safe_load(fh)
         except ImportError:
-            error = f"{source} found but PyYAML is not installed"
+            try:
+                with open(yaml_path, "r", encoding="utf-8") as fh:
+                    raw_data = _parse_capability_yaml(fh.read())
+            except Exception as exc:
+                error = f"Invalid YAML in {source}: {exc}"
         except Exception as exc:
             error = f"Invalid YAML in {source}: {exc}"
 
@@ -899,9 +954,13 @@ def walk_aux(repo_path, ignore_patterns=None, skip_dirs=None, *,
         ignore_patterns = load_ignore_patterns(repo_path)
 
     for root, dirs, files in os.walk(repo_path, followlinks=False):
-        dirs[:] = [d for d in dirs if d not in skip_dirs]
+        # Deterministic order: os.walk yields readdir order (filesystem-dependent),
+        # and these scanners enforce global budgets over the walk — which file a
+        # fan-out decoy starves must not depend on inode layout, or the fail-loud
+        # "budget exhausted" naming becomes nondeterministic.
+        dirs[:] = sorted(d for d in dirs if d not in skip_dirs)
 
-        for filename in files:
+        for filename in sorted(files):
             if skip_lockfiles and filename in LOCKFILES:
                 continue
 

@@ -2,6 +2,7 @@
 
 import os
 import json
+import shutil
 import subprocess
 import pytest
 import scan_dast as scanner
@@ -192,11 +193,11 @@ class TestSandboxHookExecution:
 
         real = os.path.realpath(hook)
         cmd = [
-            '/usr/bin/sandbox-exec',
+            scanner._SANDBOX_EXEC,
             '-D', f'HOOK_PATH={real}',
             '-D', f'HOOK_DIR={os.path.dirname(real)}',
             '-f', scanner.SANDBOX_PROFILE,
-            '/bin/bash', hook,
+            shutil.which('bash') or '/bin/bash', hook,
         ]
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         combined = proc.stdout + proc.stderr

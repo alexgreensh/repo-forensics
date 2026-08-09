@@ -1,10 +1,32 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Repo Forensics Suite Runner v2
 # Created by Alex Greenshpun
 # Usage: ./run_forensics.sh <repo_path> [--skill-scan] [--format text|json|summary]
 
 set -euo pipefail
+
+# Floor PATH with trusted system roots so this script's own utilities
+# (dirname, realpath, date, ps, awk, mktemp) resolve when the caller's PATH
+# is stripped (GUI hook environments) or the system is non-FHS — NixOS has
+# no /usr/bin or /bin coreutils. Appended, never replacing the caller's
+# PATH, so caller priority is preserved. Deliberately excludes ~/.local/bin:
+# arbitrary user-installed binaries should not become this scanner's tools.
+PATH="${PATH:-}:/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin:/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin"
+if [ -n "${HOME:-}" ]; then
+    PATH="$PATH:$HOME/.nix-profile/bin"
+fi
+_rf_profile_user="${USER:-}"
+if [ -z "$_rf_profile_user" ] && [ -n "${HOME:-}" ]; then
+    _rf_profile_user="${HOME##*/}"
+fi
+if [ -n "$_rf_profile_user" ]; then
+    PATH="$PATH:/etc/profiles/per-user/$_rf_profile_user/bin"
+fi
+unset _rf_profile_user
+# Drop a leading ':' left by an empty caller PATH (empty segment = cwd).
+PATH="${PATH#:}"
+export PATH
 
 if [ -z "${1:-}" ]; then
     echo "Usage: $0 <repo_path> [options]"
@@ -59,10 +81,10 @@ fi
 # direct-path fallbacks. This resolver instead relies on a bounded sentinel
 # probe. Note run_forensics.sh is ALSO reachable from that hook PATH — session
 # hook deep scans (session_scan.py) spawn it via subprocess without a sanitized
-# env, so the probe inherits the caller's PATH rather than a guaranteed-trusted
-# one; the bounded sentinel + timeout is the safety boundary here. Extending the
-# launcher's allowlist to this path is tracked as follow-up. Do not collapse the
-# two without accounting for that environment.
+# env. The probe searches the caller's PATH plus the trusted system-root floor
+# added at the top of this script (appended, so caller priority wins); the
+# bounded sentinel + timeout remains the safety boundary here. Do not collapse
+# the two resolvers without accounting for that environment.
 _rf_bounded() {
     # Run "$@" with a 5-second alarm. Uses timeout/gtimeout/perl in priority order.
     # Returns the candidate's exit status (124 if timed out).

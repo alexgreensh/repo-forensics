@@ -24,3 +24,7 @@ __pycache__/
 
 # Devin CLI tooling artifact
 .devin/
+
+# Local test virtualenvs (never commit)
+.venv-test/
+.venv/

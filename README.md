@@ -28,6 +28,7 @@ Audit untrusted repos before they touch your agent. Fully local, self-updating d
 <p align="center">
   <img src="https://img.shields.io/badge/Claude%20Code-auto--scan-5436DA.svg?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZD0iTTEyIDJDNi40OCAyIDIgNi40OCAyIDEyczQuNDggMTAgMTAgMTAgMTAtNC40OCAxMC0xMFMxNy41MiAyIDEyIDJ6IiBmaWxsPSIjZmZmIi8+PC9zdmc+" alt="Claude Code">
   <img src="https://img.shields.io/badge/Codex%20CLI-auto--scan-10A37F.svg" alt="Codex CLI">
+  <img src="https://img.shields.io/badge/Kimi%20Code-auto--scan-1E88E5.svg" alt="Kimi Code">
   <img src="https://img.shields.io/badge/OpenClaw-supported-FF6B35.svg" alt="OpenClaw">
   <img src="https://img.shields.io/badge/Cursor-supported-00D1FF.svg" alt="Cursor">
   <img src="https://img.shields.io/badge/NanoClaw-supported-8B5CF6.svg" alt="NanoClaw">
@@ -42,6 +43,95 @@ Audit untrusted repos before they touch your agent. Fully local, self-updating d
 </p>
 
 ---
+
+## Install
+
+<details open>
+<summary><b>Claude Code</b> (auto-scan on install)</summary>
+
+```bash
+/plugin marketplace add alexgreensh/repo-forensics
+/plugin install repo-forensics@alexgreensh-repo-forensics
+```
+
+Hooks auto-wire on install. Every `git clone`, `npm install`, `pip install`, `uv add`, `bun install`, `pnpm add` is scanned automatically. Known-malicious packages are blocked before execution.
+
+</details>
+
+<details>
+<summary><b>Codex CLI</b> (auto-scan on install)</summary>
+
+Install the plugin via the Codex marketplace. Hooks auto-wire from `plugin.json`. Same three hooks as Claude Code: PreToolUse (IOC gate), PostToolUse (auto-scan), SessionStart (security scan).
+
+```bash
+codex plugin marketplace add alexgreensh/repo-forensics --ref main
+codex plugin add repo-forensics@alexgreensh-repo-forensics
+```
+
+Restart Codex and trust the four Repo Forensics hook handlers when prompted.
+The first trusted SessionStart automatically bootstraps daily threat-feed
+refresh; no separate cron setup is required.
+
+For a local checkout/manual wire-up:
+
+```bash
+python3 scripts/codex_install.py
+# restart Codex, then prove Codex registered the hooks
+python3 scripts/codex_install.py --verify --require-registered
+```
+
+Codex v0.137+ inventory uses `codex plugin list --json` when available, falling back to filesystem manifests on older installs.
+
+</details>
+
+<details>
+<summary><b>Kimi Code</b> (auto-scan on install)</summary>
+
+Install the plugin directly from GitHub. Hooks auto-wire from `.kimi-plugin/plugin.json`. Same hooks as Claude Code: PreToolUse (IOC gate), PostToolUse (auto-scan), SessionStart (security scan).
+
+```
+/plugins install https://github.com/alexgreensh/repo-forensics
+/reload
+```
+
+Every `git clone`, `npm install`, `pip install`, `uv add`, `bun install`, `pnpm add` is scanned automatically. Known-malicious packages are blocked before execution, with the block reason surfaced in the agent context.
+
+</details>
+
+<details>
+<summary><b>OpenClaw</b> (one-time setup)</summary>
+
+Install the plugin, then wire hooks:
+
+```bash
+python3 scripts/openclaw_install.py
+```
+
+This adds PreToolUse, PostToolUse, and SessionStart hooks to `~/.openclaw/openclaw.json`. Uninstall with `--uninstall`.
+OpenClaw 2026.6.1+ operator install policy is supported; the installer preserves `security.installPolicy`, does not use unsafe force-install flags, and can be checked with `python3 scripts/openclaw_install.py --verify`.
+
+</details>
+
+<details>
+<summary><b>CLI scan</b> (no plugin required, any platform)</summary>
+
+```bash
+git clone https://github.com/alexgreensh/repo-forensics.git
+cd repo-forensics
+./skills/repo-forensics/scripts/run_forensics.sh /path/to/repo
+```
+
+Works standalone on any machine with Python 3.8+. No pip install, no API keys, no Docker, no dependencies.
+
+</details>
+
+Then run `/repo-forensics /path/to/repo` before installing a new skill, plugin, MCP server, or dependency.
+
+### Troubleshooting install / plugin-manifest errors
+
+- `author: Invalid input: expected object, received string` (or `invalid manifest file`) means Claude Code has a stale cached plugin version. Run `/plugin marketplace update alexgreensh-repo-forensics`, then uninstall and reinstall the plugin. If it persists, run `/plugin marketplace remove alexgreensh-repo-forensics` followed by `/plugin marketplace add https://github.com/alexgreensh/repo-forensics`, or delete the stale version folder from the Claude plugin cache. You can also use Claude Code's **f to fix with Claude** prompt shown on the error screen.
+- If a relative-path install fails, add the marketplace from its Git URL: `/plugin marketplace add https://github.com/alexgreensh/repo-forensics`. Do not add a direct `marketplace.json` URL: relative `source: "./"` works only for Git or local marketplaces.
+- On Windows, `EPERM` during rename/extraction is a known Claude Code platform issue. Update Claude Code, then remove and re-add the marketplace using the GitHub URL above.
 
 That npm package Cursor added to your lockfile. The GitHub Actions workflow someone contributed in a PR. The MCP server with 500 downloads. The Claude Code skill someone linked in Discord. The ClawHub extension your OpenClaw agent auto-installed. The Codex plugin you grabbed from GitHub.
 
@@ -129,6 +219,7 @@ Installed as a plugin, repo-forensics also runs automatically in the background,
 |----------|-----------|-------------|
 | Claude Code | Plugin install auto-registers all 3 hooks | None needed |
 | Codex CLI | Plugin install auto-registers all 3 hooks | Local checkout: `python3 scripts/codex_install.py` |
+| Kimi Code | Plugin install auto-registers all 3 hooks | None needed |
 | OpenClaw | Not auto-wired by plugin system | One-time: `python3 scripts/openclaw_install.py` |
 | Cursor / NanoClaw / CLI | N/A (no plugin hook system) | Use manual `/repo-forensics` invocation |
 

@@ -1,0 +1,53 @@
+{
+  "name": "repo-forensics",
+  "version": "2.16.0",
+  "description": "Audit untrusted repos before they touch your agent. Fully local, zero dependencies, zero telemetry.",
+  "author": {
+    "name": "Alex Greenshpun",
+    "url": "https://linkedin.com/in/alexgreensh"
+  },
+  "homepage": "https://github.com/alexgreensh/repo-forensics",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "keywords": [
+    "security",
+    "agent-security",
+    "supply-chain",
+    "mcp",
+    "kimi-code",
+    "skills",
+    "plugins",
+    "forensics",
+    "scanner"
+  ],
+  "skills": "./skills/",
+  "hooks": [
+    {
+      "event": "PreToolUse",
+      "matcher": "Bash",
+      "command": "bash \"${KIMI_PLUGIN_ROOT}/hooks/run_pre_scan.sh\"",
+      "timeout": 10
+    },
+    {
+      "event": "PostToolUse",
+      "matcher": "Bash",
+      "command": "bash \"${KIMI_PLUGIN_ROOT}/hooks/run_auto_scan.sh\"",
+      "timeout": 30
+    },
+    {
+      "event": "SessionStart",
+      "command": "bash \"${KIMI_PLUGIN_ROOT}/hooks/run_session_scan.sh\"",
+      "timeout": 25
+    },
+    {
+      "event": "SessionStart",
+      "command": "bash \"${KIMI_PLUGIN_ROOT}/hooks/first-run-nudge.sh\""
+    }
+  ],
+  "interface": {
+    "displayName": "Repo Forensics",
+    "shortDescription": "Security scanner for AI agent plugins, skills, and MCP servers.",
+    "longDescription": "Audit any repo, skill, MCP server, or plugin before installation. 26 scanners detect supply chain attacks, prompt injection, credential theft, and runtime exploitation. Zero dependencies, fully offline, nothing uploaded.",
+    "developerName": "Alex Greenshpun",
+    "websiteURL": "https://github.com/alexgreensh/repo-forensics"
+  }
+}

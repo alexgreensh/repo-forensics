@@ -18,7 +18,7 @@ SCRIPT_DIRNAME="$(dirname "$SCRIPT_PATH")"
 SCRIPT_DIR="$(cd "$SCRIPT_DIRNAME" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-for marker in ".codex-plugin/plugin.json" ".claude-plugin/plugin.json" "skills/repo-forensics/SKILL.md" "skills/forensify/SKILL.md" "hooks/hooks.json"; do
+for marker in ".codex-plugin/plugin.json" ".claude-plugin/plugin.json" ".kimi-plugin/plugin.json" "skills/repo-forensics/SKILL.md" "skills/forensify/SKILL.md" "hooks/hooks.json"; do
     if [ ! -e "${REPO_ROOT}/${marker}" ]; then
         echo "ERROR: REPO_ROOT looks wrong (missing ${marker}): ${REPO_ROOT}" >&2
         echo "Refusing to run destructive sync." >&2
@@ -39,6 +39,7 @@ cp -R "${REPO_ROOT}/skills" "${STAGE}/skills"
 cp -R "${REPO_ROOT}/hooks" "${STAGE}/hooks"
 cp -R "${REPO_ROOT}/.codex-plugin" "${STAGE}/.codex-plugin"
 cp -R "${REPO_ROOT}/.claude-plugin" "${STAGE}/.claude-plugin"
+cp -R "${REPO_ROOT}/.kimi-plugin" "${STAGE}/.kimi-plugin"
 
 find "${STAGE}" \( \
     -name '__pycache__' -o \

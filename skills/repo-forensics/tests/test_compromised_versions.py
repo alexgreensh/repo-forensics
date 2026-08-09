@@ -1056,17 +1056,21 @@ class TestOverridesRecursionGuard:
         """End-to-end: recursion-bomb package.json must surface a high
         'Adversarial package.json' finding AND must not suppress IOC checks
         for other files in the same repo."""
-        nested = {}
-        cur = nested
-        for _ in range(1000):
-            cur["next"] = {"nested": {}}
-            cur = cur["next"]["nested"]
+        # json.dumps cannot serialize 1000-deep nesting under the default
+        # recursion limit (the encoder itself raises RecursionError), so the
+        # bomb is written textually as a fixed repeating unit.
+        depth = 1000
+        bomb = '{"next": {"nested": ' * depth + '{}' + '}}' * depth
         pkg = tmp_path / "package.json"
-        pkg.write_text(json.dumps({
-            "dependencies": {"chalk": "5.6.1"},
-            "overrides": {"root": nested},
-        }))
+        pkg.write_text(
+            '{"dependencies": {"chalk": "5.6.1"}, "overrides": {"root": ' + bomb + '}}'
+        )
         findings = scanner.scan_package_json(str(pkg), "package.json")
+        # The hostile structure MUST be surfaced
+        adversarial = [f for f in findings if f.severity == "high" and "adversarial" in f.title.lower()]
+        assert len(adversarial) == 1, (
+            "recursion-bomb package.json must surface a high 'Adversarial package.json' finding"
+        )
         # The IOC check for chalk@5.6.1 MUST still fire
         criticals = [f for f in findings if f.severity == "critical" and "chalk" in f.title.lower()]
         assert len(criticals) == 1, (

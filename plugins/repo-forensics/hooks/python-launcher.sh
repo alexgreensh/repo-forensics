@@ -5,7 +5,42 @@
 
 set -eu
 
+# Last-resort HOME discovery for fully stripped environments (no HOME, no
+# usable PATH): derive the invoking user's home from /etc/passwd using only
+# bash builtins, so per-user interpreter locations (~/.local/bin/python3,
+# ~/.nix-profile/bin/python3) stay reachable on non-FHS systems like NixOS,
+# where no FHS python exists at all.
+if [ -z "${HOME:-}" ] && [ -r /etc/passwd ]; then
+    while IFS=: read -r _rf_u _rf_p _rf_uid _rf_gid _rf_gecos _rf_home _rf_shell; do
+        if [ "$_rf_uid" = "$EUID" ]; then
+            HOME="$_rf_home"
+            export HOME
+            break
+        fi
+    done < /etc/passwd
+    unset _rf_u _rf_p _rf_uid _rf_gid _rf_gecos _rf_home _rf_shell
+fi
+
+# Trusted interpreter locations. Hook environments (Codex, GUI-launched agent
+# apps) may present an untrusted or stripped PATH, so only interpreters under
+# these prefixes are accepted. Covers FHS (Linux/macOS/Homebrew), NixOS
+# system profiles (root-owned, /usr/bin-equivalent trust), and per-user
+# Nix/XDG profile dirs — the user-owned entries carry the same trust level as
+# /opt/homebrew/bin and the Windows AppData prefixes below. NixOS has no
+# /usr/bin or /bin, so without these the launcher finds nothing there.
 _SAFE_PREFIXES="/usr/bin /usr/local/bin /opt/homebrew/bin /opt/homebrew/opt"
+_SAFE_PREFIXES="$_SAFE_PREFIXES /run/current-system/sw/bin /run/wrappers/bin /nix/var/nix/profiles/default/bin"
+if [ -n "${HOME:-}" ]; then
+    _SAFE_PREFIXES="$_SAFE_PREFIXES $HOME/.nix-profile/bin $HOME/.local/bin $HOME/.local/state/nix/profile/bin"
+fi
+_rf_profile_user="${USER:-}"
+if [ -z "$_rf_profile_user" ] && [ -n "${HOME:-}" ]; then
+    _rf_profile_user="${HOME##*/}"
+fi
+if [ -n "$_rf_profile_user" ]; then
+    _SAFE_PREFIXES="$_SAFE_PREFIXES /etc/profiles/per-user/$_rf_profile_user/bin"
+fi
+unset _rf_profile_user
 
 _is_safe_prefix() {
     local IFS=$' \t\n'
@@ -66,12 +101,23 @@ _bounded_version() {
     tmpf=$(mktemp 2>/dev/null) || tmpf="${TMPDIR:-/tmp}/rf-probe.$$"
     "$binpath" --version >"$tmpf" 2>&1 &
     local cmd_pid=$!
-    ( sleep 2; kill -KILL "$cmd_pid" 2>/dev/null ) </dev/null >/dev/null 2>&1 &
-    local killer_pid=$!
-    wait "$cmd_pid" 2>/dev/null
-    rc=$?
-    kill -KILL "$killer_pid" 2>/dev/null
-    wait "$killer_pid" 2>/dev/null
+    # Arm the watchdog only when `sleep` actually resolves. On stripped-PATH,
+    # non-FHS systems (NixOS has no /usr/bin) sleep may be missing, and a
+    # missing sleep turns the watchdog subshell into an immediate SIGKILL of
+    # the candidate — every probe then "fails" and no interpreter is found.
+    if command -v sleep >/dev/null 2>&1; then
+        ( sleep 2; kill -KILL "$cmd_pid" 2>/dev/null ) </dev/null >/dev/null 2>&1 &
+        local killer_pid=$!
+        wait "$cmd_pid" 2>/dev/null
+        rc=$?
+        kill -KILL "$killer_pid" 2>/dev/null
+        wait "$killer_pid" 2>/dev/null
+    else
+        # No watchdog available: run unbounded (residual hang risk, same as
+        # the documented fallback in run_forensics.sh's _rf_bounded).
+        wait "$cmd_pid" 2>/dev/null
+        rc=$?
+    fi
     printf '%s' "$(<"$tmpf")"
     rm -f "$tmpf" 2>/dev/null
     return "$rc"
@@ -150,11 +196,16 @@ if pyl=$(find_interpreter "py"); then
     exec "$pyl" -3 "$@"
 fi
 
-for direct in /opt/homebrew/bin/python3 /usr/local/bin/python3 /usr/bin/python3; do
+_direct_candidates=(/opt/homebrew/bin/python3 /usr/local/bin/python3 /usr/bin/python3 /run/current-system/sw/bin/python3 /nix/var/nix/profiles/default/bin/python3)
+if [ -n "${HOME:-}" ]; then
+    _direct_candidates+=("$HOME/.nix-profile/bin/python3" "$HOME/.local/bin/python3")
+fi
+for direct in ${_direct_candidates[@]+"${_direct_candidates[@]}"}; do
     if [ -x "$direct" ] && [ -s "$direct" ]; then
         exec "$direct" "$@"
     fi
 done
+unset _direct_candidates
 
 # Last resort: agent-bundled runtime pythons (Codex Desktop et al.) that never
 # appear on PATH. Prefer real system interpreters above; only fall back here.
@@ -163,5 +214,5 @@ if codexpy=$(find_codex_runtime_python); then
 fi
 
 echo "repo-forensics: no usable Python 3 interpreter found" >&2
-echo "  tried: python3, python, py -3, direct paths, codex runtime" >&2
+echo "  tried: python3, python, py -3, FHS/Nix direct paths, codex runtime" >&2
 exit 127

@@ -14,13 +14,34 @@ Mapping spec: see design doc §1.2-1.4.
 """
 
 import hashlib
+import json
 import os
 import re
 import urllib.parse
+from pathlib import Path
 
-# Pinned to .claude-plugin/plugin.json by test_sarif_export. Bumped in lockstep
-# with the release version (validate_manifests checks drift).
-TOOL_VERSION = "2.14.0"
+# Resolved from the plugin manifests at import time so the SARIF tool version
+# can never drift from the release version again (it went stale at 2.15.0 and
+# 2.16.0 while hardcoded). The manifests sit three levels above this file in
+# both the source checkout and installed plugin layouts. The literal fallback
+# keeps standalone use (skill copied without manifests) working; it is pinned
+# to .claude-plugin/plugin.json by test_sarif_export.
+def _resolve_tool_version():
+    root = Path(__file__).resolve().parents[3]
+    for rel in (".claude-plugin/plugin.json", ".kimi-plugin/plugin.json",
+                ".codex-plugin/plugin.json"):
+        manifest = root / rel
+        try:
+            if manifest.is_file():
+                version = json.loads(manifest.read_text(encoding="utf-8"))["version"]
+                if version:
+                    return version
+        except (OSError, ValueError, KeyError):
+            continue
+    return "2.16.0"
+
+
+TOOL_VERSION = _resolve_tool_version()
 
 TOOL_NAME = "repo-forensics"
 INFORMATION_URI = "https://github.com/alexgreensh/repo-forensics"

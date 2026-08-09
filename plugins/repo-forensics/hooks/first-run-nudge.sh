@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # repo-forensics - SessionStart First-Run Auto-Update Nudge
 #
 # Marketplace installs can go stale. This hook prints a one-time platform-aware
@@ -37,6 +37,10 @@ CLAUDE_ROOT="${HOME}/.claude"
 if [ -d "$CLAUDE_ROOT" ]; then
     CLAUDE_ROOT="$(cd "$CLAUDE_ROOT" && pwd)"
 fi
+KIMI_ROOT="${KIMI_CODE_HOME:-${HOME}/.kimi-code}"
+if [ -d "$KIMI_ROOT" ]; then
+    KIMI_ROOT="$(cd "$KIMI_ROOT" && pwd)"
+fi
 
 PLATFORM="generic"
 STATE_ROOT="${HOME}/.repo-forensics"
@@ -46,6 +50,9 @@ if [[ "$PLUGIN_ROOT" == "$CODEX_ROOT/"* || "$PLUGIN_ROOT" == *"/.codex/"* ]]; th
 elif [[ "$PLUGIN_ROOT" == "$CLAUDE_ROOT/"* || "$PLUGIN_ROOT" == *"/.claude/"* ]]; then
     PLATFORM="claude"
     STATE_ROOT="${CLAUDE_ROOT}/repo-forensics"
+elif [[ "$PLUGIN_ROOT" == "$KIMI_ROOT/"* || "$PLUGIN_ROOT" == *"/.kimi-code/"* ]]; then
+    PLATFORM="kimi"
+    STATE_ROOT="${KIMI_ROOT}/repo-forensics"
 fi
 NUDGE_FLAG="${STATE_ROOT}/.marketplace-nudge-shown"
 
@@ -55,8 +62,9 @@ if [ "${REPO_FORENSICS_NUDGE:-1}" = "0" ]; then
 fi
 
 # Only fire for marketplace/cache installs. Dev-symlink or script-install users
-# have their own update paths and do not need this hint.
-if [[ "$PLUGIN_ROOT" != *"/plugins/cache/"* ]]; then
+# have their own update paths and do not need this hint. Kimi Code installs
+# land in plugins/managed rather than plugins/cache.
+if [[ "$PLUGIN_ROOT" != *"/plugins/cache/"* && "$PLUGIN_ROOT" != *"/plugins/managed/"* ]]; then
     exit 0
 fi
 
@@ -91,6 +99,20 @@ elif [ "$PLATFORM" = "codex" ]; then
 
   If repo-forensics was already installed from that marketplace, reinstall it
   after refreshing the snapshot. Opt out of this hint permanently with
+  REPO_FORENSICS_NUDGE=0. This message will not show again.
+
+NUDGE
+elif [ "$PLATFORM" = "kimi" ]; then
+    cat <<'NUDGE'
+
+  [repo-forensics] First-run tip: keep this plugin fresh so you get new
+  IOCs, detection rules, and critical security patches. For a security
+  scanner, stale installs are especially dangerous. In Kimi Code:
+
+      /plugins  ->  Installed  ->  repo-forensics  ->  Enter (install update)
+
+  Kimi Code does not auto-update plugins installed from GitHub; reinstall
+  when a new version is available. Opt out of this hint permanently with
   REPO_FORENSICS_NUDGE=0. This message will not show again.
 
 NUDGE

@@ -8,8 +8,9 @@
 
 set -u
 
-SCRIPT="${CLAUDE_PLUGIN_ROOT}/skills/repo-forensics/scripts/pre_scan.py"
-LAUNCHER="${CLAUDE_PLUGIN_ROOT}/hooks/python-launcher.sh"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-${KIMI_PLUGIN_ROOT:-}}"
+SCRIPT="$PLUGIN_ROOT/skills/repo-forensics/scripts/pre_scan.py"
+LAUNCHER="$PLUGIN_ROOT/hooks/python-launcher.sh"
 
 if [ ! -f "$SCRIPT" ]; then
     echo "[repo-forensics] WARNING: pre_scan.py not found at: $SCRIPT"
@@ -21,7 +22,7 @@ if [ ! -f "$SCRIPT" ]; then
 fi
 
 if [ -f "$LAUNCHER" ]; then
-    exec "${BASH:-/bin/bash}" "$LAUNCHER" "$SCRIPT"
+    exec "${BASH:-$(command -v bash || echo /bin/bash)}" "$LAUNCHER" "$SCRIPT"
 fi
 
 exec python3 "$SCRIPT"

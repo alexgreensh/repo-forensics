@@ -46,7 +46,10 @@ MAX_OUTPUT_BYTES = 1024 * 100  # 100KB - anything more is amplification
 # macOS Seatbelt sandbox profile (denies network + /Users read/write,
 # re-allows reads on the specific hook script via HOOK_PATH/HOOK_DIR -D params)
 SANDBOX_PROFILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'dast_sandbox.sb')
-SANDBOX_AVAILABLE = os.path.exists('/usr/bin/sandbox-exec') and os.path.exists(SANDBOX_PROFILE)
+# Resolve dynamically: sandbox-exec is a macOS-only tool, but absolute FHS
+# paths are not guaranteed on non-FHS systems.
+_SANDBOX_EXEC = shutil.which('sandbox-exec') or '/usr/bin/sandbox-exec'
+SANDBOX_AVAILABLE = os.path.exists(_SANDBOX_EXEC) and os.path.exists(SANDBOX_PROFILE)
 
 # Linux bubblewrap sandbox (fallback when macOS Seatbelt is unavailable)
 BWRAP_AVAILABLE = shutil.which("bwrap") is not None
@@ -161,10 +164,25 @@ def find_hook_scripts(repo_path):
     return hooks
 
 
+def _safe_env_path():
+    """Minimal PATH for sandboxed hook execution: FHS dirs plus the NixOS/XDG
+    roots that exist on this machine. NixOS has no /usr/bin or /bin, so a
+    hardcoded FHS PATH would leave executed hooks without coreutils."""
+    dirs = ['/usr/bin', '/bin', '/usr/sbin', '/sbin',
+            '/run/current-system/sw/bin', '/nix/var/nix/profiles/default/bin']
+    home = os.path.expanduser('~')
+    dirs += [os.path.join(home, '.nix-profile', 'bin'),
+             os.path.join(home, '.local', 'bin')]
+    user = os.environ.get('USER') or os.path.basename(home)
+    if user:
+        dirs.append(f'/etc/profiles/per-user/{user}/bin')
+    return ':'.join(d for d in dirs if os.path.isdir(d))
+
+
 def build_safe_env(extra_vars=None):
     """Build a minimal, safe environment for sandboxed execution."""
     safe_env = {
-        'PATH': '/usr/bin:/bin:/usr/sbin:/sbin',
+        'PATH': _safe_env_path(),
         'HOME': tempfile.gettempdir(),
         'LANG': 'en_US.UTF-8',
         'TERM': 'dumb',
@@ -216,7 +234,7 @@ def execute_hook_with_payload(hook, payload, repo_path):
 
     # Use explicit interpreter for shell scripts (handles broken shebangs)
     if script_path.endswith(('.sh', '.bash')):
-        exec_cmd = ['/bin/bash', script_path]
+        exec_cmd = [shutil.which('bash') or '/bin/bash', script_path]
     elif script_path.endswith('.py'):
         exec_cmd = [sys.executable, script_path]
     else:
@@ -234,7 +252,7 @@ def execute_hook_with_payload(hook, payload, repo_path):
         # we don't trust the hook anyway (we're running it to observe leaks).
         hook_real = os.path.realpath(script_path)
         exec_cmd = [
-            '/usr/bin/sandbox-exec',
+            _SANDBOX_EXEC,
             '-D', f'HOOK_PATH={hook_real}',
             '-D', f'HOOK_DIR={os.path.dirname(hook_real)}',
             '-f', SANDBOX_PROFILE,
@@ -242,11 +260,17 @@ def execute_hook_with_payload(hook, payload, repo_path):
     elif BWRAP_AVAILABLE:
         # Linux bubblewrap sandbox: read-only root, no network, isolated /tmp.
         # --die-with-parent ensures the sandboxed process cannot outlive us.
+        # --tmpfs /tmp hides hooks that live under /tmp (test harnesses, OS
+        # temp dirs), so re-bind the resolved hook's directory back in — the
+        # same re-allow pattern as the Seatbelt HOOK_PATH/HOOK_DIR params.
+        hook_real = os.path.realpath(script_path)
+        hook_dir = os.path.dirname(hook_real)
         exec_cmd = [
             'bwrap',
             '--ro-bind', '/', '/',
             '--dev', '/dev',
             '--tmpfs', '/tmp',
+            '--ro-bind', hook_dir, hook_dir,
             '--unshare-net',
             '--die-with-parent',
         ] + exec_cmd
@@ -364,7 +388,11 @@ def execute_hook_with_payload(hook, payload, repo_path):
 
     # Check if path traversal succeeded
     if payload['name'] == 'path_traversal':
-        for indicator in ['root:', '/bin/bash', '/bin/sh', 'nobody']:
+        # Indicators must match /etc/passwd line shapes, not bare substrings:
+        # on non-FHS systems (e.g. NixOS) the interpreter's own resolved path
+        # ("/etc/profiles/per-user/<user>/bin/bash: ...") appears in error
+        # output and substring-matches a bare "/bin/bash" — a false positive.
+        for indicator in ['root:', ':/bin/bash', ':/bin/sh', 'nobody:']:
             if indicator in combined_output:
                 findings.append(core.Finding(
                     scanner=SCANNER_NAME, severity="critical",

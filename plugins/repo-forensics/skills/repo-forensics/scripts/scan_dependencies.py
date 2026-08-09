@@ -925,11 +925,69 @@ def _flatten_overrides(overrides_map, result=None, _depth=0, _seen=None):
     return result
 
 
+_JSON_NESTING_HARD_LIMIT = 10000  # refuse outright; real package.json nests ~10 deep
+
+
+def _json_nesting_depth(text):
+    """Maximum `{`/`[` nesting depth of a JSON document, computed in a single
+    pass without parsing (string- and escape-aware). Used to size the bounded
+    recursion-limit retry for adversarially deep package.json files and to
+    refuse documents too deep to parse safely."""
+    depth = max_depth = 0
+    in_string = False
+    escaped = False
+    for ch in text:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == '\\':
+                escaped = True
+            elif ch == '"':
+                in_string = False
+        elif ch == '"':
+            in_string = True
+        elif ch in '{[':
+            depth += 1
+            if depth > max_depth:
+                max_depth = depth
+        elif ch in '}]':
+            depth -= 1
+    return max_depth
+
+
 def scan_package_json(filepath, rel_path):
     findings = []
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+            raw = f.read()
+        try:
+            data = json.loads(raw)
+        except RecursionError:
+            # Adversarial package.json with pathologically nested structure
+            # (e.g. thousands of nested `overrides` levels) blows the default
+            # recursion limit inside the JSON parser itself, before the depth
+            # guard in _flatten_overrides can even run. Flag the file, then
+            # retry under a bounded, temporarily raised recursion limit so the
+            # IOC / compromised-version checks below still run for this file
+            # instead of being silently suppressed. (SS-F1, 2026-04-05.)
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="high",
+                title="Adversarial package.json structure",
+                description="Refused to parse hostile package.json: RecursionError",
+                file=rel_path, line=0, snippet="excessive JSON nesting depth",
+                category="parser-dos"
+            ))
+            nesting = _json_nesting_depth(raw)
+            if nesting > _JSON_NESTING_HARD_LIMIT:
+                return findings
+            old_limit = sys.getrecursionlimit()
+            sys.setrecursionlimit(max(old_limit, nesting * 2 + 1024))
+            try:
+                data = json.loads(raw)
+            except RecursionError:
+                return findings
+            finally:
+                sys.setrecursionlimit(old_limit)
 
         all_deps = {}
         for key in ('dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'):

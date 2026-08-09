@@ -25,6 +25,12 @@ FRONTMATTER_SCALAR_KEYS = (
 FRONTMATTER_STRING_KEYS = ("name", "description", "argument-hint", "allowed-tools")
 _FRONTMATTER_KEY_RE = re.compile(r"^([A-Za-z][A-Za-z0-9_-]*):\s*(.*)$")
 
+# Legitimate frontmatter never nests flow collections anywhere near this deep.
+# Beyond it the value is unbalanced or hostile: PyYAML's pure-Python loader
+# dies with RecursionError (not YAMLError), so the depth is bounded here in
+# the dependency-free pass instead of relying on the parser to complain.
+FRONTMATTER_MAX_FLOW_DEPTH = 100
+
 # Vendored trees, VCS internals and tool caches. Build output directories are
 # intentionally absent: they can contain shipped skills.
 EXCLUDED_DIR_PARTS = frozenset((
@@ -111,19 +117,46 @@ def _extract_frontmatter(text):
     return None
 
 
+def _flow_depth(value):
+    """Return the deepest flow-collection nesting in *value*.
+
+    Counts ``[``/``{`` openers against ``]``/``}`` closers, ignoring quoting;
+    for a sanity bound that approximation is fine.
+    """
+    depth = deepest = 0
+    for char in value:
+        if char in "[{":
+            depth += 1
+            deepest = max(deepest, depth)
+        elif char in "]}":
+            depth = max(0, depth - 1)
+    return deepest
+
+
 def _structural_frontmatter_check(violations, relative, block):
     """Flag scalar keys whose raw value begins with an unquoted flow collection.
 
     Works with zero third-party dependencies. Catches issue #35
     (``argument-hint: [a] [b]``) which is a hard YAML ParserError, and also
     catches single flow collections (``argument-hint: [single]``) that parse
-    as a list instead of the documented string type.
+    as a list instead of the documented string type. Flow collections nested
+    deeper than ``FRONTMATTER_MAX_FLOW_DEPTH`` are flagged on any key, since
+    they kill the real parser with RecursionError rather than a YAMLError.
     """
     for line in block.splitlines():
         match = _FRONTMATTER_KEY_RE.match(line)
         if not match:
             continue
         key, value = match.group(1), match.group(2)
+        if value and value[0] in "[{" \
+                and _flow_depth(value) > FRONTMATTER_MAX_FLOW_DEPTH:
+            _failure(
+                violations, relative, "frontmatter",
+                "flow collection nested deeper than {} levels; unbalanced or "
+                "hostile nesting crashes strict YAML loaders".format(
+                    FRONTMATTER_MAX_FLOW_DEPTH),
+            )
+            continue
         if key not in FRONTMATTER_SCALAR_KEYS or not value:
             continue
         if value[0] in "[{":

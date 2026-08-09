@@ -1,4 +1,5 @@
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -7,6 +8,11 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 RUN_FORENSICS = REPO_ROOT / "skills" / "repo-forensics" / "scripts" / "run_forensics.sh"
 PYTHON_LAUNCHER = REPO_ROOT / "hooks" / "python-launcher.sh"
+BASH = shutil.which("bash") or "/bin/bash"
+# The codex-finder helper sources the launcher via sed inside a stripped-PATH
+# environment (PATH=/usr/bin:/bin); on non-FHS systems (NixOS) sed does not
+# exist there, so resolve it from the parent environment up front.
+SED = shutil.which("sed") or "sed"
 
 
 def _write_shim(path: Path, banner: str | None, *, executable: bool = True) -> None:
@@ -16,7 +22,7 @@ def _write_shim(path: Path, banner: str | None, *, executable: bool = True) -> N
     path.parent.mkdir(parents=True, exist_ok=True)
     version_line = f'echo "{banner}"' if banner is not None else "true"
     path.write_text(
-        "#!/bin/bash\n"
+        f"#!{BASH}\n"
         f'[ "$1" = "--version" ] && {{ {version_line}; exit 0; }}\n'
         'echo "SHIM_RAN:$*"\n'
     )
@@ -30,13 +36,13 @@ def _run_codex_finder(env: dict) -> subprocess.CompletedProcess:
     exercised without the machine's real system Python short-circuiting it."""
     script = (
         'set -u\n'
-        f'''eval "$(sed -n '1,/^if py3=/p' "{PYTHON_LAUNCHER}" | sed '$d')"\n'''
+        f'''eval "$("{SED}" -n '1,/^if py3=/p' "{PYTHON_LAUNCHER}" | "{SED}" '$d')"\n'''
         'set +e\n'
         'out=$(find_codex_runtime_python); rc=$?\n'
         'printf "OUT=%s\\nRC=%s\\n" "$out" "$rc"\n'
     )
     return subprocess.run(
-        ["/bin/bash", "-c", script],
+        [BASH, "-c", script],
         text=True, capture_output=True, env=env, timeout=20, check=False,
     )
 
@@ -128,7 +134,7 @@ def test_cli_skips_broken_windows_python_alias(tmp_path):
         "PATH": f"{fake_bin}:/usr/bin:/bin",
     }
     result = subprocess.run(
-        ["/bin/bash", str(RUN_FORENSICS), "--inventory", "--list-ecosystems"],
+        [BASH, str(RUN_FORENSICS), "--inventory", "--list-ecosystems"],
         text=True,
         capture_output=True,
         env=env,
@@ -158,7 +164,7 @@ def test_cli_skips_zero_byte_python_stub(tmp_path):
 
     env = {**os.environ, "PATH": f"{fake_bin}:/usr/bin:/bin"}
     result = subprocess.run(
-        ["/bin/bash", str(RUN_FORENSICS), "--inventory", "--list-ecosystems"],
+        [BASH, str(RUN_FORENSICS), "--inventory", "--list-ecosystems"],
         text=True, capture_output=True, env=env, timeout=20, check=False,
     )
 
@@ -184,7 +190,7 @@ def test_cli_skips_non_python_exit0_pretender(tmp_path):
 
     env = {**os.environ, "PATH": f"{fake_bin}:/usr/bin:/bin"}
     result = subprocess.run(
-        ["/bin/bash", str(RUN_FORENSICS), "--inventory", "--list-ecosystems"],
+        [BASH, str(RUN_FORENSICS), "--inventory", "--list-ecosystems"],
         text=True, capture_output=True, env=env, timeout=20, check=False,
     )
 
@@ -212,7 +218,7 @@ def test_cli_bypasses_hanging_python_stub(tmp_path):
     # 20s is generous: the resolver's internal timeout (5s) must kick in
     # well before this outer subprocess timeout fires.
     result = subprocess.run(
-        ["/bin/bash", str(RUN_FORENSICS), "--inventory", "--list-ecosystems"],
+        [BASH, str(RUN_FORENSICS), "--inventory", "--list-ecosystems"],
         text=True, capture_output=True, env=env, timeout=20, check=False,
     )
 
@@ -241,7 +247,7 @@ def test_cli_falls_back_to_py_launcher(tmp_path):
 
     env = {**os.environ, "PATH": f"{fake_bin}:/usr/bin:/bin"}
     result = subprocess.run(
-        ["/bin/bash", str(RUN_FORENSICS), "--inventory", "--list-ecosystems"],
+        [BASH, str(RUN_FORENSICS), "--inventory", "--list-ecosystems"],
         text=True, capture_output=True, env=env, timeout=20, check=False,
     )
 

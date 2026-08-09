@@ -2,7 +2,90 @@
 
 All notable changes to repo-forensics. Versions follow semver.
 
-## [Unreleased]
+## [2.16.0] - 2026-08-09
+
+### Added: Kimi Code plugin support
+
+- New `.kimi-plugin/plugin.json` manifest makes the suite installable in Kimi
+  Code straight from GitHub (`/plugins install <url>`), with the same three
+  hooks as the Claude Code and Codex integrations — PreToolUse (IOC gate),
+  PostToolUse (auto-scan), SessionStart (security scan) — declared inline in
+  Kimi's hook format.
+- All hook wrappers now fall back to `KIMI_PLUGIN_ROOT` when
+  `CLAUDE_PLUGIN_ROOT` is unset, and `first-run-nudge.sh` detects Kimi
+  managed installs (`plugins/managed/`) with its own update instructions.
+- `pre_scan.py` prints the block reason to stderr in addition to the stdout
+  JSON decision, so Kimi Code (exit 2 + stderr reason) surfaces why a
+  command was blocked, not just that it was.
+- `verify_install.py` integrity tracking now covers `.kimi-plugin` manifests,
+  and the Codex marketplace sync mirrors the new manifest directory.
+
+### Fixed: SARIF tool version drifted from the release version
+
+- `sarif_export.py` hardcoded `TOOL_VERSION`, which went stale at both the
+  2.15.0 and 2.16.0 bumps. It is now resolved from the plugin manifests at
+  import time (with a literal fallback for standalone use), so the SARIF
+  `version`/`semanticVersion` can never drift again.
+
+## [2.15.0] - 2026-08-08
+
+### Added: non-FHS system support (NixOS and friends)
+
+- Every interpreter and command resolution now works on systems built without
+  `/usr/bin` or `/bin` (NixOS, where coreutils and python3 live in per-user
+  Nix profiles and `/bin` holds only a `sh` symlink). Bash is resolved
+  dynamically (`$BASH` → `command -v bash` → `shutil.which`, with `/bin/bash`
+  only as a last-resort fallback) and all shebangs are `#!/usr/bin/env`.
+- The trusted-path allowlists — `python-launcher.sh` safe prefixes and
+  direct-path fallbacks, the refresh-daemon hook PATH, the `run_forensics.sh`
+  PATH floor, `refresh_controller._trusted_command`, the DAST sandboxed-env
+  PATH, and the npmrc `git=` system-path allowlist — now cover root-owned
+  NixOS roots (`/run/current-system/sw/bin`, `/run/wrappers/bin`,
+  `/nix/var/nix/profiles/default/bin`) and per-user Nix/XDG profile dirs,
+  without downgrading to blanket PATH trust.
+- `python-launcher.sh` derives HOME from `/etc/passwd` (pure bash, via
+  `$EUID`) when the hook environment strips both HOME and PATH, and its
+  interpreter probe arms the 2-second watchdog only when `sleep` actually
+  resolves — previously a missing `sleep` turned the watchdog into an
+  immediate SIGKILL of every candidate, so no interpreter was ever found.
+
+### Fixed: capability ledger worked only when PyYAML happened to be installed
+
+- `.forensics-capabilities.yml` declarations were silently ignored on hosts
+  without PyYAML (the suite is deliberately zero-dependency), so findings
+  were never annotated with `declared_capability`. A zero-dependency subset
+  parser (same trade-off as `parse_pnpm_lock.py`) now handles the documented
+  declaration shape, with PyYAML still preferred when present.
+
+### Fixed: hostile deep nesting crashed or slipped past parsers
+
+- `validate_manifests.py` reports SKILL.md frontmatter with pathologically
+  nested flow collections as a violation even without PyYAML, via a
+  dependency-free depth guard (100 levels); previously the line was silently
+  skipped on the degraded path.
+- `scan_dependencies.py` no longer abandons a recursion-bomb `package.json`:
+  it flags the adversarial structure, then retries the parse under a
+  bounded, temporarily raised recursion limit (hard cap 10,000 levels) so
+  IOC and compromised-version checks still run for that file.
+
+### Fixed: DAST sandboxing and detection on non-macOS hosts
+
+- The bubblewrap sandbox re-binds hooks that live under `/tmp` into its
+  private tmpfs — previously every `/tmp`-hosted hook (test harnesses, OS
+  temp dirs) failed to execute inside the sandbox, silently disabling DAST.
+- The path-traversal verdict no longer false-positives on the interpreter's
+  own resolved path: indicators match `/etc/passwd` line shapes
+  (`:/bin/bash`, `nobody:`) instead of bare substrings, and `sandbox-exec`
+  is resolved dynamically.
+
+### Fixed: deterministic budget-starvation naming
+
+- `walk_aux` now walks directories and files in sorted order. Which archive
+  a fan-out decoy starves no longer depends on filesystem `readdir` order,
+  so the fail-loud `archive-scan-incomplete` finding names the same file on
+  every host.
+
+## [2.14.0] - 2026-08-07
 
 ### Added: keyv/cacheable August 2026 wave + 25-campaign IOC ingest
 

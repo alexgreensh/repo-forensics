@@ -363,12 +363,17 @@ def check_ioc_packages(package_names, iocs=None):
 
 
 def output_block(reason):
-    """Output JSON that tells Claude Code to block the command."""
+    """Output JSON that tells the agent to block the command.
+
+    Claude Code reads the JSON decision on stdout; Kimi Code blocks on exit
+    code 2 and surfaces stderr as the reason. Emit both so either host shows
+    the operator why the command was blocked."""
     result = {
         "decision": "block",
         "reason": reason
     }
     print(json.dumps(result))
+    print(reason, file=sys.stderr)
     sys.exit(2)
 
 

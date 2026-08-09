@@ -93,13 +93,13 @@ def get_tracked_hook_files(repo_root):
 def get_tracked_runtime_manifest_files(repo_root):
     """Get load-bearing plugin manifest files under agent plugin dirs.
 
-    Claude, Codex, and cross-agent marketplace manifests live outside
+    Claude, Codex, Kimi, and cross-agent marketplace manifests live outside
     skill_root but determine what hooks and skills the agent loads. Extending
     the integrity registry to cover them closes the same gap class as hook
     files (commit 64fbe57).
     """
     tracked = []
-    for dirname in (".claude-plugin", ".codex-plugin"):
+    for dirname in (".claude-plugin", ".codex-plugin", ".kimi-plugin"):
         manifest_dir = os.path.join(repo_root, dirname)
         try:
             if not os.path.isdir(manifest_dir):

@@ -17,6 +17,7 @@ PRE_SCAN_WRAPPER = REPO_ROOT / "hooks" / "run_pre_scan.sh"
 SESSION_SCAN_WRAPPER = REPO_ROOT / "hooks" / "run_session_scan.sh"
 INSTALL_REFRESH_DAEMON = REPO_ROOT / "hooks" / "install_refresh_daemon.sh"
 ENSURE_REFRESH_DAEMON = REPO_ROOT / "hooks" / "ensure_refresh_daemon.sh"
+BASH = shutil.which("bash") or "/bin/bash"
 
 
 def _install_nudge_script(cache_root):
@@ -30,7 +31,7 @@ def _install_nudge_script(cache_root):
 
 def _run_script(script, env):
     return subprocess.run(
-        ["bash", str(script)],
+        [BASH, str(script)],
         capture_output=True,
         text=True,
         env=env,
@@ -188,7 +189,7 @@ def test_pre_scan_wrapper_survives_stripped_path_and_preserves_block_exit():
     }
 
     result = subprocess.run(
-        ["/bin/bash", str(PRE_SCAN_WRAPPER)],
+        [BASH, str(PRE_SCAN_WRAPPER)],
         input=payload,
         capture_output=True,
         text=True,
