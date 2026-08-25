@@ -42,6 +42,7 @@ SCRIPT="$PLUGIN_ROOT/skills/repo-forensics/scripts/pre_scan.py"
 LAUNCHER="$PLUGIN_ROOT/hooks/python-launcher.sh"
 ENSURE_REFRESH="$PLUGIN_ROOT/hooks/ensure_refresh_daemon.sh"
 MANIFEST="$PLUGIN_ROOT/install-manifest.json"
+CHECKSUMS="$PLUGIN_ROOT/skills/repo-forensics/checksums.json"
 
 warn() { printf '%s\n' "$*" >&2; }
 
@@ -72,7 +73,10 @@ verdict() {
 _bootstrap_refresh() {
     [ -f "$ENSURE_REFRESH" ] || return 0
     local latch_dir latch now mtime
-    latch_dir="${XDG_CACHE_HOME:-$HOME/.cache}/repo-forensics"
+    # HOME may be unset under set -u in minimal envs (devcontainers, launchd,
+    # broken-dotfile SSH). Falling back to /tmp keeps the non-critical refresh
+    # latch from crashing the whole wrapper before it can emit a verdict.
+    latch_dir="${XDG_CACHE_HOME:-${HOME:-/tmp}/.cache}/repo-forensics"
     latch="$latch_dir/cursor-session.latch"
     now="$(date +%s 2>/dev/null || echo 0)"
     mtime=0
@@ -124,6 +128,7 @@ _evidence(){
     safe="$(printf '%s' "$1" | sed \
         -e 's/"user_email"[[:space:]]*:[[:space:]]*"[^"]*"/"user_email":"<redacted>"/g' \
         -e 's/"transcript_path"[[:space:]]*:[[:space:]]*"[^"]*"/"transcript_path":"<redacted>"/g' \
+        -e 's/"session_id"[[:space:]]*:[[:space:]]*"[^"]*"/"session_id":"<redacted>"/g' \
         -e 's/[A-Za-z0-9._%+-]\{1,\}@[A-Za-z0-9.-]\{1,\}\.[A-Za-z]\{2,\}/<redacted-email>/g')"
 
     if [ ! -s "$REPO_FORENSICS_HOOK_LOG" ]; then
@@ -164,6 +169,93 @@ _manifest_claims_missing_file() {
     return 1
 }
 
+# --- (R8) modification-aware tamper check -----------------------------------
+# The manifest sweep above catches a DELETED scanner. A MODIFIED scanner
+# (pre_scan.py rewritten to always-allow, or the launcher swapped) passes an
+# existence check, so the wrapper hash-verifies the fast gate's trust base
+# against the shipped checksums.json BEFORE trusting a verdict. The check lives
+# in the shell wrapper, not the Python it checks, so a rewritten scanner cannot
+# vouch for itself.
+#
+# SCOPE, stated honestly: this is a tamper-EVIDENT tripwire, not a tamper-PROOF
+# boundary. checksums.json lives in the same writable directory as the scanner,
+# so a same-user attacker who can rewrite the scanner can also rewrite its hash
+# in checksums.json, or edit this wrapper. Runtime self-hashing cannot close
+# that; the authoritative defenses are the OFFLINE signed audit
+# (`verify_install.py --verify-signature`, ed25519 against a pinned key) plus OS
+# file permissions. What this DOES close: accidental corruption, and an attacker
+# who modifies one scanner file / the launcher / the IOC feed without also
+# forging the manifest -- the common, cheap attacks. It also closes on a fake
+# empty-output hasher and a deleted manifest key (both -> deny), and resolves the
+# hash tool by absolute path so a PATH-planted `shasum` cannot neuter it.
+_expected_sha() {
+    # checksums.json keys are relative to the skill root (or plugin root for the
+    # launcher); the value is a 64-hex sha256. Extract exactly the entry for "$1".
+    [ -f "$CHECKSUMS" ] || return 1
+    sed -n "s|.*\"$1\"[[:space:]]*:[[:space:]]*\"\([0-9a-f]\{64\}\)\".*|\1|p" \
+        "$CHECKSUMS" 2>/dev/null | head -1
+}
+_resolve_hasher() {
+    # Absolute paths FIRST so a `shasum` planted earlier in PATH cannot win.
+    local p
+    for p in /usr/bin/shasum /bin/shasum /usr/local/bin/shasum /opt/homebrew/bin/shasum; do
+        [ -x "$p" ] && { printf '%s -a 256' "$p"; return 0; }
+    done
+    for p in /usr/bin/sha256sum /bin/sha256sum /usr/local/bin/sha256sum /opt/homebrew/bin/sha256sum; do
+        [ -x "$p" ] && { printf '%s' "$p"; return 0; }
+    done
+    # Last resort: PATH lookup. Still safe against a fake EMPTY-output tool,
+    # because the strict per-file loop denies on any missing output line.
+    if command -v shasum >/dev/null 2>&1; then printf '%s -a 256' "$(command -v shasum)"; return 0; fi
+    if command -v sha256sum >/dev/null 2>&1; then printf '%s' "$(command -v sha256sum)"; return 0; fi
+    return 1
+}
+_critical_file_tampered() {
+    # Prints: a tampered/unverifiable relpath (caller DENIES); __CANNOT_VERIFY__
+    # when integrity cannot be established (caller decides degrade vs deny);
+    # empty when everything verified. All present files are hashed in ONE sha256
+    # invocation (N files, one process) to stay inside the per-command latency
+    # budget; output preserves argument order so results match by line index,
+    # robust to spaces in paths.
+    [ -f "$CHECKSUMS" ] || { printf '__CANNOT_VERIFY__'; return 0; }
+    local sd="$PLUGIN_ROOT/skills/repo-forensics" pair k p
+    # key|abspath. Skill files are skill-root-relative; python-launcher.sh is
+    # plugin-root-relative and RUNS the scanner (it can emit a verdict itself),
+    # so it is in the trust base. A missing launcher is a legit python3-fallback
+    # config, not tamper, so it is skipped when absent.
+    local -a keys=() abses=()
+    for pair in \
+        "scripts/pre_scan.py|$sd/scripts/pre_scan.py" \
+        "scripts/hook_adapter.py|$sd/scripts/hook_adapter.py" \
+        "scripts/ioc_manager.py|$sd/scripts/ioc_manager.py" \
+        "scripts/forensics_core.py|$sd/scripts/forensics_core.py" \
+        "scripts/rule_loader.py|$sd/scripts/rule_loader.py" \
+        "data/compromised_versions.json|$sd/data/compromised_versions.json" \
+        "hooks/python-launcher.sh|$PLUGIN_ROOT/hooks/python-launcher.sh"; do
+        k="${pair%%|*}"; p="${pair#*|}"
+        [ -f "$p" ] || continue
+        keys+=("$k"); abses+=("$p")
+    done
+    [ "${#abses[@]}" -gt 0 ] || return 0
+    local hasher; hasher="$(_resolve_hasher)" || { printf '__CANNOT_VERIFY__'; return 0; }
+    local hashout; hashout="$($hasher "${abses[@]}" 2>/dev/null)"
+    # STRICT: with checksums.json present, every present critical file must have a
+    # listed hash, a computed hash, and they must match. A missing key, a missing
+    # output line (short/fake tool), or a mismatch all DENY. "verified" and
+    # "could not verify" are never collapsed once checksums.json exists.
+    local i=0 want got
+    for k in "${keys[@]}"; do
+        want="$(_expected_sha "$k")"
+        got="$(printf '%s\n' "$hashout" | awk -v n="$((i + 1))" 'NR==n{print $1; exit}')"
+        if [ -z "$want" ] || [ -z "$got" ] || [ "$got" != "$want" ]; then
+            printf '%s' "$k"
+            return 0
+        fi
+        i=$((i + 1))
+    done
+    return 0
+}
+
 if [ ! -f "$SCRIPT" ]; then
     _missing="$(_manifest_claims_missing_file || true)"
     if [ -f "$MANIFEST" ]; then
@@ -179,6 +271,24 @@ if [ ! -f "$SCRIPT" ]; then
     warn "[repo-forensics] No install manifest claims it, so this is treated as 'not installed here' rather than tampering."
     warn "[repo-forensics] The pre-execution gate is NOT protecting this command."
     verdict allow ""
+fi
+
+# A present-but-modified scanner is the gap the existence sweep cannot see.
+_tampered="$(_critical_file_tampered)"
+if [ "$_tampered" = "__CANNOT_VERIFY__" ]; then
+    # Integrity could not be established (no checksums.json, or no sha256 tool).
+    # Degrade with a LOUD warning rather than deny: denying every command on a
+    # legitimately checksums-less install would brick the gate (users uninstall
+    # a tool that blocks everything), which is the worse failure. A deleted
+    # checksums.json is the same residual class as a co-edited one -- both are
+    # only truly closed by the OFFLINE signed audit (verify_install.py
+    # --verify-signature) plus OS file permissions, not by runtime self-hashing.
+    warn "[repo-forensics] WARNING: cannot verify scanner integrity (no checksums.json or no sha256 tool)."
+    warn "[repo-forensics] Proceeding on existence checks only. Run 'verify_install.py --verify-signature' to audit the install."
+elif [ -n "${_tampered:-}" ]; then
+    warn "[repo-forensics] TAMPER: $_tampered does not match checksums.json (modified since install)."
+    warn "[repo-forensics] Refusing to trust a modified scanner. Reinstall repo-forensics."
+    verdict deny "[repo-forensics] TAMPER: a decision-critical scanner file ($_tampered) has been modified since install (checksum mismatch). The pre-execution gate will not trust a modified scanner to vouch for this command; reinstall repo-forensics."
 fi
 
 # --- run the gate -----------------------------------------------------------

@@ -80,7 +80,7 @@
     "scripts/scan_yara.py": "0272b4de75c8af5c461bfda86287254f1be9dfd31cfa20e2ebe91a55a8a35256",
     "scripts/session_scan.py": "e0c4c5326059733126fa3bbb00ead2adc2f0df5f43e81958f015d24918ddefe7",
     "scripts/validate_manifests.py": "a0926bc0a0b86ca59a2d66036a8bce403d4d4a0793bf799af8554e3c36ef43c9",
-    "scripts/verify_install.py": "39db078858ac3bee2ee44a02403461d447d50f1760a57176c0d264f7cdd89b3b",
+    "scripts/verify_install.py": "b98802487a4483f53553ef106ad82692ea92ad2b94972f73684e52d29c468034",
     "scripts/vuln_feed.py": "0b56e20969beb8fbc59650114a34ac8743d1a0862ff3ae56b07e92d2e368a141"
   },
   "repo_symlinks": {
@@ -98,8 +98,8 @@
     "hooks/run_session_scan.sh": "72792f801bfe3f21651224e64e4eb4eb024d99a94369be26c4a05f723949b2e7",
     "hooks/uninstall_refresh_daemon.sh": "a4e48bd32fe653818e210ad98457b9c9436c6f8a58630c3105ea4a18280a3412",
     "hooks/cursor/run_auto_scan.sh": "3877afcf8806d54ed1562c830fb95c111b84f2ce6313e6874f355afd939f884b",
-    "hooks/cursor/run_pre_scan.sh": "f50bf5bde8c367af2059ab0d5224689588cd10f80013fd4bbd810059969f73be",
-    "hooks/cursor/run_session_scan.sh": "1d69d0edad1246ca080e95c7488e8e96038d50e15f58fe3447d588938dd2a5f4"
+    "hooks/cursor/run_pre_scan.sh": "920f453b4627ee4070835d1575b1508c69546a26632e28ccb3217d601780a9a8",
+    "hooks/cursor/run_session_scan.sh": "adec34a9b382afe4317b36909cf2b871b27912c0ba22febd317df58e87822772"
   },
   "hook_count": 12,
   "repo_manifests": {

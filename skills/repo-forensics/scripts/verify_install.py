@@ -395,6 +395,20 @@ def verify_checksums(skill_root):
             tampered_hooks.append(rel)
             report.append(f"  HOOK TAMPERED: {rel} (expected {expected_hash[:12]}..., got {actual_hash[:12]}...)")
 
+    # Detect NEW untracked hook files. #41 landed the enumeration half of the
+    # "hooks/ subdirectories escaped the registry" fix (get_tracked_hook_files
+    # now recurses), but not the verification half: a wrapper planted under
+    # hooks/ or hooks/cursor/ would otherwise pass audit as VERIFIED because
+    # every *claimed* file still matches. An audit that says CLEAN while a
+    # malicious wrapper sits on disk is the exact failure the registry exists to
+    # prevent. Folded into all_extra so the summary drops from VERIFIED to
+    # PARTIAL (same posture as new skill files / symlinks).
+    extra_hooks = []
+    current_hook_files = set(get_tracked_hook_files(repo_root))
+    for rel in sorted(current_hook_files - set(expected_hooks)):
+        extra_hooks.append(rel)
+        report.append(f"  NEW HOOK FILE: {rel} (not in checksums.json)")
+
     # Check repo-level symlinks against manifest. Caught by torture-room
     # security-sentinel Finding 3 — the backward-compat skill symlink at
     # repo root points into skills/repo-forensics/, but it lives outside
@@ -497,7 +511,7 @@ def verify_checksums(skill_root):
         len(missing) + len(missing_symlinks) + len(missing_hooks) +
         len(missing_manifests) + len(missing_source_manifests)
     )
-    all_extra = len(extra) + len(extra_symlinks)
+    all_extra = len(extra) + len(extra_symlinks) + len(extra_hooks)
     passed = all_tampered == 0 and all_missing == 0
     total_tracked = (
         len(expected) + len(expected_symlinks) + len(expected_hooks) +

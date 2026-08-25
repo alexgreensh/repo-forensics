@@ -38,7 +38,7 @@ fi
 
 # Mark the session latch so the beforeShellExecution wrapper does not repeat
 # the bootstrap it just performed (K1).
-_latch_dir="${XDG_CACHE_HOME:-$HOME/.cache}/repo-forensics"
+_latch_dir="${XDG_CACHE_HOME:-${HOME:-/tmp}/.cache}/repo-forensics"
 mkdir -p "$_latch_dir" 2>/dev/null && : > "$_latch_dir/cursor-session.latch" 2>/dev/null || true
 
 if [ ! -f "$SCRIPT" ]; then
