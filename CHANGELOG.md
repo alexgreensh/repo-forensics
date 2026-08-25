@@ -2,7 +2,25 @@
 
 All notable changes to repo-forensics. Versions follow semver.
 
-## [Unreleased]
+## [2.14.3] - 2026-08-26
+
+### Security: modification-aware tamper check on the Cursor blocking gate
+
+- The Cursor wrapper's runtime integrity was existence-only, so a scanner that
+  was present but **modified** (`pre_scan.py` rewritten to always-allow, the
+  launcher swapped, or the IOC feed edited) passed the check and silently
+  approved malware. `run_pre_scan.sh` now hash-verifies the fast gate's trust
+  base against `checksums.json` before trusting a verdict — one sha256 pass, hash
+  tool resolved by absolute path (no PATH-planting), strict when checksums are
+  present. This is tamper-**evident**, not tamper-proof: the authoritative
+  defense against a same-user attacker remains the offline signed audit
+  (`verify_install.py --verify-signature`) plus OS file permissions.
+- `run_pre_scan.sh` / `run_session_scan.sh`: guard the refresh-latch `HOME`
+  reference so the wrapper emits a verdict instead of crashing under `set -u`
+  when `HOME` and `XDG_CACHE_HOME` are both unset.
+- `run_pre_scan.sh`: redact `session_id` in the opt-in evidence log.
+- `verify_install.py`: report `NEW HOOK FILE` for untracked files planted under
+  `hooks/`, dropping the audit verdict from VERIFIED to PARTIAL.
 
 ### Added: Cursor adapter — scan-on-agent-activity as the 4th platform
 
