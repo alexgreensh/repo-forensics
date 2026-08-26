@@ -623,7 +623,12 @@ class TestCredentialsWalker:
         rec = records[0]
         assert rec["auth_mode"] == "chatgpt"
         assert rec["auth_mode_risk_weight"] == "medium"
-        assert rec["is_world_readable"] is False
+        # Windows can't enforce 0o600 via os.chmod (no Unix mode bits), so a
+        # restricted file still reports world-readable there; this "restricted
+        # file is NOT world-readable" check is POSIX-only (Windows ACL-based
+        # detection is a tracked follow-up, not covered here).
+        if sys.platform != "win32":
+            assert rec["is_world_readable"] is False
         assert "json_shape" in rec
         # Shape must NOT contain actual token values
         shape = rec["json_shape"]

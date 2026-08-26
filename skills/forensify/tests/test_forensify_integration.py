@@ -152,7 +152,11 @@ class TestCoordFolder:
         from orchestrator.analysis_dispatcher import create_coord_folder, list_runs
         coord = create_coord_folder()
         assert os.path.isdir(coord)
-        assert os.stat(coord).st_mode & 0o777 == 0o700
+        # Unix mode bits don't map on Windows (it uses ACLs, not 0o700 st_mode);
+        # os.chmod there cannot produce 0o700. The private-coord-folder guarantee
+        # on Windows needs an ACL (tracked separately); skip the POSIX perm check.
+        if platform.system() != "Windows":
+            assert os.stat(coord).st_mode & 0o777 == 0o700
 
         manifest = json.loads(open(os.path.join(coord, "manifest.json")).read())
         assert manifest["coord_schema_version"] == 1

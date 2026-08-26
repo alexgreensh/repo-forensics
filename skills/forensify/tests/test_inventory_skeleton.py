@@ -125,8 +125,12 @@ class TestExpandEnvVars:
         monkeypatch.setenv("HOME", str(tmp_path))
         result = expand_env_vars("~/test", env={"HOME": str(tmp_path)})
         # expanduser uses HOME from the real environment, not the passed dict,
-        # so we set it via monkeypatch.
-        assert result == str(tmp_path / "test")
+        # so we set it via monkeypatch. Compare NORMALIZED: expand_env_vars joins
+        # home + "/test", so on Windows the home half has backslashes and the
+        # suffix a forward slash -- a valid path Windows accepts, but exact-string
+        # equality against str(tmp_path / "test") (all backslashes) is
+        # separator-brittle. normpath makes the comparison separator-insensitive.
+        assert os.path.normpath(result) == os.path.normpath(str(tmp_path / "test"))
 
     def test_no_bare_dollar_expansion(self):
         # $NAME without braces is intentionally not expanded

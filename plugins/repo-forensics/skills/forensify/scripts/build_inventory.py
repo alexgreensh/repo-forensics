@@ -1310,7 +1310,12 @@ def walk_credentials_surface(
         mode = st.st_mode & 0o777
         rec["is_world_readable"] = bool(mode & stat.S_IROTH)
         rec["is_group_readable"] = bool(mode & stat.S_IRGRP)
-        rec["owner_uid_matches_current"] = st.st_uid == os.getuid()
+        # os.getuid() is POSIX-only and crashes on Windows (AttributeError);
+        # Windows has no uid to compare (st_uid is always 0), so the ownership
+        # match is undefined there rather than a hard failure of the whole walk.
+        _cur_uid = os.getuid() if hasattr(os, "getuid") else None
+        rec["owner_uid_matches_current"] = (
+            st.st_uid == _cur_uid if _cur_uid is not None else None)
 
         if schema_mode == "shape_only" and path.endswith(".json"):
             rec.update(_inspect_json_shape(path))
