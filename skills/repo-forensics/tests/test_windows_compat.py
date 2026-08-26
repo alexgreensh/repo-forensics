@@ -7,19 +7,35 @@ import sys
 from pathlib import Path
 
 
+def _normalize_launcher_path(p):
+    """Canonicalize a path the bash launcher printed so it can be compared to a
+    native Python path WITHOUT os.stat.
+
+    The launcher runs under bash. On the Windows CI runner that is Git Bash,
+    whose MSYS layer prints paths in POSIX form with a mounted-drive prefix --
+    `/c/Users/.../python.exe` -- NOT `C:\\Users\\...`. os.path.samefile() cannot
+    be used to compare that against the native Python path: samefile stat()s
+    both operands, and native Windows Python cannot stat `/c/Users/...` (it is
+    not a valid Win32 path), so it raised FileNotFoundError even though the
+    launcher DID find the file. So we convert `/<drive>/rest` -> `<drive>:/rest`
+    and compare normalized strings instead of touching the filesystem."""
+    p = p.strip().replace("\\", "/")
+    m = re.match(r"^/([a-zA-Z])/(.*)$", p)  # /c/Users/... (Git Bash / MSYS)
+    if m:
+        p = "%s:/%s" % (m.group(1).upper(), m.group(2))
+    return os.path.normcase(os.path.normpath(p))
+
+
 def _assert_found(result, expected):
-    """Assert the launcher reported finding `expected`, comparing paths by
-    identity rather than string. On Windows the launcher globs from a native
-    HOME and emits forward-slash paths (e.g. C:/Users/.../python.exe) while
-    Python's str(Path) uses backslashes -- an exact-string match spuriously
-    fails there even though the SAME file was found. os.path.samefile resolves
-    both through the OS, so the comparison is separator- and case-insensitive on
-    every platform."""
+    """Assert the launcher reported finding `expected`, comparing by normalized
+    path STRING (separator-, case-, and MSYS-prefix-insensitive) rather than by
+    os.stat. See _normalize_launcher_path for why samefile is wrong on the Git
+    Bash Windows runner."""
     m = re.search(r"^OUT=(.*)$", result.stdout, re.MULTILINE)
     assert m, result.stdout + result.stderr
     out = m.group(1).strip()
     assert out, "launcher returned no path: " + result.stdout + result.stderr
-    assert os.path.samefile(out, str(expected)), (
+    assert _normalize_launcher_path(out) == _normalize_launcher_path(str(expected)), (
         f"launcher returned {out!r}, expected the file {str(expected)!r}\n"
         + result.stdout + result.stderr
     )
