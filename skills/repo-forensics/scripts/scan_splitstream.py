@@ -286,7 +286,7 @@ def _extract_fragments(text, deadline=None, stats=None):
     for start, end, frag in candidates:
         processed += 1
         if deadline is not None and (processed % DEADLINE_CHECK_EVERY == 0):
-            if time.monotonic() > deadline:
+            if time.monotonic() >= deadline:
                 stats["deadline_hit"] = True
                 stats["truncated"] = True
                 break
@@ -484,7 +484,7 @@ def scan_repo(repo_path, ignore_patterns=None):
     ):
         if (scanned >= MAX_FILES
                 or total_fragments >= MAX_TOTAL_FRAGMENTS
-                or time.monotonic() > deadline):
+                or time.monotonic() >= deadline):
             _add_budget_note(rel_path, "splitstream-scan-incomplete")
             break
         scanned += 1
@@ -513,7 +513,7 @@ def scan_repo(repo_path, ignore_patterns=None):
 
     # --- Reassembly pass over groups merging ALL same-alphabet bands ---
     for alphabet, band_lo, members in _merged_groups(groups):
-        if time.monotonic() > deadline:
+        if time.monotonic() >= deadline:
             _add_budget_note("<splitstream>", "splitstream-scan-incomplete")
             break
         if len(members) < MIN_GROUP_MEMBERS:
@@ -535,7 +535,7 @@ def scan_repo(repo_path, ignore_patterns=None):
         contributing_for_hit = None
         # Try the bounded set of orderings; the FIRST that decodes to a payload wins.
         for order in _candidate_orderings(members):
-            if time.monotonic() > deadline:
+            if time.monotonic() >= deadline:
                 _add_budget_note("<splitstream>", "splitstream-scan-incomplete")
                 break
 

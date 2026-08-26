@@ -124,6 +124,40 @@ class TestMergeSafety:
         assert f'CLAUDE_PLUGIN_ROOT="{cursor_install._dq(plugin_root)}"' in command
         assert os.path.isabs(plugin_root)
 
+    def test_blocking_gate_launches_via_baked_absolute_interpreter(
+            self, cursor_home, plugin_root):
+        """The installed blocking gate must launch the cross-platform Python
+        entrypoint via the interpreter that ran the installer (absolute
+        sys.executable), NOT a literal `python3`.
+
+        The python.org Windows installer -- the dominant Windows Python -- ships
+        only `python.exe` and the `py` launcher, no `python3.exe`. A failClosed
+        gate launched as `python3` there cannot start and would DENY every shell
+        command (the WSL-`bash` failure class again). The installer necessarily
+        ran under a WORKING interpreter, so baking sys.executable is guaranteed
+        valid on that box, Windows included."""
+        cursor_install.install(root=plugin_root)
+        entry = [e for e in _read(cursor_home)["hooks"]["beforeShellExecution"]
+                 if cursor_install.OWNERSHIP_MARKER in e.get("command", "")][0]
+        command = entry["command"]
+        # Launches the shipped Python gate via the baked absolute interpreter.
+        expected_tail = (
+            f'"{cursor_install._dq(sys.executable)}" '
+            f'"{cursor_install._dq(plugin_root)}/'
+            f'skills/repo-forensics/scripts/cursor_pre_scan.py"')
+        assert expected_tail in command, command
+        assert os.path.isabs(sys.executable)
+        # NOT the un-baked literal `python3` launcher, and NOT bash.
+        assert 'python3 "${CLAUDE_PLUGIN_ROOT}' not in command
+        assert "hooks/cursor/run_pre_scan.sh" not in command
+        assert "bash " not in command
+        # No fallback chaining: a legit exit-2 DENY must not trip a second
+        # interpreter attempt and double-run the scanner.
+        assert "||" not in command and "&&" not in command
+        # Contract preserved.
+        assert entry.get("failClosed") is True
+        assert entry.get("timeout") == 10
+
     def test_reinstall_replaces_instead_of_stacking(self, cursor_home, plugin_root):
         cursor_install.install(root=plugin_root)
         cursor_install.install(root=plugin_root)

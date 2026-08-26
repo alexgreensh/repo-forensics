@@ -600,12 +600,27 @@ class TestCursorBundleShipsHooks:
         data = json.loads(Path(
             os.path.join(ch.REPO_ROOT, ".cursor-plugin", "hooks.json")
         ).read_text(encoding="utf-8"))
+        # Every command references a shipped file via ${CLAUDE_PLUGIN_ROOT}/<rel>.
+        # beforeShellExecution now points at the cross-platform Python gate
+        # (skills/repo-forensics/scripts/cursor_pre_scan.py -- the port of the
+        # bash-only hooks/cursor/run_pre_scan.sh, which could not run on Windows);
+        # the other two events still point at their hooks/cursor/*.sh wrappers.
+        # Resolve the plugin-root-relative path generically rather than assuming a
+        # single directory, and assert the target exists.
+        import re
         for event, entries in data["hooks"].items():
             command = entries[0]["command"]
-            rel = command.split("hooks/cursor/")[1].rstrip('"')
-            assert os.path.isfile(
-                os.path.join(ch.REPO_ROOT, "hooks", "cursor", rel)), \
-                f"{event} points at a wrapper that does not exist: {rel}"
+            m = re.search(r'\$\{CLAUDE_PLUGIN_ROOT\}/([^"]+)', command)
+            assert m, f"{event} command does not reference ${{CLAUDE_PLUGIN_ROOT}}: {command!r}"
+            rel = m.group(1)
+            assert os.path.isfile(os.path.join(ch.REPO_ROOT, rel)), \
+                f"{event} points at a file that does not exist: {rel}"
+        # The blocking gate must be the Python entrypoint, never bash (the WSL
+        # bash launcher on Windows would make a failClosed gate deny everything).
+        before = data["hooks"]["beforeShellExecution"][0]["command"]
+        assert "cursor_pre_scan.py" in before, before
+        assert not before.strip().startswith("bash"), \
+            f"blocking gate must not launch via bash: {before!r}"
 
     def test_bundle_hooks_json_is_in_the_integrity_registry(self):
         sys.path.insert(0, ch.SCRIPTS_DIR)

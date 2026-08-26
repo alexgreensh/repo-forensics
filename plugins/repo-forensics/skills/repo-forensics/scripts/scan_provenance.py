@@ -62,13 +62,22 @@ class _Deadline:
     """Tracks remaining wall-clock against the single shared TOTAL_BUDGET_SEC so
     the sequential probes can never sum past it. `remaining()` returns seconds
     left (>=0); `expired()` is True once the budget is spent. TOTAL_BUDGET_SEC is
-    read at construction (not import) so a test can monkeypatch it."""
+    read at construction (not import) so a test can monkeypatch it.
+
+    Uses time.perf_counter (highest-resolution monotonic clock) rather than
+    time.monotonic: on Windows time.monotonic has ~15.6 ms granularity
+    (GetTickCount64), coarse enough that a sub-second budget could under-count
+    elapsed time and let extra probes run past the point they should have been
+    skipped. perf_counter (QueryPerformanceCounter on Windows) is monotonic
+    within the process and sub-microsecond, so the clamp/early-stop is precise
+    on every platform. Both reads below use the same clock, so the deadline is
+    self-consistent."""
 
     def __init__(self):
-        self._end = time.monotonic() + TOTAL_BUDGET_SEC
+        self._end = time.perf_counter() + TOTAL_BUDGET_SEC
 
     def remaining(self):
-        return max(0.0, self._end - time.monotonic())
+        return max(0.0, self._end - time.perf_counter())
 
     def expired(self):
         return self.remaining() <= 0.0

@@ -65,6 +65,11 @@ MANIFEST_FILES = (
     "hooks/cursor/run_session_scan.sh",
     "hooks/python-launcher.sh",
     "hooks/ensure_refresh_daemon.sh",
+    # The blocking beforeShellExecution gate is now this cross-platform Python
+    # entrypoint (the port of run_pre_scan.sh). It is the file the failClosed
+    # hook actually launches, so it belongs in the R8 tamper oracle: deleting it
+    # while the manifest claims it must DENY, not silently degrade to approve.
+    "skills/repo-forensics/scripts/cursor_pre_scan.py",
     "skills/repo-forensics/scripts/pre_scan.py",
     "skills/repo-forensics/scripts/auto_scan.py",
     "skills/repo-forensics/scripts/session_scan.py",
@@ -97,17 +102,52 @@ def _cursor_config_path(scope="user"):
     return home / "hooks.json"
 
 
+# The cross-platform Python gate that replaces the bash-only
+# hooks/cursor/run_pre_scan.sh for the blocking event. Plugin-root-relative.
+CURSOR_GATE_REL = "skills/repo-forensics/scripts/cursor_pre_scan.py"
+
+
+def _gate_interpreter():
+    """Absolute path to the interpreter that ran this installer, baked into the
+    installed blocking-gate command.
+
+    The shipped hooks.json template launches the gate via a literal `python3`,
+    which is fine on CI (actions/setup-python provides a `python3` shim) and on
+    POSIX, but the dominant Windows Python -- the python.org installer -- ships
+    only `python.exe` and the `py` launcher, no `python3.exe`. On such a box a
+    failClosed gate launched as `python3` cannot start and would DENY every
+    shell command (the same failure class as the WSL-`bash` bug this port
+    fixes). The user necessarily ran cursor_install.py with a WORKING Python, so
+    sys.executable is guaranteed valid on that machine, Windows included. Baking
+    it makes the residual vanish for every installer-based install; a hand-wired
+    hooks.json keeps the `python3` default, which is the advanced user's choice.
+
+    Baking (not a `python3 || python || py` fallback chain) is deliberate: a
+    legit exit-2 DENY from the gate would trip a `||` chain and double-run the
+    scanner. A single baked, guaranteed-valid interpreter avoids that entirely.
+    """
+    return sys.executable
+
+
 def _managed_hooks(root=None):
-    """The hook entries this installer owns, with the plugin root baked in."""
+    """The hook entries this installer owns, with the plugin root baked in.
+
+    The blocking beforeShellExecution gate launches the cross-platform Python
+    entrypoint via the baked absolute interpreter (see _gate_interpreter). The
+    non-blocking events keep their POSIX bash wrappers unchanged.
+    """
     raw_root = _repo_root() if root is None else Path(root)
     quoted = _dq(raw_root)
+    interp = _dq(_gate_interpreter())
     hooks = {}
     for event, script, timeout, blocking in HOOK_EVENTS:
-        entry = {
-            "command": (f'{OWNERSHIP_MARKER} CLAUDE_PLUGIN_ROOT="{quoted}" '
-                        f'bash "{quoted}/hooks/cursor/{script}"'),
-            "timeout": timeout,
-        }
+        if blocking:
+            command = (f'{OWNERSHIP_MARKER} CLAUDE_PLUGIN_ROOT="{quoted}" '
+                       f'"{interp}" "{quoted}/{CURSOR_GATE_REL}"')
+        else:
+            command = (f'{OWNERSHIP_MARKER} CLAUDE_PLUGIN_ROOT="{quoted}" '
+                       f'bash "{quoted}/hooks/cursor/{script}"')
+        entry = {"command": command, "timeout": timeout}
         if blocking:
             # Declared per R7. A gate that cannot answer must not approve; the
             # wrapper enforces this itself too, because a config flag is only as

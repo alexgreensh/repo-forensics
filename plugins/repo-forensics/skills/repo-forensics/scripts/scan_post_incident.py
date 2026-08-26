@@ -212,7 +212,7 @@ def scan_node_modules(repo_path):
         for pkg_name, description in MALICIOUS_PACKAGES.items():
             pkg_dir = os.path.join(root, pkg_name)
             if os.path.isdir(pkg_dir):
-                rel = os.path.relpath(pkg_dir, repo_path)
+                rel = os.path.relpath(pkg_dir, repo_path).replace(os.sep, "/")
                 findings.append(core.Finding(
                     scanner=SCANNER_NAME, severity="critical",
                     title=f"Compromised Package Installed: {pkg_name}",
@@ -228,7 +228,7 @@ def scan_node_modules(repo_path):
             if os.path.isdir(pkg_dir):
                 installed_ver = _read_installed_version(pkg_dir)
                 if installed_ver in info["versions"]:
-                    rel = os.path.relpath(pkg_dir, repo_path)
+                    rel = os.path.relpath(pkg_dir, repo_path).replace(os.sep, "/")
                     findings.append(core.Finding(
                         scanner=SCANNER_NAME, severity="critical",
                         title=f"Compromised Package Installed: {pkg_name}@{installed_ver}",
@@ -399,7 +399,7 @@ def scan_second_coming_artifacts(repo_path):
             fpath = os.path.join(root, fname)
             if os.path.islink(fpath):
                 continue
-            rel = os.path.relpath(fpath, repo_path)
+            rel = os.path.relpath(fpath, repo_path).replace(os.sep, "/")
             try:
                 size = os.path.getsize(fpath)
             except OSError:
@@ -453,7 +453,7 @@ def scan_shai_hulud_family_artifacts(repo_path):
             fpath = os.path.join(root, fname)
             if os.path.islink(fpath):
                 continue
-            rel = os.path.relpath(fpath, repo_path)
+            rel = os.path.relpath(fpath, repo_path).replace(os.sep, "/")
 
             entry = SHAI_HULUD_FAMILY_ARTIFACTS.get(fname)
             if entry is not None:
@@ -540,7 +540,7 @@ def scan_worm_payload_hashes(repo_path):
             desc = WORM_PAYLOAD_HASHES.get(digest)
             if desc is None:
                 continue
-            rel = os.path.relpath(fpath, repo_path)
+            rel = os.path.relpath(fpath, repo_path).replace(os.sep, "/")
             findings.append(core.Finding(
                 scanner=SCANNER_NAME, severity="critical",
                 title=f"Confirmed Malicious Payload Hash: {fname}",
@@ -570,7 +570,7 @@ def scan_worm_repo_markers(repo_path):
         git_dir = os.path.join(root, '.git')
         if not os.path.isdir(git_dir):
             continue
-        rel_root = os.path.relpath(root, repo_path)
+        rel_root = os.path.relpath(root, repo_path).replace(os.sep, "/")
 
         # Repository directory name (check_shai_hulud_repos: repo_name == *shai-hulud*)
         if 'shai-hulud' in os.path.basename(root).lower():

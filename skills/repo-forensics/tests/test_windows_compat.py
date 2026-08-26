@@ -1,9 +1,29 @@
 import os
+import re
 import subprocess
 
 from shell_compat import bash_c, sh_argv
 import sys
 from pathlib import Path
+
+
+def _assert_found(result, expected):
+    """Assert the launcher reported finding `expected`, comparing paths by
+    identity rather than string. On Windows the launcher globs from a native
+    HOME and emits forward-slash paths (e.g. C:/Users/.../python.exe) while
+    Python's str(Path) uses backslashes -- an exact-string match spuriously
+    fails there even though the SAME file was found. os.path.samefile resolves
+    both through the OS, so the comparison is separator- and case-insensitive on
+    every platform."""
+    m = re.search(r"^OUT=(.*)$", result.stdout, re.MULTILINE)
+    assert m, result.stdout + result.stderr
+    out = m.group(1).strip()
+    assert out, "launcher returned no path: " + result.stdout + result.stderr
+    assert os.path.samefile(out, str(expected)), (
+        f"launcher returned {out!r}, expected the file {str(expected)!r}\n"
+        + result.stdout + result.stderr
+    )
+    assert "RC=0" in result.stdout
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -51,8 +71,7 @@ def test_codex_runtime_fallback_finds_bundled_python(tmp_path):
     env = {"HOME": str(tmp_path), "XDG_CACHE_HOME": "", "LOCALAPPDATA": "",
            "CODEX_RUNTIME_PYTHON": "", "PATH": "/usr/bin:/bin"}
     result = _run_codex_finder(env)
-    assert f"OUT={py}" in result.stdout, result.stdout + result.stderr
-    assert "RC=0" in result.stdout
+    _assert_found(result, py)
 
 
 def test_codex_runtime_rejects_exit0_non_python(tmp_path):
@@ -77,8 +96,7 @@ def test_codex_runtime_handles_space_in_home(tmp_path):
     env = {"HOME": str(home), "XDG_CACHE_HOME": "", "LOCALAPPDATA": "",
            "CODEX_RUNTIME_PYTHON": "", "PATH": "/usr/bin:/bin"}
     result = _run_codex_finder(env)
-    assert f"OUT={py}" in result.stdout, result.stdout + result.stderr
-    assert "RC=0" in result.stdout
+    _assert_found(result, py)
 
 
 def test_codex_runtime_absent_returns_nonzero(tmp_path):

@@ -3,7 +3,7 @@
   "hooks": {
     "beforeShellExecution": [
       {
-        "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/cursor/run_pre_scan.sh\"",
+        "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/skills/repo-forensics/scripts/cursor_pre_scan.py\"",
         "timeout": 10,
         "failClosed": true
       }

@@ -22,6 +22,14 @@ def isolate_signing_key(monkeypatch, tmp_path):
     fake_home = tmp_path / "home"
     fake_home.mkdir()
     monkeypatch.setenv("HOME", str(fake_home))
+    # os.path.expanduser("~") on Windows consults USERPROFILE (then
+    # HOMEDRIVE/HOMEPATH), NEVER HOME -- so setting only HOME leaves
+    # _get_signing_key_path() pointing at the real profile, breaking per-test
+    # isolation and letting one test's migrated key leak into the next. Redirect
+    # the Windows home vars too so the fake home wins on every platform.
+    monkeypatch.setenv("USERPROFILE", str(fake_home))
+    monkeypatch.setenv("HOMEDRIVE", "")
+    monkeypatch.setenv("HOMEPATH", str(fake_home))
 
 
 class TestCriticalFileDiscovery:
