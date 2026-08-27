@@ -315,15 +315,19 @@ def test_run_reports_worker_degradation_despite_zero_exit(monkeypatch, tmp_path)
     }))
     monkeypatch.setattr(controller, "_active_is_usable", lambda _active: True)
 
-    def fake_run(_args, **kwargs):
+    def fake_popen(_args, **kwargs):
         run_id = kwargs["env"]["REPO_FORENSICS_RUN_ID"]
         controller.REFRESH_STATE.write_text(json.dumps({
             "run_id": run_id, "status": "degraded",
             "feeds": {"ioc": {"ok": False}},
         }))
-        return SimpleNamespace(returncode=0)
+        # 2.14.7: run_active spawns the worker with Popen in its own process
+        # group so a timeout can reap the scanners it fans out into, rather
+        # than orphaning them. wait() stands in for the old run() returncode.
+        return SimpleNamespace(returncode=0, pid=-1,
+                               wait=lambda timeout=None: 0, poll=lambda: 0)
 
-    monkeypatch.setattr(controller.subprocess, "run", fake_run)
+    monkeypatch.setattr(controller.subprocess, "Popen", fake_popen)
     result = controller.run_active()
 
     assert result["operation_ok"] is True
