@@ -2,6 +2,90 @@
 
 All notable changes to repo-forensics. Versions follow semver.
 
+## [2.14.7] - 2026-08-28
+
+### Fix: bound scan-hook concurrency (unbounded fan-out could stall a machine)
+
+- `PreToolUse` and `PostToolUse` both fire on **every** Bash command, and each
+  scan fans out into eight scanner processes. Nothing bounded that. Under an
+  agent running commands back to back, scans outlived the gap between commands
+  and stacked instead of queueing: **16 concurrent scan trees, ~64% CPU each,
+  load average 175** on a live machine. Interactive use never hit it, because a
+  human pauses between commands.
+- New `hooks/scan_guard.sh` provides `rf_scan_guard <name> <debounce>`, sourced
+  by all six wrappers (Claude Code + Cursor, pre/auto/session). A scan is
+  skipped when another is genuinely **in flight**, or when one ran inside the
+  debounce window.
+- The `PreToolUse` gate uses **concurrency-only** guarding (debounce `0`): it is
+  a blocking gate, so skipping it on recency would let a command run unscanned.
+  `PostToolUse` (90s) and `SessionStart` (60s) are advisory and debounce on time.
+- Portability: the lock is a `mkdir` (atomic on macOS, Linux and Git Bash;
+  `flock` is reliably present on none of them), release is by **PID liveness**
+  plus a stale TTL rather than an `EXIT` trap, because these wrappers `exec()`
+  and never run cleanup code. No `stat` calls, per the 2.14.5 Git Bash path fix.
+- Escape hatches: `REPO_FORENSICS_DISABLE_SCAN_GUARD=1` restores the previous
+  unbounded behaviour, `REPO_FORENSICS_SCAN_DEBOUNCE` and
+  `REPO_FORENSICS_SCAN_STALE` override the windows.
+- A **missing** `scan_guard.sh` degrades to the old unbounded behaviour on
+  purpose. For a security tool, silently not scanning is the worse failure.
+
+- `refresh_controller.py`: a timed-out refresh worker no longer **orphans its
+  scanners**. `subprocess.run(timeout=...)` kills only the direct child, so the
+  worker's scanner fan-out survived every timeout, reparented to init/launchd
+  and still burning CPU with nothing tracking it. The worker now starts in its
+  own process group (POSIX) / `CREATE_NEW_PROCESS_GROUP` (Windows) and a
+  timeout signals the whole tree: SIGTERM, then SIGKILL, with `taskkill /F /T`
+  on Windows. Verified against a worker-plus-grandchild tree, with a negative
+  control confirming the previous path really did leave the grandchild alive.
+
+**Known limitation:** a scan that is skipped is skipped, not queued. Under a
+sustained command stream the `PostToolUse` audit samples at roughly one scan per
+debounce window rather than one per command. That is the intended trade: the
+previous behaviour did not scan more reliably, it collapsed the host.
+
+## [2.14.6] - 2026-08-26
+
+### Windows support complete: full Tests matrix green
+
+- The `windows-latest` / `macos-latest` / `ubuntu-latest` matrix is green end to end,
+  validated on-branch before release.
+- Fixes 5 pre-existing **forensify** Windows failures that only surfaced once the
+  repo-forensics suite started passing on Windows (it previously short-circuited them):
+  `os.getuid()` guarded (was an `AttributeError`), and the Unix-permission assertions
+  (0o700 coord folder, 0o600 world-readable check) plus a tilde-expansion path comparison
+  made platform-aware.
+- **Tracked follow-up:** Windows ACL-based permission detection.
+
+## [2.14.5] - 2026-08-26
+
+### Fix: launcher-path comparison under Git Bash
+
+- Clears the 2 residual `windows-latest` CI failures from 2.14.4. `test_windows_compat`
+  compared launcher paths with `os.path.samefile`, which `stat()`s both operands. Under Git
+  Bash the launcher prints MSYS paths (`/c/Users/...`) that native Windows Python cannot
+  `stat`, so it raised `FileNotFoundError` even when the launcher had found the file.
+- Now compares normalized path strings (`/<drive>/` -> `<drive>:/`, `normcase` + `normpath`),
+  touching no filesystem. Verified against both `ntpath` and `posixpath` semantics.
+
+## [2.14.4] - 2026-08-26
+
+### Windows support + security hardening
+
+- **Cross-platform Cursor gate.** Ported the bash `beforeShellExecution` gate to
+  `cursor_pre_scan.py`. On Windows `bash` resolves to the WSL launcher, so the failClosed
+  gate denied *every* shell command. The port uses in-process `hashlib` + `sys.executable`
+  and preserves R8 tamper-deny, fail-closed, degrade-vs-deny and PII redaction.
+- **Install-time interpreter baking.** The installed hook launches via the installer's own
+  interpreter, so python.org Windows installs (no `python3.exe`) still start the gate.
+- **Security: closed a corrupt-manifest fail-open.** `cursor_pre_scan.py` now **denies**
+  when `checksums.json` is present but corrupt or unreadable (previously fail-open).
+  Corrupting the manifest must not be cheaper than forging a hash. Regression test added.
+- **7 Windows-only failures fixed:** clock granularity (splitstream/provenance), path
+  separators (post_incident), path comparison (windows_compat), home-var isolation
+  (integrity).
+- **docx false positive resolved** by making the test's font input deterministic; a random
+  blob can chance onto a bidi/zero-width decode, whereas real fonts are structured.
+
 ## [2.14.3] - 2026-08-26
 
 ### Security: modification-aware tamper check on the Cursor blocking gate

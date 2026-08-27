@@ -21,6 +21,7 @@ import json
 import os
 import plistlib
 import shutil
+import signal
 import stat
 import subprocess
 import sys
@@ -924,6 +925,60 @@ def status() -> dict:
     }
 
 
+def _terminate_worker_tree(proc: subprocess.Popen) -> None:
+    """Kill a timed-out worker AND everything it spawned.
+
+    `subprocess.run(timeout=...)` kills only the DIRECT child. The refresh
+    worker fans out into scanner processes, so a timeout used to leave those
+    running with no parent — reparented to init/launchd, still burning CPU, and
+    invisible to the next run's bookkeeping. Observed on macOS 2026-08-28:
+    orphaned scan trees accumulating across timed-out runs until the host
+    stalled.
+
+    The worker is started in its own process group / session by the caller, so
+    one signal reaches the whole tree. SIGTERM first for a clean exit, SIGKILL
+    if it does not go. Windows has no portable killable group, so `taskkill /T`
+    walks the tree instead — same shape as the detached-spawn branch above.
+    """
+    if proc.poll() is not None:
+        return
+
+    if os.name == "nt":
+        try:
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                           stdin=subprocess.DEVNULL, capture_output=True,
+                           timeout=15, check=False)
+        except (OSError, subprocess.SubprocessError):
+            try:
+                proc.kill()
+            except OSError:
+                pass
+        return
+
+    try:
+        pgid = os.getpgid(proc.pid)
+    except OSError:
+        pgid = None
+
+    if pgid is not None:
+        for sig in (signal.SIGTERM, signal.SIGKILL):
+            try:
+                os.killpg(pgid, sig)
+            except OSError:
+                break
+            try:
+                proc.wait(timeout=5)
+                return
+            except subprocess.TimeoutExpired:
+                continue
+
+    if proc.poll() is None:
+        try:
+            proc.kill()
+        except OSError:
+            pass
+
+
 def run_active() -> dict:
     """Scheduler entry point: verify the stable payload, then run its worker."""
     if DISABLED_MARKER.exists():
@@ -947,12 +1002,22 @@ def run_active() -> dict:
             run_id = f"{int(started * 1000)}-{os.getpid()}"
             env = _sanitized_env({"REPO_FORENSICS_RUN_ID": run_id})
 
+        # Start the worker in its own process group / session so a timeout can
+        # take down the scanners it spawns, not just the worker itself.
+        proc = None
         try:
-            completed = subprocess.run(
-                [sys.executable, refresh_script, "--worker"],
-                stdin=subprocess.DEVNULL, timeout=60, check=False, env=env,
+            _kwargs = {"stdin": subprocess.DEVNULL, "env": env}
+            if os.name == "nt":
+                _kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+            else:
+                _kwargs["start_new_session"] = True
+            proc = subprocess.Popen(
+                [sys.executable, refresh_script, "--worker"], **_kwargs
             )
+            returncode = proc.wait(timeout=60)
         except subprocess.TimeoutExpired:
+            if proc is not None:
+                _terminate_worker_tree(proc)
             state = _load_json(REFRESH_STATE)
             state.update({"status": "timeout", "run_id": run_id,
                           "last_attempt": started,
@@ -964,9 +1029,9 @@ def run_active() -> dict:
         terminal = state.get("status", "error")
         same_run = state.get("run_id") == run_id
         healthy = bool(same_run and terminal == "healthy")
-        return {"ok": healthy, "operation_ok": completed.returncode == 0 and same_run,
+        return {"ok": healthy, "operation_ok": returncode == 0 and same_run,
                 "status": terminal if same_run else "already-running",
-                "refresh_healthy": healthy, "returncode": completed.returncode,
+                "refresh_healthy": healthy, "returncode": returncode,
                 "run_id": run_id, "feeds": state.get("feeds", {})}
     except BlockingIOError:
         result = {"ok": False, "operation_ok": False, "status": "already-running",

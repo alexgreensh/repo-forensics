@@ -37,6 +37,23 @@ if [ ! -f "$SCRIPT" ]; then
     exit 0
 fi
 
+# Bound how often this scan may run (2.14.7). PreToolUse/PostToolUse fire on
+# every Bash command and each scan fans out into eight scanners, which stacked
+# into 16 concurrent trees and a load average of 175 before this guard existed.
+# A MISSING guard file degrades to the old unbounded behaviour on purpose: for a
+# security tool, silently not scanning is worse than scanning too often.
+GUARD="$PLUGIN_ROOT/hooks/scan_guard.sh"
+if [ -f "$GUARD" ]; then
+    # shellcheck source=/dev/null
+    . "$GUARD"
+    if ! rf_scan_guard auto 90; then
+        # Guard declined: another scan is live or one just ran. Answer the
+        # adapter contract so the command is not left hanging.
+        printf '{"permission": "allow", "user_message": "", "agent_message": ""}\n'
+        exit 0
+    fi
+fi
+
 if [ -f "$LAUNCHER" ]; then
     exec "${BASH:-/bin/bash}" "$LAUNCHER" "$SCRIPT" --adapter cursor
 fi

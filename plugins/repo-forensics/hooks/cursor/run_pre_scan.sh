@@ -301,7 +301,24 @@ fi
 # no extra copy of an attacker-controlled payload sitting in a shell variable.
 if [ -n "${REPO_FORENSICS_HOOK_LOG:-}" ]; then
     _stdin="$(cat)"
-    if [ -f "$LAUNCHER" ]; then
+    # Bound how often this scan may run (2.14.7). PreToolUse/PostToolUse fire on
+# every Bash command and each scan fans out into eight scanners, which stacked
+# into 16 concurrent trees and a load average of 175 before this guard existed.
+# A MISSING guard file degrades to the old unbounded behaviour on purpose: for a
+# security tool, silently not scanning is worse than scanning too often.
+GUARD="$PLUGIN_ROOT/hooks/scan_guard.sh"
+if [ -f "$GUARD" ]; then
+    # shellcheck source=/dev/null
+    . "$GUARD"
+    if ! rf_scan_guard pre 0; then
+        # Guard declined: another scan is live or one just ran. Answer the
+        # adapter contract so the command is not left hanging.
+        printf '{"permission": "allow", "user_message": "", "agent_message": ""}\n'
+        exit 0
+    fi
+fi
+
+if [ -f "$LAUNCHER" ]; then
         _out="$(printf '%s' "$_stdin" | "${BASH:-/bin/bash}" "$LAUNCHER" "$SCRIPT" --adapter cursor)"
         _rc=$?
     else
