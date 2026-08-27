@@ -20,7 +20,7 @@ import urllib.parse
 
 # Pinned to .claude-plugin/plugin.json by test_sarif_export. Bumped in lockstep
 # with the release version (validate_manifests checks drift).
-TOOL_VERSION = "2.14.7"
+TOOL_VERSION = "2.14.8"
 
 TOOL_NAME = "repo-forensics"
 INFORMATION_URI = "https://github.com/alexgreensh/repo-forensics"

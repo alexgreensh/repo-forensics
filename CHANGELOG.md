@@ -2,6 +2,29 @@
 
 All notable changes to repo-forensics. Versions follow semver.
 
+## [2.14.8] - 2026-08-28
+
+### Fix: re-signed release manifest (2.14.7 shipped an unverifiable one)
+
+**Install 2.14.8, not 2.14.7.** 2.14.7's `checksums.json` was regenerated but never
+re-signed, so `verify_install.py --verify-signature` fails against the pinned release
+key on that tag. The scanners and the 2.14.7 concurrency fix are unaffected and work
+as intended; what breaks is the tamper-evidence check, which is precisely the thing
+you should not have to take on faith. 2.14.7 is left in history rather than re-tagged.
+
+- `checksums.json` re-signed from the repo root and re-synced, so the nested Codex
+  mirror carries the same signature instead of a stale one. Shipping order is
+  **regenerate -> re-sign -> sync**; skipping the middle step is what produced 2.14.7.
+- `test_run_reports_worker_degradation_despite_zero_exit`: moved the mock seam from
+  `subprocess.run` to `subprocess.Popen`. 2.14.7 changed `run_active` to spawn via
+  `Popen` (so a timeout can reap the worker's scanner fan-out) and the old mock
+  silently stopped intercepting, letting the test execute the real path. The contract
+  under test is unchanged: a worker reporting `degraded` while exiting 0 must surface
+  as not-healthy.
+
+Everything in 2.14.7 is included here. See that entry for the concurrency guard and
+the orphan-reaping fix.
+
 ## [2.14.7] - 2026-08-28
 
 ### Fix: bound scan-hook concurrency (unbounded fan-out could stall a machine)

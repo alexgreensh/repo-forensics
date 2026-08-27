@@ -49,7 +49,7 @@
     "scripts/rule_loader.py": "72500a303020ade3680fe9c4974e12d3d093873182d7a1de2a1563ebbc287ea2",
     "scripts/rulepack_feed.py": "f63781e4c909257c97c4dadf0018621c6f5455096bd51ae7be8eee106b8f66be",
     "scripts/run_forensics.sh": "e68ee91d5951f7f16fc0961df90cbcd44f5e11276f4af2670700b4092a93bded",
-    "scripts/sarif_export.py": "4cead81740b05c9e5790d8a843b3490725d23dcc37060c4c205db499e7a85c71",
+    "scripts/sarif_export.py": "7d5fd142defbceef59e267dd21d72f68535b4b9ac2ae057a834b4dcae9f971b7",
     "scripts/scan_agent_skills.py": "7c9f0036b7fcc528f5146ac4652627c1603cee9e0631e9b4b10b53599cea2107",
     "scripts/scan_archive.py": "0ecbfc6a76e66aee23fbd0bc3f521b694bcfb7a3e4ff19a8229d9645630b4931",
     "scripts/scan_ast.py": "fe109606a356a483a9c7b997dbefc89f80ecc3e6ecbc0f9c8b6f94ca3306fc9a",
@@ -105,11 +105,11 @@
   },
   "hook_count": 13,
   "repo_manifests": {
-    ".claude-plugin/marketplace.json": "304aa3ebacd976f95f5fccdb8bd4d1df2afa790500170389033e76c39472d7d3",
-    ".claude-plugin/plugin.json": "77c2c251540b3b1e61f5d91b211ad83ad58b81ad1a19b4846b9517d5c2847f33",
-    ".codex-plugin/plugin.json": "f4364abf13e5424df6bd7acd74ed599a479e2158d69f121d32161027a9200a52",
+    ".claude-plugin/marketplace.json": "bc79ee8156c79b6183995cec3a56ad8188dd5613ee8318669849fdb195cf5716",
+    ".claude-plugin/plugin.json": "99bcbcc5f3adbe3da3bc05c4345a1b064abfcf950780a20f1c21b379b6181456",
+    ".codex-plugin/plugin.json": "53da635729384f6a59668c514a8099cf2bd23be9f2807db5c412aef28c8a89c5",
     ".cursor-plugin/hooks.json": "77dcb9cd64b52604cbc607a867b1069187ad6ab2ba6e0e77bbab58206bc1707f",
-    ".cursor-plugin/plugin.json": "0af6a635011513a1d5dc1a96647c46b1f7e786c3a2f0c8cdec01b83fcd31d5e7"
+    ".cursor-plugin/plugin.json": "1ea6bc20dc27b67b15e98d6edf46c08b5935db5c88d12d3c7560e5210355ef7f"
   },
   "manifest_count": 5,
   "repo_source_manifests": {
