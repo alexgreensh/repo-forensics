@@ -1058,8 +1058,10 @@ class TestDeepScanFindingsReachTheSession:
         scanner-level `severity`/`detail`, so nothing in this payload is a
         finding and none of it may be rendered as one.
 
-        Whether such a scan is still allowed to report the item *clean* is
-        ticket 04's question, not this one.
+        Whether such a scan is still allowed to report the item *clean* is a
+        separate question, answered by
+        `TestNonzeroScanSpeaksInsteadOfGoingQuiet.test_the_invented_report_shape_is_not_read_as_clean`:
+        it is not.
         """
         payload = {
             "summary": {"critical": 1},
@@ -1325,6 +1327,272 @@ class TestSessionReportFrictionBudget:
         assert len(shown) == 2
         assert shown[0].startswith("[MEDIUM]")
         assert shown[1].startswith("[UNKNOWN]")
+
+
+# ========================================================================
+# Ticket 04: a nonzero scan that renders nothing says so, and is not cleared
+# ========================================================================
+
+def session_start(monkeypatch, capsys):
+    """One SessionStart run of the hook. Returns what it printed.
+
+    `main()` is the only entry point that writes the baseline, so the
+    baseline half of this behaviour cannot be observed anywhere below it.
+    """
+    monkeypatch.setattr(session_scan, 'refresh_threat_databases', lambda: [])
+    monkeypatch.delenv("REPO_FORENSICS_SESSION_SCAN", raising=False)
+    with pytest.raises(SystemExit) as exc:
+        session_scan.main()
+    assert exc.value.code == 0
+    return capsys.readouterr().out
+
+
+def baselined_items():
+    """The item keys the saved baseline currently holds."""
+    with open(session_scan.BASELINE_FILE, "r", encoding="utf-8") as handle:
+        return set(json.load(handle).get("items", {}))
+
+
+def change_plugin(plugin_dir, content):
+    """Move a plugin's content so the next run sees it as changed."""
+    with open(os.path.join(plugin_dir, "index.js"), "w", encoding="utf-8") as handle:
+        handle.write(content)
+
+
+@_POSIX_ONLY
+class TestNonzeroScanSpeaksInsteadOfGoingQuiet:
+    """A scan that ended nonzero and rendered nothing says exactly that.
+
+    This is the one deliberate behaviour change in this work, and it is a
+    change rather than a fix: a deep scan ending in 99 previously returned no
+    lines at all, so `format_output()` printed `clean` over it. A shape
+    problem inside the tool reached the owner disguised as a clean item --
+    the same false clean the rest of this spine removes, arriving through the
+    reader's silence rather than through its blindness.
+
+    Every early return above this point has already handled the two cases
+    that legitimately render nothing: exit 0, which is the scanner saying it
+    found nothing, and a signal death, which already speaks for itself.
+    Reaching the end with an empty list past both of them means the aggregate
+    carried something the reader could not turn into a line.
+
+    Assertions are on what `deep_scan_item()` returns and on what
+    `format_output()` prints. The baseline is a separate subject and lives in
+    `TestAnUnclearedItemStaysOutOfTheBaseline`, one seam up, because
+    `deep_scan_item()` does not write it.
+    """
+
+    def test_a_nonzero_scan_that_renders_nothing_names_its_exit_code(
+        self, tmp_dir, tmp_path, monkeypatch
+    ):
+        """Exit 99 with an empty report: the infrastructure-failure case."""
+        report = aggregate_report(tmp_path, [
+            scanner_result("skill_threats", [], exit_code=0),
+        ])
+        stub_forensics(tmp_dir, monkeypatch, report, 99)
+
+        findings = session_scan.deep_scan_item(tmp_dir, "test", "plugin")
+
+        assert len(findings) == 1
+        assert "99" in findings[0]
+        # Not a finding line: it reports the scan, not something found in the
+        # tree, and must not be mistakable for one.
+        assert rendered_findings(findings) == []
+
+    def test_the_item_is_never_reported_as_clean(self, tmp_dir, tmp_path, monkeypatch):
+        """Driven through the function that produces the word `clean`.
+
+        A line the reader emitted that the formatter then ignored would still
+        be a false clean on the owner's screen, so the assertion is made where
+        the word is written rather than one seam below it.
+        """
+        report = aggregate_report(tmp_path, [
+            scanner_result("skill_threats", [], exit_code=0),
+        ])
+        stub_forensics(tmp_dir, monkeypatch, report, 99)
+        findings = session_scan.deep_scan_item(tmp_dir, "test", "plugin")
+
+        lines = session_scan.format_output(
+            [], [(tmp_dir, "test-plugin", "plugin", {})],
+            {f"plugin:{tmp_dir}": findings}, False, 1,
+        )
+
+        assert not any("clean" in line for line in lines)
+        assert not any("Security check passed" in line for line in lines)
+        assert any("99" in line for line in lines)
+
+    def test_the_invented_report_shape_is_not_read_as_clean(self, tmp_dir, monkeypatch):
+        """The other half of `test_invented_report_shape_is_not_read_as_findings`.
+
+        That test pins that nothing in this payload is rendered as a finding.
+        The question it left open -- whether a scan carrying it may still
+        report the item clean -- is answered here: it may not. Same
+        hand-written shape, at the exit code the defect was first seen at.
+        """
+        payload = {
+            "summary": {"critical": 1},
+            "scanners": [
+                {"name": "runtime_behavior", "severity": "critical",
+                 "detail": "eval() with external input detected"},
+            ],
+        }
+        stub_forensics(tmp_dir, monkeypatch, payload, 2)
+
+        findings = session_scan.deep_scan_item(tmp_dir, "test", "plugin")
+
+        assert len(findings) == 1
+        assert "2" in findings[0]
+        assert not any("eval() with external input" in line for line in findings)
+
+    def test_a_report_below_the_floor_still_surfaces_its_nonzero_exit(
+        self, tmp_dir, tmp_path, monkeypatch
+    ):
+        """The silence ticket 03 opened by dropping LOW below the floor.
+
+        Reachable rather than theoretical: an unexpected scanner exit code
+        becomes a `parse_error`, and `calculate_report_exit_code()` returns 99
+        on any `parse_error` whatever the findings say. So a report whose only
+        finding is a note can still end nonzero, and the reader renders
+        nothing from it.
+        """
+        report = aggregate_report(tmp_path, [
+            scanner_result("skill_threats", [
+                finding(severity="low", title="Informational note"),
+            ], exit_code=7),
+        ])
+        # The premise of the assertions below, not an incidental property: the
+        # report really does end nonzero, and its only finding really is a note.
+        assert report["exit_code"] == 99
+        assert [item["severity"] for item in report["findings"]] == ["low"]
+        stub_forensics(tmp_dir, monkeypatch, report, 99)
+
+        findings = session_scan.deep_scan_item(tmp_dir, "test", "plugin")
+
+        assert rendered_findings(findings) == []
+        assert len(findings) == 1
+        assert "99" in findings[0]
+        assert "Informational note" not in findings[0]
+
+    def test_a_clean_exit_stays_silent_even_when_nothing_is_rendered(
+        self, tmp_dir, tmp_path, monkeypatch
+    ):
+        """Exit 0 is the scanner saying it found nothing, and is still believed.
+
+        The sharp version of "the existing early returns keep their
+        behaviour": this report carries a LOW finding, so the reader renders
+        nothing from it either -- but the exit code is 0, so this is not the
+        silence the new line exists to break, and adding a line here would
+        turn every note into a warning.
+        """
+        report = aggregate_report(tmp_path, [
+            scanner_result("skill_threats", [
+                finding(severity="low", title="Informational note"),
+            ], exit_code=0),
+        ])
+        assert report["exit_code"] == 0
+        stub_forensics(tmp_dir, monkeypatch, report, 0)
+
+        assert session_scan.deep_scan_item(tmp_dir, "test", "plugin") == []
+
+    def test_a_signal_death_keeps_its_own_line(self, tmp_dir, monkeypatch):
+        """A killed scan already says so, and must not say it twice."""
+        script = os.path.join(tmp_dir, "stub_forensics.sh")
+        create_file(script, '#!/bin/bash\nkill -TERM $$\n')
+        os.chmod(script, 0o755)
+        monkeypatch.setattr(session_scan, 'RUN_FORENSICS_SCRIPT', script)
+
+        findings = session_scan.deep_scan_item(tmp_dir, "test", "plugin")
+
+        assert findings == ["deep scan killed by signal 15"]
+
+
+@_POSIX_ONLY
+class TestAnUnclearedItemStaysOutOfTheBaseline:
+    """A silent failure is not made permanent by the next run.
+
+    The baseline is what makes a session report stop repeating: `main()`
+    writes every scanned item's checksums and `detect_changes()` then reports
+    only items whose hashes moved. That is right for an item that was looked
+    at and found clean, and wrong for one whose scan ended nonzero and
+    rendered nothing -- baselining that one turns a single silent failure into
+    a permanent one, because the same result is not reported at the next
+    session start either.
+
+    Driven through `main()`, the only place the baseline is written.
+    """
+
+    def _stub_scan(self, tmp_path, monkeypatch, exit_code):
+        """A stub scanner emitting an emitter-built empty report at *exit_code*.
+
+        The report goes through `aggregate_report()` like every other fixture
+        in this file rather than being written by hand: `report_builders`
+        exists precisely so no test can describe a shape the product does not
+        emit, and an empty report is one call away. What is under test here is
+        the exit code, not the report.
+        """
+        stub_forensics(str(tmp_path), monkeypatch, aggregate_report(tmp_path, []), exit_code)
+
+    def _changed_plugin(self, mock_home, monkeypatch, capsys):
+        """A plugin already in the baseline, then changed. Returns its dir and key."""
+        plugin_cache = os.path.join(mock_home, ".claude", "plugins", "cache")
+        plugin_dir = create_plugin(plugin_cache, "test-plugin")
+        session_start(monkeypatch, capsys)
+        item_key = f"plugin:{plugin_dir}"
+        # Control arm for every assertion below: the first run really does
+        # baseline this item, so "absent from the baseline" cannot pass
+        # because nothing is ever written there.
+        assert item_key in baselined_items()
+        change_plugin(plugin_dir, "// CHANGED")
+        return plugin_dir, item_key
+
+    def test_the_uncleared_item_is_not_written_into_the_baseline(
+        self, mock_home, tmp_path, monkeypatch, capsys
+    ):
+        _, item_key = self._changed_plugin(mock_home, monkeypatch, capsys)
+        self._stub_scan(tmp_path, monkeypatch, 99)
+
+        out = session_start(monkeypatch, capsys)
+
+        assert "99" in out
+        assert "clean" not in out
+        assert item_key not in baselined_items()
+
+    def test_the_same_result_surfaces_again_at_the_next_session_start(
+        self, mock_home, tmp_path, monkeypatch, capsys
+    ):
+        """Nothing moves on disk between the two runs, and it still re-reports.
+
+        That is the whole value of leaving it unbaselined: the owner sees the
+        failure again next session instead of once and never again.
+        """
+        self._changed_plugin(mock_home, monkeypatch, capsys)
+        self._stub_scan(tmp_path, monkeypatch, 99)
+        session_start(monkeypatch, capsys)
+
+        out = session_start(monkeypatch, capsys)
+
+        assert "Updates detected" in out
+        assert "99" in out
+
+    def test_an_item_that_really_was_cleared_is_still_baselined(
+        self, mock_home, tmp_path, monkeypatch, capsys
+    ):
+        """The control arm, and the behaviour that must not regress.
+
+        A scan that exited 0 cleared the item, so it is baselined and stops
+        being reported. Without this, "uncleared items are absent from the
+        baseline" would also pass on a change that stopped baselining
+        anything, and every session would re-report every changed item
+        forever.
+        """
+        _, item_key = self._changed_plugin(mock_home, monkeypatch, capsys)
+        self._stub_scan(tmp_path, monkeypatch, 0)
+
+        out = session_start(monkeypatch, capsys)
+        assert "clean" in out
+        assert item_key in baselined_items()
+
+        assert "Updates detected" not in session_start(monkeypatch, capsys)
 
 
 class TestAggregateReportContract:

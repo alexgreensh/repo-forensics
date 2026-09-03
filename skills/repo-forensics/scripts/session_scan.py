@@ -641,6 +641,29 @@ def _format_overflow_line(hidden):
     return f"... and {len(hidden)} more {noun} not shown ({breakdown})"
 
 
+def _format_uncleared_scan_line(returncode):
+    """The one line a scan owes the reader when it rendered nothing.
+
+    Reached only past the early returns for exit 0 and for a signal death, so
+    the scan ended nonzero and the reader still produced nothing: the report
+    was unparseable at a code deep_scan_item()'s own fallbacks do not cover,
+    or every finding in it sat below DEEP_FINDING_REPORT_FLOOR, or its shape
+    was not one this reader knows. All three are problems inside the tool,
+    and the owner cannot tell them apart from here -- but reporting the item
+    `clean` would tell them the one thing that is certainly false.
+
+    The exit code is in the line because it is the only handle the owner has
+    on which of those happened: 99 is an infrastructure failure, 1 and 2 are
+    findings the reader could not render. Carries no attacker-controlled text
+    -- an integer from waitpid and nothing else -- and deliberately does not
+    start with `[`, so it cannot be mistaken for a finding line.
+    """
+    return (
+        f"deep scan exited {returncode} with no reportable finding "
+        f"(not cleared; will be re-reported next session)"
+    )
+
+
 def report_findings(report):
     """The report's finding list, or empty for anything that is not one.
 
@@ -701,7 +724,8 @@ def summarize_deep_findings(report):
     return lines
 
 
-def deep_scan_item(dirpath, label, item_type, timeout=None, adjudication_sink=None):
+def deep_scan_item(dirpath, label, item_type, timeout=None, adjudication_sink=None,
+                   uncleared_sink=None):
     """Run the full run_forensics.sh scanner suite on a changed item.
 
     On POSIX, uses start_new_session=True so the entire process tree
@@ -710,7 +734,13 @@ def deep_scan_item(dirpath, label, item_type, timeout=None, adjudication_sink=No
     scanner zombies. Windows lacks os.getpgid/os.killpg, so it falls
     back to killing the direct subprocess.
 
-    Returns list of finding strings (empty = clean). Never raises.
+    Returns list of finding strings. Never raises. A scan that actually ran
+    and ended nonzero never returns an empty list: if it renders no finding it
+    returns one line naming its exit code rather than going quiet, and appends
+    the item's baseline key to *uncleared_sink* so main() can keep it out of
+    the baseline. The early returns above -- no scanner script, no such
+    directory, no time budget left, an OSError launching it -- still return []
+    and leave the sink untouched.
     """
     if not os.path.isfile(RUN_FORENSICS_SCRIPT):
         return []
@@ -771,6 +801,15 @@ def deep_scan_item(dirpath, label, item_type, timeout=None, adjudication_sink=No
             findings.append("deep scan found CRITICAL issues (parse failed, check manually)")
         elif proc.returncode == 1:
             findings.append("deep scan found warnings (parse failed, check manually)")
+
+    if not findings:
+        # Silence is not an available answer past this point -- see
+        # _format_uncleared_scan_line(). The item is reported uncleared as
+        # well as spoken about, because a false clean that gets baselined is
+        # not one missed report, it is every future one.
+        if uncleared_sink is not None:
+            uncleared_sink.append(f"{item_type}:{dirpath}")
+        findings.append(_format_uncleared_scan_line(proc.returncode))
 
     return findings
 
@@ -1021,6 +1060,7 @@ def main(argv=None):
     # Only runs when items actually changed (rare). Skipped on first run
     # (too many items) and when run_forensics.sh is missing.
     adjudication_findings = []
+    uncleared_items = []
     if scan_items and not is_first_run and os.path.isfile(RUN_FORENSICS_SCRIPT):
         deep_start = time.monotonic()
         for dirpath, label, itype, checksums in scan_items:
@@ -1033,7 +1073,8 @@ def main(argv=None):
                 break
             deep_findings = deep_scan_item(dirpath, label, itype, timeout=min(
                 DEEP_SCAN_TIMEOUT_PER_ITEM, remaining
-            ), adjudication_sink=adjudication_findings)
+            ), adjudication_sink=adjudication_findings,
+                uncleared_sink=uncleared_items)
             scan_results.setdefault(f"{itype}:{dirpath}", []).extend(deep_findings)
 
     # Format output
@@ -1059,6 +1100,16 @@ def main(argv=None):
     # detect_changes already produced fresh entries for every item; reuse them
     # directly instead of re-walking the tree. Avoids ~150-300ms of redundant
     # stat syscalls on warm sessions.
+    #
+    # An item whose deep scan ended nonzero and rendered nothing was never
+    # cleared, so it is dropped from the snapshot rather than written into it.
+    # Baselining it would silence the same result at every future session
+    # start -- detect_changes() reports only items whose hashes moved -- which
+    # turns one failure the owner could act on into a permanent one they never
+    # see again. Dropping the key costs that item its incremental-hash cache
+    # on the next run and nothing else.
+    for item_key in uncleared_items:
+        all_entries.pop(item_key, None)
     save_baseline(all_entries)
 
     output_session_context(lines, adapter=adapter)
