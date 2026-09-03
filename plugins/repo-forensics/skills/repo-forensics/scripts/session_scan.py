@@ -702,14 +702,14 @@ def summarize_deep_findings(report):
     without neutralizing them would trade a false clean for an injection path
     into SessionStart.
 
-    What reaches the reader is then bounded twice, because the report competes
-    with the session for the same context window. DEEP_FINDING_REPORT_FLOOR
-    drops the notes; DEEP_FINDING_MAX_LINES bounds how many lines one item can
-    occupy. Sorting happens here rather than being taken from the report: the
-    aggregator does sort worst-first, but the report is a scanner's stdout and
-    this is the last thing between it and the user, so truncating on a trusted
-    order would let a producer decide which finding the owner never sees. The
-    sort is stable, so findings of one severity keep the order they arrived in.
+    What reaches the reader is then bounded twice: DEEP_FINDING_REPORT_FLOOR
+    drops the notes, and DEEP_FINDING_MAX_LINES bounds how many lines one item
+    can occupy -- see each constant, which explains why it is there. Sorting
+    happens here rather than being taken from the report: the aggregator does
+    sort worst-first, but the report is a scanner's stdout and this is the last
+    thing between it and the user, so truncating on a trusted order would let a
+    producer decide which finding the owner never sees. The sort is stable, so
+    findings of one severity keep the order they arrived in.
 
     Nothing here spawns a subprocess or reads the scanned tree, so the
     rendering can be exercised without one; deep_scan_item() owns the

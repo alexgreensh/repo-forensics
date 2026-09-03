@@ -1108,12 +1108,10 @@ class TestSessionReportIsBounded:
     """The session report carries only what could change what the owner does.
 
     Two limits are asserted here, and they bound different things. The
-    **floor** bounds what is worth a line at all: an informational note must
-    not turn every plugin update into a warning line, or the report stops
-    being read, and a report that is not read reports nothing. The **cap**
-    bounds how many lines one item can occupy: the return value of this hook
-    is echoed into the agent's session context, so a report with no ceiling
-    pushes the rest of the session out of the window.
+    **floor**, `DEEP_FINDING_REPORT_FLOOR`, bounds what is worth a line at
+    all; the **cap**, `DEEP_FINDING_MAX_LINES`, bounds how many lines one item
+    may occupy -- see each constant in `session_scan.py`, which explains why it
+    is there. What is asserted here is the behaviour.
 
     Both are lossy, so both are made visible: a capped report says how much it
     is hiding and at what severities, and the reader sorts before it truncates
