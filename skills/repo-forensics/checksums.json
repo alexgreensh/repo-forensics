@@ -79,7 +79,7 @@
     "scripts/scan_skill_threats.py": "05452f244b1c0f5259d2f45a41593c1a1b82d7caad39f6b1efb0b87f02c09729",
     "scripts/scan_splitstream.py": "4fd98a612442a8c241e8796f984e6ecce3e43be7334355bf84f2ad408f556319",
     "scripts/scan_yara.py": "0272b4de75c8af5c461bfda86287254f1be9dfd31cfa20e2ebe91a55a8a35256",
-    "scripts/session_scan.py": "bae31804288971171aadabee9924d0bd43931df400f22041b289eee0e3dfd1e3",
+    "scripts/session_scan.py": "88159342f34a18d5ff066060b6aa7750d406df64d94475cf3df06e9032c4a33a",
     "scripts/validate_manifests.py": "a0926bc0a0b86ca59a2d66036a8bce403d4d4a0793bf799af8554e3c36ef43c9",
     "scripts/verify_install.py": "b98802487a4483f53553ef106ad82692ea92ad2b94972f73684e52d29c468034",
     "scripts/vuln_feed.py": "0b56e20969beb8fbc59650114a34ac8743d1a0862ff3ae56b07e92d2e368a141"

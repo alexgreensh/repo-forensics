@@ -1286,7 +1286,7 @@ class TestSessionReportIsBounded:
         report -- a scanner's raw JSON is, and `load_scanner_results()` copies
         it through verbatim. If an unrecognised severity fell below the floor,
         a scanned repository could suppress its own worst finding by writing
-        one, trading the false clean this work removes for a narrower one.
+        one, trading the false-clean this work removes for a narrower one.
         """
         payload = {"scanners": [], "findings": [
             {"severity": "sev-9", "title": "unrankable finding",
@@ -1365,7 +1365,7 @@ class TestNonzeroScanSpeaksInsteadOfGoingQuiet:
     change rather than a fix: a deep scan ending in 99 previously returned no
     lines at all, so `format_output()` printed `clean` over it. A shape
     problem inside the tool reached the owner disguised as a clean item --
-    the same false clean the rest of this spine removes, arriving through the
+    the same false-clean the rest of this spine removes, arriving through the
     reader's silence rather than through its blindness.
 
     Every early return above this point has already handled the two cases
@@ -1401,7 +1401,7 @@ class TestNonzeroScanSpeaksInsteadOfGoingQuiet:
         """Driven through the function that produces the word `clean`.
 
         A line the reader emitted that the formatter then ignored would still
-        be a false clean on the owner's screen, so the assertion is made where
+        be a false-clean on the owner's screen, so the assertion is made where
         the word is written rather than one seam below it.
         """
         report = aggregate_report(tmp_path, [
@@ -1536,8 +1536,8 @@ class TestAnUnclearedItemStaysOutOfTheBaseline:
         plugin_dir = create_plugin(plugin_cache, "test-plugin")
         session_start(monkeypatch, capsys)
         item_key = f"plugin:{plugin_dir}"
-        # Control arm for every assertion below: the first run really does
-        # baseline this item, so "absent from the baseline" cannot pass
+        # Positive control for every assertion below: the first run really
+        # does baseline this item, so "absent from the baseline" cannot pass
         # because nothing is ever written there.
         assert item_key in baselined_items()
         change_plugin(plugin_dir, "// CHANGED")
@@ -1575,7 +1575,7 @@ class TestAnUnclearedItemStaysOutOfTheBaseline:
     def test_an_item_that_really_was_cleared_is_still_baselined(
         self, mock_home, tmp_path, monkeypatch, capsys
     ):
-        """The control arm, and the behaviour that must not regress.
+        """The positive control, and the behaviour that must not regress.
 
         A scan that exited 0 cleared the item, so it is baselined and stops
         being reported. Without this, "uncleared items are absent from the
@@ -1607,7 +1607,7 @@ class TestAggregateReportContract:
     Every assertion here is on the emitter's own output, so the class is green
     on the unchanged base commit and goes red the moment the emitted shape
     moves under a reader still expecting the old one. That is what makes it a
-    control arm: a reader that has stopped seeing findings must not be
+    positive control: a reader that has stopped seeing findings must not be
     indistinguishable from a target that has none.
     """
 

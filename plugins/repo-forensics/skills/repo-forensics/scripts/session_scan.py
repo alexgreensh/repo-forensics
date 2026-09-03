@@ -597,7 +597,7 @@ def _is_above_report_floor(item):
     deliberate: this field is attacker-controlled -- load_scanner_results()
     copies each scanner's JSON through verbatim -- so a floor that swallowed
     off-vocabulary severities would hand a scanned repository a one-word way
-    to suppress its own worst finding, trading the false clean this reader
+    to suppress its own worst finding, trading the false-clean this reader
     exists to remove for a narrower one. It renders `UNKNOWN` and sorts below
     every ranked finding, so it can neither hide nor crowd one out.
     """
@@ -624,7 +624,7 @@ def _format_overflow_line(hidden):
     """The one line a capped report owes the reader.
 
     Truncation is silent unless it says so, and a silent truncation is the
-    same defect class as the false clean above it: a report that showed five
+    same defect class as the false-clean above it: a report that showed five
     of nine findings and looked exactly like a report that found five. The
     count and the per-severity breakdown are what make the difference visible
     without adding another line per hidden finding.
@@ -699,7 +699,7 @@ def summarize_deep_findings(report):
     it arrived: free text is sanitized, and the severity -- which is not free
     text but a four-word vocabulary -- is checked against it. That is a
     condition of the repair, not a refinement of it: reporting the findings
-    without neutralizing them would trade a false clean for an injection path
+    without neutralizing them would trade a false-clean for an injection path
     into SessionStart.
 
     What reaches the reader is then bounded twice: DEEP_FINDING_REPORT_FLOOR
@@ -806,7 +806,7 @@ def deep_scan_item(dirpath, label, item_type, timeout=None, adjudication_sink=No
     if not findings:
         # Silence is not an available answer past this point -- see
         # _format_uncleared_scan_line(). The item is reported uncleared as
-        # well as spoken about, because a false clean that gets baselined is
+        # well as spoken about, because a false-clean that gets baselined is
         # not one missed report, it is every future one.
         if uncleared_sink is not None:
             uncleared_sink.append(f"{item_type}:{dirpath}")
