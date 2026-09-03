@@ -15,7 +15,10 @@ import pytest
 SCRIPTS_DIR = os.path.join(os.path.dirname(__file__), '..', 'scripts')
 sys.path.insert(0, os.path.abspath(SCRIPTS_DIR))
 
+import aggregate_json  # noqa: E402
 import session_scan  # noqa: E402
+
+from report_builders import aggregate_report, finding, scanner_result  # noqa: E402
 
 _POSIX_ONLY = pytest.mark.skipif(
     os.name == "nt", reason="POSIX shell/process behavior not available on Windows"
@@ -841,6 +844,111 @@ class TestDeepScanItem:
         findings = session_scan.deep_scan_item(tmp_dir, "test", "plugin")
         assert len(findings) >= 1
         assert any("CRITICAL" in f for f in findings)
+
+
+class TestAggregateReportContract:
+    """Pin the aggregate report's shape against the aggregator that emits it.
+
+    This class lives beside the SessionStart tests rather than in
+    test_aggregate_json.py because it exists for the *consumer*: session_scan
+    reads the report the aggregator writes, and the two drifted apart in
+    silence once already -- the deep scan read a scanner-level `severity` key
+    that `load_scanner_results()` has never emitted, so it collected nothing
+    and printed `clean` over a scan that exited 2 on a CRITICAL finding, while
+    a hand-written fixture kept the suite green.
+
+    Every assertion here is on the emitter's own output, so the class is green
+    on the unchanged base commit and goes red the moment the emitted shape
+    moves under a reader still expecting the old one. That is what makes it a
+    control arm: a reader that has stopped seeing findings must not be
+    indistinguishable from a target that has none.
+    """
+
+    def test_scanner_entry_carries_exactly_the_loader_keys(self, tmp_path):
+        critical = finding(severity="critical")
+        report = aggregate_report(tmp_path, [
+            scanner_result("skill_threats", [critical], exit_code=2),
+        ])
+
+        assert len(report["scanners"]) == 1
+        entry = report["scanners"][0]
+        assert set(entry) == {
+            "name", "exit_code", "parse_error", "finding_count", "findings",
+        }
+        assert entry["name"] == "skill_threats"
+        assert entry["exit_code"] == 2
+        assert entry["parse_error"] is None
+        assert entry["finding_count"] == 1
+        assert entry["findings"] == [critical]
+
+    def test_scanner_entry_carries_stderr_only_when_present(self, tmp_path):
+        report = aggregate_report(tmp_path, [
+            scanner_result("noisy", [finding()], stderr="warning: slow walk"),
+            scanner_result("quiet", [finding()]),
+        ])
+
+        entries = {entry["name"]: entry for entry in report["scanners"]}
+        assert entries["noisy"]["stderr"] == "warning: slow walk"
+        assert "stderr" not in entries["quiet"]
+
+    def test_scanner_entry_carries_no_severity_detail_or_message(self, tmp_path):
+        """The three keys the broken reader looked for. None is ever emitted."""
+        report = aggregate_report(tmp_path, [
+            scanner_result("skill_threats", [finding(severity="critical")], exit_code=2),
+            scanner_result("secrets", [finding(severity="high")], exit_code=1),
+            scanner_result("binary", [], exit_code=0),
+        ])
+
+        for entry in report["scanners"]:
+            assert "severity" not in entry
+            assert "detail" not in entry
+            assert "message" not in entry
+
+    def test_severity_lives_on_each_finding_with_the_report_vocabulary(self, tmp_path):
+        report = aggregate_report(tmp_path, [
+            scanner_result("skill_threats", [
+                finding(severity="critical"),
+                finding(severity="high", title="H"),
+                finding(severity="medium", title="M"),
+                finding(severity="low", title="L"),
+            ], exit_code=2),
+        ])
+
+        # The vocabulary is the aggregator's, not this test's.
+        assert set(aggregate_json.SEVERITY_ORDER) == {
+            "critical", "high", "medium", "low",
+        }
+        assert len(report["findings"]) == 4
+        for item in report["findings"]:
+            assert item["severity"] in aggregate_json.SEVERITY_ORDER
+        assert {item["severity"] for item in report["findings"]} == {
+            "critical", "high", "medium", "low",
+        }
+
+    def test_builder_entries_match_a_real_build_report(self, tmp_path):
+        """The builder stops at the loader; prove that costs no fidelity.
+
+        aggregate_report() assembles a report from load_scanner_results() plus
+        the two pure scorers instead of calling build_report(), so that a
+        fixture's findings are not rewritten by correlation and evidence
+        capping. If build_report() ever gave its scanner entries a different
+        shape, that shortcut would become a drift of its own -- so compare the
+        two directly.
+        """
+        results_dir = tmp_path / "results"
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+
+        built = aggregate_report(results_dir, [
+            scanner_result("skill_threats", [finding(severity="critical")], exit_code=2),
+            scanner_result("secrets", [finding(severity="high")], stderr="note", exit_code=1),
+        ])
+        real = aggregate_json.build_report(str(results_dir), str(repo_dir), "false")
+
+        real_entries = {entry["name"]: entry for entry in real["scanners"]}
+        for entry in built["scanners"]:
+            assert entry["name"] in real_entries
+            assert set(entry) == set(real_entries[entry["name"]])
 
 
 @_POSIX_ONLY
