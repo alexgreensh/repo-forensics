@@ -494,8 +494,25 @@ DEEP_FINDING_PATH_MAX = 160
 # The aggregator's severity vocabulary, mirrored rather than imported:
 # session_scan is a SessionStart hook on a 15s budget and deliberately imports
 # no heavy scanner module. TestDeepScanFindingsReachTheSession pins this tuple
-# against aggregate_json.SEVERITY_ORDER so the mirror cannot drift.
+# against aggregate_json.SEVERITY_ORDER so the mirror cannot drift -- its
+# members and, since the reader sorts by position in it, its order.
 DEEP_FINDING_SEVERITIES = ("critical", "high", "medium", "low")
+
+# Severities worth a line at session start. `low` is deliberately excluded: it
+# is an informational note, and a note that turns every plugin update into a
+# warning line spends the report's credibility on nothing. A report nobody
+# reads is not a control, it is an alibi.
+#
+# A severity the vocabulary does not contain is NOT below this floor -- see
+# _is_above_report_floor(), which explains why.
+DEEP_FINDING_REPORT_FLOOR = ("critical", "high", "medium")
+
+# Finding lines one changed item may spend, before the overflow line. This
+# return value is echoed into the agent's session context, so an uncapped
+# report from one noisy target pushes the rest of the session out of the
+# window. The cap is lossy by construction, which is why _format_overflow_line()
+# exists: a capped report that did not say so would read as a complete one.
+DEEP_FINDING_MAX_LINES = 5
 
 
 def _snippet_sanitizer():
@@ -554,6 +571,41 @@ def _format_finding_severity(item):
     return "UNKNOWN"
 
 
+def _severity_rank(item):
+    """Sort key for a finding: 0 is worst.
+
+    Position in DEEP_FINDING_SEVERITIES, which is the aggregator's ranking
+    mirrored worst-first. Anything off the vocabulary ranks after every known
+    severity, so an unrankable value cannot be used to claim the top of a
+    capped report.
+    """
+    severity = item.get("severity")
+    if isinstance(severity, str):
+        try:
+            return DEEP_FINDING_SEVERITIES.index(severity.lower())
+        except ValueError:
+            pass
+    return len(DEEP_FINDING_SEVERITIES)
+
+
+def _is_above_report_floor(item):
+    """Is this finding worth one of the session report's lines?
+
+    A recognized severity is tested against DEEP_FINDING_REPORT_FLOOR. An
+    unrecognized one is reported instead of dropped, and that asymmetry is
+    deliberate: this field is attacker-controlled -- load_scanner_results()
+    copies each scanner's JSON through verbatim -- so a floor that swallowed
+    off-vocabulary severities would hand a scanned repository a one-word way
+    to suppress its own worst finding, trading the false clean this reader
+    exists to remove for a narrower one. It renders `UNKNOWN` and sorts below
+    every ranked finding, so it can neither hide nor crowd one out.
+    """
+    severity = item.get("severity")
+    if isinstance(severity, str) and severity.lower() in DEEP_FINDING_SEVERITIES:
+        return severity.lower() in DEEP_FINDING_REPORT_FLOOR
+    return True
+
+
 def _format_finding_line(item, sanitize):
     """One display line: severity, what was found, where, and why it matters."""
     title = sanitize(item.get("title") or "", max_len=DEEP_FINDING_TITLE_MAX)
@@ -565,6 +617,28 @@ def _format_finding_line(item, sanitize):
     if description:
         line += f" - {description}"
     return line
+
+
+def _format_overflow_line(hidden):
+    """The one line a capped report owes the reader.
+
+    Truncation is silent unless it says so, and a silent truncation is the
+    same defect class as the false clean above it: a report that showed five
+    of nine findings and looked exactly like a report that found five. The
+    count and the per-severity breakdown are what make the difference visible
+    without spending another line per hidden finding.
+
+    Carries no attacker-controlled text -- only integers and severity tags
+    already checked against the vocabulary -- and deliberately does not start
+    with `[`, so it cannot be mistaken for one more finding line.
+    """
+    counts = {}
+    for item in sorted(hidden, key=_severity_rank):
+        tag = _format_finding_severity(item)
+        counts[tag] = counts.get(tag, 0) + 1
+    breakdown = ", ".join(f"{count} {tag}" for tag, count in counts.items())
+    noun = "finding" if len(hidden) == 1 else "findings"
+    return f"... and {len(hidden)} more {noun} not shown ({breakdown})"
 
 
 def report_findings(report):
@@ -604,12 +678,27 @@ def summarize_deep_findings(report):
     without neutralizing them would trade a false clean for an injection path
     into SessionStart.
 
+    What reaches the reader is then bounded twice, because the report competes
+    with the session for the same context window. DEEP_FINDING_REPORT_FLOOR
+    drops the notes; DEEP_FINDING_MAX_LINES bounds what one noisy target can
+    spend. Sorting happens here rather than being taken from the report: the
+    aggregator does sort worst-first, but the report is a scanner's stdout and
+    this is the last thing between it and the user, so truncating on a trusted
+    order would let a producer decide which finding the owner never sees. The
+    sort is stable, so findings of one severity keep the order they arrived in.
+
     Nothing here spawns a subprocess or reads the scanned tree, so the
     rendering can be exercised without one; deep_scan_item() owns the
     subprocess and hands the parsed report in.
     """
     sanitize = _snippet_sanitizer()
-    return [_format_finding_line(item, sanitize) for item in report_findings(report)]
+    items = [item for item in report_findings(report) if _is_above_report_floor(item)]
+    items.sort(key=_severity_rank)
+    shown, hidden = items[:DEEP_FINDING_MAX_LINES], items[DEEP_FINDING_MAX_LINES:]
+    lines = [_format_finding_line(item, sanitize) for item in shown]
+    if hidden:
+        lines.append(_format_overflow_line(hidden))
+    return lines
 
 
 def deep_scan_item(dirpath, label, item_type, timeout=None, adjudication_sink=None):

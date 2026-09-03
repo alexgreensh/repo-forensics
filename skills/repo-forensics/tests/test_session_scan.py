@@ -1076,6 +1076,257 @@ class TestDeepScanFindingsReachTheSession:
         assert not any("runtime_behavior" in line for line in findings)
 
 
+def rendered_findings(lines):
+    """The severity-tagged lines: every rendered finding starts with `[`."""
+    return [line for line in lines if line.startswith("[")]
+
+
+def overflow_lines(lines):
+    """Everything the renderer emitted that is not a finding line."""
+    return [line for line in lines if not line.startswith("[")]
+
+
+def unsorted_report(tmp_path, findings, exit_code=2):
+    """An emitter-built report whose finding order is deliberately wrong.
+
+    `aggregate_report()` sorts worst-first because `build_report()` does. The
+    reader may not rely on that: the report is a scanner's stdout, and the
+    reader is the last thing between it and the user. Reversing the list is
+    what makes "sorted in the reader" an assertion rather than a coincidence
+    inherited from the producer.
+    """
+    report = aggregate_report(tmp_path, [
+        scanner_result("skill_threats", findings, exit_code=exit_code),
+    ])
+    report["findings"].reverse()
+    return report
+
+
+class TestSessionReportFrictionBudget:
+    """The session report is spent only on what could change what the owner does.
+
+    Two costs are bounded here, and they are different costs. The **floor**
+    bounds what is worth a line at all: an informational note must not turn
+    every plugin update into a warning line, or the report stops being read,
+    and an ignored report is an alibi rather than a control. The **cap** bounds
+    what one noisy target can spend: the return value of this hook is echoed
+    into the agent's session context, so a report with no ceiling pushes the
+    rest of the session out of the window.
+
+    Both are lossy, so both are made visible: a capped report says how much it
+    is hiding and at what severities, and the reader sorts before it truncates
+    so what survives the cut is the worst of what was found.
+
+    Assertions are on what `deep_scan_item()` returns. Nothing here reaches
+    past it into the renderer.
+    """
+
+    def test_reporting_floor_is_the_vocabulary_minus_low(self):
+        """The floor is a named constant, and `low` is the only thing under it.
+
+        Written against the vocabulary rather than as a second literal, so a
+        severity added upstream lands above the floor by default -- reported
+        and argued about -- instead of being silently dropped by a floor that
+        was spelled out once and never revisited.
+        """
+        assert session_scan.DEEP_FINDING_REPORT_FLOOR == ("critical", "high", "medium")
+        assert (set(session_scan.DEEP_FINDING_REPORT_FLOOR)
+                == set(session_scan.DEEP_FINDING_SEVERITIES) - {"low"})
+
+    def test_severity_vocabulary_is_ordered_worst_first(self):
+        """The mirror carries the aggregator's *ranking*, not just its members.
+
+        `test_severity_vocabulary_matches_the_aggregator` pins the set. The
+        reader now sorts by position in this tuple, so its order became
+        load-bearing too: a vocabulary that drifted into a different order
+        would silently invert the truncation and hide the worst result.
+        """
+        assert list(session_scan.DEEP_FINDING_SEVERITIES) == sorted(
+            aggregate_json.SEVERITY_ORDER,
+            key=lambda severity: -aggregate_json.SEVERITY_ORDER[severity],
+        )
+
+    def test_a_low_only_report_produces_no_finding_lines(self, tmp_dir, tmp_path, monkeypatch):
+        """LOW is a note, and a note is not worth a line in this budget."""
+        report = aggregate_report(tmp_path, [
+            scanner_result("skill_threats", [
+                finding(severity="low", title="Informational note"),
+                finding(severity="low", title="Second note"),
+            ], exit_code=1),
+        ])
+        stub_forensics(tmp_dir, monkeypatch, report, 1)
+
+        findings = session_scan.deep_scan_item(tmp_dir, "test", "plugin")
+
+        assert rendered_findings(findings) == []
+        assert not any("Informational note" in line for line in findings)
+
+    def test_low_is_dropped_while_the_floor_is_reported(self, tmp_dir, tmp_path, monkeypatch):
+        """The floor is a filter on a mixed report, not only on an all-LOW one."""
+        report = aggregate_report(tmp_path, [
+            scanner_result("skill_threats", [
+                finding(severity="critical", title="Critical one"),
+                finding(severity="high", title="High one"),
+                finding(severity="medium", title="Medium one"),
+                finding(severity="low", title="Low one"),
+            ], exit_code=2),
+        ])
+        stub_forensics(tmp_dir, monkeypatch, report, 2)
+
+        findings = session_scan.deep_scan_item(tmp_dir, "test", "plugin")
+
+        assert len(rendered_findings(findings)) == 3
+        assert not any("Low one" in line for line in findings)
+        for title in ("Critical one", "High one", "Medium one"):
+            assert any(title in line for line in findings)
+
+    def test_at_most_five_finding_lines_from_one_changed_item(
+        self, tmp_dir, tmp_path, monkeypatch
+    ):
+        report = aggregate_report(tmp_path, [
+            scanner_result("skill_threats", [
+                finding(severity="high", title=f"Finding {n}") for n in range(9)
+            ], exit_code=1),
+        ])
+        stub_forensics(tmp_dir, monkeypatch, report, 1)
+
+        findings = session_scan.deep_scan_item(tmp_dir, "test", "plugin")
+
+        assert len(rendered_findings(findings)) == 5
+
+    def test_the_cap_is_not_paid_when_it_does_not_bite(self, tmp_dir, tmp_path, monkeypatch):
+        """No overflow line on a report that fits, so it cannot become noise."""
+        report = aggregate_report(tmp_path, [
+            scanner_result("skill_threats", [
+                finding(severity="high", title=f"Finding {n}") for n in range(5)
+            ], exit_code=1),
+        ])
+        stub_forensics(tmp_dir, monkeypatch, report, 1)
+
+        findings = session_scan.deep_scan_item(tmp_dir, "test", "plugin")
+
+        assert len(rendered_findings(findings)) == 5
+        assert overflow_lines(findings) == []
+
+    def test_overflow_line_carries_the_hidden_count_and_breakdown(
+        self, tmp_dir, tmp_path, monkeypatch
+    ):
+        """A capped report must never be mistakable for a complete one.
+
+        Two CRITICAL and three HIGH fill the cap exactly, so the four MEDIUM
+        are the hidden set and the breakdown is checkable rather than
+        approximate.
+        """
+        report = aggregate_report(tmp_path, [
+            scanner_result(
+                "skill_threats",
+                [finding(severity="critical", title=f"Crit {n}") for n in range(2)]
+                + [finding(severity="high", title=f"High {n}") for n in range(3)]
+                + [finding(severity="medium", title=f"Med {n}") for n in range(4)],
+                exit_code=2,
+            ),
+        ])
+        stub_forensics(tmp_dir, monkeypatch, report, 2)
+
+        findings = session_scan.deep_scan_item(tmp_dir, "test", "plugin")
+
+        overflow = overflow_lines(findings)
+        assert len(overflow) == 1
+        assert findings[-1] == overflow[0]
+        assert "4" in overflow[0]
+        assert "MEDIUM" in overflow[0]
+        # The breakdown describes what was hidden, not what was shown.
+        assert "CRITICAL" not in overflow[0] and "HIGH" not in overflow[0]
+
+    def test_findings_are_sorted_by_severity_in_the_reader(
+        self, tmp_dir, tmp_path, monkeypatch
+    ):
+        """Worst first, and not because the producer happened to say so."""
+        report = unsorted_report(tmp_path, [
+            finding(severity="medium", title="Middling"),
+            finding(severity="high", title="Bad"),
+            finding(severity="critical", title="Worst"),
+        ])
+        # The premise of the assertion below, not an incidental property: a
+        # reader that took the producer's order would render MEDIUM first.
+        assert report["findings"][0]["title"] == "Middling"
+        stub_forensics(tmp_dir, monkeypatch, report, 2)
+
+        findings = session_scan.deep_scan_item(tmp_dir, "test", "plugin")
+
+        assert [line.split("]")[0] + "]" for line in rendered_findings(findings)] == [
+            "[CRITICAL]", "[HIGH]", "[MEDIUM]",
+        ]
+
+    def test_truncation_never_hides_the_worst_result(self, tmp_dir, tmp_path, monkeypatch):
+        """The cap bites on a report whose producer put the worst finding last."""
+        report = unsorted_report(tmp_path, (
+            [finding(severity="medium", title=f"Med {n}") for n in range(5)]
+            + [finding(severity="critical", title="The worst")]
+        ))
+        stub_forensics(tmp_dir, monkeypatch, report, 2)
+
+        findings = session_scan.deep_scan_item(tmp_dir, "test", "plugin")
+
+        shown = rendered_findings(findings)
+        assert len(shown) == 5
+        assert shown[0].startswith("[CRITICAL]")
+        assert "The worst" in shown[0]
+        overflow = overflow_lines(findings)
+        assert len(overflow) == 1
+        assert "1" in overflow[0] and "MEDIUM" in overflow[0]
+
+    def test_an_unrankable_severity_is_reported_rather_than_dropped(
+        self, tmp_dir, monkeypatch
+    ):
+        """A severity off the vocabulary must not be a way to go quiet.
+
+        Hand-written rather than built through `finding()`, because
+        `forensics_core.Finding` is not the only way a severity reaches a
+        report -- a scanner's raw JSON is, and `load_scanner_results()` copies
+        it through verbatim. If an unrecognised severity fell below the floor,
+        a scanned repository could suppress its own worst finding by writing
+        one, trading the false clean this work removes for a narrower one.
+        """
+        payload = {"scanners": [], "findings": [
+            {"severity": "sev-9", "title": "unrankable finding",
+             "description": "", "file": "a.py", "line": 1},
+            {"severity": "low", "title": "informational note",
+             "description": "", "file": "b.py", "line": 2},
+        ]}
+        stub_forensics(tmp_dir, monkeypatch, payload, 2)
+
+        findings = session_scan.deep_scan_item(tmp_dir, "test", "plugin")
+
+        assert len(rendered_findings(findings)) == 1
+        assert findings[0].startswith("[UNKNOWN] unrankable finding")
+        assert not any("informational note" in line for line in findings)
+
+    def test_an_unrankable_severity_sorts_below_every_ranked_one(
+        self, tmp_dir, monkeypatch
+    ):
+        """Reported, but never ahead of a finding the aggregator could rank.
+
+        The other half of the rule above: showing an unrankable severity must
+        not hand a scanned repository the top of the report, or the cap becomes
+        the suppression channel the floor was not.
+        """
+        payload = {"scanners": [], "findings": [
+            {"severity": "sev-9", "title": "unrankable finding",
+             "description": "", "file": "a.py", "line": 1},
+            {"severity": "medium", "title": "ranked finding",
+             "description": "", "file": "b.py", "line": 2},
+        ]}
+        stub_forensics(tmp_dir, monkeypatch, payload, 2)
+
+        findings = session_scan.deep_scan_item(tmp_dir, "test", "plugin")
+
+        shown = rendered_findings(findings)
+        assert len(shown) == 2
+        assert shown[0].startswith("[MEDIUM]")
+        assert shown[1].startswith("[UNKNOWN]")
+
+
 class TestAggregateReportContract:
     """Pin the aggregate report's shape against the aggregator that emits it.
 
