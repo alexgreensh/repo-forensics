@@ -20,6 +20,15 @@ from typing import Any, Dict, List, Optional
 
 from .contracts import DomainJob
 
+# Exit-code contract of the scanner suite. The codes are defined by
+# aggregate_json.calculate_report_exit_code() —
+#   0  = clean, 1 = HIGH/MEDIUM findings, 2 = CRITICAL findings,
+#   99 = infrastructure error —
+# and run_forensics.sh's final `case` block clamps anything else to 99.
+# 0, 1 and 2 each write a complete aggregate report to stdout and are results;
+# only 99 and anything unforeseen are failures.
+SCANNER_REPORT_EXIT_CODES = (0, 1, 2)
+
 
 def find_scanner_script() -> Optional[str]:
     """Locate run_forensics.sh relative to this file."""
@@ -69,8 +78,7 @@ def run_scanners(
     except OSError as e:
         return {"_error": "subprocess_failed", "detail": str(e)}
 
-    if result.returncode not in (0, 1):
-        # Exit 1 = warnings found (normal). Anything else is unexpected.
+    if result.returncode not in SCANNER_REPORT_EXIT_CODES:
         return {
             "_error": "scanner_exit_%d" % result.returncode,
             "stderr": result.stderr[:500] if result.stderr else "",
