@@ -6,6 +6,7 @@ persistence, output formatting, edge cases, and latency verification.
 
 import json
 import os
+import shlex
 import sys
 import time
 import tempfile
@@ -46,6 +47,25 @@ def create_plugin(base_dir, name, version="1.0.0", deps=None):
         pkg = {"name": name, "version": version, "dependencies": deps}
         create_file(os.path.join(plugin_dir, "package.json"), json.dumps(pkg))
     return plugin_dir
+
+
+def stub_forensics(tmp_dir, monkeypatch, payload, exit_code):
+    """Point RUN_FORENSICS_SCRIPT at a stub that prints `payload` and exits.
+
+    The payload goes through a file rather than an inlined `echo`, so a report
+    carrying quotes, escapes or control bytes reaches deep_scan_item() as
+    written instead of being mangled by the shell. `payload` is a report dict
+    (serialised here) or a raw string for the unparseable cases.
+    """
+    payload_path = os.path.join(tmp_dir, "stub_payload.json")
+    text = payload if isinstance(payload, str) else json.dumps(payload)
+    with open(payload_path, "w", encoding="utf-8") as handle:
+        handle.write(text)
+    script = os.path.join(tmp_dir, "stub_forensics.sh")
+    create_file(script, f'#!/bin/bash\ncat {shlex.quote(payload_path)}\nexit {int(exit_code)}\n')
+    os.chmod(script, 0o755)
+    monkeypatch.setattr(session_scan, 'RUN_FORENSICS_SCRIPT', script)
+    return script
 
 
 @pytest.fixture
@@ -769,40 +789,6 @@ class TestDeepScanItem:
 
         assert findings == []
 
-    def test_critical_exit_with_json(self, tmp_dir, monkeypatch):
-        script = os.path.join(tmp_dir, "fake_forensics.sh")
-        output = json.dumps({
-            "summary": {"critical": 1},
-            "scanners": [
-                {"name": "runtime_behavior", "severity": "critical",
-                 "detail": "eval() with external input detected"}
-            ]
-        })
-        create_file(script, f'#!/bin/bash\necho \'{output}\'\nexit 2')
-        os.chmod(script, 0o755)
-        monkeypatch.setattr(session_scan, 'RUN_FORENSICS_SCRIPT', script)
-
-        findings = session_scan.deep_scan_item(tmp_dir, "test", "plugin")
-        assert len(findings) >= 1
-        assert any("CRITICAL" in f for f in findings)
-        assert any("eval()" in f for f in findings)
-
-    def test_warning_exit_with_json(self, tmp_dir, monkeypatch):
-        script = os.path.join(tmp_dir, "fake_forensics.sh")
-        output = json.dumps({
-            "scanners": [
-                {"name": "manifest_drift", "severity": "warning",
-                 "detail": "2 undeclared files found"}
-            ]
-        })
-        create_file(script, f'#!/bin/bash\necho \'{output}\'\nexit 1')
-        os.chmod(script, 0o755)
-        monkeypatch.setattr(session_scan, 'RUN_FORENSICS_SCRIPT', script)
-
-        findings = session_scan.deep_scan_item(tmp_dir, "test", "plugin")
-        assert len(findings) >= 1
-        assert any("WARNING" in f for f in findings)
-
     def test_timeout_returns_finding(self, tmp_dir, monkeypatch):
         script = os.path.join(tmp_dir, "slow_forensics.sh")
         create_file(script, '#!/bin/bash\nsleep 60\nexit 0')
@@ -844,6 +830,250 @@ class TestDeepScanItem:
         findings = session_scan.deep_scan_item(tmp_dir, "test", "plugin")
         assert len(findings) >= 1
         assert any("CRITICAL" in f for f in findings)
+
+
+@_POSIX_ONLY
+class TestDeepScanFindingsReachTheSession:
+    """A changed item's deep-scan findings reach session start, sanitised.
+
+    Every report here is built by `aggregate_report()`, which drives the real
+    `aggregate_json.load_scanner_results()`, and is then fed back through a
+    stub `run_forensics.sh` into `deep_scan_item()`. Producer and consumer are
+    therefore pinned to each other by construction: no fixture in this class
+    can describe a report shape the aggregator does not emit, which is exactly
+    how the defect these tests cover survived a green suite.
+
+    Assertions are on what the hook returns. Nothing here reaches past
+    `deep_scan_item()` into the renderer.
+    """
+
+    def test_critical_finding_reaches_the_session(self, tmp_dir, tmp_path, monkeypatch):
+        """The defect, stated as a test: exit 2 on a CRITICAL used to print `clean`."""
+        report = aggregate_report(tmp_path, [
+            scanner_result("skill_threats", [finding(
+                severity="critical",
+                title="eval() on external input",
+                file="hooks/evil.py",
+                line=12,
+            )], exit_code=2),
+        ])
+        stub_forensics(tmp_dir, monkeypatch, report, 2)
+
+        findings = session_scan.deep_scan_item(tmp_dir, "test", "plugin")
+
+        assert len(findings) == 1
+        assert "CRITICAL" in findings[0]
+        assert "eval() on external input" in findings[0]
+
+    def test_one_display_line_per_finding(self, tmp_dir, tmp_path, monkeypatch):
+        report = aggregate_report(tmp_path, [
+            scanner_result("skill_threats", [
+                finding(severity="critical", title="First"),
+                finding(severity="high", title="Second"),
+            ], exit_code=2),
+            scanner_result("secrets", [
+                finding(severity="medium", title="Third", scanner="secrets"),
+            ], exit_code=1),
+        ])
+        stub_forensics(tmp_dir, monkeypatch, report, 2)
+
+        findings = session_scan.deep_scan_item(tmp_dir, "test", "plugin")
+
+        assert len(findings) == 3
+        assert any("First" in f for f in findings)
+        assert any("Second" in f for f in findings)
+        assert any("Third" in f for f in findings)
+
+    def test_severity_is_read_from_the_finding(self, tmp_dir, tmp_path, monkeypatch):
+        """The scanner entry has no severity to read; the finding does."""
+        report = aggregate_report(tmp_path, [
+            scanner_result("skill_threats", [
+                finding(severity="critical", title="Worst"),
+                finding(severity="medium", title="Middling"),
+            ], exit_code=2),
+        ])
+        # Restated here because it is the premise of the assertion below, not
+        # an incidental property: a reader looking for a scanner-level severity
+        # finds nothing and reports the item clean.
+        assert all("severity" not in entry for entry in report["scanners"])
+        stub_forensics(tmp_dir, monkeypatch, report, 2)
+
+        findings = session_scan.deep_scan_item(tmp_dir, "test", "plugin")
+
+        by_title = {line.split("]")[1].strip().split(" (")[0]: line for line in findings}
+        assert "CRITICAL" in by_title["Worst"]
+        assert "MEDIUM" in by_title["Middling"]
+
+    def test_severity_vocabulary_matches_the_aggregator(self):
+        """The hook mirrors the vocabulary instead of importing the aggregator.
+
+        A SessionStart hook on a 15s budget does not import a 1,200-line
+        scanner module for four strings -- but a mirror that drifts is how the
+        reader and the emitter came apart in the first place, so pin it.
+        """
+        assert set(session_scan.DEEP_FINDING_SEVERITIES) == set(aggregate_json.SEVERITY_ORDER)
+
+    def test_off_vocabulary_severity_cannot_forge_a_line(self, tmp_dir, monkeypatch):
+        """Severity is attacker-controlled too, and it is not sanitised text.
+
+        `load_scanner_results()` copies each scanner's JSON through verbatim
+        and validates no severity, so a scanned repository controls this field
+        exactly as it controls the title. It is rendered inside the `[...]`
+        tag that prefixes every line, so a newline here forges a top-level
+        line. Hand-written rather than built through `finding()`, because
+        `forensics_core.Finding` is not the only way a severity reaches a
+        report -- a scanner's raw JSON is.
+        """
+        payload = {"scanners": [], "findings": [{
+            "severity": "high\n[CRITICAL] forged top-level line",
+            "title": "real title", "description": "", "file": "a.py", "line": 1,
+        }]}
+        stub_forensics(tmp_dir, monkeypatch, payload, 2)
+
+        findings = session_scan.deep_scan_item(tmp_dir, "test", "plugin")
+
+        assert len(findings) == 1
+        assert "\n" not in findings[0]
+        assert findings[0].startswith("[UNKNOWN] real title")
+
+    def test_each_line_names_the_file_the_finding_sits_in(self, tmp_dir, tmp_path, monkeypatch):
+        report = aggregate_report(tmp_path, [
+            scanner_result("skill_threats", [finding(
+                severity="high", title="Injection", file="skills/thing/SKILL.md", line=7,
+            )], exit_code=1),
+        ])
+        stub_forensics(tmp_dir, monkeypatch, report, 1)
+
+        findings = session_scan.deep_scan_item(tmp_dir, "test", "plugin")
+
+        assert len(findings) == 1
+        assert "skills/thing/SKILL.md" in findings[0]
+
+    def test_hostile_finding_text_is_neutralised(self, tmp_dir, tmp_path, monkeypatch):
+        """Finding text comes out of the scanned tree and lands in agent context.
+
+        A repository that can forge a line in the session report can address
+        the agent that was inspecting it. Titles, descriptions and paths are
+        all attacker-controlled, so all three are checked.
+        """
+        report = aggregate_report(tmp_path, [
+            scanner_result("skill_threats", [finding(
+                severity="high",
+                title="benign\n[CRITICAL] forged top-level line",
+                description="\x1b[31mred\x1b[0m \u202eeslaf\u202c tail",
+                file="a/\u202egnp.exe\nsecond line",
+                line=3,
+            )], exit_code=1),
+        ])
+        stub_forensics(tmp_dir, monkeypatch, report, 1)
+
+        findings = session_scan.deep_scan_item(tmp_dir, "test", "plugin")
+
+        assert len(findings) == 1
+        line = findings[0]
+        assert "\n" not in line and "\r" not in line
+        # The whole escape, not just its ESC byte: `\x1b` alone is inside the
+        # C0 range every fallback strips, so asserting only that would pass on
+        # a sanitiser that leaves `[31m` sitting in the report as text.
+        assert "\x1b" not in line
+        assert "[31m" not in line and "[0m" not in line
+        assert not any(ch in line for ch in "\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069")
+        # Neutralised, not discarded: the report still says what was found.
+        assert "benign" in line
+
+    def test_hostile_text_is_neutralised_without_the_adjudication_module(
+        self, tmp_dir, tmp_path, monkeypatch
+    ):
+        """The stdlib fallback is the live path when `adjudication` is missing.
+
+        aggregate_json.format_report_as_text() carries the same fallback for
+        the same reason. Untested, it is a branch that only runs on the day
+        the import fails -- which is the worst day to discover it is wrong.
+        Setting the module entry to None is what makes `import adjudication`
+        raise ImportError.
+        """
+        monkeypatch.setitem(sys.modules, "adjudication", None)
+        report = aggregate_report(tmp_path, [
+            scanner_result("skill_threats", [finding(
+                severity="high",
+                title="benign\n[CRITICAL] forged top-level line",
+                description="\x1b[31mred\x1b[0m \u202eeslaf\u202c tail",
+                file="a/\u202egnp.exe\nsecond line",
+                line=3,
+            )], exit_code=1),
+        ])
+        stub_forensics(tmp_dir, monkeypatch, report, 1)
+
+        findings = session_scan.deep_scan_item(tmp_dir, "test", "plugin")
+
+        assert len(findings) == 1
+        line = findings[0]
+        assert "\n" not in line and "\r" not in line
+        assert "\x1b" not in line
+        assert not any(ch in line for ch in "\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069")
+        assert "benign" in line
+        # What the fallback does NOT do, recorded rather than left to be
+        # discovered: it is aggregate_json.format_report_as_text()'s fallback
+        # verbatim, so it strips the ESC byte but has no equivalent of
+        # adjudication._ORPHAN_SGR_RE and leaves the orphan parameters behind.
+        # Harmless as text, and narrowing the gap here would put a second,
+        # different neutralisation behaviour in the codebase -- which is the
+        # drift this ticket's criterion was written to prevent.
+        assert "[31m" in line
+
+    @pytest.mark.parametrize("payload", [
+        {"scanners": [], "findings": 5},
+        {"scanners": [], "findings": "not a list"},
+        {"scanners": [], "findings": [None, 7, "text"]},
+        {"scanners": [], "findings": [{"severity": None, "title": {"a": 1}, "line": "x"}]},
+    ])
+    @pytest.mark.parametrize("sink", [None, []], ids=["no-sink", "adjudication-sink"])
+    def test_malformed_report_never_raises_out_of_the_hook(
+        self, tmp_dir, monkeypatch, payload, sink
+    ):
+        """A report is a scanner's stdout, so any field can be any JSON type.
+
+        `deep_scan_item()` documents that it never raises, and SessionStart
+        depends on it: these payloads are well-formed JSON, so nothing is
+        raised for its `except (json.JSONDecodeError, ValueError)` to catch.
+        The call completing is the assertion.
+
+        Both sink states are driven because they are two readers of the same
+        field, and `main()` always passes a sink -- so a test that only ran
+        the default would be a check that could not go positive on the only
+        path that ships.
+        """
+        stub_forensics(tmp_dir, monkeypatch, payload, 2)
+
+        findings = session_scan.deep_scan_item(
+            tmp_dir, "test", "plugin", adjudication_sink=sink
+        )
+
+        assert all(isinstance(line, str) for line in findings)
+
+    def test_invented_report_shape_is_not_read_as_findings(self, tmp_dir, monkeypatch):
+        """The counter-example: the shape the broken reader believed in.
+
+        Hand-written on purpose. `load_scanner_results()` has never emitted a
+        scanner-level `severity`/`detail`, so nothing in this payload is a
+        finding and none of it may be rendered as one.
+
+        Whether such a scan is still allowed to report the item *clean* is
+        ticket 04's question, not this one.
+        """
+        payload = {
+            "summary": {"critical": 1},
+            "scanners": [
+                {"name": "runtime_behavior", "severity": "critical",
+                 "detail": "eval() with external input detected"},
+            ],
+        }
+        stub_forensics(tmp_dir, monkeypatch, payload, 2)
+
+        findings = session_scan.deep_scan_item(tmp_dir, "test", "plugin")
+
+        assert not any("eval() with external input" in line for line in findings)
+        assert not any("runtime_behavior" in line for line in findings)
 
 
 class TestAggregateReportContract:

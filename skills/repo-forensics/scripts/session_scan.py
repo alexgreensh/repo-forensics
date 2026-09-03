@@ -481,6 +481,137 @@ def scan_item(dirpath, label, item_type, checksums):
     return findings
 
 
+# Per-field caps for a rendered finding line. The session report is echoed
+# into the agent's context, so length is bounded per field as well as per
+# line. All three are the caps this codebase already applies to the same
+# fields: title and description in aggregate_json.format_report_as_text() and
+# adjudication.build_adjudication_block(), the path in the latter -- the text
+# formatter is the odd one out and does not sanitize its path at all.
+DEEP_FINDING_TITLE_MAX = 160
+DEEP_FINDING_DESC_MAX = 300
+DEEP_FINDING_PATH_MAX = 160
+
+# The aggregator's severity vocabulary, mirrored rather than imported:
+# session_scan is a SessionStart hook on a 15s budget and deliberately imports
+# no heavy scanner module. TestDeepScanFindingsReachTheSession pins this tuple
+# against aggregate_json.SEVERITY_ORDER so the mirror cannot drift.
+DEEP_FINDING_SEVERITIES = ("critical", "high", "medium", "low")
+
+
+def _snippet_sanitizer():
+    """Return the sanitizer used for finding-derived text.
+
+    Same lazy import and same stdlib fallback aggregate_json.format_report_as_text()
+    uses for the same fields, so there is one neutralization behaviour in this
+    codebase rather than two that can drift. The fallback's character ranges are
+    that formatter's, written as escapes: C0/C1 controls plus the BIDI
+    overrides (U+202A-U+202E) and isolates (U+2066-U+2069).
+    """
+    try:
+        import adjudication as _adj
+        return _adj.sanitize_snippet
+    except ImportError:
+        import re as _re
+
+        def _sanitize(text, max_len=300):
+            if not isinstance(text, str):
+                return ""
+            cleaned = _re.sub(
+                "[\x00-\x1f\x7f\x80-\x9f\u202a-\u202e\u2066-\u2069]", "", text
+            )
+            cleaned = _re.sub(r"\s+", " ", cleaned).strip()
+            return cleaned[:max_len]
+
+        return _sanitize
+
+
+def _format_finding_location(item, sanitize):
+    """`file:line` for a finding, or `file` when the scanner gave no line."""
+    path = sanitize(item.get("file") or "", max_len=DEEP_FINDING_PATH_MAX)
+    if not path:
+        return "location unknown"
+    try:
+        line_no = int(item.get("line") or 0)
+    except (TypeError, ValueError):
+        line_no = 0
+    return f"{path}:{line_no}" if line_no > 0 else path
+
+
+def _format_finding_severity(item):
+    """The finding's severity tag, or `UNKNOWN` for anything off-vocabulary.
+
+    Checked against the vocabulary rather than sanitized. Nothing downstream
+    validates this field -- load_scanner_results() copies each scanner's JSON
+    through verbatim -- so a scanned repository controls it exactly as it
+    controls the title, and a severity of "high\n[CRITICAL] ..." would forge a
+    top-level line. Sanitizing would neutralize that; refusing the value
+    outright also refuses to show the reader a severity the aggregator cannot
+    rank, which is the more honest failure.
+    """
+    severity = item.get("severity")
+    if isinstance(severity, str) and severity.lower() in DEEP_FINDING_SEVERITIES:
+        return severity.upper()
+    return "UNKNOWN"
+
+
+def _format_finding_line(item, sanitize):
+    """One display line: severity, what was found, where, and why it matters."""
+    title = sanitize(item.get("title") or "", max_len=DEEP_FINDING_TITLE_MAX)
+    description = sanitize(item.get("description") or "", max_len=DEEP_FINDING_DESC_MAX)
+    line = (
+        f"[{_format_finding_severity(item)}] {title or 'untitled finding'} "
+        f"({_format_finding_location(item, sanitize)})"
+    )
+    if description:
+        line += f" - {description}"
+    return line
+
+
+def report_findings(report):
+    """The report's finding list, or empty for anything that is not one.
+
+    Both readers of `report["findings"]` go through here, and the type checks
+    are load-bearing rather than defensive habit: the report is parsed from a
+    scanner's stdout, so any field can be any JSON type, and `for item in 5`
+    raises a TypeError that deep_scan_item()'s
+    `except (json.JSONDecodeError, ValueError)` does not catch -- breaking its
+    documented promise never to raise, and taking the SessionStart hook with
+    it.
+    """
+    if not isinstance(report, dict):
+        return []
+    items = report.get("findings")
+    if not isinstance(items, (list, tuple)):
+        return []
+    return [item for item in items if isinstance(item, dict)]
+
+
+def summarize_deep_findings(report):
+    """Render a parsed aggregate report's findings as session display lines.
+
+    Severity is read from each finding, because that is the only place the
+    aggregator puts one. An entry of `report["scanners"]` carries exactly
+    `name`, `exit_code`, `parse_error`, `finding_count`, `findings`, plus
+    `stderr` when present -- never a severity. A reader that looked for one
+    there collected nothing and printed `clean` over a scan that exited 2 on a
+    CRITICAL finding, which is the defect this function exists to fix.
+
+    Every rendered field originates in the scanned tree and this return value
+    is echoed into the agent's session context, so none of it is rendered as
+    it arrived: free text is sanitized, and the severity -- which is not free
+    text but a four-word vocabulary -- is checked against it. That is a
+    condition of the repair, not a refinement of it: reporting the findings
+    without neutralizing them would trade a false clean for an injection path
+    into SessionStart.
+
+    Nothing here spawns a subprocess or reads the scanned tree, so the
+    rendering can be exercised without one; deep_scan_item() owns the
+    subprocess and hands the parsed report in.
+    """
+    sanitize = _snippet_sanitizer()
+    return [_format_finding_line(item, sanitize) for item in report_findings(report)]
+
+
 def deep_scan_item(dirpath, label, item_type, timeout=None, adjudication_sink=None):
     """Run the full run_forensics.sh scanner suite on a changed item.
 
@@ -538,21 +669,13 @@ def deep_scan_item(dirpath, label, item_type, timeout=None, adjudication_sink=No
     try:
         data = json.loads(stdout)
         if isinstance(data, dict):
-            for scanner in data.get('scanners', []):
-                if not isinstance(scanner, dict):
-                    continue
-                sev = scanner.get('severity', '')
-                if sev in ('critical', 'high', 'warning'):
-                    scanner_name = scanner.get('name', 'unknown')
-                    detail = scanner.get('detail', scanner.get('message', ''))
-                    if detail:
-                        findings.append(f"[{sev.upper()}] {scanner_name}: {detail}")
+            findings.extend(summarize_deep_findings(data))
             # Collect WARN-tier findings flagged for adjudication (U8). These
             # carry needs_adjudication=true from aggregate_json; they feed the
             # injection-safe adjudication block built once in main().
             if adjudication_sink is not None:
-                for finding in data.get('findings', []):
-                    if isinstance(finding, dict) and finding.get('needs_adjudication') is True:
+                for finding in report_findings(data):
+                    if finding.get('needs_adjudication') is True:
                         adjudication_sink.append(finding)
     except (json.JSONDecodeError, ValueError):
         if proc.returncode == 2:
