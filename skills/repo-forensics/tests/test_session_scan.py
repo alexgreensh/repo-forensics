@@ -1104,16 +1104,16 @@ def unsorted_report(tmp_path, findings, exit_code=2):
     return report
 
 
-class TestSessionReportFrictionBudget:
-    """The session report is spent only on what could change what the owner does.
+class TestSessionReportIsBounded:
+    """The session report carries only what could change what the owner does.
 
-    Two costs are bounded here, and they are different costs. The **floor**
-    bounds what is worth a line at all: an informational note must not turn
-    every plugin update into a warning line, or the report stops being read,
-    and an ignored report is an alibi rather than a control. The **cap** bounds
-    what one noisy target can spend: the return value of this hook is echoed
-    into the agent's session context, so a report with no ceiling pushes the
-    rest of the session out of the window.
+    Two limits are asserted here, and they bound different things. The
+    **floor** bounds what is worth a line at all: an informational note must
+    not turn every plugin update into a warning line, or the report stops
+    being read, and a report that is not read reports nothing. The **cap**
+    bounds how many lines one item can occupy: the return value of this hook
+    is echoed into the agent's session context, so a report with no ceiling
+    pushes the rest of the session out of the window.
 
     Both are lossy, so both are made visible: a capped report says how much it
     is hiding and at what severities, and the reader sorts before it truncates
@@ -1149,7 +1149,7 @@ class TestSessionReportFrictionBudget:
         )
 
     def test_a_low_only_report_produces_no_finding_lines(self, tmp_dir, tmp_path, monkeypatch):
-        """LOW is a note, and a note is not worth a line in this budget."""
+        """LOW is a note, and a note is not worth a line at session start."""
         report = aggregate_report(tmp_path, [
             scanner_result("skill_threats", [
                 finding(severity="low", title="Informational note"),

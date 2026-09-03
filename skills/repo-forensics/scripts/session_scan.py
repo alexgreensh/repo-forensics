@@ -500,16 +500,17 @@ DEEP_FINDING_SEVERITIES = ("critical", "high", "medium", "low")
 
 # Severities worth a line at session start. `low` is deliberately excluded: it
 # is an informational note, and a note that turns every plugin update into a
-# warning line spends the report's credibility on nothing. A report nobody
-# reads is not a control, it is an alibi.
+# warning line trains the reader to skip the report. A skipped report is not
+# read as "nothing was said" but as "nothing was found" -- the same false-clean
+# a nonzero scan reporting nothing would be.
 #
 # A severity the vocabulary does not contain is NOT below this floor -- see
 # _is_above_report_floor(), which explains why.
 DEEP_FINDING_REPORT_FLOOR = ("critical", "high", "medium")
 
-# Finding lines one changed item may spend, before the overflow line. This
+# Finding lines one changed item may occupy, before the overflow line. This
 # return value is echoed into the agent's session context, so an uncapped
-# report from one noisy target pushes the rest of the session out of the
+# report from one finding-heavy item pushes the rest of the session out of the
 # window. The cap is lossy by construction, which is why _format_overflow_line()
 # exists: a capped report that did not say so would read as a complete one.
 DEEP_FINDING_MAX_LINES = 5
@@ -626,7 +627,7 @@ def _format_overflow_line(hidden):
     same defect class as the false clean above it: a report that showed five
     of nine findings and looked exactly like a report that found five. The
     count and the per-severity breakdown are what make the difference visible
-    without spending another line per hidden finding.
+    without adding another line per hidden finding.
 
     Carries no attacker-controlled text -- only integers and severity tags
     already checked against the vocabulary -- and deliberately does not start
@@ -703,8 +704,8 @@ def summarize_deep_findings(report):
 
     What reaches the reader is then bounded twice, because the report competes
     with the session for the same context window. DEEP_FINDING_REPORT_FLOOR
-    drops the notes; DEEP_FINDING_MAX_LINES bounds what one noisy target can
-    spend. Sorting happens here rather than being taken from the report: the
+    drops the notes; DEEP_FINDING_MAX_LINES bounds how many lines one item can
+    occupy. Sorting happens here rather than being taken from the report: the
     aggregator does sort worst-first, but the report is a scanner's stdout and
     this is the last thing between it and the user, so truncating on a trusted
     order would let a producer decide which finding the owner never sees. The
