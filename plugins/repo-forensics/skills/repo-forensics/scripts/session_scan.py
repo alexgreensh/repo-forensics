@@ -481,7 +481,252 @@ def scan_item(dirpath, label, item_type, checksums):
     return findings
 
 
-def deep_scan_item(dirpath, label, item_type, timeout=None, adjudication_sink=None):
+# Per-field caps for a rendered finding line. The session report is echoed
+# into the agent's context, so length is bounded per field as well as per
+# line. All three are the caps this codebase already applies to the same
+# fields: title and description in aggregate_json.format_report_as_text() and
+# adjudication.build_adjudication_block(), the path in the latter -- the text
+# formatter is the odd one out and does not sanitize its path at all.
+DEEP_FINDING_TITLE_MAX = 160
+DEEP_FINDING_DESC_MAX = 300
+DEEP_FINDING_PATH_MAX = 160
+
+# The aggregator's severity vocabulary, mirrored rather than imported:
+# session_scan is a SessionStart hook on a 15s budget and deliberately imports
+# no heavy scanner module. TestDeepScanFindingsReachTheSession pins this tuple
+# against aggregate_json.SEVERITY_ORDER so the mirror cannot drift -- its
+# members and, since the reader sorts by position in it, its order.
+DEEP_FINDING_SEVERITIES = ("critical", "high", "medium", "low")
+
+# Severities worth a line at session start. `low` is deliberately excluded: it
+# is an informational note, and a note that turns every plugin update into a
+# warning line trains the reader to skip the report. A skipped report is not
+# read as "nothing was said" but as "nothing was found" -- the same false-clean
+# a nonzero scan reporting nothing would be.
+#
+# A severity the vocabulary does not contain is NOT below this floor -- see
+# _is_above_report_floor(), which explains why.
+DEEP_FINDING_REPORT_FLOOR = ("critical", "high", "medium")
+
+# Finding lines one changed item may occupy, before the overflow line. This
+# return value is echoed into the agent's session context, so an uncapped
+# report from one finding-heavy item pushes the rest of the session out of the
+# window. The cap is lossy by construction, which is why _format_overflow_line()
+# exists: a capped report that did not say so would read as a complete one.
+DEEP_FINDING_MAX_LINES = 5
+
+
+def _snippet_sanitizer():
+    """Return the sanitizer used for finding-derived text.
+
+    Same lazy import and same stdlib fallback aggregate_json.format_report_as_text()
+    uses for the same fields, so there is one neutralization behaviour in this
+    codebase rather than two that can drift. The fallback's character ranges are
+    that formatter's, written as escapes: C0/C1 controls plus the BIDI
+    overrides (U+202A-U+202E) and isolates (U+2066-U+2069).
+    """
+    try:
+        import adjudication as _adj
+        return _adj.sanitize_snippet
+    except ImportError:
+        import re as _re
+
+        def _sanitize(text, max_len=300):
+            if not isinstance(text, str):
+                return ""
+            cleaned = _re.sub(
+                "[\x00-\x1f\x7f\x80-\x9f\u202a-\u202e\u2066-\u2069]", "", text
+            )
+            cleaned = _re.sub(r"\s+", " ", cleaned).strip()
+            return cleaned[:max_len]
+
+        return _sanitize
+
+
+def _format_finding_location(item, sanitize):
+    """`file:line` for a finding, or `file` when the scanner gave no line."""
+    path = sanitize(item.get("file") or "", max_len=DEEP_FINDING_PATH_MAX)
+    if not path:
+        return "location unknown"
+    try:
+        line_no = int(item.get("line") or 0)
+    except (TypeError, ValueError):
+        line_no = 0
+    return f"{path}:{line_no}" if line_no > 0 else path
+
+
+def _format_finding_severity(item):
+    """The finding's severity tag, or `UNKNOWN` for anything off-vocabulary.
+
+    Checked against the vocabulary rather than sanitized. Nothing downstream
+    validates this field -- load_scanner_results() copies each scanner's JSON
+    through verbatim -- so a scanned repository controls it exactly as it
+    controls the title, and a severity of "high\n[CRITICAL] ..." would forge a
+    top-level line. Sanitizing would neutralize that; refusing the value
+    outright also refuses to show the reader a severity the aggregator cannot
+    rank, which is the more honest failure.
+    """
+    severity = item.get("severity")
+    if isinstance(severity, str) and severity.lower() in DEEP_FINDING_SEVERITIES:
+        return severity.upper()
+    return "UNKNOWN"
+
+
+def _severity_rank(item):
+    """Sort key for a finding: 0 is worst.
+
+    Position in DEEP_FINDING_SEVERITIES, which is the aggregator's ranking
+    mirrored worst-first. Anything off the vocabulary ranks after every known
+    severity, so an unrankable value cannot be used to claim the top of a
+    capped report.
+    """
+    severity = item.get("severity")
+    if isinstance(severity, str):
+        try:
+            return DEEP_FINDING_SEVERITIES.index(severity.lower())
+        except ValueError:
+            pass
+    return len(DEEP_FINDING_SEVERITIES)
+
+
+def _is_above_report_floor(item):
+    """Is this finding worth one of the session report's lines?
+
+    A recognized severity is tested against DEEP_FINDING_REPORT_FLOOR. An
+    unrecognized one is reported instead of dropped, and that asymmetry is
+    deliberate: this field is attacker-controlled -- load_scanner_results()
+    copies each scanner's JSON through verbatim -- so a floor that swallowed
+    off-vocabulary severities would hand a scanned repository a one-word way
+    to suppress its own worst finding, trading the false-clean this reader
+    exists to remove for a narrower one. It renders `UNKNOWN` and sorts below
+    every ranked finding, so it can neither hide nor crowd one out.
+    """
+    severity = item.get("severity")
+    if isinstance(severity, str) and severity.lower() in DEEP_FINDING_SEVERITIES:
+        return severity.lower() in DEEP_FINDING_REPORT_FLOOR
+    return True
+
+
+def _format_finding_line(item, sanitize):
+    """One display line: severity, what was found, where, and why it matters."""
+    title = sanitize(item.get("title") or "", max_len=DEEP_FINDING_TITLE_MAX)
+    description = sanitize(item.get("description") or "", max_len=DEEP_FINDING_DESC_MAX)
+    line = (
+        f"[{_format_finding_severity(item)}] {title or 'untitled finding'} "
+        f"({_format_finding_location(item, sanitize)})"
+    )
+    if description:
+        line += f" - {description}"
+    return line
+
+
+def _format_overflow_line(hidden):
+    """The one line a capped report owes the reader.
+
+    Truncation is silent unless it says so, and a silent truncation is the
+    same defect class as the false-clean above it: a report that showed five
+    of nine findings and looked exactly like a report that found five. The
+    count and the per-severity breakdown are what make the difference visible
+    without adding another line per hidden finding.
+
+    Carries no attacker-controlled text -- only integers and severity tags
+    already checked against the vocabulary -- and deliberately does not start
+    with `[`, so it cannot be mistaken for one more finding line.
+    """
+    counts = {}
+    for item in sorted(hidden, key=_severity_rank):
+        tag = _format_finding_severity(item)
+        counts[tag] = counts.get(tag, 0) + 1
+    breakdown = ", ".join(f"{count} {tag}" for tag, count in counts.items())
+    noun = "finding" if len(hidden) == 1 else "findings"
+    return f"... and {len(hidden)} more {noun} not shown ({breakdown})"
+
+
+def _format_uncleared_scan_line(returncode):
+    """The one line a scan owes the reader when it rendered nothing.
+
+    Reached only past the early returns for exit 0 and for a signal death, so
+    the scan ended nonzero and the reader still produced nothing: the report
+    was unparseable at a code deep_scan_item()'s own fallbacks do not cover,
+    or every finding in it sat below DEEP_FINDING_REPORT_FLOOR, or its shape
+    was not one this reader knows. All three are problems inside the tool,
+    and the owner cannot tell them apart from here -- but reporting the item
+    `clean` would tell them the one thing that is certainly false.
+
+    The exit code is in the line because it is the only handle the owner has
+    on which of those happened: 99 is an infrastructure failure, 1 and 2 are
+    findings the reader could not render. Carries no attacker-controlled text
+    -- an integer from waitpid and nothing else -- and deliberately does not
+    start with `[`, so it cannot be mistaken for a finding line.
+    """
+    return (
+        f"deep scan exited {returncode} with no reportable finding "
+        f"(not cleared; will be re-reported next session)"
+    )
+
+
+def report_findings(report):
+    """The report's finding list, or empty for anything that is not one.
+
+    Both readers of `report["findings"]` go through here, and the type checks
+    are load-bearing rather than defensive habit: the report is parsed from a
+    scanner's stdout, so any field can be any JSON type, and `for item in 5`
+    raises a TypeError that deep_scan_item()'s
+    `except (json.JSONDecodeError, ValueError)` does not catch -- breaking its
+    documented promise never to raise, and taking the SessionStart hook with
+    it.
+    """
+    if not isinstance(report, dict):
+        return []
+    items = report.get("findings")
+    if not isinstance(items, (list, tuple)):
+        return []
+    return [item for item in items if isinstance(item, dict)]
+
+
+def summarize_deep_findings(report):
+    """Render a parsed aggregate report's findings as session display lines.
+
+    Severity is read from each finding, because that is the only place the
+    aggregator puts one. An entry of `report["scanners"]` carries exactly
+    `name`, `exit_code`, `parse_error`, `finding_count`, `findings`, plus
+    `stderr` when present -- never a severity. A reader that looked for one
+    there collected nothing and printed `clean` over a scan that exited 2 on a
+    CRITICAL finding, which is the defect this function exists to fix.
+
+    Every rendered field originates in the scanned tree and this return value
+    is echoed into the agent's session context, so none of it is rendered as
+    it arrived: free text is sanitized, and the severity -- which is not free
+    text but a four-word vocabulary -- is checked against it. That is a
+    condition of the repair, not a refinement of it: reporting the findings
+    without neutralizing them would trade a false-clean for an injection path
+    into SessionStart.
+
+    What reaches the reader is then bounded twice: DEEP_FINDING_REPORT_FLOOR
+    drops the notes, and DEEP_FINDING_MAX_LINES bounds how many lines one item
+    can occupy -- see each constant, which explains why it is there. Sorting
+    happens here rather than being taken from the report: the aggregator does
+    sort worst-first, but the report is a scanner's stdout and this is the last
+    thing between it and the user, so truncating on a trusted order would let a
+    producer decide which finding the owner never sees. The sort is stable, so
+    findings of one severity keep the order they arrived in.
+
+    Nothing here spawns a subprocess or reads the scanned tree, so the
+    rendering can be exercised without one; deep_scan_item() owns the
+    subprocess and hands the parsed report in.
+    """
+    sanitize = _snippet_sanitizer()
+    items = [item for item in report_findings(report) if _is_above_report_floor(item)]
+    items.sort(key=_severity_rank)
+    shown, hidden = items[:DEEP_FINDING_MAX_LINES], items[DEEP_FINDING_MAX_LINES:]
+    lines = [_format_finding_line(item, sanitize) for item in shown]
+    if hidden:
+        lines.append(_format_overflow_line(hidden))
+    return lines
+
+
+def deep_scan_item(dirpath, label, item_type, timeout=None, adjudication_sink=None,
+                   uncleared_sink=None):
     """Run the full run_forensics.sh scanner suite on a changed item.
 
     On POSIX, uses start_new_session=True so the entire process tree
@@ -490,7 +735,13 @@ def deep_scan_item(dirpath, label, item_type, timeout=None, adjudication_sink=No
     scanner zombies. Windows lacks os.getpgid/os.killpg, so it falls
     back to killing the direct subprocess.
 
-    Returns list of finding strings (empty = clean). Never raises.
+    Returns list of finding strings. Never raises. A scan that actually ran
+    and ended nonzero never returns an empty list: if it renders no finding it
+    returns one line naming its exit code rather than going quiet, and appends
+    the item's baseline key to *uncleared_sink* so main() can keep it out of
+    the baseline. The early returns above -- no scanner script, no such
+    directory, no time budget left, an OSError launching it -- still return []
+    and leave the sink untouched.
     """
     if not os.path.isfile(RUN_FORENSICS_SCRIPT):
         return []
@@ -538,27 +789,28 @@ def deep_scan_item(dirpath, label, item_type, timeout=None, adjudication_sink=No
     try:
         data = json.loads(stdout)
         if isinstance(data, dict):
-            for scanner in data.get('scanners', []):
-                if not isinstance(scanner, dict):
-                    continue
-                sev = scanner.get('severity', '')
-                if sev in ('critical', 'high', 'warning'):
-                    scanner_name = scanner.get('name', 'unknown')
-                    detail = scanner.get('detail', scanner.get('message', ''))
-                    if detail:
-                        findings.append(f"[{sev.upper()}] {scanner_name}: {detail}")
+            findings.extend(summarize_deep_findings(data))
             # Collect WARN-tier findings flagged for adjudication (U8). These
             # carry needs_adjudication=true from aggregate_json; they feed the
             # injection-safe adjudication block built once in main().
             if adjudication_sink is not None:
-                for finding in data.get('findings', []):
-                    if isinstance(finding, dict) and finding.get('needs_adjudication') is True:
+                for finding in report_findings(data):
+                    if finding.get('needs_adjudication') is True:
                         adjudication_sink.append(finding)
     except (json.JSONDecodeError, ValueError):
         if proc.returncode == 2:
             findings.append("deep scan found CRITICAL issues (parse failed, check manually)")
         elif proc.returncode == 1:
             findings.append("deep scan found warnings (parse failed, check manually)")
+
+    if not findings:
+        # Silence is not an available answer past this point -- see
+        # _format_uncleared_scan_line(). The item is reported uncleared as
+        # well as spoken about, because a false-clean that gets baselined is
+        # not one missed report, it is every future one.
+        if uncleared_sink is not None:
+            uncleared_sink.append(f"{item_type}:{dirpath}")
+        findings.append(_format_uncleared_scan_line(proc.returncode))
 
     return findings
 
@@ -809,6 +1061,7 @@ def main(argv=None):
     # Only runs when items actually changed (rare). Skipped on first run
     # (too many items) and when run_forensics.sh is missing.
     adjudication_findings = []
+    uncleared_items = []
     if scan_items and not is_first_run and os.path.isfile(RUN_FORENSICS_SCRIPT):
         deep_start = time.monotonic()
         for dirpath, label, itype, checksums in scan_items:
@@ -821,7 +1074,8 @@ def main(argv=None):
                 break
             deep_findings = deep_scan_item(dirpath, label, itype, timeout=min(
                 DEEP_SCAN_TIMEOUT_PER_ITEM, remaining
-            ), adjudication_sink=adjudication_findings)
+            ), adjudication_sink=adjudication_findings,
+                uncleared_sink=uncleared_items)
             scan_results.setdefault(f"{itype}:{dirpath}", []).extend(deep_findings)
 
     # Format output
@@ -847,6 +1101,16 @@ def main(argv=None):
     # detect_changes already produced fresh entries for every item; reuse them
     # directly instead of re-walking the tree. Avoids ~150-300ms of redundant
     # stat syscalls on warm sessions.
+    #
+    # An item whose deep scan ended nonzero and rendered nothing was never
+    # cleared, so it is dropped from the snapshot rather than written into it.
+    # Baselining it would silence the same result at every future session
+    # start -- detect_changes() reports only items whose hashes moved -- which
+    # turns one failure the owner could act on into a permanent one they never
+    # see again. Dropping the key costs that item its incremental-hash cache
+    # on the next run and nothing else.
+    for item_key in uncleared_items:
+        all_entries.pop(item_key, None)
     save_baseline(all_entries)
 
     output_session_context(lines, adapter=adapter)
