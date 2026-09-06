@@ -49,6 +49,28 @@ _EXEC_DESCS = {'ELF Executable (Linux)', 'PE Executable (Windows)',
 EXEC_SIGNATURES = [sig for sig, desc in MAGIC_NUMBERS.items() if desc in _EXEC_DESCS]
 
 
+def _is_valid_pe(content, offset):
+    """A real PE has 'PE\\x00\\x00' at the location its e_lfanew field points to.
+    A bare 'MZ' pair (2 bytes) appears routinely inside compressed audio,
+    so require the structural marker too before treating it as an executable."""
+    if offset + 0x40 > len(content):
+        return False
+    e_lfanew = int.from_bytes(content[offset + 0x3C:offset + 0x40], "little")
+    return 0 < e_lfanew < 4096 and content[e_lfanew:e_lfanew + 4] == b'PE\x00\x00'
+
+
+def _find_embedded_executable(content, search_from):
+    """Return the first offset of a valid executable signature in content, else None."""
+    for sig in EXEC_SIGNATURES:
+        offset = content.find(sig, search_from)
+        while offset > 0:
+            if sig == b'MZ' and not _is_valid_pe(content, offset):
+                offset = content.find(sig, offset + 1)
+                continue
+            return offset
+    return None
+
+
 def scan_audio_steganography(filepath, rel_path):
     """Detect executable content hidden in audio files (TeamPCP Telnyx attack pattern, March 2026).
 
@@ -68,18 +90,16 @@ def scan_audio_steganography(filepath, rel_path):
         with open(filepath, 'rb') as f:
             content = f.read(min(file_size, 128 * 1024))
 
-        for sig in EXEC_SIGNATURES:
-            offset = content.find(sig, 44 if ext == '.wav' else 0)
-            if offset > 0:
-                findings.append(core.Finding(
-                    scanner=SCANNER_NAME, severity="critical",
-                    title=f"Audio Steganography: Executable in {ext.upper()}",
-                    description=f"Audio file contains executable signature at offset {offset} (TeamPCP Telnyx attack pattern, March 2026). Malicious code hidden in audio data frames.",
-                    file=rel_path, line=0,
-                    snippet=f"Executable signature found at byte offset {offset}",
-                    category="audio-steganography"
-                ))
-                break
+        offset = _find_embedded_executable(content, 44 if ext == '.wav' else 0)
+        if offset is not None:
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="critical",
+                title=f"Audio Steganography: Executable in {ext.upper()}",
+                description=f"Audio file contains executable signature at offset {offset} (TeamPCP Telnyx attack pattern, March 2026). Malicious code hidden in audio data frames.",
+                file=rel_path, line=0,
+                snippet=f"Executable signature found at byte offset {offset}",
+                category="audio-steganography"
+            ))
 
         data_section = content[44:] if ext == '.wav' else content[128:]
         if len(data_section) > 100:
