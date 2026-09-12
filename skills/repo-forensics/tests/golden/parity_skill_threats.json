@@ -506,6 +506,62 @@
   [
     "Environment variable access",
     "low",
+    "RD-CP-010.py",
+    4,
+    "credential-exfiltration"
+  ],
+  [
+    "Environment variable access",
+    "low",
+    "RD-CP-010.py",
+    7,
+    "credential-exfiltration"
+  ],
+  [
+    "Environment variable access",
+    "low",
+    "RD-CP-011.py",
+    1,
+    "credential-exfiltration"
+  ],
+  [
+    "Environment variable access",
+    "low",
+    "RD-CP-011.py",
+    2,
+    "credential-exfiltration"
+  ],
+  [
+    "Environment variable access",
+    "low",
+    "RD-CP-011.py",
+    3,
+    "credential-exfiltration"
+  ],
+  [
+    "Environment variable access",
+    "low",
+    "RD-CP-011.py",
+    5,
+    "credential-exfiltration"
+  ],
+  [
+    "Environment variable access",
+    "low",
+    "RD-CP-011.py",
+    6,
+    "credential-exfiltration"
+  ],
+  [
+    "Environment variable access",
+    "low",
+    "RD-CP-011.py",
+    7,
+    "credential-exfiltration"
+  ],
+  [
+    "Environment variable access",
+    "low",
     "RD-DYN-002.py",
     1,
     "credential-exfiltration"

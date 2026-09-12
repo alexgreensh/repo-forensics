@@ -1272,6 +1272,142 @@
           "os.environ.get('GITHUB_ACTIONS')"
         ]
       }
+    },
+    {
+      "id": "RD-CP-010",
+      "type": "regex",
+      "pattern": "process\\.env\\.(?:CURSOR_SANDBOX|CODESPACES|GITPOD_WORKSPACE_ID|REPL_ID)\\b|process\\.env\\s*\\[\\s*[\\\"'](?:CURSOR_SANDBOX|CODESPACES|GITPOD_WORKSPACE_ID|REPL_ID)[\\\"']\\s*\\]",
+      "title": "Sandbox-presence probing: process.env sandbox marker",
+      "severity": "medium",
+      "confidence": 0.55,
+      "category": "environment-detection",
+      "explanation": "Sandbox-presence probing: process.env sandbox marker.",
+      "examples": {
+        "match": [
+          "if (process.env.CURSOR_SANDBOX) exit(0)",
+          "process.env.CODESPACES && benign()",
+          "const id = process.env.REPL_ID",
+          "if (process.env[\"GITPOD_WORKSPACE_ID\"]) exit(0)"
+        ],
+        "no_match": [
+          "process.env.PORT",
+          "const c = process.env",
+          "process.env[\"NODE_ENV\"]"
+        ]
+      }
+    },
+    {
+      "id": "RD-CP-011",
+      "type": "regex",
+      "pattern": "\\benviron\\.get\\s*\\(\\s*[\\\"'](?:CURSOR_SANDBOX|CODESPACES|GITPOD_WORKSPACE_ID|REPL_ID)[\\\"']|\\benviron\\s*\\[\\s*[\\\"'](?:CURSOR_SANDBOX|CODESPACES|GITPOD_WORKSPACE_ID|REPL_ID)[\\\"']\\s*\\]",
+      "title": "Sandbox-presence probing: os.environ sandbox marker",
+      "severity": "medium",
+      "confidence": 0.55,
+      "category": "environment-detection",
+      "explanation": "Sandbox-presence probing: os.environ sandbox marker.",
+      "examples": {
+        "match": [
+          "os.environ.get('CURSOR_SANDBOX')",
+          "os.environ.get( \"CODESPACES\" )",
+          "os.environ['REPL_ID']",
+          "environ.get(\"GITPOD_WORKSPACE_ID\")"
+        ],
+        "no_match": [
+          "os.environ.get('PATH')",
+          "os.environ.get('CI')",
+          "os.environ['HOME']"
+        ]
+      }
+    },
+    {
+      "id": "RD-CP-012",
+      "type": "regex",
+      "pattern": "\\bgetenv\\s*\\(\\s*[\\\"'](?:CURSOR_SANDBOX|CODESPACES|GITPOD_WORKSPACE_ID|REPL_ID)[\\\"']",
+      "title": "Sandbox-presence probing: os.getenv sandbox marker",
+      "severity": "medium",
+      "confidence": 0.55,
+      "category": "environment-detection",
+      "explanation": "Sandbox-presence probing: os.getenv sandbox marker.",
+      "examples": {
+        "match": [
+          "os.getenv('CURSOR_SANDBOX')",
+          "os.getenv( 'GITPOD_WORKSPACE_ID' )",
+          "getenv(\"REPL_ID\")"
+        ],
+        "no_match": [
+          "os.getenv('HOME')",
+          "os.getenv('GITHUB_ACTIONS')",
+          "getenv('PATH')"
+        ]
+      }
+    },
+    {
+      "id": "RD-CP-013",
+      "type": "regex",
+      "pattern": "(?:(?:\\bif\\b|&&|\\|\\||\\bexit\\b|\\breturn\\b|\\?|\\bunless\\b|\\bassert\\b|\\bwhile\\b)[^\\n]*(?:(?:os\\.path\\.(?:exists|isfile|isdir)|os\\.l?stat|fs\\.(?:existsSync|statSync|lstatSync|accessSync)|existsSync|statSync)\\s*\\(\\s*[\\\"'`]?(?:/\\.dockerenv|/run/\\.containerenv)\\b|(?:test|\\[\\[?)\\s+-[a-zA-Z]\\s+(?:/\\.dockerenv|/run/\\.containerenv)\\b|\\bstat\\s+(?:/\\.dockerenv|/run/\\.containerenv)\\b)|(?:(?:os\\.path\\.(?:exists|isfile|isdir)|os\\.l?stat|fs\\.(?:existsSync|statSync|lstatSync|accessSync)|existsSync|statSync)\\s*\\(\\s*[\\\"'`]?(?:/\\.dockerenv|/run/\\.containerenv)\\b|(?:test|\\[\\[?)\\s+-[a-zA-Z]\\s+(?:/\\.dockerenv|/run/\\.containerenv)\\b|\\bstat\\s+(?:/\\.dockerenv|/run/\\.containerenv)\\b)[^\\n]*(?:&&|\\|\\||\\bexit\\b|\\breturn\\b|\\?|\\bunless\\b|\\bor\\b|\\band\\b))",
+      "title": "Sandbox-presence probing: container artifact check gating behavior",
+      "severity": "medium",
+      "confidence": 0.55,
+      "category": "environment-detection",
+      "explanation": "Sandbox-presence probing: container artifact check gating behavior. Requires the artifact probe to gate behavior on the same line; a bare existence check without trailing boolean composition (e.g. a container-detection helper) is not flagged.",
+      "examples": {
+        "match": [
+          "if os.path.exists('/.dockerenv'): sys.exit(0)",
+          "test -f /.dockerenv && echo container",
+          "if (fs.existsSync('/run/.containerenv')) process.exit(0)",
+          "[ -f /.dockerenv ] && exit 0",
+          "os.path.exists('/.dockerenv') or payload()",
+          "os.path.exists('/run/.containerenv') and payload()"
+        ],
+        "no_match": [
+          "fs.statSync('/.dockerenv');",
+          "os.path.exists('/.dockerenv')",
+          "if (path === '/.dockerenv') {",
+          "ls /.docker"
+        ]
+      }
+    },
+    {
+      "id": "RD-CP-014",
+      "type": "regex",
+      "pattern": "\\bsystemd-detect-virt\\b",
+      "title": "Sandbox-presence probing: virtualization detection tool",
+      "severity": "medium",
+      "confidence": 0.55,
+      "category": "environment-detection",
+      "explanation": "Sandbox-presence probing: virtualization detection tool.",
+      "examples": {
+        "match": [
+          "systemd-detect-virt --quiet",
+          "subprocess.run(['systemd-detect-virt'])",
+          "VIRT=$(systemd-detect-virt)"
+        ],
+        "no_match": [
+          "systemd-analyze blame",
+          "systemd-detect-virtuous"
+        ]
+      }
+    },
+    {
+      "id": "RD-CP-015",
+      "type": "regex",
+      "pattern": "\\$(?:\\{(?:CURSOR_SANDBOX|CODESPACES|GITPOD_WORKSPACE_ID|REPL_ID)(?::[-=?+][^}]*)?\\}|(?:CURSOR_SANDBOX|CODESPACES|GITPOD_WORKSPACE_ID|REPL_ID)\\b)",
+      "title": "Sandbox-presence probing: shell sandbox marker reference",
+      "severity": "medium",
+      "confidence": 0.55,
+      "category": "environment-detection",
+      "explanation": "Sandbox-presence probing: shell sandbox marker reference.",
+      "examples": {
+        "match": [
+          "[ -n \"$CURSOR_SANDBOX\" ] && exit 0",
+          "echo ${CODESPACES}",
+          "[ -n \"${GITPOD_WORKSPACE_ID:-}\" ] && exit 0"
+        ],
+        "no_match": [
+          "echo $HOME",
+          "echo ${PATH:-/usr/bin}"
+        ]
+      }
     }
   ]
 }

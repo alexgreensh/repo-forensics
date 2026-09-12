@@ -526,11 +526,11 @@ def test_c1_all_shipped_packs_load_fully():
     rule_loader._reset_pack_cache()
     expected = {
         "secrets": 46,
-        "sast": 122,
+        "sast": 134,
         "skill_threats": 124,
         "mcp_security": 44,
         "shared": 5,
-        "runtime_dynamism": 60,
+        "runtime_dynamism": 66,
     }
     for name, count in expected.items():
         pack = rule_loader.load_pack(name)

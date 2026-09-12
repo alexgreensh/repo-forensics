@@ -203,6 +203,13 @@
     "shell-injection"
   ],
   [
+    "Curl Pipe Bash",
+    "critical",
+    "SA-SH-024.sh",
+    2,
+    "shell-injection"
+  ],
+  [
     "Dangerous Eval",
     "high",
     "RD-CP-001.py",
@@ -1197,6 +1204,83 @@
     "kernel-exploit"
   ],
   [
+    "Kernel Exploit: AF_NETLINK Socket",
+    "critical",
+    "SA-PY-027.py",
+    1,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: AF_NETLINK Socket",
+    "critical",
+    "SA-PY-027.py",
+    2,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: AF_NETLINK Socket",
+    "critical",
+    "SA-PY-027.py",
+    3,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: Capability Manipulation",
+    "critical",
+    "SA-PY-029.py",
+    1,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: Capability Manipulation",
+    "critical",
+    "SA-PY-029.py",
+    2,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: Capability Manipulation",
+    "critical",
+    "SA-PY-029.py",
+    3,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: Capability Manipulation",
+    "critical",
+    "SA-PY-029.py",
+    4,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: Capability Manipulation",
+    "critical",
+    "SA-PY-029.py",
+    5,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: Capability Manipulation",
+    "critical",
+    "SA-SH-023.sh",
+    1,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: Capability Manipulation",
+    "critical",
+    "SA-SH-023.sh",
+    2,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: Capability Manipulation",
+    "critical",
+    "SA-SH-023.sh",
+    3,
+    "kernel-exploit"
+  ],
+  [
     "Kernel Exploit: Crypto Template Bind",
     "critical",
     "SA-PY-017.py",
@@ -1215,6 +1299,153 @@
     "critical",
     "SA-PY-017.py",
     3,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: Namespace Syscall (unshare/setns/clone3)",
+    "critical",
+    "SA-PY-025.py",
+    1,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: Namespace Syscall (unshare/setns/clone3)",
+    "critical",
+    "SA-PY-025.py",
+    3,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: Namespace Syscall (unshare/setns/clone3)",
+    "critical",
+    "SA-PY-026.py",
+    1,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: Namespace Syscall (unshare/setns/clone3)",
+    "critical",
+    "SA-PY-026.py",
+    2,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: Namespace Syscall (unshare/setns/clone3)",
+    "critical",
+    "SA-PY-026.py",
+    3,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: Namespace Syscall (unshare/setns/clone3)",
+    "critical",
+    "SA-PY-026.py",
+    4,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: Namespace Syscall (unshare/setns/clone3)",
+    "critical",
+    "SA-PY-026.py",
+    5,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: Namespace Syscall (unshare/setns/clone3)",
+    "critical",
+    "SA-PY-026.py",
+    6,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: Namespace Syscall (unshare/setns/clone3)",
+    "critical",
+    "SA-PY-026.py",
+    7,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: Namespace Syscall (unshare/setns/clone3)",
+    "critical",
+    "SA-PY-026.py",
+    8,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: Namespace Syscall (unshare/setns/clone3)",
+    "critical",
+    "SA-PY-026.py",
+    9,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: User Namespace Creation",
+    "critical",
+    "SA-SH-020.sh",
+    1,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: User Namespace Creation",
+    "critical",
+    "SA-SH-020.sh",
+    2,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: User Namespace Creation",
+    "critical",
+    "SA-SH-020.sh",
+    3,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: User Namespace Creation",
+    "critical",
+    "SA-SH-020.sh",
+    4,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: User Namespace Creation",
+    "critical",
+    "SA-SH-020.sh",
+    5,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: User Namespace Creation",
+    "critical",
+    "SA-SH-020.sh",
+    6,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: User Namespace Flag (CLONE_NEWUSER)",
+    "critical",
+    "SA-PY-025.py",
+    1,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: User Namespace Flag (CLONE_NEWUSER)",
+    "critical",
+    "SA-PY-025.py",
+    2,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: User Namespace Flag (CLONE_NEWUSER)",
+    "critical",
+    "SA-PY-025.py",
+    3,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: User Namespace Flag (CLONE_NEWUSER)",
+    "critical",
+    "SA-PY-026.py",
+    1,
     "kernel-exploit"
   ],
   [
@@ -1257,6 +1488,279 @@
     "high",
     "SA-PY-018.py",
     3,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: io_uring Build/Usage",
+    "critical",
+    "SA-SH-024.sh",
+    1,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: io_uring Build/Usage",
+    "critical",
+    "SA-SH-024.sh",
+    2,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: io_uring Build/Usage",
+    "critical",
+    "SA-SH-024.sh",
+    3,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: io_uring Usage",
+    "critical",
+    "SA-PY-030.py",
+    1,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: io_uring Usage",
+    "critical",
+    "SA-PY-030.py",
+    2,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: io_uring Usage",
+    "critical",
+    "SA-PY-030.py",
+    3,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: io_uring Usage",
+    "critical",
+    "SA-PY-030.py",
+    4,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: io_uring Usage",
+    "critical",
+    "SA-PY-030.py",
+    5,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: net/sched Control (tc/pyroute2)",
+    "critical",
+    "SA-PY-028.py",
+    1,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: net/sched Control (tc/pyroute2)",
+    "critical",
+    "SA-PY-028.py",
+    2,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: net/sched Control (tc/pyroute2)",
+    "critical",
+    "SA-PY-028.py",
+    3,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: net/sched Control (tc/pyroute2)",
+    "critical",
+    "SA-PY-028.py",
+    4,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: net/sched Control (tc/pyroute2)",
+    "critical",
+    "SA-PY-031.py",
+    1,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: net/sched Control (tc/pyroute2)",
+    "critical",
+    "SA-PY-031.py",
+    2,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: net/sched Control (tc/pyroute2)",
+    "critical",
+    "SA-PY-031.py",
+    4,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: net/sched Control (tc/pyroute2)",
+    "critical",
+    "SA-PY-031.py",
+    7,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: net/sched tc Configuration",
+    "critical",
+    "SA-SH-021.sh",
+    1,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: net/sched tc Configuration",
+    "critical",
+    "SA-SH-021.sh",
+    2,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: net/sched tc Configuration",
+    "critical",
+    "SA-SH-021.sh",
+    3,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: net/sched tc Configuration",
+    "critical",
+    "SA-SH-021.sh",
+    4,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: net/sched tc Configuration",
+    "critical",
+    "SA-SH-021.sh",
+    5,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: net/sched tc Configuration",
+    "critical",
+    "SA-SH-022.sh",
+    1,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: net/sched tc Configuration",
+    "critical",
+    "SA-SH-022.sh",
+    4,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: net/sched tc Configuration",
+    "critical",
+    "SA-SH-022.sh",
+    5,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Exploit: net/sched tc Configuration",
+    "critical",
+    "SA-SH-022.sh",
+    11,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Module Load (modprobe/insmod)",
+    "high",
+    "SA-SH-015.sh",
+    1,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Module Load (modprobe/insmod)",
+    "high",
+    "SA-SH-015.sh",
+    2,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Module Load (modprobe/insmod)",
+    "high",
+    "SA-SH-015.sh",
+    3,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Module Load (modprobe/insmod)",
+    "high",
+    "SA-SH-015.sh",
+    4,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Module Load (modprobe/insmod)",
+    "high",
+    "SA-SH-015.sh",
+    5,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Module Load (modprobe/insmod)",
+    "high",
+    "SA-SH-021.sh",
+    3,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Module Load (modprobe/insmod)",
+    "high",
+    "SA-SH-022.sh",
+    1,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Module Load (modprobe/insmod)",
+    "high",
+    "SA-SH-022.sh",
+    2,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Module Load (modprobe/insmod)",
+    "high",
+    "SA-SH-022.sh",
+    3,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Module Load (modprobe/insmod)",
+    "high",
+    "SA-SH-022.sh",
+    4,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Module Load (modprobe/insmod)",
+    "medium",
+    "SA-PY-031.py",
+    1,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Module Load (modprobe/insmod)",
+    "medium",
+    "SA-PY-031.py",
+    2,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Module Load (modprobe/insmod)",
+    "medium",
+    "SA-PY-031.py",
+    3,
+    "kernel-exploit"
+  ],
+  [
+    "Kernel Module Load (modprobe/insmod)",
+    "medium",
+    "SA-PY-031.py",
+    4,
     "kernel-exploit"
   ],
   [
@@ -1705,6 +2209,13 @@
     "critical",
     "SA-SH-003.sh",
     3,
+    "shell-injection"
+  ],
+  [
+    "Pipe to Shell Interpreter",
+    "critical",
+    "SA-SH-024.sh",
+    2,
     "shell-injection"
   ],
   [
@@ -2684,6 +3195,27 @@
     "Shell Injection (os)",
     "critical",
     "SA-PY-007.py",
+    3,
+    "shell-injection"
+  ],
+  [
+    "Shell Injection (os)",
+    "critical",
+    "SA-PY-028.py",
+    1,
+    "shell-injection"
+  ],
+  [
+    "Shell Injection (os)",
+    "critical",
+    "SA-PY-031.py",
+    2,
+    "shell-injection"
+  ],
+  [
+    "Shell Injection (os)",
+    "critical",
+    "SA-PY-031.py",
     3,
     "shell-injection"
   ],
