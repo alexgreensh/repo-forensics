@@ -56,6 +56,7 @@ class _Scope:
         self.dict_aliases = {}     # name -> module name (module.__dict__ / vars(module))
         self.callable_aliases = {} # name -> (module, dangerous attr)
         self.tainted = set()       # names holding fetch-derived values
+        self.blocked = set()       # names killed here - shadow outer scopes
 
     def kill(self, name):
         self.const.pop(name, None)
@@ -63,6 +64,55 @@ class _Scope:
         self.dict_aliases.pop(name, None)
         self.callable_aliases.pop(name, None)
         self.tainted.discard(name)
+        self.blocked.add(name)
+
+
+def _binding_in(scope, name):
+    """The binding `name` holds in one _Scope as a (kind, value) tuple:
+    ('const', str), ('mod', module), ('dict', module),
+    ('callable', (module, attr)), or ('taint', True). None when unbound."""
+    if name in scope.const:
+        return ('const', scope.const[name])
+    if name in scope.module_aliases:
+        return ('mod', scope.module_aliases[name])
+    if name in scope.dict_aliases:
+        return ('dict', scope.dict_aliases[name])
+    if name in scope.callable_aliases:
+        return ('callable', scope.callable_aliases[name])
+    if name in scope.tainted:
+        return ('taint', True)
+    return None
+
+
+def _lookup_binding(scopes, name):
+    """Innermost binding for `name` across the scope chain (innermost
+    first). A branch-killed name is blocked and shadows every outer
+    binding, matching Python's assignment-shadows-outer semantics."""
+    for scope in scopes:
+        if name in scope.blocked:
+            return None
+        binding = _binding_in(scope, name)
+        if binding is not None:
+            return binding
+    return None
+
+
+def _apply_binding(scope, name, binding):
+    """Write a (kind, value) binding into a scope, replacing anything
+    the name held there before (including a branch-kill shadow)."""
+    kind, value = binding
+    scope.kill(name)
+    scope.blocked.discard(name)
+    if kind == 'const':
+        scope.const[name] = value
+    elif kind == 'mod':
+        scope.module_aliases[name] = value
+    elif kind == 'dict':
+        scope.dict_aliases[name] = value
+    elif kind == 'callable':
+        scope.callable_aliases[name] = value
+    elif kind == 'taint':
+        scope.tainted.add(name)
 
 
 def _fold_str(node, scopes):
@@ -78,9 +128,9 @@ def _fold_str(node, scopes):
             return left + right
         return None
     if isinstance(node, ast.Name):
-        for scope in scopes:
-            if node.id in scope.const:
-                return scope.const[node.id]
+        binding = _lookup_binding(scopes, node.id)
+        if binding is not None and binding[0] == 'const':
+            return binding[1]
     return None
 
 
@@ -90,9 +140,9 @@ def _resolve_module(node, scopes):
     if isinstance(node, ast.Name):
         if node.id in SENSITIVE_MODULES:
             return node.id
-        for scope in scopes:
-            if node.id in scope.module_aliases:
-                return scope.module_aliases[node.id]
+        binding = _lookup_binding(scopes, node.id)
+        if binding is not None and binding[0] == 'mod':
+            return binding[1]
     return None
 
 
@@ -105,9 +155,9 @@ def _dict_base_module(node, scopes):
             and node.func.id == 'vars' and len(node.args) == 1):
         return _resolve_module(node.args[0], scopes)
     if isinstance(node, ast.Name):
-        for scope in scopes:
-            if node.id in scope.dict_aliases:
-                return scope.dict_aliases[node.id]
+        binding = _lookup_binding(scopes, node.id)
+        if binding is not None and binding[0] == 'dict':
+            return binding[1]
     return None
 
 
@@ -153,18 +203,18 @@ def _is_fetch_call(node, scopes):
             if (isinstance(base, ast.Attribute)
                     and base.attr == 'socket'):
                 return True
-            for scope in scopes:
-                if (isinstance(base, ast.Name)
-                        and scope.module_aliases.get(base.id) == 'socket'):
+            if isinstance(base, ast.Name):
+                if _lookup_binding(scopes, base.id) == ('mod', 'socket'):
                     return True
             return False
         if func.attr.lower() in FETCH_MODULE_VERBS:
             base = func.value
             if isinstance(base, ast.Name) and base.id in FETCH_MODULES:
                 return True
-            for scope in scopes:
-                if (isinstance(base, ast.Name)
-                        and scope.module_aliases.get(base.id) in FETCH_MODULES):
+            if isinstance(base, ast.Name):
+                binding = _lookup_binding(scopes, base.id)
+                if (binding is not None and binding[0] == 'mod'
+                        and binding[1] in FETCH_MODULES):
                     return True
     return False
 
@@ -175,7 +225,7 @@ def _is_tainted(node, scopes):
     (propagating through .read()/.json()/json.loads(...).get(...) chains)."""
     for sub in ast.walk(node):
         if isinstance(sub, ast.Name):
-            if any(sub.id in scope.tainted for scope in scopes):
+            if _lookup_binding(scopes, sub.id) == ('taint', True):
                 return True
         elif _is_fetch_call(sub, scopes):
             return True
@@ -193,6 +243,43 @@ def _collect_scope(body, outer_scopes, fetch_funcs, reflective_funcs):
     """
     scope = _Scope()
     scopes = [scope] + list(outer_scopes)
+
+    def merge_branch_bodies(bodies, include_incoming):
+        """Join conditional branches conservatively. Each branch body is
+        collected into its own scope seeded from the current chain; a
+        binding survives the join only when EVERY reachable exit agrees on
+        it (branches that do not bind the name contribute the incoming
+        binding). Otherwise the name is killed here, shadowing outer
+        scopes, so a branch-only alias or taint can never convict
+        post-join code."""
+        branch_scopes = [
+            _collect_scope(b, scopes, fetch_funcs, reflective_funcs)
+            for b in bodies if b
+        ]
+        names = set()
+        for bs in branch_scopes:
+            names |= (set(bs.const) | set(bs.module_aliases)
+                      | set(bs.dict_aliases) | set(bs.callable_aliases)
+                      | bs.tainted | bs.blocked)
+        for name in names:
+            exits = []
+            for bs in branch_scopes:
+                if name in bs.blocked:
+                    # The branch re-bound the name to something
+                    # unrecognised: that exit's binding is unknown,
+                    # not the incoming one.
+                    exits.append(None)
+                    continue
+                bound = _binding_in(bs, name)
+                exits.append(bound if bound is not None
+                             else _lookup_binding(scopes, name))
+            if include_incoming:
+                exits.append(_lookup_binding(scopes, name))
+            first = exits[0]
+            if first is not None and all(e == first for e in exits):
+                _apply_binding(scope, name, first)
+            else:
+                scope.kill(name)
 
     def handle_stmt(stmt):
         if isinstance(stmt, ast.FunctionDef):
@@ -212,18 +299,42 @@ def _collect_scope(body, outer_scopes, fetch_funcs, reflective_funcs):
                 if (item.optional_vars is not None
                         and isinstance(item.optional_vars, ast.Name)
                         and _is_tainted(item.context_expr, scopes)):
+                    scope.blocked.discard(item.optional_vars.id)
                     scope.tainted.add(item.optional_vars.id)
             for sub in stmt.body:
                 handle_stmt(sub)
             return
-        if isinstance(stmt, (ast.If, ast.For, ast.AsyncFor, ast.While, ast.Try)):
-            sub_bodies = [getattr(stmt, 'body', []),
-                          getattr(stmt, 'orelse', []),
-                          getattr(stmt, 'finalbody', [])]
-            sub_bodies += [h.body for h in getattr(stmt, 'handlers', [])]
-            for sub_body in sub_bodies:
-                for sub in sub_body:
-                    handle_stmt(sub)
+        if isinstance(stmt, ast.If):
+            # if/else: post-join bindings must agree across branch exits.
+            # With no else, the incoming state is itself an exit.
+            bodies = [stmt.body] + ([stmt.orelse] if stmt.orelse else [])
+            merge_branch_bodies(bodies, include_incoming=not stmt.orelse)
+            return
+        if isinstance(stmt, (ast.For, ast.AsyncFor, ast.While)):
+            # Loops may execute zero times: the incoming state is always a
+            # reachable exit, so a body-only binding never survives.
+            bodies = [stmt.body] + ([stmt.orelse] if stmt.orelse else [])
+            merge_branch_bodies(bodies, include_incoming=True)
+            if isinstance(stmt, (ast.For, ast.AsyncFor)) \
+                    and isinstance(stmt.target, ast.Name):
+                # The loop target holds the last iterated value (or the
+                # incoming binding after zero iterations) - never a
+                # reliable alias or taint carrier.
+                scope.kill(stmt.target.id)
+            return
+        if isinstance(stmt, ast.Try):
+            # Post-join code is reachable only via the body exit or a
+            # handler exit (an uncaught exception never reaches it), so the
+            # incoming state is not an exit of its own; handlers that leave
+            # the name untouched resolve to the incoming binding through
+            # the merge. finally runs on every path, so its bindings apply
+            # unconditionally afterwards.
+            bodies = [stmt.body] + [h.body for h in stmt.handlers]
+            if stmt.orelse:
+                bodies.append(stmt.orelse)
+            merge_branch_bodies(bodies, include_incoming=False)
+            for sub in stmt.finalbody:
+                handle_stmt(sub)
             return
         if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1 \
                 and isinstance(stmt.targets[0], ast.Name):
@@ -231,30 +342,37 @@ def _collect_scope(body, outer_scopes, fetch_funcs, reflective_funcs):
             value = stmt.value
             folded = _fold_str(value, scopes)
             if folded is not None:
+                scope.blocked.discard(name)
                 scope.const[name] = folded
                 return
             mod = _resolve_module(value, scopes)
             if mod is not None:
+                scope.blocked.discard(name)
                 scope.module_aliases[name] = mod
                 return
             dict_mod = _dict_base_module(value, scopes)
             if dict_mod is not None:
+                scope.blocked.discard(name)
                 scope.dict_aliases[name] = dict_mod
                 return
             target = _reflective_target(value, scopes)
             if target is not None:
+                scope.blocked.discard(name)
                 scope.callable_aliases[name] = target
                 return
             if (isinstance(value, ast.Call)
                     and isinstance(value.func, ast.Name)):
                 if value.func.id in reflective_funcs:
+                    scope.blocked.discard(name)
                     scope.callable_aliases[name] = \
                         reflective_funcs[value.func.id]
                     return
                 if value.func.id in fetch_funcs:
+                    scope.blocked.discard(name)
                     scope.tainted.add(name)
                     return
             if _is_tainted(value, scopes):
+                scope.blocked.discard(name)
                 scope.tainted.add(name)
                 return
             # Unrecognised reassignment: the name no longer aliases anything.
@@ -570,10 +688,9 @@ class ObfuscationVisitor(ast.NodeVisitor):
         if isinstance(node.func, ast.Subscript):
             sink = _reflective_target(node.func, self._scopes)
         elif isinstance(node.func, ast.Name):
-            for scope in self._scopes:
-                if node.func.id in scope.callable_aliases:
-                    sink = scope.callable_aliases[node.func.id]
-                    break
+            binding = _lookup_binding(self._scopes, node.func.id)
+            if binding is not None and binding[0] == 'callable':
+                sink = binding[1]
         elif (isinstance(node.func, ast.Attribute)
               and node.func.attr == 'get'):
             sink = _reflective_target(node, self._scopes)
@@ -640,6 +757,41 @@ class ObfuscationVisitor(ast.NodeVisitor):
         self._scopes.insert(0, local)
         self.generic_visit(node)
         self._scopes.pop(0)
+
+    def _visit_branch_bodies(self, bodies):
+        """Visit conditional branch bodies with a branch-local binding
+        scope pushed, so aliases/taint resolve INSIDE the branch that
+        defines them (the pre-pass join keeps them out of the post-join
+        scope)."""
+        for body in bodies:
+            if not body:
+                continue
+            local = _collect_scope(body, self._scopes, self._fetch_funcs,
+                                   self._reflective_funcs)
+            self._scopes.insert(0, local)
+            for sub in body:
+                self.visit(sub)
+            self._scopes.pop(0)
+
+    def visit_If(self, node):
+        self.visit(node.test)
+        self._visit_branch_bodies([node.body, node.orelse])
+
+    def visit_While(self, node):
+        self.visit(node.test)
+        self._visit_branch_bodies([node.body, node.orelse])
+
+    def visit_For(self, node):
+        self.visit(node.target)
+        self.visit(node.iter)
+        self._visit_branch_bodies([node.body, node.orelse])
+
+    visit_AsyncFor = visit_For
+
+    def visit_Try(self, node):
+        bodies = [node.body] + [h.body for h in node.handlers]
+        bodies += [node.orelse, node.finalbody]
+        self._visit_branch_bodies(bodies)
 
     def visit_ClassDef(self, node):
         """Detect __reduce__ overrides - classic pickle deserialization backdoor."""
