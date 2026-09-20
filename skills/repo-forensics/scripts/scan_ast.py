@@ -28,6 +28,249 @@ DANGEROUS_ATTRS = {'system', 'popen', 'Popen', 'call', 'run', 'check_output',
 DECODE_FUNCS = {'b64decode', 'decodebytes', 'decodestring',
                 'decompress', 'loads', 'fromhex', 'decode', 'unhexlify'}
 
+# Call shapes that retrieve remote content/commands at runtime (fetch sources
+# for fetch-then-execute taint). Attribute-name based so both
+# `urllib.request.urlopen(...)` and `from urllib.request import urlopen` forms
+# resolve; module-scoped verbs cover requests/httpx/urllib3/aiohttp.
+FETCH_ATTR_CALLS = {'urlopen', 'HTTPConnection', 'HTTPSConnection'}
+FETCH_MODULE_VERBS = {'get', 'post', 'put', 'delete', 'head', 'request',
+                      'poolmanager'}
+FETCH_MODULES = {'requests', 'httpx', 'urllib3', 'aiohttp'}
+
+
+class _Scope:
+    """Per-scope name bindings collected before the detection pass.
+
+    Tracks only what reflective-call detection needs: foldable string
+    constants ("po" + "pen"), module aliases (o = os), module-dict aliases
+    (d = os.__dict__ or d = vars(os)), dangerous-callable aliases
+    (launch = os.__dict__["po" + "pen"]), and fetch-tainted names (values
+    derived from a runtime remote fetch). Names are removed from every map
+    on reassignment to something unrecognised, so a stale alias can never
+    convict unrelated later code.
+    """
+
+    def __init__(self):
+        self.const = {}            # name -> constant string
+        self.module_aliases = {}   # name -> sensitive module name
+        self.dict_aliases = {}     # name -> module name (module.__dict__ / vars(module))
+        self.callable_aliases = {} # name -> (module, dangerous attr)
+        self.tainted = set()       # names holding fetch-derived values
+
+    def kill(self, name):
+        self.const.pop(name, None)
+        self.module_aliases.pop(name, None)
+        self.dict_aliases.pop(name, None)
+        self.callable_aliases.pop(name, None)
+        self.tainted.discard(name)
+
+
+def _fold_str(node, scopes):
+    """Constant-fold a string expression: literals, literal concatenation
+    ("po" + "pen"), and names bound to foldable strings in any enclosing
+    collected scope. Returns None when not statically foldable."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        left = _fold_str(node.left, scopes)
+        right = _fold_str(node.right, scopes)
+        if left is not None and right is not None:
+            return left + right
+        return None
+    if isinstance(node, ast.Name):
+        for scope in scopes:
+            if node.id in scope.const:
+                return scope.const[node.id]
+    return None
+
+
+def _resolve_module(node, scopes):
+    """Resolve an expression to a sensitive-module name, following module
+    aliases (o = os). Returns the module name or None."""
+    if isinstance(node, ast.Name):
+        if node.id in SENSITIVE_MODULES:
+            return node.id
+        for scope in scopes:
+            if node.id in scope.module_aliases:
+                return scope.module_aliases[node.id]
+    return None
+
+
+def _dict_base_module(node, scopes):
+    """Resolve a module-dict expression to its module name:
+    os.__dict__, vars(os), or an alias of either (d = os.__dict__)."""
+    if isinstance(node, ast.Attribute) and node.attr == '__dict__':
+        return _resolve_module(node.value, scopes)
+    if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+            and node.func.id == 'vars' and len(node.args) == 1):
+        return _resolve_module(node.args[0], scopes)
+    if isinstance(node, ast.Name):
+        for scope in scopes:
+            if node.id in scope.dict_aliases:
+                return scope.dict_aliases[node.id]
+    return None
+
+
+def _reflective_target(node, scopes):
+    """Resolve a reflective-retrieval expression to (module, dangerous attr):
+    os.__dict__["po" + "pen"], vars(os)["system"], aliases of those, and the
+    dict.get("sy" + "stem") form. Returns None when the expression is not a
+    dangerous reflective retrieval."""
+    if isinstance(node, ast.Subscript):
+        mod = _dict_base_module(node.value, scopes)
+        sl = node.slice
+        # Python 3.8 wraps the subscript key in ast.Index (removed in 3.9+).
+        if hasattr(ast, 'Index') and isinstance(sl, ast.Index):
+            sl = sl.value
+        key = _fold_str(sl, scopes)
+    elif (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+          and node.func.attr == 'get' and node.args):
+        mod = _dict_base_module(node.func.value, scopes)
+        key = _fold_str(node.args[0], scopes)
+    else:
+        return None
+    if mod in SENSITIVE_MODULES and key in DANGEROUS_ATTRS:
+        return (mod, key)
+    return None
+
+
+def _is_fetch_call(node, scopes):
+    """True when a Call node retrieves remote content/commands at runtime."""
+    if not isinstance(node, ast.Call):
+        return False
+    func = node.func
+    if isinstance(func, ast.Name):
+        return func.id == 'urlopen'
+    if isinstance(func, ast.Attribute):
+        if func.attr in ('urlopen', 'HTTPConnection', 'HTTPSConnection'):
+            return True
+        if func.attr in ('create_connection', 'connect'):
+            # Socket-shaped connects only: a bare `conn.connect()` on an
+            # arbitrary object (db, websocket client) is not a fetch source.
+            base = func.value
+            if isinstance(base, ast.Name) and base.id == 'socket':
+                return True
+            if (isinstance(base, ast.Attribute)
+                    and base.attr == 'socket'):
+                return True
+            for scope in scopes:
+                if (isinstance(base, ast.Name)
+                        and scope.module_aliases.get(base.id) == 'socket'):
+                    return True
+            return False
+        if func.attr.lower() in FETCH_MODULE_VERBS:
+            base = func.value
+            if isinstance(base, ast.Name) and base.id in FETCH_MODULES:
+                return True
+            for scope in scopes:
+                if (isinstance(base, ast.Name)
+                        and scope.module_aliases.get(base.id) in FETCH_MODULES):
+                    return True
+    return False
+
+
+def _is_tainted(node, scopes):
+    """True when an expression derives from a runtime remote fetch: it
+    contains a fetch call or a name previously bound to fetch-derived data
+    (propagating through .read()/.json()/json.loads(...).get(...) chains)."""
+    for sub in ast.walk(node):
+        if isinstance(sub, ast.Name):
+            if any(sub.id in scope.tainted for scope in scopes):
+                return True
+        elif _is_fetch_call(sub, scopes):
+            return True
+    return False
+
+
+def _collect_scope(body, outer_scopes, fetch_funcs, reflective_funcs):
+    """Walk one statement body in source order, collecting bindings.
+
+    `outer_scopes` are enclosing scopes (read fallback). FunctionDefs are
+    analysed recursively with a fresh local scope and registered in
+    fetch_funcs / reflective_funcs when they return fetch-tainted data or a
+    dangerous reflective retrieval, so `command = fetch_cmd()` taints and
+    `sink = get_launcher()` aliases at the call site.
+    """
+    scope = _Scope()
+    scopes = [scope] + list(outer_scopes)
+
+    def handle_stmt(stmt):
+        if isinstance(stmt, ast.FunctionDef):
+            local = _collect_scope(stmt.body, scopes, fetch_funcs,
+                                   reflective_funcs)
+            local_scopes = [local] + scopes
+            for sub in ast.walk(stmt):
+                if isinstance(sub, ast.Return) and sub.value is not None:
+                    if _is_tainted(sub.value, local_scopes):
+                        fetch_funcs.add(stmt.name)
+                    target = _reflective_target(sub.value, local_scopes)
+                    if target is not None:
+                        reflective_funcs[stmt.name] = target
+            return
+        if isinstance(stmt, (ast.With, ast.AsyncWith)):
+            for item in stmt.items:
+                if (item.optional_vars is not None
+                        and isinstance(item.optional_vars, ast.Name)
+                        and _is_tainted(item.context_expr, scopes)):
+                    scope.tainted.add(item.optional_vars.id)
+            for sub in stmt.body:
+                handle_stmt(sub)
+            return
+        if isinstance(stmt, (ast.If, ast.For, ast.AsyncFor, ast.While, ast.Try)):
+            sub_bodies = [getattr(stmt, 'body', []),
+                          getattr(stmt, 'orelse', []),
+                          getattr(stmt, 'finalbody', [])]
+            sub_bodies += [h.body for h in getattr(stmt, 'handlers', [])]
+            for sub_body in sub_bodies:
+                for sub in sub_body:
+                    handle_stmt(sub)
+            return
+        if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1 \
+                and isinstance(stmt.targets[0], ast.Name):
+            name = stmt.targets[0].id
+            value = stmt.value
+            folded = _fold_str(value, scopes)
+            if folded is not None:
+                scope.const[name] = folded
+                return
+            mod = _resolve_module(value, scopes)
+            if mod is not None:
+                scope.module_aliases[name] = mod
+                return
+            dict_mod = _dict_base_module(value, scopes)
+            if dict_mod is not None:
+                scope.dict_aliases[name] = dict_mod
+                return
+            target = _reflective_target(value, scopes)
+            if target is not None:
+                scope.callable_aliases[name] = target
+                return
+            if (isinstance(value, ast.Call)
+                    and isinstance(value.func, ast.Name)):
+                if value.func.id in reflective_funcs:
+                    scope.callable_aliases[name] = \
+                        reflective_funcs[value.func.id]
+                    return
+                if value.func.id in fetch_funcs:
+                    scope.tainted.add(name)
+                    return
+            if _is_tainted(value, scopes):
+                scope.tainted.add(name)
+                return
+            # Unrecognised reassignment: the name no longer aliases anything.
+            scope.kill(name)
+            return
+        if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
+            scope.kill(stmt.target.id)
+            return
+        if isinstance(stmt, ast.AugAssign) and isinstance(stmt.target, ast.Name):
+            scope.kill(stmt.target.id)
+
+    for stmt in body:
+        handle_stmt(stmt)
+    return scope
+
+
 
 class ObfuscationVisitor(ast.NodeVisitor):
     """AST visitor detecting obfuscation and dangerous dynamic patterns."""
@@ -42,6 +285,20 @@ class ObfuscationVisitor(ast.NodeVisitor):
         # ONE shared scan_decode budget threaded from main() across every file so
         # the decode deadline + byte cap span the whole scan, never re-armed.
         self.budget = budget
+        # Reflective-call / taint state, populated by bind() before visiting:
+        # scope stack (innermost first), functions returning fetch-tainted
+        # values, functions returning dangerous reflective retrievals.
+        self._scopes = [_Scope()]
+        self._fetch_funcs = set()
+        self._reflective_funcs = {}
+
+    def bind(self, tree):
+        """Run the binding pre-pass over a parsed module. Must be called
+        before visit(); scan_file() does this. Collects constants, aliases,
+        taint, and helper-return shapes used by the reflective-sink and
+        fetch-then-execute patterns."""
+        self._scopes = [_collect_scope(tree.body, [], self._fetch_funcs,
+                                       self._reflective_funcs)]
 
     def _snippet(self, lineno):
         if lineno and 1 <= lineno <= len(self.source_lines):
@@ -159,19 +416,21 @@ class ObfuscationVisitor(ast.NodeVisitor):
             if len(node.args) >= 2:
                 obj_arg = node.args[0]
                 attr_arg = node.args[1]
-                obj_name = obj_arg.id if isinstance(obj_arg, ast.Name) else None
+                obj_name = _resolve_module(obj_arg, self._scopes)
                 # Support both ast.Constant (3.8+) and ast.Str (deprecated 3.8,
                 # REMOVED 3.12+). Guard the bare ast.Str reference with hasattr so
                 # evaluating it does not AttributeError on 3.12+ (it crashed the whole
                 # scanner on modern Python), mirroring the guarded sites below and in
                 # scan_entrypoint.py. ast.Constant already covers every string literal
                 # on 3.8+, so this branch is dead weight there and live only on <3.12.
+                # The key is then constant-folded so getattr(os, "po" + "pen")
+                # and getattr(os, KEY) with KEY bound to a literal resolve too.
                 if isinstance(attr_arg, ast.Constant) and isinstance(attr_arg.value, str):
                     attr_val = attr_arg.value
                 elif hasattr(ast, "Str") and isinstance(attr_arg, ast.Str):
                     attr_val = attr_arg.s
                 else:
-                    attr_val = None
+                    attr_val = self._fold(attr_arg)
                 if obj_name in SENSITIVE_MODULES and attr_val in DANGEROUS_ATTRS:
                     self._add(
                         severity="critical",
@@ -299,7 +558,88 @@ class ObfuscationVisitor(ast.NodeVisitor):
                                 category="obfuscated-exec"
                             )
 
+        # Pattern 13: reflective dangerous sink invoked through a module
+        # __dict__ / vars() subscript, a .get() on the module dict, or a
+        # callable alias (launch = os.__dict__["po" + "pen"]; launch(cmd)).
+        # The retrieval itself is flagged by visit_Subscript (or at the
+        # assignment for aliases); here we resolve the sink for the
+        # fetch-then-execute taint check and for the .get() form, which has
+        # no Subscript node.
+        sink = None
+        sink_from_get = False
+        if isinstance(node.func, ast.Subscript):
+            sink = _reflective_target(node.func, self._scopes)
+        elif isinstance(node.func, ast.Name):
+            for scope in self._scopes:
+                if node.func.id in scope.callable_aliases:
+                    sink = scope.callable_aliases[node.func.id]
+                    break
+        elif (isinstance(node.func, ast.Attribute)
+              and node.func.attr == 'get'):
+            sink = _reflective_target(node, self._scopes)
+            sink_from_get = sink is not None
+        if sink_from_get:
+            self._add(
+                severity="critical",
+                title=f"Reflective Attribute Access: {sink[0]}.__dict__.get('{sink[1]}')",
+                description=f"Reflective dict access evasion: dangerous '{sink[1]}' retrieved from '{sink[0]}' via .__dict__.get() with a folded key",
+                lineno=lineno,
+                category="obfuscated-exec"
+            )
+
+        # Pattern 14: fetch-then-execute. A command fetched from a remote
+        # source at call time (urlopen/requests/... through .read()/.json()/
+        # json.loads().get() or a helper return) flows into a reflective
+        # shell sink. This is the runtime-fetched RCE shape that per-call
+        # metadata scanning cannot see.
+        if sink is not None:
+            tainted_arg = any(
+                _is_tainted(arg, self._scopes)
+                for arg in list(node.args) + [kw.value for kw in node.keywords]
+            )
+            if tainted_arg:
+                self._add(
+                    severity="critical",
+                    title=f"Fetch-then-Execute: remote content passed to reflective {sink[0]}.{sink[1]}",
+                    description=(f"Command/content fetched from a remote source at runtime is "
+                                 f"passed to a reflectively-resolved {sink[0]}.{sink[1]} sink. "
+                                 f"The executed payload is invisible to static and metadata scanning."),
+                    lineno=lineno,
+                    category="remote-code-execution"
+                )
+
         self.generic_visit(node)
+
+    def _fold(self, node):
+        """Constant-fold a string expression against collected bindings."""
+        return _fold_str(node, self._scopes)
+
+    def visit_Subscript(self, node):
+        """Flag dangerous reflective retrieval: os.__dict__["po" + "pen"],
+        vars(os)["system"], or an alias of the module dict subscripted with a
+        foldable dangerous key. Fires at the retrieval site whether or not
+        the result is ever called - the retrieval alone hides the sink from
+        call-based scanners."""
+        target = _reflective_target(node, self._scopes)
+        if target is not None:
+            self._add(
+                severity="critical",
+                title=f"Reflective Attribute Access: {target[0]}.__dict__['{target[1]}']",
+                description=f"Reflective dict access evasion: dangerous '{target[1]}' retrieved from '{target[0]}' via __dict__/vars() with a folded key",
+                lineno=getattr(node, 'lineno', None),
+                category="obfuscated-exec"
+            )
+        self.generic_visit(node)
+
+    def visit_FunctionDef(self, node):
+        """Track function-local binding scopes so aliases/constants/taint
+        declared inside a function resolve for its body, and never leak out
+        to sibling code."""
+        local = _collect_scope(node.body, self._scopes, self._fetch_funcs,
+                               self._reflective_funcs)
+        self._scopes.insert(0, local)
+        self.generic_visit(node)
+        self._scopes.pop(0)
 
     def visit_ClassDef(self, node):
         """Detect __reduce__ overrides - classic pickle deserialization backdoor."""
@@ -356,6 +696,7 @@ def scan_file(file_path, rel_path, budget=None):
 
     source_lines = source.split('\n')
     visitor = ObfuscationVisitor(rel_path, source_lines, budget=budget)
+    visitor.bind(tree)
     visitor.visit(tree)
     return visitor.findings
 

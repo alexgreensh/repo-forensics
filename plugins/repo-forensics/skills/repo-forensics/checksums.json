@@ -38,7 +38,7 @@
     "scripts/dast_sandbox.sb": "6f6e9571a73aa8a9d07e7e4c5c0e6ae49fb6447c5f34a446154d301c6c4e8875",
     "scripts/dead_anchors_extract.py": "84097dd442184fc1e7339e291bc7ac47657d57a40326bd634f9b4fdfd5b97c0e",
     "scripts/dead_anchors_probe.py": "acf3cc06ba61462bcf466710a5bce88317e3519212ca27432656d785cc952d02",
-    "scripts/forensics_core.py": "bdd0f43a15dd9df87c9a1990fe61c13c69a685d52fe63dcf7c506e0809b870b5",
+    "scripts/forensics_core.py": "f61dac3b1f1e2804141c3a55af4be1135503f989cd7cdf2909f1518034adaf30",
     "scripts/gen_rule_ids.py": "f0e743f98d7c0b8e8f317d75ec7854dd22e746f5ff98be9c88915d1236d7002c",
     "scripts/hook_adapter.py": "2953e5e266616a3c35e535af2ae261197907c002b90c62e3042a4b90f8b46989",
     "scripts/ioc_manager.py": "dc881b80595abeeb6a4b7cf88df75a50534ff4a2e970a0e0d5d1be1fba6b91be",
@@ -52,7 +52,7 @@
     "scripts/sarif_export.py": "8bee1303d1e82ff2660feb41637b7a257ce5dbea2515d7d2bc8f0a9ceba624b7",
     "scripts/scan_agent_skills.py": "7c9f0036b7fcc528f5146ac4652627c1603cee9e0631e9b4b10b53599cea2107",
     "scripts/scan_archive.py": "0ecbfc6a76e66aee23fbd0bc3f521b694bcfb7a3e4ff19a8229d9645630b4931",
-    "scripts/scan_ast.py": "fe109606a356a483a9c7b997dbefc89f80ecc3e6ecbc0f9c8b6f94ca3306fc9a",
+    "scripts/scan_ast.py": "c14a3ceb049754c30315dcf3926669b1d92defdc6613deca160ab9c248241843",
     "scripts/scan_binary.py": "b458c2d2a022ef1cc19714e4a74ec07fbac3cbfcf6aa522709ba4aee109bb1e6",
     "scripts/scan_bytecode.py": "2020735ead74f6e3415ee4480addbe8b9dce18796f34596abea726a7b3bf895a",
     "scripts/scan_dast.py": "f87b7c069f1cfc23d722502cedac0069421855fdc23fe4c4757302d0952d1bef",
@@ -111,5 +111,9 @@
     ".cursor-plugin/hooks.json": "77dcb9cd64b52604cbc607a867b1069187ad6ab2ba6e0e77bbab58206bc1707f",
     ".cursor-plugin/plugin.json": "1bccb46a0a5034001352676db8e79e8f16533b19b2ccb37390e4ae705d65d0da"
   },
-  "manifest_count": 5
+  "manifest_count": 5,
+  "repo_source_manifests": {
+    ".agents/plugins/marketplace.json": "1fb6dcd1f514fe8787cf52c0d3f8982ac509b0c1e09fe70c1a0cd1590d6fb15e"
+  },
+  "source_manifest_count": 1
 }

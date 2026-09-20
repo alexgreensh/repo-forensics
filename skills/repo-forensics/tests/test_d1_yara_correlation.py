@@ -7,6 +7,10 @@ manifest explanation contains "$_REQUEST/$_GET" -> the YARA finding's _tags
 satisfy network_keywords (which contains "request") with NO network call
 present. Combined with a hardcoded AWS key (env_keywords) in the same file,
 Rule 1 manufactured a spurious critical "Potential Data Exfiltration".
+(Rules 1 and 3 have since moved to typed structured-leaf classification -
+see _exfil_capabilities in forensics_core - so prose alone no longer
+satisfies either side; the yara exclusion remains as defense in depth for
+the other prose-keyed rules.)
 
 Fix: forensics_core.correlate() excludes scanner "yara" from the by_file leaf
 pool (_CORRELATION_LEAF_EXCLUDED_SCANNERS). The YARA finding stays in the
@@ -101,15 +105,37 @@ class TestD1UnitGuard:
         assert yara.severity == "critical"
         assert aws.severity == "high"
 
-    def test_positive_control_exfil_fires_without_exclusion(self):
-        # Positive control: the SAME findings under a NON-excluded scanner name
-        # MUST manufacture the exfil compound. This proves the test setup is a
-        # valid D1 trigger and that the yara exclusion (not some other guard)
-        # is what prevents the compound above.
+    def test_prose_only_network_evidence_does_not_fire(self):
+        # Typed correlation (2026-09-20): Rules 1/3 classify leaves by
+        # structured identity (scanner, rule_id, category, fixed primitive
+        # titles), never free-text prose. The SAME webshell finding under a
+        # NON-excluded scanner name carries "request" in its description but
+        # has no structured network identity, so it must NOT manufacture the
+        # exfil compound even without the yara exclusion.
         yara_like = _yara_webshell_finding()
         yara_like.scanner = "notyara"  # would-be yara, but not excluded
         aws = _aws_key_finding()
         correlated = core.correlate([yara_like, aws])
+        titles = [c.title for c in correlated]
+        assert "Potential Data Exfiltration" not in titles, (
+            f"typed-correlation regression: prose manufactured exfil: {titles}")
+
+    def test_positive_control_exfil_fires_without_exclusion(self):
+        # Positive control: a real credential leaf (secrets AWS key) plus a
+        # STRUCTURED network-primitive leaf (the raw trifecta scanner's fixed
+        # "Outbound network primitive" identity) MUST manufacture the exfil
+        # compound. This proves the env-side typing and distinct-leaf pairing
+        # are the active mechanism, not a blanket disable of Rule 1.
+        net = core.Finding(
+            scanner="trifecta_raw", severity="high",
+            title="Outbound network primitive",
+            description="Raw-content match for outbound network primitive "
+                        "(http.client, requests.post, urllib, socket, axios, "
+                        "httpx, aiohttp)",
+            file="shell.php", line=3, snippet="requests.post(",
+            category="exfiltration", evidence_class="direct")
+        aws = _aws_key_finding()
+        correlated = core.correlate([net, aws])
         titles = [c.title for c in correlated]
         assert "Potential Data Exfiltration" in titles, (
             f"positive control failed: expected exfil compound, got {titles}")
