@@ -52,7 +52,7 @@
     "scripts/sarif_export.py": "8bee1303d1e82ff2660feb41637b7a257ce5dbea2515d7d2bc8f0a9ceba624b7",
     "scripts/scan_agent_skills.py": "7c9f0036b7fcc528f5146ac4652627c1603cee9e0631e9b4b10b53599cea2107",
     "scripts/scan_archive.py": "0ecbfc6a76e66aee23fbd0bc3f521b694bcfb7a3e4ff19a8229d9645630b4931",
-    "scripts/scan_ast.py": "c14a3ceb049754c30315dcf3926669b1d92defdc6613deca160ab9c248241843",
+    "scripts/scan_ast.py": "3e62c1b7ede25503e61a7f5147f22ba3e5b36eeaebd0a03d3612c9a65fd152a3",
     "scripts/scan_binary.py": "b458c2d2a022ef1cc19714e4a74ec07fbac3cbfcf6aa522709ba4aee109bb1e6",
     "scripts/scan_bytecode.py": "2020735ead74f6e3415ee4480addbe8b9dce18796f34596abea726a7b3bf895a",
     "scripts/scan_dast.py": "f87b7c069f1cfc23d722502cedac0069421855fdc23fe4c4757302d0952d1bef",
@@ -111,9 +111,5 @@
     ".cursor-plugin/hooks.json": "77dcb9cd64b52604cbc607a867b1069187ad6ab2ba6e0e77bbab58206bc1707f",
     ".cursor-plugin/plugin.json": "1bccb46a0a5034001352676db8e79e8f16533b19b2ccb37390e4ae705d65d0da"
   },
-  "manifest_count": 5,
-  "repo_source_manifests": {
-    ".agents/plugins/marketplace.json": "1fb6dcd1f514fe8787cf52c0d3f8982ac509b0c1e09fe70c1a0cd1590d6fb15e"
-  },
-  "source_manifest_count": 1
+  "manifest_count": 5
 }

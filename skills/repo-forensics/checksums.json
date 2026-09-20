@@ -52,7 +52,7 @@
     "scripts/sarif_export.py": "8bee1303d1e82ff2660feb41637b7a257ce5dbea2515d7d2bc8f0a9ceba624b7",
     "scripts/scan_agent_skills.py": "7c9f0036b7fcc528f5146ac4652627c1603cee9e0631e9b4b10b53599cea2107",
     "scripts/scan_archive.py": "0ecbfc6a76e66aee23fbd0bc3f521b694bcfb7a3e4ff19a8229d9645630b4931",
-    "scripts/scan_ast.py": "c14a3ceb049754c30315dcf3926669b1d92defdc6613deca160ab9c248241843",
+    "scripts/scan_ast.py": "3e62c1b7ede25503e61a7f5147f22ba3e5b36eeaebd0a03d3612c9a65fd152a3",
     "scripts/scan_binary.py": "b458c2d2a022ef1cc19714e4a74ec07fbac3cbfcf6aa522709ba4aee109bb1e6",
     "scripts/scan_bytecode.py": "2020735ead74f6e3415ee4480addbe8b9dce18796f34596abea726a7b3bf895a",
     "scripts/scan_dast.py": "f87b7c069f1cfc23d722502cedac0069421855fdc23fe4c4757302d0952d1bef",

