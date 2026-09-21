@@ -381,6 +381,7 @@ if $SKILL_SCAN; then
     throttled_run run_scanner "bytecode" "scan_bytecode.py" &
     throttled_run run_scanner "archive" "scan_archive.py" &
     throttled_run run_scanner "splitstream" "scan_splitstream.py" &
+    throttled_run run_scanner "git_forensics" "scan_git_forensics.py" &
     throttled_run run_scanner "provenance" "scan_provenance.py" &
     throttled_run run_scanner "dead_anchors" "scan_dead_anchors.py" &
     throttled_run run_scanner "yara" "scan_yara.py" &
