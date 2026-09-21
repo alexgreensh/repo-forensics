@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "generated": "2026-04-05",
+  "generated": "2026-09-09",
   "description": "Version-pinned and entirely-malicious package IOCs. Shipped with repo-forensics as baseline detection. Optional OSV feed adds live updates (see --osv flag). Use '*' in the version list to mean 'any version of this package is malicious'.",
   "contributors": [
     {
@@ -2983,6 +2983,34 @@
         "@umacloud/cli-win32-x64": ["1.0.74"],
         "@umacloud/knowledge": ["1.0.74"],
         "umadev": ["1.0.74"]
+      }
+    },
+    "agentgate-agent-relay-npm-2026-09": {
+      "title": "Relay-driven AI-agent npm malware batch (AgentGate verification)",
+      "ecosystem": "npm",
+      "disclosed": "2026-09",
+      "family": "relay-driven agent execution / config hijack / binary replacement / security-regression squatting",
+      "reference": "https://dev.to/agentgate/18-malicious-npm-packages-are-still-remote-controlling-ai-coding-agents-verified-today-3n59",
+      "notes": "18 packages tarball-verified malicious by AgentGate (2026-09-06) and re-verified by repo-forensics payload inspection (2026-09-09). Patterns: outbound WS/HTTPS relay driving local agent CLIs with permission bypass, OS autostart persistence, MCP/config hijack (ANTHROPIC_BASE_URL, mcp.json, SessionEnd hooks), credential-theft-via-agent-prompt, opencode binary replacement, and an MCP Inspector squat reverting the CVE-2025-49596 auth fix. Entire packages are malicious by design, so all versions are flagged.",
+      "packages": {
+        "opencode-optimised-toolings": ["*"],
+        "agenthub-multiagent-mcp": ["*"],
+        "llm-interceptor": ["*"],
+        "agenttunnels": ["*"],
+        "opencode-engos-ai": ["*"],
+        "remote-claude-daemon": ["*"],
+        "@guangnao/claude-cli": ["*"],
+        "@cliphijack/santaclaude": ["*"],
+        "claw-subagent-service": ["*"],
+        "claude-cup": ["*"],
+        "mangomind-agent": ["*"],
+        "aclade-agent": ["*"],
+        "agenthub-ai": ["*"],
+        "claude-remote-agent": ["*"],
+        "@atom8n/inspector": ["*"],
+        "trimprompt": ["*"],
+        "@addai/node": ["*"],
+        "@xiaohhhh1/canvas-agent": ["*"]
       }
     }
   }

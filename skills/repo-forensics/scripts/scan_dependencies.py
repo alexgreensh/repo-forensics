@@ -369,6 +369,63 @@ def check_version_anomaly(version_str):
     return False
 
 
+# Canonical scope -> identity markers that scope's official packages legitimately
+# carry. A package OUTSIDE the scope carrying these markers is passing itself
+# off as the org's official package. Motivating case: @atom8n/inspector, a
+# security-regression squat of @modelcontextprotocol/inspector that declared
+# author "Anthropic, PBC" and homepage modelcontextprotocol.io while shipping
+# an inverted auth gate (Sept 2026 verified-malicious npm batch).
+_CANONICAL_SCOPE_IDENTITY = {
+    '@modelcontextprotocol': ('anthropic, pbc', 'modelcontextprotocol.io'),
+    '@anthropic-ai': ('anthropic, pbc',),
+    '@openai': ('openai',),
+}
+
+
+def check_provenance_squat(data, rel_path):
+    """Flag scoped packages whose author/homepage metadata claims a canonical
+    org identity the package's own scope does not belong to (high)."""
+    findings = []
+    name = data.get('name')
+    if not isinstance(name, str) or not name.startswith('@'):
+        return findings
+    author = data.get('author', '')
+    if isinstance(author, dict):
+        author = author.get('name', '')
+    if not isinstance(author, str):
+        author = ''
+    homepage = data.get('homepage', '')
+    if not isinstance(homepage, str):
+        homepage = ''
+    identity_text = (author + ' ' + homepage).lower()
+    if not identity_text.strip():
+        return findings
+    # A package inside ANY canonical scope is that org's own publish; only
+    # packages outside every canonical scope can be squatting the identity.
+    if any(name.lower().startswith(scope + '/') for scope in _CANONICAL_SCOPE_IDENTITY):
+        return findings
+    for scope, markers in _CANONICAL_SCOPE_IDENTITY.items():
+        if name.lower().startswith(scope + '/'):
+            continue
+        for marker in markers:
+            if marker in identity_text:
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="high",
+                    title=f"Provenance Squat: '{name}' claims {scope} identity",
+                    description=(
+                        f"Package metadata (author/homepage) references '{marker}', "
+                        f"the identity of canonical scope {scope}, but this package "
+                        "is published outside that scope. Security-regression squats "
+                        "use official-looking provenance to pass as the upstream package."
+                    ),
+                    file=rel_path, line=0,
+                    snippet=f"name={name} author={author} homepage={homepage}",
+                    category="provenance-squat"
+                ))
+                break
+    return findings
+
+
 def check_known_ioc_packages(dependencies, rel_path):
     """Flag packages matching SANDWORM_MODE campaign known-IOC list (critical)."""
     findings = []
@@ -1063,6 +1120,25 @@ def scan_package_json(filepath, rel_path):
                         snippet=f"{pkg}: {ver[:120]}",
                         category="orphan-commit"
                     ))
+
+        # Self-IOC check: the scanned package's OWN name against the known
+        # malicious package list. Dependency checks cover what a package pulls
+        # in; a directly-downloaded malicious tarball names itself, and that
+        # name is the IOC.
+        own_name = data.get('name')
+        if isinstance(own_name, str) and own_name.lower() in _get_ioc_packages():
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="critical",
+                title=f"Known Malicious Package (self): '{own_name}'",
+                description="This package's own name matches the known-malicious package IOC list",
+                file=rel_path, line=0,
+                snippet=f"'{own_name}' is a known malicious package",
+                category="known-ioc"
+            ))
+
+        # Provenance squat: identity metadata claims a canonical org while the
+        # package lives outside that org's canonical scope.
+        findings.extend(check_provenance_squat(data, rel_path))
 
         # Known IOC check (critical, before typosquatting)
         findings.extend(check_known_ioc_packages(dep_names, rel_path))
