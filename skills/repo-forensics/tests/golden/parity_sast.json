@@ -1,5 +1,145 @@
 [
   [
+    "AI Agent CLI Permission Bypass Flag",
+    "critical",
+    "SA-JS-039.js",
+    1,
+    "auth-bypass"
+  ],
+  [
+    "AI Agent CLI Permission Bypass Flag",
+    "critical",
+    "SA-JS-039.js",
+    2,
+    "auth-bypass"
+  ],
+  [
+    "AI Agent CLI Permission Bypass Flag",
+    "critical",
+    "SA-JS-039.js",
+    3,
+    "auth-bypass"
+  ],
+  [
+    "AI Agent CLI Permission Bypass Flag",
+    "critical",
+    "SA-SH-020.sh",
+    1,
+    "auth-bypass"
+  ],
+  [
+    "AI Agent CLI Permission Bypass Flag",
+    "critical",
+    "SA-SH-020.sh",
+    2,
+    "auth-bypass"
+  ],
+  [
+    "AI Agent CLI Permission Bypass Flag",
+    "critical",
+    "SA-SH-020.sh",
+    3,
+    "auth-bypass"
+  ],
+  [
+    "AI Agent CLI Permission Bypass Flag",
+    "critical",
+    "SA-TS-019.ts",
+    1,
+    "auth-bypass"
+  ],
+  [
+    "AI Agent CLI Permission Bypass Flag",
+    "critical",
+    "SA-TS-019.ts",
+    2,
+    "auth-bypass"
+  ],
+  [
+    "AI Agent CLI Permission Bypass Flag",
+    "critical",
+    "SA-TS-019.ts",
+    3,
+    "auth-bypass"
+  ],
+  [
+    "AI Agent CLI Spawned as Child Process",
+    "critical",
+    "SA-JS-037.js",
+    1,
+    "agent-execution"
+  ],
+  [
+    "AI Agent CLI Spawned as Child Process",
+    "critical",
+    "SA-JS-037.js",
+    2,
+    "agent-execution"
+  ],
+  [
+    "AI Agent CLI Spawned as Child Process",
+    "critical",
+    "SA-JS-037.js",
+    3,
+    "agent-execution"
+  ],
+  [
+    "AI Agent CLI Spawned as Child Process",
+    "critical",
+    "SA-JS-037.js",
+    4,
+    "agent-execution"
+  ],
+  [
+    "AI Agent CLI Spawned as Child Process",
+    "critical",
+    "SA-JS-039.js",
+    3,
+    "agent-execution"
+  ],
+  [
+    "AI Agent CLI Spawned as Child Process",
+    "critical",
+    "SA-JS-039.js",
+    4,
+    "agent-execution"
+  ],
+  [
+    "AI Agent CLI Spawned as Child Process",
+    "critical",
+    "SA-TS-017.ts",
+    1,
+    "agent-execution"
+  ],
+  [
+    "AI Agent CLI Spawned as Child Process",
+    "critical",
+    "SA-TS-017.ts",
+    2,
+    "agent-execution"
+  ],
+  [
+    "AI Agent CLI Spawned as Child Process",
+    "critical",
+    "SA-TS-017.ts",
+    3,
+    "agent-execution"
+  ],
+  [
+    "AI Agent CLI Spawned as Child Process",
+    "critical",
+    "SA-TS-019.ts",
+    3,
+    "agent-execution"
+  ],
+  [
+    "AI Agent CLI Spawned as Child Process",
+    "critical",
+    "SA-TS-019.ts",
+    4,
+    "agent-execution"
+  ],
+  [
     "AI Tool Config Theft",
     "critical",
     "SA-JS-028.js",
@@ -40,6 +180,48 @@
     "SA-JS-026.js",
     3,
     "credential-validation"
+  ],
+  [
+    "Auth Disabled by Default (Inverted Env Flag)",
+    "critical",
+    "SA-JS-038.js",
+    1,
+    "auth-bypass"
+  ],
+  [
+    "Auth Disabled by Default (Inverted Env Flag)",
+    "critical",
+    "SA-JS-038.js",
+    2,
+    "auth-bypass"
+  ],
+  [
+    "Auth Disabled by Default (Inverted Env Flag)",
+    "critical",
+    "SA-JS-038.js",
+    3,
+    "auth-bypass"
+  ],
+  [
+    "Auth Disabled by Default (Inverted Env Flag)",
+    "critical",
+    "SA-TS-018.ts",
+    1,
+    "auth-bypass"
+  ],
+  [
+    "Auth Disabled by Default (Inverted Env Flag)",
+    "critical",
+    "SA-TS-018.ts",
+    2,
+    "auth-bypass"
+  ],
+  [
+    "Auth Disabled by Default (Inverted Env Flag)",
+    "critical",
+    "SA-TS-018.ts",
+    3,
+    "auth-bypass"
   ],
   [
     "Base64 Decode (Obfuscation Signal)",
@@ -201,6 +383,41 @@
     "SA-SH-002.sh",
     3,
     "shell-injection"
+  ],
+  [
+    "Curl/Wget TLS Verification Disabled",
+    "high",
+    "SA-SH-021.sh",
+    1,
+    "insecure-transport"
+  ],
+  [
+    "Curl/Wget TLS Verification Disabled",
+    "high",
+    "SA-SH-021.sh",
+    2,
+    "insecure-transport"
+  ],
+  [
+    "Curl/Wget TLS Verification Disabled",
+    "high",
+    "SA-SH-021.sh",
+    3,
+    "insecure-transport"
+  ],
+  [
+    "Curl/Wget TLS Verification Disabled",
+    "high",
+    "SA-SH-021.sh",
+    4,
+    "insecure-transport"
+  ],
+  [
+    "Curl/Wget TLS Verification Disabled",
+    "high",
+    "SA-SH-021.sh",
+    5,
+    "insecure-transport"
   ],
   [
     "Dangerous Eval",
@@ -658,6 +875,55 @@
     "destructive-command"
   ],
   [
+    "Destructured child_process Import (ESM)",
+    "high",
+    "SA-JS-035.js",
+    1,
+    "shell-injection"
+  ],
+  [
+    "Destructured child_process Import (ESM)",
+    "high",
+    "SA-JS-035.js",
+    2,
+    "shell-injection"
+  ],
+  [
+    "Destructured child_process Import (ESM)",
+    "high",
+    "SA-JS-035.js",
+    3,
+    "shell-injection"
+  ],
+  [
+    "Destructured child_process Import (ESM)",
+    "high",
+    "SA-TS-015.ts",
+    1,
+    "shell-injection"
+  ],
+  [
+    "Destructured child_process Import (ESM)",
+    "high",
+    "SA-TS-015.ts",
+    2,
+    "shell-injection"
+  ],
+  [
+    "Destructured child_process Import (ESM)",
+    "high",
+    "SA-TS-015.ts",
+    3,
+    "shell-injection"
+  ],
+  [
+    "Destructured child_process Import (ESM)",
+    "high",
+    "SA-TS-015.ts",
+    4,
+    "shell-injection"
+  ],
+  [
     "Direct /proc Filesystem Access",
     "high",
     "SA-JS-014.js",
@@ -1428,6 +1694,34 @@
     "code-execution"
   ],
   [
+    "Node.js TLS Certificate Verification Disabled",
+    "high",
+    "SA-JS-040.js",
+    1,
+    "insecure-transport"
+  ],
+  [
+    "Node.js TLS Certificate Verification Disabled",
+    "high",
+    "SA-JS-040.js",
+    2,
+    "insecure-transport"
+  ],
+  [
+    "Node.js TLS Certificate Verification Disabled",
+    "high",
+    "SA-JS-040.js",
+    3,
+    "insecure-transport"
+  ],
+  [
+    "Node.js TLS Certificate Verification Disabled",
+    "high",
+    "SA-JS-040.js",
+    4,
+    "insecure-transport"
+  ],
+  [
     "OIDC Token Exchange",
     "critical",
     "SA-GO-008.go",
@@ -2000,6 +2294,34 @@
     "SA-PY-015.py",
     3,
     "worm-propagation"
+  ],
+  [
+    "Python TLS Certificate Verification Disabled",
+    "high",
+    "SA-PY-025.py",
+    1,
+    "insecure-transport"
+  ],
+  [
+    "Python TLS Certificate Verification Disabled",
+    "high",
+    "SA-PY-025.py",
+    2,
+    "insecure-transport"
+  ],
+  [
+    "Python TLS Certificate Verification Disabled",
+    "high",
+    "SA-PY-025.py",
+    3,
+    "insecure-transport"
+  ],
+  [
+    "Python TLS Certificate Verification Disabled",
+    "high",
+    "SA-PY-025.py",
+    4,
+    "insecure-transport"
   ],
   [
     "Redirect to /dev/tcp",
@@ -2709,6 +3031,48 @@
     "shell-injection"
   ],
   [
+    "Shell Interpretation Enabled (shell: true)",
+    "high",
+    "SA-JS-036.js",
+    1,
+    "shell-injection"
+  ],
+  [
+    "Shell Interpretation Enabled (shell: true)",
+    "high",
+    "SA-JS-036.js",
+    2,
+    "shell-injection"
+  ],
+  [
+    "Shell Interpretation Enabled (shell: true)",
+    "high",
+    "SA-JS-036.js",
+    3,
+    "shell-injection"
+  ],
+  [
+    "Shell Interpretation Enabled (shell: true)",
+    "high",
+    "SA-TS-016.ts",
+    1,
+    "shell-injection"
+  ],
+  [
+    "Shell Interpretation Enabled (shell: true)",
+    "high",
+    "SA-TS-016.ts",
+    2,
+    "shell-injection"
+  ],
+  [
+    "Shell Interpretation Enabled (shell: true)",
+    "high",
+    "SA-TS-016.ts",
+    3,
+    "shell-injection"
+  ],
+  [
     "System Call",
     "critical",
     "SA-RB-002.rb",
@@ -2728,6 +3092,48 @@
     "SA-RB-002.rb",
     3,
     "shell-injection"
+  ],
+  [
+    "TSX TLS Certificate Verification Disabled",
+    "high",
+    "SA-TSX-003.tsx",
+    1,
+    "insecure-transport"
+  ],
+  [
+    "TSX TLS Certificate Verification Disabled",
+    "high",
+    "SA-TSX-003.tsx",
+    2,
+    "insecure-transport"
+  ],
+  [
+    "TSX TLS Certificate Verification Disabled",
+    "high",
+    "SA-TSX-003.tsx",
+    3,
+    "insecure-transport"
+  ],
+  [
+    "TypeScript TLS Certificate Verification Disabled",
+    "high",
+    "SA-TS-020.ts",
+    1,
+    "insecure-transport"
+  ],
+  [
+    "TypeScript TLS Certificate Verification Disabled",
+    "high",
+    "SA-TS-020.ts",
+    2,
+    "insecure-transport"
+  ],
+  [
+    "TypeScript TLS Certificate Verification Disabled",
+    "high",
+    "SA-TS-020.ts",
+    3,
+    "insecure-transport"
   ],
   [
     "Unsafe Deserialization",

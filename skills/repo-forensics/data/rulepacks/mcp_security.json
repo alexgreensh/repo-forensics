@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "generated": "2026-06-10",
+  "generated": "2026-09-09",
   "pack": "mcp_security",
-  "pack_version": 1,
+  "pack_version": 2,
   "rules": [
     {
       "id": "SM-SQL-001",
@@ -954,6 +954,48 @@
         "no_match": [
           "a normal helpful tool",
           "read the documentation"
+        ]
+      }
+    },
+    {
+      "id": "SM-CFG-007",
+      "type": "regex",
+      "pattern": "\\.tool\\(\\s*['\"][^'\"]*(?:run_command|exec_command|execute_command|shell_command|run_shell|apply_patch|apply_diff)[^'\"]*['\"]",
+      "title": "MCP Tool Exposes Remote Command/Patch Execution",
+      "severity": "critical",
+      "confidence": 0.8,
+      "category": "mcp-config-risk",
+      "explanation": "Registers an MCP tool whose name offers shell-command execution or patch application; a remote operator (or a poisoned session) can drive arbitrary local code execution through it.",
+      "examples": {
+        "match": [
+          "server.tool(\"tunnel_run_command\", \"Run a local shell command\", {...})",
+          "server.tool('apply_patch', desc)",
+          "srv.tool(\"execute_command\", desc)"
+        ],
+        "no_match": [
+          "server.tool(\"get_weather\", desc)",
+          "server.tool(\"run_diagnostics_info\", desc)"
+        ]
+      }
+    },
+    {
+      "id": "SM-CFG-008",
+      "type": "regex",
+      "pattern": "\\.tool\\([^)]{0,160}(?:shell command|unified diff|arbitrary commands?)",
+      "title": "MCP Tool Description Advertises Local Command/Patch Execution",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "mcp-config-risk",
+      "explanation": "MCP tool registration whose description advertises running shell commands or applying diffs on the host; treat as a remote code execution surface requiring explicit local consent.",
+      "examples": {
+        "match": [
+          "server.tool(\"x\", \"Run a local shell command in the bridge workdir\", {...})",
+          "server.tool(\"y\", \"Apply a unified diff in the workdir\")",
+          "server.tool(\"z\", \"Execute arbitrary commands on the host\")"
+        ],
+        "no_match": [
+          "server.tool(\"x\", \"Read a file from disk\")",
+          "server.tool(\"y\", \"List open issues\")"
         ]
       }
     }

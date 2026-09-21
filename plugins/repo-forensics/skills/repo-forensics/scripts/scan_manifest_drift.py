@@ -203,8 +203,17 @@ def extract_js_imports(file_path):
 
     imports = set()
 
+    # Module names must be valid npm identifier shapes; the regexes below can
+    # capture garbage spans from mid-code 'from'/'require' text (schema
+    # builders, template literals), which previously surfaced as phantom-dep
+    # titles containing newlines and punctuation.
+    def _valid(mod):
+        return re.match(
+            r'^(?:@[a-z0-9][a-z0-9._~-]*/)?[a-z0-9][a-z0-9._~-]*$', mod
+        ) is not None and len(mod) <= 214
+
     # require('module') or require("module")
-    for m in re.finditer(r'require\s*\(\s*["\']([^"\']+)["\']', content):
+    for m in re.finditer(r'require\s*\(\s*["\']([^"\']{1,214})["\']', content):
         mod = m.group(1)
         if not mod.startswith('.'):  # Skip relative imports
             # Get package name (scoped: @scope/pkg -> @scope/pkg, unscoped: pkg/sub -> pkg)
@@ -216,7 +225,7 @@ def extract_js_imports(file_path):
                 imports.add(mod.split('/')[0].lower())
 
     # import ... from 'module' or import 'module'
-    for m in re.finditer(r'(?:import|from)\s+.*?["\']([^"\']+)["\']', content):
+    for m in re.finditer(r'(?:import|from)\s+.*?["\']([^"\']{1,214})["\']', content):
         mod = m.group(1)
         if not mod.startswith('.'):
             if mod.startswith('@'):
@@ -226,6 +235,7 @@ def extract_js_imports(file_path):
             else:
                 imports.add(mod.split('/')[0].lower())
 
+    imports = {m for m in imports if _valid(m)}
     return imports
 
 

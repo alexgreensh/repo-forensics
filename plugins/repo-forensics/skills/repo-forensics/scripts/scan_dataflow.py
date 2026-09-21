@@ -198,6 +198,16 @@ def main():
 
     # Cross-file: if file A has tainted sources and file B imports A and has sinks
     import_graph = build_import_graph(repo_path, ignore_patterns)
+    # Only STRONG sources taint a whole module cross-file. Whole-env capture,
+    # env enumeration, and credential-file reads are rare outside exfiltration;
+    # bare process.env reads, dotenv, and JSON config parses are ubiquitous in
+    # legitimate server code and mass-flagged clean packages.
+    cross_file_sources = {
+        'python': [p for p in PYTHON_SOURCES
+                   if p[1] in ("os.environ.copy()", "Sensitive file read", "Sensitive path access")],
+        'javascript': [p for p in JS_SOURCES
+                       if p[1] in ("process.env enumeration", "Sensitive file read")],
+    }
     tainted_modules = set()
     for file_path, rel_path in core.walk_repo(repo_path, ignore_patterns, skip_binary=True):
         lang = detect_language(rel_path)
@@ -210,8 +220,7 @@ def main():
         except (OSError, UnicodeDecodeError):
             continue
 
-        sources = PYTHON_SOURCES if lang == 'python' else JS_SOURCES
-        for source_pat, _ in sources:
+        for source_pat, _ in cross_file_sources[lang]:
             if source_pat.search(content):
                 stem = os.path.splitext(os.path.basename(rel_path))[0]
                 tainted_modules.add(stem)
