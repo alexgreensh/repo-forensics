@@ -2366,6 +2366,13 @@
     "insecure-transport"
   ],
   [
+    "Python TLS Certificate Verification Disabled",
+    "high",
+    "SA-PY-032.py",
+    7,
+    "insecure-transport"
+  ],
+  [
     "Redirect to /dev/tcp",
     "critical",
     "SA-SH-007.sh",

@@ -12,7 +12,7 @@
     "data/rulepacks/dead_anchors.json": "4a14e280d113c3e100dde3ea438c79eb379ac752aba763f2832b6783cb51868f",
     "data/rulepacks/mcp_security.json": "6ced2b4b473840ece01ecedbda4f27eeb05a971c5b6642dcfc8ce85da4062788",
     "data/rulepacks/runtime_dynamism.json": "6879c13a528b916e5d924d5b3442ebfe53f730c5c251cec627dfc058f1c5dfbc",
-    "data/rulepacks/sast.json": "a23c351077967cd00b7a215df950a251aaa7bc5ac564c767053a077416819863",
+    "data/rulepacks/sast.json": "4e6bf5aec5b37a20efaa2887594a03c08e99cb9f44abbfc017d61bc2ffc83e41",
     "data/rulepacks/secrets.json": "f222503e53c0d0dac9006de2f1343ca54a12aa71fef86bcace218ea26b96be21",
     "data/rulepacks/shared.json": "0caddde9466b1ed1aefe6aa05d42e145de96fe7cfc27a17f7bd893698b3ebcb8",
     "data/rulepacks/skill_threats.json": "0ff800a8adaffedb381dfefca2d9e3c7b32118631b4afb90d0f4361a3a581bcd",

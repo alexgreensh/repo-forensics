@@ -229,6 +229,15 @@ class TestTlsOffCoverage:
         assert "SA-SH-027" not in self._ids(tmp_path, "d.sh", "git clone https://x/y.git\n")
         assert "SA-PY-032" not in self._ids(tmp_path, "e.py", "requests.get(url, verify=True)\n")
 
+    def test_global_tls_monkeypatch_and_urllib3(self, tmp_path):
+        # Torture gap 1: the canonical global TLS-disable monkeypatch (assignment,
+        # no call) and the urllib3 CERT_NONE string form must be caught.
+        assert "SA-PY-032" in self._ids(
+            tmp_path, "f.py",
+            "ssl._create_default_https_context = ssl._create_unverified_context\n")
+        assert "SA-PY-032" in self._ids(
+            tmp_path, "g.py", "http = urllib3.PoolManager(cert_reqs='CERT_NONE')\n")
+
 
 # --- LOW: idiomatic-Node severities -------------------------------------------
 class TestNodeSeverityDowngrade:

@@ -3314,7 +3314,7 @@
     {
       "id": "SA-PY-032",
       "type": "regex",
-      "pattern": "\\b(?:requests|httpx)\\s*\\.\\s*(?:request|get|post|put|patch|delete|head|options|Session|Client|AsyncClient)\\s*\\([^\\n)]*\\bverify\\s*=\\s*False\\b|\\b\\w+\\.verify\\s*=\\s*False\\b|\\bssl\\s*=\\s*False\\b|ssl\\._create_unverified_context\\s*\\(|\\bssl\\.CERT_NONE\\b",
+      "pattern": "\\b(?:requests|httpx)\\s*\\.\\s*(?:request|get|post|put|patch|delete|head|options|Session|Client|AsyncClient)\\s*\\([^\\n)]*\\bverify\\s*=\\s*False\\b|\\b\\w+\\.verify\\s*=\\s*False\\b|\\bssl\\s*=\\s*False\\b|ssl\\._create_default_https_context\\s*=\\s*ssl\\._create_unverified_context|ssl\\._create_unverified_context\\b|\\bssl\\.CERT_NONE\\b|cert_reqs\\s*=\\s*['\\\"]?CERT_NONE",
       "extensions": [
         ".py"
       ],
@@ -3331,8 +3331,9 @@
           "requests.get(url, verify=False)",
           "httpx.Client(verify=False)",
           "s = requests.Session(); s.verify = False",
-          "connector = aiohttp.TCPConnector(ssl=False)",
+          "ssl._create_default_https_context = ssl._create_unverified_context",
           "ctx = ssl._create_unverified_context()",
+          "http = urllib3.PoolManager(cert_reqs='CERT_NONE')",
           "context.verify_mode = ssl.CERT_NONE"
         ],
         "no_match": [
