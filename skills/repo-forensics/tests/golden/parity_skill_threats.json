@@ -142,6 +142,41 @@
   [
     "Code-level agent instantiation with inline config (DeepMind Agent Traps, March 2026)",
     "high",
+    "SA-JS-037.js",
+    1,
+    "sub-agent-spawn"
+  ],
+  [
+    "Code-level agent instantiation with inline config (DeepMind Agent Traps, March 2026)",
+    "high",
+    "SA-JS-040.js",
+    1,
+    "sub-agent-spawn"
+  ],
+  [
+    "Code-level agent instantiation with inline config (DeepMind Agent Traps, March 2026)",
+    "high",
+    "SA-TS-017.ts",
+    2,
+    "sub-agent-spawn"
+  ],
+  [
+    "Code-level agent instantiation with inline config (DeepMind Agent Traps, March 2026)",
+    "high",
+    "SA-TS-020.ts",
+    1,
+    "sub-agent-spawn"
+  ],
+  [
+    "Code-level agent instantiation with inline config (DeepMind Agent Traps, March 2026)",
+    "high",
+    "SA-TSX-003.tsx",
+    1,
+    "sub-agent-spawn"
+  ],
+  [
+    "Code-level agent instantiation with inline config (DeepMind Agent Traps, March 2026)",
+    "high",
     "ST-SA-004.md",
     1,
     "sub-agent-spawn"
@@ -1914,6 +1949,76 @@
     "ST-PI-010.md",
     3,
     "prompt-injection"
+  ],
+  [
+    "TLS Verification Disabled in Download Instruction",
+    "critical",
+    "SA-SH-025.sh",
+    1,
+    "prerequisite-attack"
+  ],
+  [
+    "TLS Verification Disabled in Download Instruction",
+    "critical",
+    "SA-SH-025.sh",
+    2,
+    "prerequisite-attack"
+  ],
+  [
+    "TLS Verification Disabled in Download Instruction",
+    "critical",
+    "SA-SH-025.sh",
+    3,
+    "prerequisite-attack"
+  ],
+  [
+    "TLS Verification Disabled in Download Instruction",
+    "critical",
+    "SA-SH-025.sh",
+    4,
+    "prerequisite-attack"
+  ],
+  [
+    "TLS Verification Disabled in Download Instruction",
+    "critical",
+    "SA-SH-025.sh",
+    5,
+    "prerequisite-attack"
+  ],
+  [
+    "TLS Verification Disabled in Download Instruction",
+    "critical",
+    "ST-PR-017.md",
+    1,
+    "prerequisite-attack"
+  ],
+  [
+    "TLS Verification Disabled in Download Instruction",
+    "critical",
+    "ST-PR-017.md",
+    2,
+    "prerequisite-attack"
+  ],
+  [
+    "TLS Verification Disabled in Download Instruction",
+    "critical",
+    "ST-PR-017.md",
+    3,
+    "prerequisite-attack"
+  ],
+  [
+    "TLS Verification Disabled in Download Instruction",
+    "critical",
+    "ST-PR-017.md",
+    4,
+    "prerequisite-attack"
+  ],
+  [
+    "TLS Verification Disabled in Download Instruction",
+    "critical",
+    "ST-PR-017.md",
+    5,
+    "prerequisite-attack"
   ],
   [
     "TanStack Shai-Hulud: Attacker git identity (TeamPCP Wave 7, May 2026)",

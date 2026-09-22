@@ -196,6 +196,55 @@
   "log-to-leak"
  ],
  [
+  "MCP Tool Description Advertises Local Command/Patch Execution",
+  "critical",
+  "mcp_SM-CFG-007.py",
+  1,
+  "mcp-config-risk"
+ ],
+ [
+  "MCP Tool Description Advertises Local Command/Patch Execution",
+  "critical",
+  "mcp_SM-CFG-008.py",
+  1,
+  "mcp-config-risk"
+ ],
+ [
+  "MCP Tool Description Advertises Local Command/Patch Execution",
+  "critical",
+  "mcp_SM-CFG-008.py",
+  2,
+  "mcp-config-risk"
+ ],
+ [
+  "MCP Tool Description Advertises Local Command/Patch Execution",
+  "critical",
+  "mcp_SM-CFG-008.py",
+  3,
+  "mcp-config-risk"
+ ],
+ [
+  "MCP Tool Exposes Remote Command/Patch Execution",
+  "critical",
+  "mcp_SM-CFG-007.py",
+  1,
+  "mcp-config-risk"
+ ],
+ [
+  "MCP Tool Exposes Remote Command/Patch Execution",
+  "critical",
+  "mcp_SM-CFG-007.py",
+  2,
+  "mcp-config-risk"
+ ],
+ [
+  "MCP Tool Exposes Remote Command/Patch Execution",
+  "critical",
+  "mcp_SM-CFG-007.py",
+  3,
+  "mcp-config-risk"
+ ],
+ [
   "MCP command field is sourced from env or request data",
   "high",
   "mcp_SM-STDIO-004.py",
