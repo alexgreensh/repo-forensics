@@ -105,7 +105,9 @@ def _write_and_sign(path, raw_bytes, priv, pub):
 
 def main():
     ap = argparse.ArgumentParser(description="Build + sign feeds (dev-only).")
-    ap.add_argument("--seed-hex", help="Private seed hex (offline secret).")
+    key = ap.add_mutually_exclusive_group()
+    key.add_argument("--seed-hex", help="Private seed hex (legacy; prefer --seed-file).")
+    key.add_argument("--seed-file", help="Path to offline 32-byte or hex seed file.")
     ap.add_argument("--build-only", action="store_true",
                     help="Build unsigned bundle; maintainer signs in a later step.")
     ap.add_argument("--pub-hex", default=None, help="Expected public key hex (cross-check).")
@@ -115,9 +117,18 @@ def main():
                     help="Permit re-signing a bundle with no pack-content changes.")
     args = ap.parse_args()
 
-    if not args.build_only and not args.seed_hex:
-        ap.error("--seed-hex is required unless --build-only is used")
-    priv = bytes.fromhex(args.seed_hex) if args.seed_hex else None
+    if not args.build_only and not (args.seed_hex or args.seed_file):
+        ap.error("--seed-file (preferred) or --seed-hex is required unless --build-only is used")
+    if args.seed_file:
+        seed_raw = open(os.path.expanduser(args.seed_file), "rb").read().strip()
+        try:
+            priv = bytes.fromhex(seed_raw.decode("ascii"))
+        except (UnicodeDecodeError, ValueError):
+            priv = seed_raw
+    else:
+        priv = bytes.fromhex(args.seed_hex) if args.seed_hex else None
+    if priv is not None and len(priv) != 32:
+        ap.error("feed signing seed must be exactly 32 bytes (raw or 64 hex characters)")
     pub = _ed25519_sign.keypair(priv)[1] if priv else None
     if args.pub_hex and (pub is None or pub.hex() != args.pub_hex.lower()):
         print(f"[!] seed-derived pubkey {pub.hex()} != --pub-hex {args.pub_hex}",
