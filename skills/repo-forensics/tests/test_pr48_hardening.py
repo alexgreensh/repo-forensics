@@ -108,6 +108,47 @@ class TestCoverageGapFalsePositive:
         assert "a" * 40 not in pins
 
 
+class TestAmbiguousRefKinds:
+    """Torture gap 2: a SHA-shaped ref shadows pin resolution regardless of
+    whether it is a tag, branch, or remote-tracking ref."""
+    def _plugin_repo(self, tmp_path):
+        repo = tmp_path / "p"
+        repo.mkdir()
+        _run(repo, "init")
+        (repo / "SKILL.md").write_text("---\nname: x\n---\n")
+        _run(repo, "add", "-A")
+        _run(repo, "commit", "-qm", "x")
+        return repo
+
+    def _titles(self, repo):
+        return {f.title for f in gitf.scan_plugin_checkout_provenance(str(repo))}
+
+    def test_sha_named_tag_is_flagged(self, tmp_path):
+        repo = self._plugin_repo(tmp_path)
+        _run(repo, "tag", "a" * 40)
+        assert "Agent Plugin Ambiguous Git Ref" in self._titles(repo)
+
+    def test_sha_named_remote_ref_is_flagged(self, tmp_path):
+        repo = self._plugin_repo(tmp_path)
+        head = _run(repo, "rev-parse", "HEAD")
+        d = repo / ".git" / "refs" / "remotes" / "origin"
+        d.mkdir(parents=True)
+        (d / ("a" * 40)).write_text(head + "\n")
+        assert "Agent Plugin Ambiguous Git Ref" in self._titles(repo)
+
+    def test_sha_named_branch_still_flagged(self, tmp_path):
+        repo = self._plugin_repo(tmp_path)
+        _run(repo, "branch", "a" * 40)
+        assert "Agent Plugin Ambiguous Git Ref" in self._titles(repo)
+
+    def test_malformed_lockfile_still_reports_low_gap(self, tmp_path):
+        repo = self._plugin_repo(tmp_path)
+        (repo / "plugin-lock.json").write_text("{bad json,,")
+        gap = [f for f in gitf.scan_plugin_checkout_provenance(str(repo))
+               if f.title == "Agent Plugin Lockfile Missing Commit Pin"]
+        assert gap and all(f.severity == "low" for f in gap)
+
+
 class TestInstallerHeuristicScoping:
     def _plugin_repo(self, tmp_path):
         repo = tmp_path / "p"

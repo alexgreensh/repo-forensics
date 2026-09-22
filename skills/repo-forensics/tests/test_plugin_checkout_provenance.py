@@ -111,5 +111,9 @@ def test_huge_metadata_is_bounded(tmp_path):
 def test_lowercase_sha_branch_only_exact_40_hex(tmp_path):
     p,_=repo(tmp_path);git(p,'branch','a'*39);git(p,'branch','g'*40);assert gitf.scan_plugin_checkout_provenance(str(p)) == []
 
-def test_fetch_head_tag_does_not_false_fire_local_branch_rule(tmp_path):
-    p,_=repo(tmp_path);git(p,'tag','FETCH_HEAD');assert gitf.scan_plugin_checkout_provenance(str(p)) == []
+def test_fetch_head_tag_is_flagged_as_ambiguous_ref(tmp_path):
+    # A FETCH_HEAD (or SHA-shaped) TAG shadows checkout-name resolution BEFORE a
+    # branch, so it must be flagged too (torture gap 2; was previously missed
+    # because only refs/heads/ was enumerated).
+    p,_=repo(tmp_path);git(p,'tag','FETCH_HEAD')
+    assert 'Agent Plugin Ambiguous Git Ref' in {f.title for f in gitf.scan_plugin_checkout_provenance(str(p))}

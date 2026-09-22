@@ -311,6 +311,11 @@ def _recover_recorded_pins(repo_path):
             if lname not in _PIN_METADATA_NAMES:
                 continue
             path = os.path.join(root, name)
+            # A lockfile is EXPECTED to pin: record that one exists on its NAME,
+            # before parsing, so a malformed/oversized lockfile still yields the
+            # low coverage-gap note instead of silently contributing nothing.
+            if lname in _PIN_LOCKFILE_NAMES:
+                lockfile_seen = True
             try:
                 if os.path.getsize(path) > 1024 * 1024:
                     continue
@@ -321,7 +326,6 @@ def _recover_recorded_pins(repo_path):
             found = set(_walk_pin_values(data))
             pins.update(found)
             if lname in _PIN_LOCKFILE_NAMES:
-                lockfile_seen = True
                 lockfile_pins.update(found)
     lockfile_without_pin = lockfile_seen and not lockfile_pins
     return pins, lockfile_without_pin
@@ -332,18 +336,34 @@ def scan_plugin_checkout_provenance(repo_path):
     if not _is_agent_plugin_repo(repo_path):
         return []
     findings = []
-    refs = _safe_git(repo_path, "for-each-ref", "--format=%(refname:short)", "refs/heads/")
+    # Enumerate ALL local refs, not just refs/heads/. Git resolves a checkout
+    # name in the order refs/<name>, refs/tags/<name>, refs/heads/<name>,
+    # refs/remotes/<name>, so a SHA-shaped (or FETCH_HEAD) TAG shadows commit-pin
+    # resolution BEFORE a branch of the same name -- enumerating only heads
+    # missed that. `%(refname)` gives the full ref so we can name the kind.
+    refs = _safe_git(repo_path, "for-each-ref", "--format=%(refname)",
+                     "refs/heads/", "refs/tags/", "refs/remotes/")
     if refs is None:
         return findings
-    ambiguous = sorted({r.strip() for r in refs.splitlines()
-                        if _AMBIGUOUS_REF_RE.fullmatch(r.strip())})
-    for ref in ambiguous:
+    seen = set()
+    for full in sorted(r.strip() for r in refs.splitlines() if r.strip()):
+        # The checkout-name shadow hinges on the final ref segment being
+        # SHA-shaped (or FETCH_HEAD): refs/tags/<sha>, refs/heads/<sha>, and
+        # refs/remotes/origin/<sha> all have a SHA-shaped basename.
+        short = full.rsplit("/", 1)[-1]
+        if not _AMBIGUOUS_REF_RE.fullmatch(short) or short in seen:
+            continue
+        seen.add(short)
+        kind = ("tag" if full.startswith("refs/tags/")
+                else "remote-tracking ref" if full.startswith("refs/remotes/")
+                else "local branch")
         findings.append(core.Finding(
             scanner=SCANNER_NAME, severity="critical",
             title="Agent Plugin Ambiguous Git Ref",
-            description=("Agent plugin repository contains a local branch whose name "
-                         "can override commit-pin resolution during checkout."),
-            file=f".git/refs/heads/{ref}", line=0, snippet=ref,
+            description=(f"Agent plugin repository contains a {kind} whose name "
+                        "can override commit-pin resolution during checkout "
+                        "(refs/tags precede refs/heads in git's checkout name lookup)."),
+            file=full, line=0, snippet=short,
             category="plugin-provenance", evidence_class="direct"))
 
     head = _safe_git(repo_path, "rev-parse", "HEAD")

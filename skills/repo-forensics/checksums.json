@@ -63,7 +63,7 @@
     "scripts/scan_devcontainer.py": "066c27d4e4273a2d37ef3b989cd92735beba25fed1bd618111f3558e6d16ef7a",
     "scripts/scan_entropy.py": "2f94345394f485bb446fb5b25c257bbb98358bc62b9923b7c7dcc9dcec31ba74",
     "scripts/scan_entrypoint.py": "8a8486276449b8f3fa91a0739c6d718303458b1cda6754ebe19f03d9ec10ef10",
-    "scripts/scan_git_forensics.py": "172cce31a3a5aa1318a78730ca6062e2f0e43e749178d41c24567829526756c4",
+    "scripts/scan_git_forensics.py": "721d27278f6290b29f90f4cdc85f12fe53417deaa87e007d0eaaddc24cbb53da",
     "scripts/scan_history.py": "c86037c0a72c0c8056c3c2acdcdbc793899df304f9222518d8c205def8dcbea3",
     "scripts/scan_infra.py": "d19310411bccbe1c648326b45b6f5431de20898d1b59cef8fa64a91fcf980301",
     "scripts/scan_integrity.py": "82a8c7f431c8cde48aa0364f57f409dfb31535b29a2a00d185cb8cd24ffb60dd",
