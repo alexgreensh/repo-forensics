@@ -18,6 +18,7 @@ Covers:
 
 import json
 import os
+import re
 import sys
 
 import pytest
@@ -623,3 +624,197 @@ class TestUpdateRulepacks:
         assert not ok
         assert "fetch failed" in msg.lower()
         assert not (tmp_path / "bundle.json").exists()
+
+class TestPublishedBundleEndToEnd:
+    def test_publisher_built_bundle_accepts_and_overlays(self, tmp_path, monkeypatch):
+        """Publisher bytes survive exact signing, acceptance, cache and overlay."""
+        import importlib.util
+        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__)))))
+        spec = importlib.util.spec_from_file_location(
+            "sign_rulepacks_test", os.path.join(root, "scripts", "sign_rulepacks.py"))
+        publisher = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(publisher)
+        previous = {"packs": {}}
+        bundle = publisher.build_bundle(2, generated=_today_iso(),
+                                        previous_bundle=previous)
+        raw = _serialize(bundle)
+        ok, msg, accepted = _accept(raw, _sign(raw), tmp_path)
+        assert ok, msg
+        assert (tmp_path / "bundle.json").read_bytes() == raw
+
+        # Point loader at a real shipped pack and the newly accepted cache.
+        monkeypatch.setattr(rulepack_feed, "RULEPACK_FEED_PUBKEY_HEX", TEST_PUB.hex())
+        name = "mcp_security"
+        shipped = rule_loader._load_pack_file(os.path.join(
+            root, "skills", "repo-forensics", "data", "rulepacks", name + ".json"))
+        overlaid = rule_loader._maybe_overlay(name, shipped, cache_dir=str(tmp_path))
+        assert overlaid.pack_version > shipped.pack_version
+        assert overlaid.source_path.endswith("bundle.json")
+
+    def test_equal_version_published_bundle_is_structurally_inert(self):
+        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__)))))
+        shipped_dir = os.path.join(root, "skills", "repo-forensics", "data", "rulepacks")
+        packs = {}
+        for name in ("mcp_security", "runtime_dynamism", "sast", "secrets", "shared", "skill_threats"):
+            with open(os.path.join(shipped_dir, name + ".json"), encoding="utf-8") as handle:
+                data = json.load(handle)
+            packs[name] = {"pack_version": data["pack_version"], "rules": data["rules"]}
+        ok, why = rulepack_feed._check_overlay_viability(
+            _make_bundle(packs=packs), shipped_dir=shipped_dir)
+        assert not ok
+        assert "permanently unacceptable" in why
+
+class TestPublisherVersioning:
+    def _publisher(self):
+        import importlib.util
+        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__)))))
+        spec = importlib.util.spec_from_file_location(
+            "sign_rulepacks_versions", os.path.join(root, "scripts", "sign_rulepacks.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_changed_bundle_advances_every_pack_above_shipped_and_prior(self):
+        publisher = self._publisher()
+        first = publisher.build_bundle(2, generated=_today_iso(), previous_bundle={"packs": {}})
+        prior = json.loads(json.dumps(first))
+        # Force one prior payload stale; a real publication then advances all
+        # carried entries so none remain equal-version no-ops.
+        prior["packs"]["mcp_security"]["rules"] = []
+        rebuilt = publisher.build_bundle(3, generated=_today_iso(), previous_bundle=prior)
+        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__)))))
+        for name, pack in rebuilt["packs"].items():
+            with open(os.path.join(root, "skills", "repo-forensics", "data",
+                                   "rulepacks", name + ".json"), encoding="utf-8") as handle:
+                shipped_version = json.load(handle)["pack_version"]
+            assert pack["pack_version"] > shipped_version
+            assert pack["pack_version"] > prior["packs"][name]["pack_version"]
+
+    def test_unchanged_bundle_does_not_hollow_bump_versions(self):
+        publisher = self._publisher()
+        first = publisher.build_bundle(2, generated=_today_iso(), previous_bundle={"packs": {}})
+        second = publisher.build_bundle(3, generated=_today_iso(), previous_bundle=first)
+        assert {n: p["pack_version"] for n, p in second["packs"].items()} == {
+            n: p["pack_version"] for n, p in first["packs"].items()
+        }
+
+
+class TestFeedPublicationIntegrity:
+    """Gauntlet regressions: the committed feed must be signed, viable, and
+    its detection regexes must be backtracking-safe."""
+
+    def _repo_root(self):
+        return os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__)))))
+
+    def test_committed_feed_bundle_signature_verifies(self):
+        """iocs/rulepacks.json IS the live feed (RULEPACK_FEED_URL serves it
+        from main). Committing new bundle bytes without re-signing breaks every
+        installation's refresh at the signature gate. Expected to fail until
+        the maintainer re-signs with the offline seed (same hand-off as the
+        checksums manifest)."""
+        raw = open(os.path.join(self._repo_root(), "iocs", "rulepacks.json"),
+                   "rb").read()
+        sig = open(os.path.join(self._repo_root(), "iocs", "rulepacks.json.sig"),
+                   "rb").read()
+        assert rulepack_feed.verify_raw_bundle(raw, sig), (
+            "iocs/rulepacks.json does not verify against the pinned feed "
+            "pubkey; re-sign with the offline seed before merge")
+
+    def test_unknown_pack_name_cannot_qualify_inert_real_pack(self):
+        shipped_dir = os.path.join(self._repo_root(), "skills", "repo-forensics",
+                                   "data", "rulepacks")
+        packs = {
+            # Equal to the shipped version -> genuinely inert.
+            "mcp_security": {"pack_version": 1, "rules": []},
+            # Junk entry that must NOT qualify the bundle.
+            "zzz_not_a_real_pack": {"pack_version": 99, "rules": []},
+        }
+        ok, why = rulepack_feed._check_overlay_viability(
+            _make_bundle(packs=packs), shipped_dir=shipped_dir)
+        assert not ok
+        assert "permanently unacceptable" in why
+
+    def test_partially_inert_bundle_is_rejected(self):
+        shipped_dir = os.path.join(self._repo_root(), "skills", "repo-forensics",
+                                   "data", "rulepacks")
+        packs = {
+            "mcp_security": {"pack_version": 99, "rules": []},
+            "secrets": {"pack_version": 1, "rules": []},  # equal -> inert
+        }
+        ok, why = rulepack_feed._check_overlay_viability(
+            _make_bundle(packs=packs), shipped_dir=shipped_dir)
+        assert not ok
+        assert "permanently unacceptable" in why
+
+    def test_new_pack_name_overlays_from_scratch(self):
+        shipped_dir = os.path.join(self._repo_root(), "skills", "repo-forensics",
+                                   "data", "rulepacks")
+        packs = {"brand_new_pack": {"pack_version": 1, "rules": []}}
+        ok, why = rulepack_feed._check_overlay_viability(
+            _make_bundle(packs=packs), shipped_dir=shipped_dir)
+        assert ok, why
+
+    def test_st_mh_003_examples_and_bounded_backtracking(self):
+        shipped_path = os.path.join(self._repo_root(), "skills", "repo-forensics",
+                                    "data", "rulepacks", "skill_threats.json")
+        with open(shipped_path, encoding="utf-8") as handle:
+            pack = json.load(handle)
+        import time
+        for rule_id in ("ST-MH-003", "ST-MH-006"):
+            rule = next(r for r in pack["rules"] if r["id"] == rule_id)
+            assert len(rule["pattern"]) <= 1000, (
+                f"{rule_id} pattern exceeds rule_loader's 1000-char cap and "
+                "would be silently skipped")
+            compiled = re.compile(rule["pattern"])
+            for sample in rule["examples"]["match"]:
+                assert compiled.search(sample), sample
+            for sample in rule["examples"]["no_match"]:
+                assert not compiled.search(sample), sample
+            # Worst case: long line that never matches (no conditional keyword),
+            # forcing a full scan. Must stay linear, not backtracking-explode.
+            line = "user-agent " + "Claude " * 1000  # ~7KB adversarial line
+            started = time.monotonic()
+            compiled.search(line)
+            elapsed = time.monotonic() - started
+            assert elapsed < 2.0, (
+                f"{rule_id} took {elapsed:.2f}s on a 7KB adversarial line; "
+                "catastrophic backtracking regression")
+        # Keyword present -> still detects on a long line (interleaved form).
+        assert re.compile(next(
+            r["pattern"] for r in pack["rules"]
+            if r["id"] == "ST-MH-003")).search("UA if " + "Claude " * 1000)
+
+    def test_build_only_refuses_stale_signature_overwrite(self, tmp_path, monkeypatch):
+        import importlib.util
+        import json as _json
+        root = self._repo_root()
+        spec = importlib.util.spec_from_file_location(
+            "sign_rulepacks_guard", os.path.join(root, "scripts", "sign_rulepacks.py"))
+        publisher = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(publisher)
+        bundle_path = tmp_path / "rulepacks.json"
+        old_bytes = b'{"schema_version": "1.0", "packs": {}}'
+        bundle_path.write_bytes(old_bytes)
+        (tmp_path / "rulepacks.json.sig").write_bytes(b"\x00" * 64)
+        packs_dir = tmp_path / "packs"
+        packs_dir.mkdir()
+        (packs_dir / "demo.json").write_text(_json.dumps({
+            "pack": "demo", "pack_version": 2, "schema_version": "1.0",
+            "rules": [{"id": "DEMO-001", "type": "regex", "pattern": "evilcorp",
+                       "severity": "high",
+                       "examples": {"match": ["evilcorp"], "no_match": ["safe"]}}],
+        }))
+        monkeypatch.setattr(publisher, "_BUNDLE_PATH", str(bundle_path))
+        monkeypatch.setattr(publisher, "_IOCS_DIR", str(tmp_path))
+        monkeypatch.setattr(publisher, "_RULEPACK_DIR", str(packs_dir))
+        rc = publisher.main(["--build-only"])
+        assert rc == 2, "guard must refuse overwriting bytes a .sig still covers"
+        assert bundle_path.read_bytes() == old_bytes
+        rc = publisher.main(["--build-only", "--allow-unsigned-overwrite"])
+        assert rc == 0
+        assert bundle_path.read_bytes() != old_bytes

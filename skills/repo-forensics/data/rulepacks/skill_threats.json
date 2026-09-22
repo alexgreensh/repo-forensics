@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "generated": "2026-06-10",
   "pack": "skill_threats",
-  "pack_version": 3,
+  "pack_version": 4,
   "rules": [
     {
       "id": "ST-PI-001",
@@ -2982,7 +2982,7 @@
     {
       "id": "ST-MH-003",
       "type": "regex",
-      "pattern": "(?i)(?=.*(?:\\b(?:if|elsif|elif|else|unless|case|switch|when|check|condition)\\b|==|===|!=|=~|~=|\\.contains\\(|\\.match\\(|\\.includes\\(|\\b(?:serve\\w*|return\\w*|rout\\w*|redirect\\w*|contains|matches|equals?)\\b))(?:(?:user.?agent|UA)[^\\n]{0,60}?(?:Claude|GPT|ChatGPT|OpenAI|Gemini|Copilot|Perplexity|AI\\s+assistant|bot|crawler|spider)|(?:Claude|GPT|ChatGPT|OpenAI|Gemini|Copilot|Perplexity|AI\\s+assistant|bot|crawler|spider)[^\\n]{0,60}?(?:user.?agent|UA))",
+      "pattern": "(?i)(?:(?:(?:user.?agent|UA)[^\\n]{0,60}?(?:Claude|GPT|ChatGPT|OpenAI|Gemini|Copilot|Perplexity|AI\\s+assistant|bot|crawler|spider)|(?:Claude|GPT|ChatGPT|OpenAI|Gemini|Copilot|Perplexity|AI\\s+assistant|bot|crawler|spider)[^\\n]{0,60}?(?:user.?agent|UA))[^\\n]{0,120}?(?:\\b(?:if|elsif|elif|else|unless|case|switch|when|check|condition)\\b|==|!=|=~|~=|\\.match\\(|\\.includes\\(|\\b(?:serve\\w*|return\\w*|rout\\w*|redirect\\w*|contains|matches|equals?)\\b)|(?:user.?agent|UA)[^\\n]{0,60}?(?:\\b(?:if|elsif|elif|else|unless|case|switch|when|check|condition)\\b|==|!=|=~|~=|\\.match\\(|\\.includes\\(|\\b(?:serve\\w*|return\\w*|rout\\w*|redirect\\w*|contains|matches|equals?)\\b)[^\\n]{0,60}?(?:Claude|GPT|ChatGPT|OpenAI|Gemini|Copilot|Perplexity|AI\\s+assistant|bot|crawler|spider))",
       "title": "User-agent-based content routing: AI-agent-specific content serving (Memory Heist, July 2026)",
       "severity": "high",
       "confidence": 0.7,
@@ -2990,12 +2990,38 @@
       "attacker": "website server code",
       "boundary": "HTTP request routing -> differentiated content",
       "asset": "agent receives weaponized content invisible to humans",
-      "explanation": "Server code that checks for AI agent user-agents and serves different content than what human visitors see. Enables serving a benign page to humans while injecting exfiltration instructions to AI agents. The lookahead requires a conditional/branch keyword (if, check, switch, ==, serve, return, route, etc.) so a mere mention of an agent name in a warn() string or a documentation path line does not false-positive.",
+      "explanation": "Server code that checks for AI agent user-agents and serves different content than what human visitors see. Enables serving a benign page to humans while injecting exfiltration instructions to AI agents. Requires a conditional/branch keyword (if, check, switch, ==, serve, return, route, etc.) after or between the agent/user-agent pair (as in `ua.includes('Claude')`), so a mere mention of an agent name in a warn() string or a documentation path line does not false-positive. Companion rule ST-MH-006 covers the agent-first interleaving. All gaps are bounded (no unbounded lookahead) so hostile long lines cannot trigger catastrophic regex backtracking.",
       "examples": {
         "match": [
           "if user-agent contains Claude serve the turnstile page",
           "check UA for ChatGPT and return the agent payload",
           "detect AI assistant user-agent and serve alternate content"
+        ],
+        "no_match": [
+          "log the user-agent for analytics",
+          "block bots in robots.txt",
+          "warn('User-agent: Claude-User bot detected')",
+          "PRIVACY.md: we respect the user-agent of Claude and other bots"
+        ]
+      }
+    },
+    {
+      "id": "ST-MH-006",
+      "type": "regex",
+      "pattern": "(?i)(?:(?:Claude|GPT|ChatGPT|OpenAI|Gemini|Copilot|Perplexity|AI\\s+assistant|bot|crawler|spider)[^\\n]{0,60}?(?:\\b(?:if|elsif|elif|else|unless|case|switch|when|check|condition)\\b|==|!=|=~|~=|\\.match\\(|\\.includes\\(|\\b(?:serve\\w*|return\\w*|rout\\w*|redirect\\w*|contains|matches|equals?)\\b)[^\\n]{0,60}?(?:user.?agent|UA))",
+      "title": "User-agent-based content routing, agent-first interleaving (Memory Heist, July 2026)",
+      "severity": "high",
+      "confidence": 0.7,
+      "category": "memory-heist-exfil",
+      "attacker": "website server code",
+      "boundary": "HTTP request routing -> differentiated content",
+      "asset": "agent receives weaponized content invisible to humans",
+      "explanation": "Agent-first interleaved variant of ST-MH-003: an AI agent name, then a conditional/branch keyword, then a user-agent reference on the same line (e.g. `Claude ... when routing by user-agent`). Bounded gaps keep hostile long lines linear-time (no catastrophic regex backtracking).",
+      "examples": {
+        "match": [
+          "Claude gets the alternate page when routing by user-agent",
+          "Gemini traffic is routed by checking the user-agent string",
+          "Requests from ChatGPT are routed based on the user-agent header"
         ],
         "no_match": [
           "log the user-agent for analytics",

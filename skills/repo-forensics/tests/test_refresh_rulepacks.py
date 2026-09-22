@@ -13,6 +13,7 @@ import sys
 import pytest
 
 import rule_loader
+import rulepack_feed  # noqa: E402  (real module, for the marker drift guard)
 
 _SCRIPTS_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts")
@@ -112,8 +113,9 @@ def test_refresh_invokes_update_rulepacks(monkeypatch, tmp_path):
     assert hasattr(mod, "_refresh_rulepacks"), "U6 wiring missing"
     fake = _FakeFeed((True, "mocked"))
     _stub_feed_import(mod, monkeypatch, fake)
-    ok = mod._refresh_rulepacks(_SCRIPTS_DIR)
+    ok, detail = mod._refresh_rulepacks(_SCRIPTS_DIR)
     assert ok is True
+    assert detail == "mocked"
     assert fake.calls == 1
 
 
@@ -123,7 +125,9 @@ def test_refresh_rulepacks_swallows_exceptions(monkeypatch, tmp_path):
     fake = _FakeFeed(RuntimeError("network exploded"))
     _stub_feed_import(mod, monkeypatch, fake)
     # Must NOT propagate (refresher always exits 0).
-    assert mod._refresh_rulepacks(_SCRIPTS_DIR) is False
+    ok, detail = mod._refresh_rulepacks(_SCRIPTS_DIR)
+    assert ok is False
+    assert "network exploded" in detail
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="refresh uses fcntl (POSIX)")
@@ -223,3 +227,65 @@ def test_supervisor_records_cross_platform_timeout(monkeypatch, tmp_path):
 
     assert mod.main([]) == 0
     assert states[-1]["status"] == "timeout"
+
+@pytest.mark.skipif(sys.platform == "win32", reason="refresh uses fcntl (POSIX)")
+def test_rulepack_structural_failure_is_critical_but_stale_is_advisory(monkeypatch):
+    mod = _load_refresh_module(monkeypatch)
+    assert mod._rulepack_failure_is_critical(
+        "bundle permanently unacceptable: no pack can overlay installed versions")
+    assert not mod._rulepack_failure_is_critical("bundle 89d old (> 30d)")
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX lock teardown fixture")
+@pytest.mark.parametrize("message,expected_status,expected_critical", [
+    ("bundle 89d old (> 30d)", "healthy", False),
+    ("bundle permanently unacceptable: no pack can overlay installed versions",
+     "degraded", True),
+])
+def test_refresh_health_distinguishes_stale_from_inert(
+        monkeypatch, tmp_path, message, expected_status, expected_critical):
+    mod = _load_refresh_module(monkeypatch)
+    states = []
+    monkeypatch.setattr(mod, "_refresh_iocs", lambda d: True)
+    monkeypatch.setattr(mod, "_refresh_kev", lambda d: True)
+    monkeypatch.setattr(mod, "_refresh_rulepacks", lambda d: (False, message))
+    monkeypatch.setattr(mod, "_resolve_scripts_dir", lambda: _SCRIPTS_DIR)
+    monkeypatch.setattr(mod, "_acquire_lock", lambda: 999)
+    monkeypatch.setattr(mod, "_write_marker", lambda forensics_core=None: True)
+    monkeypatch.setattr(mod, "_write_state", lambda **updates: states.append(updates))
+    monkeypatch.setattr(mod, "LAST_ATTEMPT_MARKER", str(tmp_path / ".last-attempt"))
+    monkeypatch.setattr(mod, "DISABLED_MARKER", str(tmp_path / "refresh.disabled"))
+    import fcntl as _fcntl
+    monkeypatch.setattr(_fcntl, "flock", lambda *a, **k: None)
+    monkeypatch.setattr(os, "close", lambda fd: None)
+
+    mod._worker_main()
+
+    final = states[-1]
+    assert final["status"] == expected_status
+    assert final["feeds"]["rulepacks"]["critical"] is expected_critical
+    assert final["feeds"]["rulepacks"]["detail"] == message
+
+def test_rulepack_signature_failure_is_critical(monkeypatch):
+    mod = _load_refresh_module(monkeypatch)
+    assert mod._rulepack_failure_is_critical("signature verification failed")
+    assert mod._rulepack_failure_is_critical(
+        "pack 'mcp_security': rule rejected: bad pattern")
+    assert mod._rulepack_failure_is_critical("JSON parse failed: Expecting value")
+    assert not mod._rulepack_failure_is_critical(
+        "rule-pack feed fetch failed (shipped packs authoritative)")
+    assert not mod._rulepack_failure_is_critical(
+        "rule-pack signature fetch failed (shipped packs authoritative)")
+    assert not mod._rulepack_failure_is_critical("bundle 89d old (> 30d)")
+
+
+def test_structural_markers_track_rulepack_feed_messages(monkeypatch):
+    """Drift guard: the failure messages rulepack_feed actually emits must be
+    classified critical by refresh_threat_dbs, or health under-reports."""
+    mod = _load_refresh_module(monkeypatch)
+    ok, why = rulepack_feed._check_overlay_viability({"packs": {}})
+    assert not ok
+    assert mod._rulepack_failure_is_critical(why)
+    accepted, msg, _ = rulepack_feed.accept_bundle(b"not json", b"\x01" * 64,
+                                                   pubkey=b"\x02" * 32)
+    assert not accepted
+    assert mod._rulepack_failure_is_critical(msg), msg

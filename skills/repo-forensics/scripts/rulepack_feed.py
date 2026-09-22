@@ -331,6 +331,47 @@ def _check_schema(bundle):
     return True, ""
 
 
+def _check_overlay_viability(bundle, shipped_dir=None):
+    """Reject a feed that cannot fully overlay this installation.
+
+    EVERY pack carried by the bundle must be overlay-capable: its pack_version
+    strictly beats the installed/shipped version (a pack name not shipped here
+    is a NEW pack and overlays from -1). Requiring all packs, not merely one,
+    keeps a junk or stale entry from qualifying a bundle whose real packs are
+    inert.
+    """
+    if shipped_dir is None:
+        shipped_dir = os.path.join(os.path.dirname(_SCRIPTS_DIR), "data", "rulepacks")
+    packs = bundle.get("packs", {})
+    if not isinstance(packs, dict) or not packs:
+        return False, "bundle has no packs"
+    considered = 0
+    eligible = 0
+    for name, pack in packs.items():
+        if not isinstance(pack, dict):
+            continue
+        considered += 1
+        version = pack.get("pack_version")
+        if isinstance(version, bool) or not isinstance(version, int):
+            continue
+        shipped_version = -1
+        try:
+            with open(os.path.join(shipped_dir, os.path.basename(name) + ".json"),
+                      encoding="utf-8") as handle:
+                shipped = json.load(handle)
+            value = shipped.get("pack_version", 0)
+            if isinstance(value, int) and not isinstance(value, bool):
+                shipped_version = value
+        except (OSError, ValueError):
+            pass
+        if version > shipped_version:
+            eligible += 1
+    if considered == 0 or eligible != considered:
+        return False, ("bundle permanently unacceptable: not every pack can "
+                       "overlay installed versions")
+    return True, ""
+
+
 def _check_freshness(bundle, now=None):
     gen = bundle.get("generated", "")
     if not isinstance(gen, str) or not gen:
@@ -459,11 +500,15 @@ def accept_bundle(raw_bytes, sig_bytes, cache_dir=None, pubkey=None, now=None):
     ok, why = _check_schema(bundle)
     if not ok:
         return False, why, None
-    # 4. freshness gate.
+    # 4. viability precedes freshness so inert differs from stale-but-usable.
+    ok, why = _check_overlay_viability(bundle)
+    if not ok:
+        return False, why, None
+    # 5. freshness gate.
     ok, why = _check_freshness(bundle, now=now)
     if not ok:
         return False, why, None
-    # 5. persisted-floor rollback gate.
+    # 6. persisted-floor rollback gate.
     floor = load_floor(cache_dir)
     cached_bundle = None
     try:
@@ -564,7 +609,7 @@ def _validate_cached_bundle(cache_dir=None, pubkey=None, now=None):
         return False, f"cached rule-pack JSON invalid: {exc}"
     if not isinstance(bundle, dict):
         return False, "cached rule-pack top-level not an object"
-    for check in (_check_schema,):
+    for check in (_check_schema, _check_overlay_viability):
         ok, why = check(bundle)
         if not ok:
             return False, why

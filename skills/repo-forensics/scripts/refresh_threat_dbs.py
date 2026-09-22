@@ -318,10 +318,36 @@ def _refresh_rulepacks(scripts_dir):
             return False
         ok, msg = rulepack_feed.update_rulepacks()
         _log(f"RULEPACKS: ok={ok} msg={msg}")
-        return bool(ok)
+        return bool(ok), str(msg)
     except Exception as e:
-        _log(f"rule-pack refresh exception: {type(e).__name__}: {e}")
-        return False
+        msg = f"{type(e).__name__}: {e}"
+        _log(f"rule-pack refresh exception: {msg}")
+        return False, msg
+
+
+_RULEPACK_STRUCTURAL_MARKERS = (
+    # Inert bundle: no/insufficient pack can overlay installed versions.
+    "permanently unacceptable",
+    # Tampered or mis-signed feed; deterministic, never transient.
+    "signature verification failed",
+    # Structurally malformed bundle (schema/type/self-test rejections).
+    "bundle has no packs",
+    "schema major",
+    "json parse failed",
+    "not an object",
+    "rules not a list",
+    "rule rejected",
+    "self-test failed",
+    "pack_version not an integer",
+)
+
+
+def _rulepack_failure_is_critical(message):
+    """Structural feed/publisher failures are critical; age and fetch blips
+    stay advisory. Markers mirror rulepack_feed.py's failure messages; a
+    cross-module consistency test guards against drift."""
+    text = str(message).lower()
+    return any(marker in text for marker in _RULEPACK_STRUCTURAL_MARKERS)
 
 
 def self_check():
@@ -400,7 +426,13 @@ def _worker_main():
             _write_state(status="disabled", last_attempt=started, run_id=run_id,
                          last_error="disabled during refresh")
             return
-        ok_rulepacks = _refresh_rulepacks(scripts_dir)
+        rulepack_result = _refresh_rulepacks(scripts_dir)
+        if isinstance(rulepack_result, tuple):
+            ok_rulepacks, rulepack_detail = rulepack_result
+        else:  # compatibility for tests and older injected helpers
+            ok_rulepacks, rulepack_detail = bool(rulepack_result), ""
+        rulepacks_critical = (not ok_rulepacks and
+                              _rulepack_failure_is_critical(rulepack_detail))
         finished = time.time()
         if os.path.exists(DISABLED_MARKER):
             _write_state(status="disabled", last_attempt=started, run_id=run_id,
@@ -419,9 +451,11 @@ def _worker_main():
         feeds = {
             "ioc": feed_state("ioc", ok_ioc, critical=True),
             "kev": feed_state("kev", ok_kev, critical=True),
-            "rulepacks": feed_state("rulepacks", ok_rulepacks, critical=False),
+            "rulepacks": feed_state("rulepacks", ok_rulepacks,
+                                      critical=rulepacks_critical),
         }
-        critical_ok = ok_ioc and ok_kev
+        feeds["rulepacks"]["detail"] = rulepack_detail
+        critical_ok = ok_ioc and ok_kev and not rulepacks_critical
         advisory_failed = [n for n, r in feeds.items() if not r["ok"] and not r["critical"]]
         if critical_ok:
             marker_ok = _write_marker(forensics_core=forensics_core)
