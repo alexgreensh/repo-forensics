@@ -2985,7 +2985,7 @@
         ".js"
       ],
       "title": "Destructured child_process Import (ESM)",
-      "severity": "high",
+      "severity": "medium",
       "confidence": 0.7,
       "category": "shell-injection",
       "explanation": "ESM destructured import of child_process exec/spawn; SA-JS-005 only catches namespace-qualified calls, this import form enables bare spawn()/exec() call sites.",
@@ -3009,7 +3009,7 @@
         ".js"
       ],
       "title": "Shell Interpretation Enabled (shell: true)",
-      "severity": "high",
+      "severity": "medium",
       "confidence": 0.6,
       "category": "shell-injection",
       "explanation": "shell: true routes the command through a system shell; combined with any variable command argument this is shell injection / remote command execution.",
@@ -3033,7 +3033,7 @@
         ".js"
       ],
       "title": "AI Agent CLI Spawned as Child Process",
-      "severity": "critical",
+      "severity": "medium",
       "confidence": 0.8,
       "category": "agent-execution",
       "explanation": "Spawns an installed AI coding-agent CLI (claude/codex/opencode/...) as a child process; relay-driven agent-execution malware drives the local agent with attacker-supplied prompts.",
@@ -3082,7 +3082,7 @@
         ".ts"
       ],
       "title": "Destructured child_process Import (ESM)",
-      "severity": "high",
+      "severity": "medium",
       "confidence": 0.7,
       "category": "shell-injection",
       "explanation": "ESM destructured import of child_process exec/spawn; enables bare spawn()/exec() call sites that namespace-qualified rules miss.",
@@ -3107,7 +3107,7 @@
         ".ts"
       ],
       "title": "Shell Interpretation Enabled (shell: true)",
-      "severity": "high",
+      "severity": "medium",
       "confidence": 0.6,
       "category": "shell-injection",
       "explanation": "shell: true routes the command through a system shell; combined with any variable command argument this is shell injection / remote command execution.",
@@ -3131,7 +3131,7 @@
         ".ts"
       ],
       "title": "AI Agent CLI Spawned as Child Process",
-      "severity": "critical",
+      "severity": "medium",
       "confidence": 0.8,
       "category": "agent-execution",
       "explanation": "Spawns an installed AI coding-agent CLI as a child process; relay-driven agent-execution malware drives the local agent with attacker-supplied prompts.",
@@ -3173,7 +3173,7 @@
     },
     {
       "type": "regex",
-      "pattern": "['\"`]--dangerously-skip-permissions['\"`]|\\bbypassPermissions\\b|['\"`]--permission-mode['\"`]\\s*,\\s*['\"`]bypass['\"`]",
+      "pattern": "['\"`]--dangerously-skip-permissions['\"`]|['\"`]--permission-mode['\"`]\\s*,\\s*['\"`]bypass(?:Permissions)?['\"`]|permissionMode\\s*[:=!]=*\\s*['\"`]bypassPermissions['\"`]",
       "title": "AI Agent CLI Permission Bypass Flag",
       "severity": "critical",
       "confidence": 0.9,
@@ -3199,7 +3199,7 @@
     },
     {
       "type": "regex",
-      "pattern": "['\"`]--dangerously-skip-permissions['\"`]|\\bbypassPermissions\\b|['\"`]--permission-mode['\"`]\\s*,\\s*['\"`]bypass['\"`]",
+      "pattern": "['\"`]--dangerously-skip-permissions['\"`]|['\"`]--permission-mode['\"`]\\s*,\\s*['\"`]bypass(?:Permissions)?['\"`]|permissionMode\\s*[:=!]=*\\s*['\"`]bypassPermissions['\"`]",
       "title": "AI Agent CLI Permission Bypass Flag",
       "severity": "critical",
       "confidence": 0.9,
@@ -3223,9 +3223,9 @@
       ]
     },
     {
-      "id": "SA-SH-020",
+      "id": "SA-SH-025",
       "type": "regex",
-      "pattern": "--dangerously-skip-permissions|\\bbypassPermissions\\b|--permission-mode[=\\s]+['\"`]?bypass",
+      "pattern": "--dangerously-skip-permissions|--permission-mode[=\\s]+['\"`]?bypass|\\w*MODE\\s*=\\s*['\"`]?bypassPermissions",
       "extensions": [
         ".sh",
         ".bash",
@@ -3249,7 +3249,7 @@
       }
     },
     {
-      "id": "SA-SH-021",
+      "id": "SA-SH-026",
       "type": "regex",
       "pattern": "\\bcurl\\b[^\\n|;]*\\s(?:(?:-(?!-)[A-Za-z]*k[A-Za-z]*(?![A-Za-z]))|(?:--insecure(?![\\w-])))|\\bwget\\b[^\\n|;]*\\s--no-check-certificate(?![\\w-])",
       "extensions": [
@@ -3280,9 +3280,41 @@
       }
     },
     {
-      "id": "SA-PY-025",
+      "id": "SA-SH-027",
       "type": "regex",
-      "pattern": "\\b(?:requests|httpx)\\s*\\.\\s*(?:request|get|post|put|patch|delete|head|options)\\s*\\([^\\n)]*\\bverify\\s*=\\s*False\\b|ssl\\._create_unverified_context\\s*\\(|\\bssl\\.CERT_NONE\\b",
+      "pattern": "GIT_SSL_NO_VERIFY\\s*=\\s*(?:1|true|yes)|git\\b[^\\n|;]*(?:-c\\s+http\\.sslverify\\s*=\\s*false|config\\b[^\\n|;]*http\\.sslverify\\s+false)|npm\\b[^\\n|;]*(?:config\\s+set\\s+strict-ssl\\s+false|--strict-ssl[= ]false)|yarn\\b[^\\n|;]*--strict-ssl[= ]false|pip\\b[^\\n|;]*--trusted-host\\b",
+      "flags": [
+        "IGNORECASE"
+      ],
+      "extensions": [
+        ".sh"
+      ],
+      "title": "Package/Git TLS Verification Disabled",
+      "severity": "high",
+      "confidence": 0.85,
+      "category": "insecure-transport",
+      "attacker": "malicious download source",
+      "boundary": "TLS trust boundary",
+      "asset": "downloaded dependency integrity",
+      "explanation": "Disables TLS certificate verification for git, npm, yarn, or pip (or via GIT_SSL_NO_VERIFY), letting a network attacker substitute fetched source or dependencies.",
+      "examples": {
+        "match": [
+          "GIT_SSL_NO_VERIFY=1 git clone https://example.com/x.git",
+          "git -c http.sslVerify=false clone https://example.com/x.git",
+          "npm config set strict-ssl false",
+          "pip install --trusted-host pypi.org pkg"
+        ],
+        "no_match": [
+          "git clone https://example.com/x.git",
+          "npm config set registry https://registry.npmjs.org",
+          "pip install pkg"
+        ]
+      }
+    },
+    {
+      "id": "SA-PY-032",
+      "type": "regex",
+      "pattern": "\\b(?:requests|httpx)\\s*\\.\\s*(?:request|get|post|put|patch|delete|head|options|Session|Client|AsyncClient)\\s*\\([^\\n)]*\\bverify\\s*=\\s*False\\b|\\b\\w+\\.verify\\s*=\\s*False\\b|\\bssl\\s*=\\s*False\\b|ssl\\._create_unverified_context\\s*\\(|\\bssl\\.CERT_NONE\\b",
       "extensions": [
         ".py"
       ],
@@ -3297,7 +3329,9 @@
       "examples": {
         "match": [
           "requests.get(url, verify=False)",
-          "httpx.post(url, data=d, verify = False)",
+          "httpx.Client(verify=False)",
+          "s = requests.Session(); s.verify = False",
+          "connector = aiohttp.TCPConnector(ssl=False)",
           "ctx = ssl._create_unverified_context()",
           "context.verify_mode = ssl.CERT_NONE"
         ],

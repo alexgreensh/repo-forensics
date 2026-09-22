@@ -1496,13 +1496,59 @@ def _effective_skip_dirs(repo_path, skip_dirs):
         entries = set(os.listdir(repo_path))
     except OSError:
         return skip_dirs
-    if 'package.json' not in entries or entries & _SRC_DIR_HINTS:
+    if 'package.json' not in entries:
         return skip_dirs
+
+    # PRIMARY signal: the manifest itself. If package.json's entry points
+    # (main/module/bin/exports/files/...) resolve INTO dist/ or build/, that
+    # directory is the shipped product and MUST be walked regardless of whether
+    # a src/ dir sits beside it -- an attacker could otherwise re-hide the
+    # payload just by adding an empty src/ (the sibling-dir heuristic alone was
+    # attacker-controlled).
+    manifest_payload_dirs = _manifest_referenced_build_dirs(repo_path)
+
     refined = set(skip_dirs)
     for payload_dir in ('dist', 'build'):
-        if payload_dir in entries:
-            refined.discard(payload_dir)
+        if payload_dir not in entries:
+            continue
+        if payload_dir in manifest_payload_dirs:
+            refined.discard(payload_dir)   # manifest says this is the product
+        elif not (entries & _SRC_DIR_HINTS):
+            refined.discard(payload_dir)   # fallback: tarball layout, no source
     return refined
+
+
+def _manifest_referenced_build_dirs(repo_path):
+    """Top-level dirs ('dist'/'build') that package.json entry points resolve
+    into. A published tarball points main/module/bin/exports/files at its
+    compiled output, so a reference there is proof the dir is the product."""
+    found = set()
+    try:
+        with open(os.path.join(repo_path, 'package.json'), 'r',
+                  encoding='utf-8', errors='ignore') as fh:
+            pkg = json.load(fh)
+    except (OSError, ValueError):
+        return found
+    if not isinstance(pkg, dict):
+        return found
+
+    def _harvest(value):
+        if isinstance(value, str):
+            seg = value.lstrip('./').split('/', 1)[0].lower()
+            if seg in ('dist', 'build'):
+                found.add(seg)
+        elif isinstance(value, list):
+            for v in value:
+                _harvest(v)
+        elif isinstance(value, dict):
+            for v in value.values():
+                _harvest(v)
+
+    for key in ('main', 'module', 'browser', 'types', 'typings',
+                'bin', 'exports', 'files', 'unpkg', 'jsdelivr'):
+        if key in pkg:
+            _harvest(pkg[key])
+    return found
 
 def walk_repo(repo_path, ignore_patterns=None, skip_dirs=None, skip_lockfiles=True, skip_binary=True):
     """Generator that walks a repo respecting ignore rules.
@@ -2116,7 +2162,26 @@ _EXFIL_SENSITIVE_READ_CATEGORIES = frozenset({
     "credential-path-directive", "credential-read", "secret-storage",
     "sensitive-read",
 })
-_EXFIL_NETWORK_CATEGORIES = frozenset({"network", "network-egress"})
+# Categories whose semantics ARE outbound egress / a network-target directive,
+# assigned by scanners and signed rulepacks. This MUST include the instruction-
+# file egress leaves, or a markdown skill can never form the exfil compound:
+# a credential-path directive (sensitive_read) plus a "send it to <URL>" prose
+# imperative (network) is the ClawHavoc shape and must stay a BLOCK. Restores
+# the compound that the prose-keyword -> typed-leaf rewrite dropped, but keeps
+# it structured (category), never free-text prose.
+_EXFIL_NETWORK_CATEGORIES = frozenset({
+    "network", "network-egress",
+    "fetch-execute",                 # runtime_dynamism RD-FEX-*
+    "exfiltration", "git-exfiltration",  # sast SA-* (egress, not credential-side)
+    "prose-imperative",              # skill_threats: "...send to <URL>" directive
+})
+# NOTE: credential-exfiltration / memory-heist-exfil are deliberately NOT here.
+# They are env-side categories (_EXFIL_ENV_CATEGORIES); giving them the network
+# capability too would make one ST-EX/ST-MH finding satisfy BOTH sides, and
+# first_typed_leaf() would return that same finding for env AND network,
+# collapsing the required DISTINCT-leaf pair. The instruction-file exfil
+# compound is restored via prose-imperative (the "send to <URL>" directive)
+# pairing with a separate credential/sensitive-read leaf.
 
 # Fixed primitive identities from detect_trifecta_raw() and scan_bytecode -
 # (scanner, title) pairs pinned by their emitters and their tests.
@@ -2155,7 +2220,11 @@ def _exfil_capabilities(f):
             or rule_id == "ST-EX-004"
             or rule_id.startswith("ST-CR-")):
         caps.add("sensitive_read")
-    if (category in _EXFIL_NETWORK_CATEGORIES
+    # A "secrets" scanner hit with category "network" is a hardcoded IP literal
+    # (SC-NET-*), which is neither an outbound call nor a network-target
+    # directive; excluding it here stops the mirror-image manufactured compound
+    # (a lone IP literal + a lone API key reading as data exfiltration).
+    if ((category in _EXFIL_NETWORK_CATEGORIES and scanner != "secrets")
             or (scanner, f.title) in _EXFIL_NETWORK_PRIMITIVES):
         caps.add("network")
     return caps

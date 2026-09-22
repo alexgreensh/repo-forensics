@@ -15,23 +15,23 @@ def ids(text, ext):
 
 def test_curl_short_bundle_k_any_position_and_long_form():
     for text in ("curl -sk https://x", "curl -ks https://x", "curl -kLs https://x", "curl -sSfk https://x", "curl --insecure https://x"):
-        assert "SA-SH-021" in ids(text, ".sh")
+        assert "SA-SH-026" in ids(text, ".sh")
 
 def test_wget_long_form_but_not_convert_links_short_k():
-    assert "SA-SH-021" in ids("wget --no-check-certificate https://x", ".sh")
-    assert "SA-SH-021" not in ids("wget -k https://example.com/page", ".sh")
+    assert "SA-SH-026" in ids("wget --no-check-certificate https://x", ".sh")
+    assert "SA-SH-026" not in ids("wget -k https://example.com/page", ".sh")
 
 def test_shell_benign_controls():
     for text in ("curl -s https://x", "curl --key client.pem https://x", "wget https://x"):
-        assert "SA-SH-021" not in ids(text, ".sh")
+        assert "SA-SH-026" not in ids(text, ".sh")
 
 def test_python_known_tls_apis():
     for text in ("requests.get(url, verify=False)", "httpx.post(url, verify = False)", "ssl._create_unverified_context()", "ctx.verify_mode = ssl.CERT_NONE"):
-        assert "SA-PY-025" in ids(text, ".py")
+        assert "SA-PY-032" in ids(text, ".py")
 
 def test_python_non_tls_verify_controls_stay_clean():
     for text in ("build_artifact(data, verify=False)", "def parse(value, verify=False): pass", "ctx.check_hostname = False", "requests.get(url, verify=True)"):
-        assert "SA-PY-025" not in ids(text, ".py")
+        assert "SA-PY-032" not in ids(text, ".py")
 
 def test_node_object_quoted_property_assignment_and_env():
     cases=("new https.Agent({rejectUnauthorized:false})", "const x = {'rejectUnauthorized': false}", "opts.rejectUnauthorized = false", 'process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"')

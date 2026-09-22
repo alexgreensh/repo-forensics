@@ -23,21 +23,21 @@
   [
     "AI Agent CLI Permission Bypass Flag",
     "critical",
-    "SA-SH-020.sh",
+    "SA-SH-025.sh",
     1,
     "auth-bypass"
   ],
   [
     "AI Agent CLI Permission Bypass Flag",
     "critical",
-    "SA-SH-020.sh",
+    "SA-SH-025.sh",
     2,
     "auth-bypass"
   ],
   [
     "AI Agent CLI Permission Bypass Flag",
     "critical",
-    "SA-SH-020.sh",
+    "SA-SH-025.sh",
     3,
     "auth-bypass"
   ],
@@ -64,77 +64,77 @@
   ],
   [
     "AI Agent CLI Spawned as Child Process",
-    "critical",
+    "medium",
     "SA-JS-037.js",
     1,
     "agent-execution"
   ],
   [
     "AI Agent CLI Spawned as Child Process",
-    "critical",
+    "medium",
     "SA-JS-037.js",
     2,
     "agent-execution"
   ],
   [
     "AI Agent CLI Spawned as Child Process",
-    "critical",
+    "medium",
     "SA-JS-037.js",
     3,
     "agent-execution"
   ],
   [
     "AI Agent CLI Spawned as Child Process",
-    "critical",
+    "medium",
     "SA-JS-037.js",
     4,
     "agent-execution"
   ],
   [
     "AI Agent CLI Spawned as Child Process",
-    "critical",
+    "medium",
     "SA-JS-039.js",
     3,
     "agent-execution"
   ],
   [
     "AI Agent CLI Spawned as Child Process",
-    "critical",
+    "medium",
     "SA-JS-039.js",
     4,
     "agent-execution"
   ],
   [
     "AI Agent CLI Spawned as Child Process",
-    "critical",
+    "medium",
     "SA-TS-017.ts",
     1,
     "agent-execution"
   ],
   [
     "AI Agent CLI Spawned as Child Process",
-    "critical",
+    "medium",
     "SA-TS-017.ts",
     2,
     "agent-execution"
   ],
   [
     "AI Agent CLI Spawned as Child Process",
-    "critical",
+    "medium",
     "SA-TS-017.ts",
     3,
     "agent-execution"
   ],
   [
     "AI Agent CLI Spawned as Child Process",
-    "critical",
+    "medium",
     "SA-TS-019.ts",
     3,
     "agent-execution"
   ],
   [
     "AI Agent CLI Spawned as Child Process",
-    "critical",
+    "medium",
     "SA-TS-019.ts",
     4,
     "agent-execution"
@@ -387,35 +387,35 @@
   [
     "Curl/Wget TLS Verification Disabled",
     "high",
-    "SA-SH-021.sh",
+    "SA-SH-026.sh",
     1,
     "insecure-transport"
   ],
   [
     "Curl/Wget TLS Verification Disabled",
     "high",
-    "SA-SH-021.sh",
+    "SA-SH-026.sh",
     2,
     "insecure-transport"
   ],
   [
     "Curl/Wget TLS Verification Disabled",
     "high",
-    "SA-SH-021.sh",
+    "SA-SH-026.sh",
     3,
     "insecure-transport"
   ],
   [
     "Curl/Wget TLS Verification Disabled",
     "high",
-    "SA-SH-021.sh",
+    "SA-SH-026.sh",
     4,
     "insecure-transport"
   ],
   [
     "Curl/Wget TLS Verification Disabled",
     "high",
-    "SA-SH-021.sh",
+    "SA-SH-026.sh",
     5,
     "insecure-transport"
   ],
@@ -876,49 +876,49 @@
   ],
   [
     "Destructured child_process Import (ESM)",
-    "high",
+    "medium",
     "SA-JS-035.js",
     1,
     "shell-injection"
   ],
   [
     "Destructured child_process Import (ESM)",
-    "high",
+    "medium",
     "SA-JS-035.js",
     2,
     "shell-injection"
   ],
   [
     "Destructured child_process Import (ESM)",
-    "high",
+    "medium",
     "SA-JS-035.js",
     3,
     "shell-injection"
   ],
   [
     "Destructured child_process Import (ESM)",
-    "high",
+    "medium",
     "SA-TS-015.ts",
     1,
     "shell-injection"
   ],
   [
     "Destructured child_process Import (ESM)",
-    "high",
+    "medium",
     "SA-TS-015.ts",
     2,
     "shell-injection"
   ],
   [
     "Destructured child_process Import (ESM)",
-    "high",
+    "medium",
     "SA-TS-015.ts",
     3,
     "shell-injection"
   ],
   [
     "Destructured child_process Import (ESM)",
-    "high",
+    "medium",
     "SA-TS-015.ts",
     4,
     "shell-injection"
@@ -1827,500 +1827,542 @@
     "ci-token-abuse"
   ],
   [
-    "Path Traversal: Unsanitized File Serve",
+    "Package/Git TLS Verification Disabled",
     "high",
-    "SA-JS-012.js",
-    1,
-    "path-traversal"
-  ],
-  [
-    "Path Traversal: Unsanitized File Serve",
-    "high",
-    "SA-JS-012.js",
-    2,
-    "path-traversal"
-  ],
-  [
-    "Path Traversal: Unsanitized File Serve",
-    "high",
-    "SA-JS-012.js",
-    3,
-    "path-traversal"
-  ],
-  [
-    "Path Traversal: Unsanitized File Serve",
-    "high",
-    "SA-TS-007.ts",
-    1,
-    "path-traversal"
-  ],
-  [
-    "Path Traversal: Unsanitized File Serve",
-    "high",
-    "SA-TS-007.ts",
-    2,
-    "path-traversal"
-  ],
-  [
-    "Path Traversal: Unsanitized File Serve",
-    "high",
-    "SA-TS-007.ts",
-    3,
-    "path-traversal"
-  ],
-  [
-    "Path Traversal: Unsanitized path.join",
-    "high",
-    "SA-JS-013.js",
-    1,
-    "path-traversal"
-  ],
-  [
-    "Path Traversal: Unsanitized path.join",
-    "high",
-    "SA-JS-013.js",
-    2,
-    "path-traversal"
-  ],
-  [
-    "Path Traversal: Unsanitized path.join",
-    "high",
-    "SA-JS-013.js",
-    3,
-    "path-traversal"
-  ],
-  [
-    "Path Traversal: Unsanitized path.join",
-    "high",
-    "SA-TS-008.ts",
-    1,
-    "path-traversal"
-  ],
-  [
-    "Path Traversal: Unsanitized path.join",
-    "high",
-    "SA-TS-008.ts",
-    2,
-    "path-traversal"
-  ],
-  [
-    "Path Traversal: Unsanitized path.join",
-    "high",
-    "SA-TS-008.ts",
-    3,
-    "path-traversal"
-  ],
-  [
-    "Pipe Exfiltration: env to network",
-    "critical",
-    "SA-SH-005.sh",
-    1,
-    "exfiltration"
-  ],
-  [
-    "Pipe Exfiltration: env to network",
-    "critical",
-    "SA-SH-005.sh",
-    2,
-    "exfiltration"
-  ],
-  [
-    "Pipe Exfiltration: env to network",
-    "critical",
-    "SA-SH-005.sh",
-    3,
-    "exfiltration"
-  ],
-  [
-    "Pipe Exfiltration: sensitive file to network",
-    "critical",
-    "SA-SH-005.sh",
-    3,
-    "exfiltration"
-  ],
-  [
-    "Pipe Exfiltration: sensitive file to network",
-    "critical",
-    "SA-SH-006.sh",
-    1,
-    "exfiltration"
-  ],
-  [
-    "Pipe Exfiltration: sensitive file to network",
-    "critical",
-    "SA-SH-006.sh",
-    2,
-    "exfiltration"
-  ],
-  [
-    "Pipe Exfiltration: sensitive file to network",
-    "critical",
-    "SA-SH-006.sh",
-    3,
-    "exfiltration"
-  ],
-  [
-    "Pipe to Shell Interpreter",
-    "critical",
-    "SA-SH-002.sh",
-    1,
-    "shell-injection"
-  ],
-  [
-    "Pipe to Shell Interpreter",
-    "critical",
-    "SA-SH-002.sh",
-    2,
-    "shell-injection"
-  ],
-  [
-    "Pipe to Shell Interpreter",
-    "critical",
-    "SA-SH-002.sh",
-    3,
-    "shell-injection"
-  ],
-  [
-    "Pipe to Shell Interpreter",
-    "critical",
-    "SA-SH-003.sh",
-    1,
-    "shell-injection"
-  ],
-  [
-    "Pipe to Shell Interpreter",
-    "critical",
-    "SA-SH-003.sh",
-    2,
-    "shell-injection"
-  ],
-  [
-    "Pipe to Shell Interpreter",
-    "critical",
-    "SA-SH-003.sh",
-    3,
-    "shell-injection"
-  ],
-  [
-    "Process Enumeration (/proc)",
-    "high",
-    "SA-GO-006.go",
-    1,
-    "process-enumeration"
-  ],
-  [
-    "Process Enumeration (/proc)",
-    "high",
-    "SA-GO-006.go",
-    2,
-    "process-enumeration"
-  ],
-  [
-    "Process Enumeration (/proc)",
-    "high",
-    "SA-GO-006.go",
-    3,
-    "process-enumeration"
-  ],
-  [
-    "Process Enumeration (/proc)",
-    "high",
-    "SA-JS-023.js",
-    1,
-    "process-enumeration"
-  ],
-  [
-    "Process Enumeration (/proc)",
-    "high",
-    "SA-JS-023.js",
-    2,
-    "process-enumeration"
-  ],
-  [
-    "Process Enumeration (/proc)",
-    "high",
-    "SA-JS-023.js",
-    3,
-    "process-enumeration"
-  ],
-  [
-    "Process Enumeration (/proc)",
-    "high",
-    "SA-PY-021.py",
-    1,
-    "process-enumeration"
-  ],
-  [
-    "Process Enumeration (/proc)",
-    "high",
-    "SA-PY-021.py",
-    2,
-    "process-enumeration"
-  ],
-  [
-    "Process Enumeration (/proc)",
-    "high",
-    "SA-PY-021.py",
-    3,
-    "process-enumeration"
-  ],
-  [
-    "Process Enumeration (/proc)",
-    "high",
-    "SA-SH-017.sh",
-    1,
-    "process-enumeration"
-  ],
-  [
-    "Process Enumeration (/proc)",
-    "high",
-    "SA-SH-017.sh",
-    2,
-    "process-enumeration"
-  ],
-  [
-    "Process Enumeration (/proc)",
-    "high",
-    "SA-SH-017.sh",
-    3,
-    "process-enumeration"
-  ],
-  [
-    "Process Enumeration (/proc)",
-    "high",
-    "SA-TS-012.ts",
-    1,
-    "process-enumeration"
-  ],
-  [
-    "Process Enumeration (/proc)",
-    "high",
-    "SA-TS-012.ts",
-    2,
-    "process-enumeration"
-  ],
-  [
-    "Process Enumeration (/proc)",
-    "high",
-    "SA-TS-012.ts",
-    3,
-    "process-enumeration"
-  ],
-  [
-    "Process Memory Read (/proc)",
-    "critical",
-    "SA-GO-005.go",
-    1,
-    "memory-forensics"
-  ],
-  [
-    "Process Memory Read (/proc)",
-    "critical",
-    "SA-GO-005.go",
-    2,
-    "memory-forensics"
-  ],
-  [
-    "Process Memory Read (/proc)",
-    "critical",
-    "SA-GO-005.go",
-    3,
-    "memory-forensics"
-  ],
-  [
-    "Process Memory Read (/proc)",
-    "critical",
-    "SA-JS-022.js",
-    1,
-    "memory-forensics"
-  ],
-  [
-    "Process Memory Read (/proc)",
-    "critical",
-    "SA-JS-022.js",
-    2,
-    "memory-forensics"
-  ],
-  [
-    "Process Memory Read (/proc)",
-    "critical",
-    "SA-JS-022.js",
-    3,
-    "memory-forensics"
-  ],
-  [
-    "Process Memory Read (/proc)",
-    "critical",
-    "SA-PY-020.py",
-    1,
-    "memory-forensics"
-  ],
-  [
-    "Process Memory Read (/proc)",
-    "critical",
-    "SA-PY-020.py",
-    2,
-    "memory-forensics"
-  ],
-  [
-    "Process Memory Read (/proc)",
-    "critical",
-    "SA-PY-020.py",
-    3,
-    "memory-forensics"
-  ],
-  [
-    "Process Memory Read (/proc)",
-    "critical",
-    "SA-SH-016.sh",
-    1,
-    "memory-forensics"
-  ],
-  [
-    "Process Memory Read (/proc)",
-    "critical",
-    "SA-SH-016.sh",
-    2,
-    "memory-forensics"
-  ],
-  [
-    "Process Memory Read (/proc)",
-    "critical",
-    "SA-SH-016.sh",
-    3,
-    "memory-forensics"
-  ],
-  [
-    "Process Memory Read (/proc)",
-    "critical",
-    "SA-TS-011.ts",
-    1,
-    "memory-forensics"
-  ],
-  [
-    "Process Memory Read (/proc)",
-    "critical",
-    "SA-TS-011.ts",
-    2,
-    "memory-forensics"
-  ],
-  [
-    "Process Memory Read (/proc)",
-    "critical",
-    "SA-TS-011.ts",
-    3,
-    "memory-forensics"
-  ],
-  [
-    "ProcessBuilder",
-    "high",
-    "SA-JAVA-002.java",
-    1,
-    "shell-injection"
-  ],
-  [
-    "ProcessBuilder",
-    "high",
-    "SA-JAVA-002.java",
-    2,
-    "shell-injection"
-  ],
-  [
-    "ProcessBuilder",
-    "high",
-    "SA-JAVA-002.java",
-    3,
-    "shell-injection"
-  ],
-  [
-    "Provenance Forging: Crypto Key + Sign",
-    "critical",
-    "SA-JS-030.js",
-    1,
-    "provenance-forging"
-  ],
-  [
-    "Provenance Forging: Crypto Key + Sign",
-    "critical",
-    "SA-JS-030.js",
-    2,
-    "provenance-forging"
-  ],
-  [
-    "Provenance Forging: Crypto Key + Sign",
-    "critical",
-    "SA-JS-030.js",
-    3,
-    "provenance-forging"
-  ],
-  [
-    "Provenance Forging: in-toto/SLSA Attestation",
-    "high",
-    "SA-JS-031.js",
-    1,
-    "provenance-forging"
-  ],
-  [
-    "Provenance Forging: in-toto/SLSA Attestation",
-    "high",
-    "SA-JS-031.js",
-    2,
-    "provenance-forging"
-  ],
-  [
-    "Provenance Forging: in-toto/SLSA Attestation",
-    "high",
-    "SA-JS-031.js",
-    3,
-    "provenance-forging"
-  ],
-  [
-    "PyPI Worm: Programmatic Publish",
-    "critical",
-    "SA-PY-015.py",
-    1,
-    "worm-propagation"
-  ],
-  [
-    "PyPI Worm: Programmatic Publish",
-    "critical",
-    "SA-PY-015.py",
-    2,
-    "worm-propagation"
-  ],
-  [
-    "PyPI Worm: Programmatic Publish",
-    "critical",
-    "SA-PY-015.py",
-    3,
-    "worm-propagation"
-  ],
-  [
-    "Python TLS Certificate Verification Disabled",
-    "high",
-    "SA-PY-025.py",
+    "SA-SH-027.sh",
     1,
     "insecure-transport"
   ],
   [
-    "Python TLS Certificate Verification Disabled",
+    "Package/Git TLS Verification Disabled",
     "high",
-    "SA-PY-025.py",
+    "SA-SH-027.sh",
     2,
     "insecure-transport"
   ],
   [
-    "Python TLS Certificate Verification Disabled",
+    "Package/Git TLS Verification Disabled",
     "high",
-    "SA-PY-025.py",
+    "SA-SH-027.sh",
     3,
     "insecure-transport"
   ],
   [
-    "Python TLS Certificate Verification Disabled",
+    "Package/Git TLS Verification Disabled",
     "high",
-    "SA-PY-025.py",
+    "SA-SH-027.sh",
     4,
+    "insecure-transport"
+  ],
+  [
+    "Path Traversal: Unsanitized File Serve",
+    "high",
+    "SA-JS-012.js",
+    1,
+    "path-traversal"
+  ],
+  [
+    "Path Traversal: Unsanitized File Serve",
+    "high",
+    "SA-JS-012.js",
+    2,
+    "path-traversal"
+  ],
+  [
+    "Path Traversal: Unsanitized File Serve",
+    "high",
+    "SA-JS-012.js",
+    3,
+    "path-traversal"
+  ],
+  [
+    "Path Traversal: Unsanitized File Serve",
+    "high",
+    "SA-TS-007.ts",
+    1,
+    "path-traversal"
+  ],
+  [
+    "Path Traversal: Unsanitized File Serve",
+    "high",
+    "SA-TS-007.ts",
+    2,
+    "path-traversal"
+  ],
+  [
+    "Path Traversal: Unsanitized File Serve",
+    "high",
+    "SA-TS-007.ts",
+    3,
+    "path-traversal"
+  ],
+  [
+    "Path Traversal: Unsanitized path.join",
+    "high",
+    "SA-JS-013.js",
+    1,
+    "path-traversal"
+  ],
+  [
+    "Path Traversal: Unsanitized path.join",
+    "high",
+    "SA-JS-013.js",
+    2,
+    "path-traversal"
+  ],
+  [
+    "Path Traversal: Unsanitized path.join",
+    "high",
+    "SA-JS-013.js",
+    3,
+    "path-traversal"
+  ],
+  [
+    "Path Traversal: Unsanitized path.join",
+    "high",
+    "SA-TS-008.ts",
+    1,
+    "path-traversal"
+  ],
+  [
+    "Path Traversal: Unsanitized path.join",
+    "high",
+    "SA-TS-008.ts",
+    2,
+    "path-traversal"
+  ],
+  [
+    "Path Traversal: Unsanitized path.join",
+    "high",
+    "SA-TS-008.ts",
+    3,
+    "path-traversal"
+  ],
+  [
+    "Pipe Exfiltration: env to network",
+    "critical",
+    "SA-SH-005.sh",
+    1,
+    "exfiltration"
+  ],
+  [
+    "Pipe Exfiltration: env to network",
+    "critical",
+    "SA-SH-005.sh",
+    2,
+    "exfiltration"
+  ],
+  [
+    "Pipe Exfiltration: env to network",
+    "critical",
+    "SA-SH-005.sh",
+    3,
+    "exfiltration"
+  ],
+  [
+    "Pipe Exfiltration: sensitive file to network",
+    "critical",
+    "SA-SH-005.sh",
+    3,
+    "exfiltration"
+  ],
+  [
+    "Pipe Exfiltration: sensitive file to network",
+    "critical",
+    "SA-SH-006.sh",
+    1,
+    "exfiltration"
+  ],
+  [
+    "Pipe Exfiltration: sensitive file to network",
+    "critical",
+    "SA-SH-006.sh",
+    2,
+    "exfiltration"
+  ],
+  [
+    "Pipe Exfiltration: sensitive file to network",
+    "critical",
+    "SA-SH-006.sh",
+    3,
+    "exfiltration"
+  ],
+  [
+    "Pipe to Shell Interpreter",
+    "critical",
+    "SA-SH-002.sh",
+    1,
+    "shell-injection"
+  ],
+  [
+    "Pipe to Shell Interpreter",
+    "critical",
+    "SA-SH-002.sh",
+    2,
+    "shell-injection"
+  ],
+  [
+    "Pipe to Shell Interpreter",
+    "critical",
+    "SA-SH-002.sh",
+    3,
+    "shell-injection"
+  ],
+  [
+    "Pipe to Shell Interpreter",
+    "critical",
+    "SA-SH-003.sh",
+    1,
+    "shell-injection"
+  ],
+  [
+    "Pipe to Shell Interpreter",
+    "critical",
+    "SA-SH-003.sh",
+    2,
+    "shell-injection"
+  ],
+  [
+    "Pipe to Shell Interpreter",
+    "critical",
+    "SA-SH-003.sh",
+    3,
+    "shell-injection"
+  ],
+  [
+    "Process Enumeration (/proc)",
+    "high",
+    "SA-GO-006.go",
+    1,
+    "process-enumeration"
+  ],
+  [
+    "Process Enumeration (/proc)",
+    "high",
+    "SA-GO-006.go",
+    2,
+    "process-enumeration"
+  ],
+  [
+    "Process Enumeration (/proc)",
+    "high",
+    "SA-GO-006.go",
+    3,
+    "process-enumeration"
+  ],
+  [
+    "Process Enumeration (/proc)",
+    "high",
+    "SA-JS-023.js",
+    1,
+    "process-enumeration"
+  ],
+  [
+    "Process Enumeration (/proc)",
+    "high",
+    "SA-JS-023.js",
+    2,
+    "process-enumeration"
+  ],
+  [
+    "Process Enumeration (/proc)",
+    "high",
+    "SA-JS-023.js",
+    3,
+    "process-enumeration"
+  ],
+  [
+    "Process Enumeration (/proc)",
+    "high",
+    "SA-PY-021.py",
+    1,
+    "process-enumeration"
+  ],
+  [
+    "Process Enumeration (/proc)",
+    "high",
+    "SA-PY-021.py",
+    2,
+    "process-enumeration"
+  ],
+  [
+    "Process Enumeration (/proc)",
+    "high",
+    "SA-PY-021.py",
+    3,
+    "process-enumeration"
+  ],
+  [
+    "Process Enumeration (/proc)",
+    "high",
+    "SA-SH-017.sh",
+    1,
+    "process-enumeration"
+  ],
+  [
+    "Process Enumeration (/proc)",
+    "high",
+    "SA-SH-017.sh",
+    2,
+    "process-enumeration"
+  ],
+  [
+    "Process Enumeration (/proc)",
+    "high",
+    "SA-SH-017.sh",
+    3,
+    "process-enumeration"
+  ],
+  [
+    "Process Enumeration (/proc)",
+    "high",
+    "SA-TS-012.ts",
+    1,
+    "process-enumeration"
+  ],
+  [
+    "Process Enumeration (/proc)",
+    "high",
+    "SA-TS-012.ts",
+    2,
+    "process-enumeration"
+  ],
+  [
+    "Process Enumeration (/proc)",
+    "high",
+    "SA-TS-012.ts",
+    3,
+    "process-enumeration"
+  ],
+  [
+    "Process Memory Read (/proc)",
+    "critical",
+    "SA-GO-005.go",
+    1,
+    "memory-forensics"
+  ],
+  [
+    "Process Memory Read (/proc)",
+    "critical",
+    "SA-GO-005.go",
+    2,
+    "memory-forensics"
+  ],
+  [
+    "Process Memory Read (/proc)",
+    "critical",
+    "SA-GO-005.go",
+    3,
+    "memory-forensics"
+  ],
+  [
+    "Process Memory Read (/proc)",
+    "critical",
+    "SA-JS-022.js",
+    1,
+    "memory-forensics"
+  ],
+  [
+    "Process Memory Read (/proc)",
+    "critical",
+    "SA-JS-022.js",
+    2,
+    "memory-forensics"
+  ],
+  [
+    "Process Memory Read (/proc)",
+    "critical",
+    "SA-JS-022.js",
+    3,
+    "memory-forensics"
+  ],
+  [
+    "Process Memory Read (/proc)",
+    "critical",
+    "SA-PY-020.py",
+    1,
+    "memory-forensics"
+  ],
+  [
+    "Process Memory Read (/proc)",
+    "critical",
+    "SA-PY-020.py",
+    2,
+    "memory-forensics"
+  ],
+  [
+    "Process Memory Read (/proc)",
+    "critical",
+    "SA-PY-020.py",
+    3,
+    "memory-forensics"
+  ],
+  [
+    "Process Memory Read (/proc)",
+    "critical",
+    "SA-SH-016.sh",
+    1,
+    "memory-forensics"
+  ],
+  [
+    "Process Memory Read (/proc)",
+    "critical",
+    "SA-SH-016.sh",
+    2,
+    "memory-forensics"
+  ],
+  [
+    "Process Memory Read (/proc)",
+    "critical",
+    "SA-SH-016.sh",
+    3,
+    "memory-forensics"
+  ],
+  [
+    "Process Memory Read (/proc)",
+    "critical",
+    "SA-TS-011.ts",
+    1,
+    "memory-forensics"
+  ],
+  [
+    "Process Memory Read (/proc)",
+    "critical",
+    "SA-TS-011.ts",
+    2,
+    "memory-forensics"
+  ],
+  [
+    "Process Memory Read (/proc)",
+    "critical",
+    "SA-TS-011.ts",
+    3,
+    "memory-forensics"
+  ],
+  [
+    "ProcessBuilder",
+    "high",
+    "SA-JAVA-002.java",
+    1,
+    "shell-injection"
+  ],
+  [
+    "ProcessBuilder",
+    "high",
+    "SA-JAVA-002.java",
+    2,
+    "shell-injection"
+  ],
+  [
+    "ProcessBuilder",
+    "high",
+    "SA-JAVA-002.java",
+    3,
+    "shell-injection"
+  ],
+  [
+    "Provenance Forging: Crypto Key + Sign",
+    "critical",
+    "SA-JS-030.js",
+    1,
+    "provenance-forging"
+  ],
+  [
+    "Provenance Forging: Crypto Key + Sign",
+    "critical",
+    "SA-JS-030.js",
+    2,
+    "provenance-forging"
+  ],
+  [
+    "Provenance Forging: Crypto Key + Sign",
+    "critical",
+    "SA-JS-030.js",
+    3,
+    "provenance-forging"
+  ],
+  [
+    "Provenance Forging: in-toto/SLSA Attestation",
+    "high",
+    "SA-JS-031.js",
+    1,
+    "provenance-forging"
+  ],
+  [
+    "Provenance Forging: in-toto/SLSA Attestation",
+    "high",
+    "SA-JS-031.js",
+    2,
+    "provenance-forging"
+  ],
+  [
+    "Provenance Forging: in-toto/SLSA Attestation",
+    "high",
+    "SA-JS-031.js",
+    3,
+    "provenance-forging"
+  ],
+  [
+    "PyPI Worm: Programmatic Publish",
+    "critical",
+    "SA-PY-015.py",
+    1,
+    "worm-propagation"
+  ],
+  [
+    "PyPI Worm: Programmatic Publish",
+    "critical",
+    "SA-PY-015.py",
+    2,
+    "worm-propagation"
+  ],
+  [
+    "PyPI Worm: Programmatic Publish",
+    "critical",
+    "SA-PY-015.py",
+    3,
+    "worm-propagation"
+  ],
+  [
+    "Python TLS Certificate Verification Disabled",
+    "high",
+    "SA-PY-032.py",
+    1,
+    "insecure-transport"
+  ],
+  [
+    "Python TLS Certificate Verification Disabled",
+    "high",
+    "SA-PY-032.py",
+    2,
+    "insecure-transport"
+  ],
+  [
+    "Python TLS Certificate Verification Disabled",
+    "high",
+    "SA-PY-032.py",
+    3,
+    "insecure-transport"
+  ],
+  [
+    "Python TLS Certificate Verification Disabled",
+    "high",
+    "SA-PY-032.py",
+    4,
+    "insecure-transport"
+  ],
+  [
+    "Python TLS Certificate Verification Disabled",
+    "high",
+    "SA-PY-032.py",
+    5,
+    "insecure-transport"
+  ],
+  [
+    "Python TLS Certificate Verification Disabled",
+    "high",
+    "SA-PY-032.py",
+    6,
     "insecure-transport"
   ],
   [
@@ -3032,42 +3074,42 @@
   ],
   [
     "Shell Interpretation Enabled (shell: true)",
-    "high",
+    "medium",
     "SA-JS-036.js",
     1,
     "shell-injection"
   ],
   [
     "Shell Interpretation Enabled (shell: true)",
-    "high",
+    "medium",
     "SA-JS-036.js",
     2,
     "shell-injection"
   ],
   [
     "Shell Interpretation Enabled (shell: true)",
-    "high",
+    "medium",
     "SA-JS-036.js",
     3,
     "shell-injection"
   ],
   [
     "Shell Interpretation Enabled (shell: true)",
-    "high",
+    "medium",
     "SA-TS-016.ts",
     1,
     "shell-injection"
   ],
   [
     "Shell Interpretation Enabled (shell: true)",
-    "high",
+    "medium",
     "SA-TS-016.ts",
     2,
     "shell-injection"
   ],
   [
     "Shell Interpretation Enabled (shell: true)",
-    "high",
+    "medium",
     "SA-TS-016.ts",
     3,
     "shell-injection"

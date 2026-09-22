@@ -563,9 +563,10 @@ SM-CFG-007,SM,CFG,scan_mcp_security.py,MCP_CONFIG_RISKS,,critical
 SM-CFG-008,SM,CFG,scan_mcp_security.py,MCP_CONFIG_RISKS,,high
 SA-JS-039,SA,auth-bypass,scan_sast.py,SAST_PATTERNS,,critical
 SA-TS-019,SA,auth-bypass,scan_sast.py,SAST_PATTERNS,,critical
-SA-SH-020,SA,auth-bypass,scan_sast.py,SAST_PATTERNS,,critical
-SA-SH-021,SA,insecure-transport,scan_sast.py,SAST_PATTERNS,,high
-SA-PY-025,SA,insecure-transport,scan_sast.py,SAST_PATTERNS,,high
+SA-SH-025,SA,auth-bypass,scan_sast.py,SAST_PATTERNS,,critical
+SA-SH-026,SA,insecure-transport,scan_sast.py,SAST_PATTERNS,,high
+SA-SH-027,SA,insecure-transport,scan_sast.py,SAST_PATTERNS,,high
+SA-PY-032,SA,insecure-transport,scan_sast.py,SAST_PATTERNS,,high
 SA-JS-040,SA,insecure-transport,scan_sast.py,SAST_PATTERNS,,high
 SA-TS-020,SA,insecure-transport,scan_sast.py,SAST_PATTERNS,,high
 SA-TSX-003,SA,insecure-transport,scan_sast.py,SAST_PATTERNS,,high

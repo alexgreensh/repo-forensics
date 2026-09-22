@@ -375,16 +375,58 @@ def check_version_anomaly(version_str):
 # security-regression squat of @modelcontextprotocol/inspector that declared
 # author "Anthropic, PBC" and homepage modelcontextprotocol.io while shipping
 # an inverted auth gate (Sept 2026 verified-malicious npm batch).
+# Per canonical scope: the EXACT author-identity strings and the registrable
+# homepage DOMAINS its official packages carry. Matching is exact (author) or
+# host-based (homepage), never a substring of the whole metadata blob -- a
+# substring match flagged '@langchain/openai' and '@ai-sdk/openai' (whose
+# homepages merely CONTAIN "openai" in a github path) as squatting @openai.
 _CANONICAL_SCOPE_IDENTITY = {
-    '@modelcontextprotocol': ('anthropic, pbc', 'modelcontextprotocol.io'),
-    '@anthropic-ai': ('anthropic, pbc',),
-    '@openai': ('openai',),
+    '@modelcontextprotocol': {
+        'authors': ('anthropic', 'anthropic, pbc', 'anthropic pbc'),
+        'domains': ('modelcontextprotocol.io', 'anthropic.com'),
+    },
+    '@anthropic-ai': {
+        'authors': ('anthropic', 'anthropic, pbc', 'anthropic pbc'),
+        'domains': ('anthropic.com',),
+    },
+    '@openai': {
+        'authors': ('openai', 'openai, inc', 'openai, inc.', 'openai opco',
+                    'openai opco, llc'),
+        'domains': ('openai.com',),
+    },
 }
+
+
+def _homepage_host(homepage):
+    """Registrable host of a homepage URL, lowercased, 'www.' stripped.
+
+    Handles bare hosts ('modelcontextprotocol.io') as well as full URLs, so a
+    github.com path that merely contains an org name is NOT read as that org's
+    homepage."""
+    import urllib.parse
+    hp = homepage.strip()
+    if '://' not in hp:
+        hp = 'https://' + hp
+    host = urllib.parse.urlparse(hp).netloc.lower()
+    host = host.split('@')[-1].split(':')[0]  # drop userinfo / port
+    if host.startswith('www.'):
+        host = host[4:]
+    return host
+
+
+def _norm_author(author):
+    """Lowercased author name with an email <...> / url (...) suffix removed."""
+    a = author.split('<')[0].split('(')[0]
+    return a.strip().lower().rstrip('.')
 
 
 def check_provenance_squat(data, rel_path):
     """Flag scoped packages whose author/homepage metadata claims a canonical
-    org identity the package's own scope does not belong to (high)."""
+    org identity the package's own scope does not belong to (high).
+
+    One finding per package: identity is a single fact, so the first canonical
+    scope whose EXACT author string or registrable homepage domain the package
+    carries is reported and the scan stops (no duplicate per-scope findings)."""
     findings = []
     name = data.get('name')
     if not isinstance(name, str) or not name.startswith('@'):
@@ -397,32 +439,36 @@ def check_provenance_squat(data, rel_path):
     homepage = data.get('homepage', '')
     if not isinstance(homepage, str):
         homepage = ''
-    identity_text = (author + ' ' + homepage).lower()
-    if not identity_text.strip():
+    if not (author.strip() or homepage.strip()):
         return findings
-    # A package inside ANY canonical scope is that org's own publish; only
-    # packages outside every canonical scope can be squatting the identity.
-    if any(name.lower().startswith(scope + '/') for scope in _CANONICAL_SCOPE_IDENTITY):
+    # A package inside ANY canonical scope is that org's own publish.
+    name_l = name.lower()
+    if any(name_l.startswith(scope + '/') for scope in _CANONICAL_SCOPE_IDENTITY):
         return findings
-    for scope, markers in _CANONICAL_SCOPE_IDENTITY.items():
-        if name.lower().startswith(scope + '/'):
-            continue
-        for marker in markers:
-            if marker in identity_text:
-                findings.append(core.Finding(
-                    scanner=SCANNER_NAME, severity="high",
-                    title=f"Provenance Squat: '{name}' claims {scope} identity",
-                    description=(
-                        f"Package metadata (author/homepage) references '{marker}', "
-                        f"the identity of canonical scope {scope}, but this package "
-                        "is published outside that scope. Security-regression squats "
-                        "use official-looking provenance to pass as the upstream package."
-                    ),
-                    file=rel_path, line=0,
-                    snippet=f"name={name} author={author} homepage={homepage}",
-                    category="provenance-squat"
-                ))
-                break
+
+    norm_author = _norm_author(author)
+    host = _homepage_host(homepage) if homepage.strip() else ''
+    for scope, ident in _CANONICAL_SCOPE_IDENTITY.items():
+        author_hit = norm_author in ident['authors']
+        domain_hit = bool(host) and any(
+            host == d or host.endswith('.' + d) for d in ident['domains'])
+        if author_hit or domain_hit:
+            claimed = author if author_hit else host
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="high",
+                title=f"Provenance Squat: '{name}' claims {scope} identity",
+                description=(
+                    f"Package metadata claims the identity of canonical scope "
+                    f"{scope} ({'author' if author_hit else 'homepage'} "
+                    f"'{claimed}'), but this package is published outside that "
+                    "scope. Security-regression squats use official-looking "
+                    "provenance to pass as the upstream package."
+                ),
+                file=rel_path, line=0,
+                snippet=f"name={name} author={author} homepage={homepage}",
+                category="provenance-squat"
+            ))
+            break   # one identity fact -> one finding
     return findings
 
 

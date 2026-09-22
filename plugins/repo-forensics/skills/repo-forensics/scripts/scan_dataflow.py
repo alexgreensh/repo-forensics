@@ -67,6 +67,56 @@ JS_SINKS = [
     re.compile(r'new\s+WebSocket\s*\(', re.IGNORECASE),
 ]
 
+# === Cross-file taint source classification ===
+# A module taints a WHOLE module cross-file (its importers with a sink become
+# "Cross-File Taint") only for sources strong enough that they are rare outside
+# exfiltration. Whole-env capture, env enumeration, and credential-file reads
+# qualify unconditionally. A single NAMED env read (os.environ.get("X"),
+# process.env.X) is ubiquitous in legitimate server code, so it taints
+# cross-file ONLY when the read names a credential-shaped variable/key -- the
+# dominant real-world npm/pypi theft pattern (NPM_TOKEN, AWS_SECRET_ACCESS_KEY,
+# GITHUB_TOKEN, apiKey). The ubiquitous NODE_ENV/PORT reads, dotenv, and JSON
+# config parses never taint cross-file. Restores detections the blanket
+# narrowing dropped (two-file split-source/split-sink exfil) without the
+# process.env=ubiquitous false-positive that motivated the narrowing.
+_CRED_NAME_RE = re.compile(
+    r'TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|PRIVATE[_-]?KEY|API[_-]?KEY|'
+    r'ACCESS[_-]?KEY|AUTH|SESSION|COOKIE|\bKEY\b',
+    re.IGNORECASE,
+)
+_STRONG_CROSS_FILE_SOURCES = {
+    "os.environ access", "os.environ.copy()", "getattr(os, 'environ') evasion",
+    "Sensitive file read", "Sensitive path access",
+    "process.env enumeration",
+}
+_NAMED_ENV_CROSS_FILE_SOURCES = {
+    "os.environ.get()", "os.environ[] access", "os.getenv() access",
+    "process.env access",
+}
+
+
+def _module_is_cross_file_tainted(content, lang):
+    """True if this module's content is a strong enough cross-file taint source.
+
+    Strong sources match unconditionally. Named single-value env reads match
+    only on a line that also names a credential-shaped identifier/key, so
+    `token = process.env.NPM_TOKEN` taints but `port = process.env.PORT` does
+    not.
+    """
+    sources = PYTHON_SOURCES if lang == 'python' else JS_SOURCES
+    for source_pat, label in sources:
+        if label in _STRONG_CROSS_FILE_SOURCES:
+            if source_pat.search(content):
+                return True
+        elif label in _NAMED_ENV_CROSS_FILE_SOURCES:
+            for m in source_pat.finditer(content):
+                line = content[content.rfind('\n', 0, m.start()) + 1:
+                               content.find('\n', m.end()) if content.find('\n', m.end()) != -1 else len(content)]
+                if _CRED_NAME_RE.search(line):
+                    return True
+    return False
+
+
 # === Assignment tracking ===
 ASSIGN_PATTERN = re.compile(r'(?:(?:const|let|var)\s+)?(\w+)\s*=\s*(.*)')
 TAINT_PROPAGATORS = [
@@ -198,16 +248,6 @@ def main():
 
     # Cross-file: if file A has tainted sources and file B imports A and has sinks
     import_graph = build_import_graph(repo_path, ignore_patterns)
-    # Only STRONG sources taint a whole module cross-file. Whole-env capture,
-    # env enumeration, and credential-file reads are rare outside exfiltration;
-    # bare process.env reads, dotenv, and JSON config parses are ubiquitous in
-    # legitimate server code and mass-flagged clean packages.
-    cross_file_sources = {
-        'python': [p for p in PYTHON_SOURCES
-                   if p[1] in ("os.environ.copy()", "Sensitive file read", "Sensitive path access")],
-        'javascript': [p for p in JS_SOURCES
-                       if p[1] in ("process.env enumeration", "Sensitive file read")],
-    }
     tainted_modules = set()
     for file_path, rel_path in core.walk_repo(repo_path, ignore_patterns, skip_binary=True):
         lang = detect_language(rel_path)
@@ -220,10 +260,9 @@ def main():
         except (OSError, UnicodeDecodeError):
             continue
 
-        for source_pat, _ in cross_file_sources[lang]:
-            if source_pat.search(content):
-                stem = os.path.splitext(os.path.basename(rel_path))[0]
-                tainted_modules.add(stem)
+        if _module_is_cross_file_tainted(content, lang):
+            stem = os.path.splitext(os.path.basename(rel_path))[0]
+            tainted_modules.add(stem)
 
     for rel_path, imported_modules in import_graph.items():
         for tmod in tainted_modules:

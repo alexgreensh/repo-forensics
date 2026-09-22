@@ -1855,35 +1855,35 @@
   [
     "TLS Verification Disabled in Download Instruction",
     "critical",
-    "SA-SH-021.sh",
+    "SA-SH-026.sh",
     1,
     "prerequisite-attack"
   ],
   [
     "TLS Verification Disabled in Download Instruction",
     "critical",
-    "SA-SH-021.sh",
+    "SA-SH-026.sh",
     2,
     "prerequisite-attack"
   ],
   [
     "TLS Verification Disabled in Download Instruction",
     "critical",
-    "SA-SH-021.sh",
+    "SA-SH-026.sh",
     3,
     "prerequisite-attack"
   ],
   [
     "TLS Verification Disabled in Download Instruction",
     "critical",
-    "SA-SH-021.sh",
+    "SA-SH-026.sh",
     4,
     "prerequisite-attack"
   ],
   [
     "TLS Verification Disabled in Download Instruction",
     "critical",
-    "SA-SH-021.sh",
+    "SA-SH-026.sh",
     5,
     "prerequisite-attack"
   ],

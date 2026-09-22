@@ -140,7 +140,7 @@ class TestPackageJsonChecks:
 
 
 class TestAgentCLIPermissionBypass:
-    """SA-JS-039 / SA-TS-019 / SA-SH-020: --dangerously-skip-permissions and
+    """SA-JS-039 / SA-TS-019 / SA-SH-025: --dangerously-skip-permissions and
     bypassPermissions passed to agent CLIs (MCPA-2026-0063/0084 pattern)."""
 
     def _titles(self, root):
