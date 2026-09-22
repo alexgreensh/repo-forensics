@@ -44,22 +44,51 @@ _LATEST_PATH = os.path.join(_IOCS_DIR, "latest.json")
 BUNDLE_SCHEMA_VERSION = "1.0"
 
 
-def build_bundle(bundle_version):
-    """Concatenate all shipped packs into one signed-bundle envelope dict."""
-    packs = {}
+def _published_pack_payload(pack):
+    """Fields whose change requires a new published pack version."""
+    return {"schema_version": pack.get("schema_version", "1.0"),
+            "rules": pack.get("rules", [])}
+
+
+def build_bundle(bundle_version, generated=None, previous_bundle=None):
+    """Build a bundle whose publication versions beat installed versions.
+
+    A publication is justified by actual rule-content change somewhere in the
+    bundle. Once justified, every carried pack advances above both its shipped
+    and previously published version so every entry is overlay-capable. This
+    prevents a mixed bundle from silently leaving equal-version packs inert.
+    """
+    if previous_bundle is None:
+        try:
+            with open(_BUNDLE_PATH, "r", encoding="utf-8") as f:
+                previous_bundle = json.load(f)
+        except (OSError, ValueError):
+            previous_bundle = {}
+    prior_packs = previous_bundle.get("packs", {}) if isinstance(previous_bundle, dict) else {}
+    sources = {}
     for path in sorted(glob.glob(os.path.join(_RULEPACK_DIR, "*.json"))):
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
         name = data.get("pack") or os.path.splitext(os.path.basename(path))[0]
-        packs[name] = {
-            "pack_version": data.get("pack_version", 1),
-            "schema_version": data.get("schema_version", "1.0"),
-            "rules": data.get("rules", []),
-        }
+        sources[name] = data
+    changed = any(
+        name not in prior_packs
+        or _published_pack_payload(prior_packs[name]) != _published_pack_payload(data)
+        for name, data in sources.items()
+    )
+    packs = {}
+    for name, data in sources.items():
+        shipped_version = data.get("pack_version", 1)
+        prior = prior_packs.get(name, {}) if isinstance(prior_packs, dict) else {}
+        prior_version = prior.get("pack_version", 0) if isinstance(prior, dict) else 0
+        publish_version = (max(shipped_version, prior_version) + 1
+                           if changed else prior_version)
+        packs[name] = {"pack_version": publish_version,
+                       **_published_pack_payload(data)}
     import datetime
     return {
         "schema_version": BUNDLE_SCHEMA_VERSION,
-        "generated": datetime.date.today().isoformat(),
+        "generated": generated or datetime.date.today().isoformat(),
         "bundle_version": bundle_version,
         "packs": packs,
     }
@@ -76,14 +105,21 @@ def _write_and_sign(path, raw_bytes, priv, pub):
 
 def main():
     ap = argparse.ArgumentParser(description="Build + sign feeds (dev-only).")
-    ap.add_argument("--seed-hex", required=True, help="Private seed hex (offline secret).")
+    ap.add_argument("--seed-hex", help="Private seed hex (offline secret).")
+    ap.add_argument("--build-only", action="store_true",
+                    help="Build unsigned bundle; maintainer signs in a later step.")
     ap.add_argument("--pub-hex", default=None, help="Expected public key hex (cross-check).")
-    ap.add_argument("--bundle-version", type=int, default=1, help="Bundle envelope version.")
+    ap.add_argument("--bundle-version", type=int, default=None,
+                    help="Bundle envelope version (default: prior + 1).")
+    ap.add_argument("--allow-unchanged", action="store_true",
+                    help="Permit re-signing a bundle with no pack-content changes.")
     args = ap.parse_args()
 
-    priv = bytes.fromhex(args.seed_hex)
-    _, pub = _ed25519_sign.keypair(priv)
-    if args.pub_hex and pub.hex() != args.pub_hex.lower():
+    if not args.build_only and not args.seed_hex:
+        ap.error("--seed-hex is required unless --build-only is used")
+    priv = bytes.fromhex(args.seed_hex) if args.seed_hex else None
+    pub = _ed25519_sign.keypair(priv)[1] if priv else None
+    if args.pub_hex and (pub is None or pub.hex() != args.pub_hex.lower()):
         print(f"[!] seed-derived pubkey {pub.hex()} != --pub-hex {args.pub_hex}",
               file=sys.stderr)
         return 1
@@ -91,8 +127,28 @@ def main():
     os.makedirs(_IOCS_DIR, exist_ok=True)
 
     # 1+2. Build + sign the rule-pack bundle over its exact serialized bytes.
-    bundle = build_bundle(args.bundle_version)
+    try:
+        with open(_BUNDLE_PATH, "r", encoding="utf-8") as f:
+            previous = json.load(f)
+    except (OSError, ValueError):
+        previous = {}
+    prior_version = previous.get("bundle_version", 0) if isinstance(previous, dict) else 0
+    bundle = build_bundle(args.bundle_version or prior_version + 1,
+                          previous_bundle=previous)
+    changed = [name for name, pack in bundle["packs"].items()
+               if ((previous.get("packs", {}) if isinstance(previous, dict) else {})
+                   .get(name)) != pack]
+    if not changed and not args.allow_unchanged:
+        print("[!] no rule-pack content changed; refusing a hollow freshness bump",
+              file=sys.stderr)
+        return 2
     bundle_bytes = json.dumps(bundle, indent=2, sort_keys=True).encode("utf-8")
+    if args.build_only:
+        with open(_BUNDLE_PATH, "wb") as f:
+            f.write(bundle_bytes)
+        print(f"[+] wrote unsigned {_BUNDLE_PATH} ({len(bundle_bytes)} bytes; "
+              f"{len(bundle['packs'])} packs)")
+        return 0
     _write_and_sign(_BUNDLE_PATH, bundle_bytes, priv, pub)
     print(f"[+] wrote {_BUNDLE_PATH} ({len(bundle_bytes)} bytes) + .sig "
           f"({len(bundle['packs'])} packs)")

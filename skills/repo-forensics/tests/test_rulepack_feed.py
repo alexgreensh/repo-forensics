@@ -623,3 +623,80 @@ class TestUpdateRulepacks:
         assert not ok
         assert "fetch failed" in msg.lower()
         assert not (tmp_path / "bundle.json").exists()
+
+class TestPublishedBundleEndToEnd:
+    def test_publisher_built_bundle_accepts_and_overlays(self, tmp_path, monkeypatch):
+        """Publisher bytes survive exact signing, acceptance, cache and overlay."""
+        import importlib.util
+        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__)))))
+        spec = importlib.util.spec_from_file_location(
+            "sign_rulepacks_test", os.path.join(root, "scripts", "sign_rulepacks.py"))
+        publisher = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(publisher)
+        previous = {"packs": {}}
+        bundle = publisher.build_bundle(2, generated=_today_iso(),
+                                        previous_bundle=previous)
+        raw = _serialize(bundle)
+        ok, msg, accepted = _accept(raw, _sign(raw), tmp_path)
+        assert ok, msg
+        assert (tmp_path / "bundle.json").read_bytes() == raw
+
+        # Point loader at a real shipped pack and the newly accepted cache.
+        monkeypatch.setattr(rulepack_feed, "RULEPACK_FEED_PUBKEY_HEX", TEST_PUB.hex())
+        name = "mcp_security"
+        shipped = rule_loader._load_pack_file(os.path.join(
+            root, "skills", "repo-forensics", "data", "rulepacks", name + ".json"))
+        overlaid = rule_loader._maybe_overlay(name, shipped, cache_dir=str(tmp_path))
+        assert overlaid.pack_version > shipped.pack_version
+        assert overlaid.source_path.endswith("bundle.json")
+
+    def test_equal_version_published_bundle_is_structurally_inert(self):
+        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__)))))
+        shipped_dir = os.path.join(root, "skills", "repo-forensics", "data", "rulepacks")
+        packs = {}
+        for name in ("mcp_security", "runtime_dynamism", "sast", "secrets", "shared", "skill_threats"):
+            with open(os.path.join(shipped_dir, name + ".json"), encoding="utf-8") as handle:
+                data = json.load(handle)
+            packs[name] = {"pack_version": data["pack_version"], "rules": data["rules"]}
+        ok, why = rulepack_feed._check_overlay_viability(
+            _make_bundle(packs=packs), shipped_dir=shipped_dir)
+        assert not ok
+        assert "permanently unacceptable" in why
+
+class TestPublisherVersioning:
+    def _publisher(self):
+        import importlib.util
+        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__)))))
+        spec = importlib.util.spec_from_file_location(
+            "sign_rulepacks_versions", os.path.join(root, "scripts", "sign_rulepacks.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_changed_bundle_advances_every_pack_above_shipped_and_prior(self):
+        publisher = self._publisher()
+        first = publisher.build_bundle(2, generated=_today_iso(), previous_bundle={"packs": {}})
+        prior = json.loads(json.dumps(first))
+        # Force one prior payload stale; a real publication then advances all
+        # carried entries so none remain equal-version no-ops.
+        prior["packs"]["mcp_security"]["rules"] = []
+        rebuilt = publisher.build_bundle(3, generated=_today_iso(), previous_bundle=prior)
+        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__)))))
+        for name, pack in rebuilt["packs"].items():
+            with open(os.path.join(root, "skills", "repo-forensics", "data",
+                                   "rulepacks", name + ".json"), encoding="utf-8") as handle:
+                shipped_version = json.load(handle)["pack_version"]
+            assert pack["pack_version"] > shipped_version
+            assert pack["pack_version"] > prior["packs"][name]["pack_version"]
+
+    def test_unchanged_bundle_does_not_hollow_bump_versions(self):
+        publisher = self._publisher()
+        first = publisher.build_bundle(2, generated=_today_iso(), previous_bundle={"packs": {}})
+        second = publisher.build_bundle(3, generated=_today_iso(), previous_bundle=first)
+        assert {n: p["pack_version"] for n, p in second["packs"].items()} == {
+            n: p["pack_version"] for n, p in first["packs"].items()
+        }
