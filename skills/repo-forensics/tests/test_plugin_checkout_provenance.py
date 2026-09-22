@@ -37,8 +37,24 @@ def test_matching_pin_requires_detached_head(tmp_path):
     fs=gitf.scan_plugin_checkout_provenance(str(p));assert 'SHA-Pinned Agent Plugin Is Not Detached' in titles(fs)
     git(p,'checkout','--detach','-q',pin);fs=gitf.scan_plugin_checkout_provenance(str(p));assert 'SHA-Pinned Agent Plugin Is Not Detached' not in titles(fs);assert 'Agent Plugin Checkout Does Not Match Recorded Pin' not in titles(fs)
 
-def test_metadata_without_pin_reports_coverage_gap(tmp_path):
-    p,_=repo(tmp_path);(p/'marketplace.json').write_text(json.dumps({'plugins':[{'name':'x','source':'https://example.test/x'}]}));fs=gitf.scan_plugin_checkout_provenance(str(p));assert 'Agent Plugin Provenance Pin Unavailable' in titles(fs)
+def test_bare_catalog_manifest_does_not_report_coverage_gap(tmp_path):
+    # A marketplace catalog lists plugins by name/URL and has no pin concept;
+    # its absence of a commit pin is NORMAL and must NOT raise a coverage gap
+    # (the medium FP that fired on ordinary marketplace repos, incl. this one).
+    p,_=repo(tmp_path)
+    (p/'marketplace.json').write_text(json.dumps({'plugins':[{'name':'x','source':'https://example.test/x'}]}))
+    fs=gitf.scan_plugin_checkout_provenance(str(p))
+    assert 'Agent Plugin Provenance Pin Unavailable' not in titles(fs)
+    assert 'Agent Plugin Lockfile Missing Commit Pin' not in titles(fs)
+
+def test_lockfile_without_pin_reports_low_coverage_gap(tmp_path):
+    # A LOCKFILE is expected to pin an exact commit; present without one is a
+    # genuine (low-severity) coverage gap.
+    p,_=repo(tmp_path)
+    (p/'plugin-lock.json').write_text(json.dumps({'name':'x','version':'1'}))
+    fs=gitf.scan_plugin_checkout_provenance(str(p))
+    gap=[f for f in fs if f.title=='Agent Plugin Lockfile Missing Commit Pin']
+    assert gap and all(f.severity=='low' for f in gap)
 
 def write_installer(tmp_path,text,plugin=True):
     p=tmp_path/'x';p.mkdir();

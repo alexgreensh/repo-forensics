@@ -25,16 +25,14 @@ def get_git_log(repo_path):
     # The pretty format deliberately does NOT include %G? (signature status):
     # %G? makes git verify each commit's signature, which executes the repo's
     # own gpg.program config value -- arbitrary code execution just from reading
-    # a hostile repo's history (the scanner runs inside the untrusted tree). The
-    # signature status of an untrusted checkout, verified against whatever keys
-    # happen to be in the scanning machine's keyring, is not a meaningful signal
-    # anyway (a real third-party signer's key is almost never present, so it
-    # reports "cannot check", and an attacker simply leaves commits unsigned).
-    # We drop it rather than trust config neutralization alone.
+    # a hostile repo's history (the scanner runs inside the untrusted tree, and
+    # this call runs first on every scan, including --skill-scan). The signature
+    # status of an untrusted checkout, verified against whatever keys happen to
+    # be in the scanning machine's keyring, is not a meaningful signal anyway.
     #
-    # The call still goes through the hardened runner, which overrides every
-    # exec-capable config key (gpg.program, core.fsmonitor, core.hooksPath, ...)
-    # so nothing the repo declares can run during `git log`.
+    # All git in this module goes through core.run_git_hardened, which overrides
+    # every exec-capable config key (gpg.program, core.fsmonitor, core.hooksPath,
+    # diff.external, the LFS filters, ...) so nothing the repo declares can run.
     result = core.run_git_hardened(
         repo_path,
         "log", "--pretty=format:%H%x00%an%x00%ae%x00%aI%x00%cI", "-n", "1000",
@@ -102,10 +100,10 @@ def analyze_commits(commits, repo_path):
                     category="time-anomaly"
                 ))
 
-            # GPG signature status is intentionally not collected here: reading
-            # it (%G?) makes git execute the repo's own gpg.program, an RCE
-            # vector from an untrusted checkout, and the status is not a
-            # trustworthy signal for a third-party repo anyway. See get_git_log.
+            # GPG signature status is intentionally not collected: reading it
+            # (%G?) makes git execute the repo's own gpg.program (RCE from an
+            # untrusted checkout), and the status is not trustworthy for a
+            # third-party repo anyway. See get_git_log.
 
         except (ValueError, IndexError):
             continue
@@ -236,30 +234,39 @@ _PLUGIN_MARKERS = (
 _PIN_KEYS = frozenset({
     "sha", "commit", "commitsha", "commit_sha", "revision", "rev", "gitsha",
 })
-_PIN_METADATA_NAMES = frozenset({
+# Files read for an explicit commit pin. Split into two roles:
+#  - CATALOG manifests list plugins by name/URL and have no pin concept; a
+#    pin key there is a bonus but its ABSENCE is normal, so it must NOT raise a
+#    "provenance pin unavailable" coverage gap (that FP fired on this tool's own
+#    marketplace.json and trains readers to ignore the scanner).
+#  - LOCKFILE manifests are expected to pin an exact commit; a lockfile present
+#    without a recoverable pin IS a real coverage gap worth a low-severity note.
+_PIN_CATALOG_NAMES = frozenset({
     "plugin.json", "marketplace.json", "plugins.json", "extensions.json",
+})
+_PIN_LOCKFILE_NAMES = frozenset({
     "lock.json", "plugin-lock.json", "marketplace.lock.json",
 })
+_PIN_METADATA_NAMES = _PIN_CATALOG_NAMES | _PIN_LOCKFILE_NAMES
+# Directories never walked when recovering pins (vendored trees can carry a
+# foreign project's manifest and manufacture a spurious pin mismatch).
+_PIN_WALK_SKIP_DIRS = frozenset({".git", "node_modules", "vendor",
+                                 "bower_components", ".pnpm"})
 
 
 def _safe_git(repo_path, *args):
-    """Run a read-only git command without honoring attacker-controlled config."""
-    cmd = [
-        "git", "-c", "core.fsmonitor=", "-c", "core.hooksPath=",
-        "-c", "credential.helper=", "-c", "core.sshCommand=",
-        "-c", "safe.directory=*", *args,
-    ]
-    env = {
-        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
-        "HOME": os.environ.get("HOME", "/tmp"), "LANG": "C.UTF-8",
-        "GIT_PAGER": "cat", "GIT_CONFIG_NOSYSTEM": "1",
-        "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_TERMINAL_PROMPT": "0",
-    }
-    try:
-        return subprocess.run(cmd, cwd=repo_path, capture_output=True, text=True,
-                              check=True, env=env).stdout.strip()
-    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+    """Run a read-only git command without honoring attacker-controlled config.
+
+    Delegates to core.run_git_hardened so this shares ONE hardened git choke
+    point with get_git_log/scan_replace_refs. The earlier local `-c` set here
+    missed gpg*.program / diff.external / the LFS filters -- the hardened runner
+    covers them all. Returns stripped stdout (this helper's historical contract)
+    or None on any failure.
+    """
+    result = core.run_git_hardened(repo_path, *args)
+    if result is None or result.returncode != 0:
         return None
+    return result.stdout.strip()
 
 
 def _is_agent_plugin_repo(repo_path):
@@ -280,29 +287,44 @@ def _walk_pin_values(value, key=""):
 
 
 def _recover_recorded_pins(repo_path):
+    """Return (pins, lockfile_without_pin).
+
+    `pins` are the explicit 40-hex commit pins recovered from any catalog OR
+    lockfile manifest. `lockfile_without_pin` is True only when a LOCKFILE
+    manifest (which is expected to pin) was found yet contributed no pin -- a
+    genuine coverage gap. A bare catalog manifest with no pin concept never
+    sets it (that was the medium false positive on ordinary marketplace repos).
+    """
     pins = set()
-    metadata_seen = False
+    lockfile_seen = False
+    lockfile_pins = set()
     for root, dirs, files in os.walk(repo_path):
         rel_root = os.path.relpath(root, repo_path)
         if rel_root.count(os.sep) > 3:
             dirs[:] = []
             continue
-        dirs[:] = [d for d in dirs if d != ".git"]
+        # Prune vendored trees: a dependency's own manifest must not manufacture
+        # a foreign pin (or pin mismatch) for the repo under audit.
+        dirs[:] = [d for d in dirs if d not in _PIN_WALK_SKIP_DIRS]
         for name in files:
-            if name.lower() not in _PIN_METADATA_NAMES:
+            lname = name.lower()
+            if lname not in _PIN_METADATA_NAMES:
                 continue
             path = os.path.join(root, name)
             try:
                 if os.path.getsize(path) > 1024 * 1024:
                     continue
-                data = json.load(open(path, "r", encoding="utf-8"))
+                with open(path, "r", encoding="utf-8") as fh:
+                    data = json.load(fh)
             except (OSError, UnicodeDecodeError, json.JSONDecodeError):
                 continue
             found = set(_walk_pin_values(data))
             pins.update(found)
-            if name.lower() != "plugin.json":
-                metadata_seen = True
-    return pins, metadata_seen
+            if lname in _PIN_LOCKFILE_NAMES:
+                lockfile_seen = True
+                lockfile_pins.update(found)
+    lockfile_without_pin = lockfile_seen and not lockfile_pins
+    return pins, lockfile_without_pin
 
 
 def scan_plugin_checkout_provenance(repo_path):
@@ -335,7 +357,7 @@ def scan_plugin_checkout_provenance(repo_path):
             file=".git/HEAD", line=0, snippet=f"HEAD -> {symbolic}",
             category="plugin-provenance", evidence_class="direct"))
 
-    pins, metadata_seen = _recover_recorded_pins(repo_path)
+    pins, lockfile_without_pin = _recover_recorded_pins(repo_path)
     if pins and head and head.lower() not in pins:
         findings.append(core.Finding(
             scanner=SCANNER_NAME, severity="critical",
@@ -353,14 +375,16 @@ def scan_plugin_checkout_provenance(repo_path):
                          "branch. Hash-pinned installs must use detached HEAD and verify it."),
             file=".git/HEAD", line=0, snippet=f"HEAD -> {symbolic}",
             category="plugin-provenance", evidence_class="direct"))
-    elif metadata_seen and not pins:
+    elif lockfile_without_pin:
         findings.append(core.Finding(
-            scanner=SCANNER_NAME, severity="medium",
-            title="Agent Plugin Provenance Pin Unavailable",
-            description=("Plugin metadata was found, but no explicit 40-hex commit pin could "
-                         "be recovered; checkout provenance could not be verified."),
-            file="plugin-metadata", line=0, snippet="no explicit commit pin",
-            category="coverage-gap", evidence_class="direct"))
+            scanner=SCANNER_NAME, severity="low",
+            title="Agent Plugin Lockfile Missing Commit Pin",
+            description=("A plugin lockfile was found but records no explicit 40-hex "
+                         "commit pin, so checkout provenance could not be verified. "
+                         "A bare catalog manifest with no pin concept does not trigger "
+                         "this note."),
+            file="plugin-metadata", line=0, snippet="lockfile without commit pin",
+            category="coverage-gap", evidence_class="inferred"))
     return findings
 
 
@@ -380,40 +404,70 @@ def scan_plugin_installers(repo_path):
             except OSError:
                 continue
             rel = os.path.relpath(path, repo_path)
-            pin_name = r"(?:pinned_?sha|commit_?sha|sha|revision)"
-            # Shell and common subprocess/exec representations. We require git,
-            # the relevant subcommand, and the pin/FETCH_HEAD in one bounded call.
-            has_fetch_pin = bool(re.search(
-                rf"git[^\n]{{0,100}}fetch[^\n]{{0,100}}{pin_name}", text, re.I))
-            checkout_fetch = bool(re.search(
-                r"git[^\n]{0,100}checkout[^\n]{0,60}FETCH_HEAD", text, re.I))
-            checkout_pin = bool(re.search(
-                rf"git[^\n]{{0,100}}checkout[^\n]{{0,80}}{pin_name}", text, re.I))
-            has_rev_parse = bool(re.search(
-                r"git[^\n]{0,100}rev-parse[^\n]{0,40}HEAD", text, re.I))
-            has_compare = bool(re.search(
-                rf"(?:!=|===?|equals?\s*\(|compare_digest\s*\()[^\n]{{0,100}}{pin_name}|{pin_name}[^\n]{{0,100}}(?:!=|===?|equals?\s*\(|compare_digest\s*\()",
-                text, re.I))
-            has_abort = bool(re.search(
-                r"(?:exit\s*\(?[1-9]|process\.exit\s*\(\s*[1-9]|abort|raise|throw)",
-                text, re.I))
-            verifies = has_rev_parse and has_compare and has_abort
-            if has_fetch_pin and checkout_fetch and not verifies:
-                findings.append(core.Finding(
-                    scanner=SCANNER_NAME, severity="critical",
-                    title="Agent Plugin Installer Trusts Ambiguous FETCH_HEAD",
-                    description=("Installer fetches a pinned revision then checks out FETCH_HEAD "
-                                 "without verifying resolved HEAD matches the pin."),
-                    file=rel, line=0, snippet="git fetch ...; git checkout FETCH_HEAD",
-                    category="plugin-provenance", evidence_class="direct"))
-            elif checkout_pin and not verifies:
-                findings.append(core.Finding(
-                    scanner=SCANNER_NAME, severity="high",
-                    title="Agent Plugin Installer Does Not Verify Resolved Commit",
-                    description=("Installer checks out a commit-pin variable but does not abort "
-                                 "unless git rev-parse HEAD exactly matches the requested pin."),
-                    file=rel, line=0, snippet="git checkout <pin> without HEAD verification",
-                    category="plugin-provenance", evidence_class="direct"))
+            for f in _scan_installer_text(text, rel):
+                findings.append(f)
+    return findings
+
+
+# HEURISTIC (documented limit): the verification of a pinned checkout
+# (`git rev-parse HEAD` compared to the pin, aborting on mismatch) must appear
+# in the SAME flow as the checkout, not merely somewhere in the file. We
+# approximate "same flow" as a bounded window of source immediately AFTER the
+# checkout. This removes the false negative where an unsafe checkout was
+# excused by an unrelated rev-parse / comparison / raise elsewhere in the file,
+# at the cost of missing a verification that lives in a separate function or
+# module (a documented false negative -- installer findings are `high`, never a
+# sole `critical`, so they inform rather than hard-block).
+_INSTALLER_VERIFY_WINDOW = 800
+_PIN_NAME_RE = r"(?:pinned_?sha|commit_?sha|sha|revision)"
+_RE_FETCH_PIN = re.compile(rf"git[^\n]{{0,100}}fetch[^\n]{{0,100}}{_PIN_NAME_RE}", re.I)
+_RE_CHECKOUT_FETCH = re.compile(r"git[^\n]{0,100}checkout[^\n]{0,60}FETCH_HEAD", re.I)
+_RE_CHECKOUT_PIN = re.compile(rf"git[^\n]{{0,100}}checkout[^\n]{{0,80}}{_PIN_NAME_RE}", re.I)
+_RE_REV_PARSE = re.compile(r"git[^\n]{0,100}rev-parse[^\n]{0,40}HEAD", re.I)
+_RE_COMPARE = re.compile(
+    rf"(?:!=|===?|equals?\s*\(|compare_digest\s*\()[^\n]{{0,100}}{_PIN_NAME_RE}"
+    rf"|{_PIN_NAME_RE}[^\n]{{0,100}}(?:!=|===?|equals?\s*\(|compare_digest\s*\()",
+    re.I)
+_RE_ABORT = re.compile(
+    r"(?:exit\s*\(?[1-9]|process\.exit\s*\(\s*[1-9]|abort|raise|throw)", re.I)
+
+
+def _verified_after(text, pos):
+    """True if a rev-parse/compare/abort verification appears in the window of
+    source immediately after `pos` (the checkout site)."""
+    window = text[pos:pos + _INSTALLER_VERIFY_WINDOW]
+    return bool(_RE_REV_PARSE.search(window)
+                and _RE_COMPARE.search(window)
+                and _RE_ABORT.search(window))
+
+
+def _scan_installer_text(text, rel):
+    findings = []
+    fetch_pin_anywhere = bool(_RE_FETCH_PIN.search(text))
+    # FETCH_HEAD checkout not verified in its own flow (most dangerous).
+    for m in _RE_CHECKOUT_FETCH.finditer(text):
+        if fetch_pin_anywhere and not _verified_after(text, m.start()):
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="high",
+                title="Agent Plugin Installer Trusts Ambiguous FETCH_HEAD",
+                description=("Installer fetches a pinned revision then checks out FETCH_HEAD "
+                             "without verifying, in the same flow, that resolved HEAD matches "
+                             "the pin."),
+                file=rel, line=0, snippet="git fetch ...; git checkout FETCH_HEAD",
+                category="plugin-provenance", evidence_class="direct"))
+            break
+    # Pin-variable checkout not verified in its own flow.
+    for m in _RE_CHECKOUT_PIN.finditer(text):
+        if not _verified_after(text, m.start()):
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="high",
+                title="Agent Plugin Installer Does Not Verify Resolved Commit",
+                description=("Installer checks out a commit-pin variable but does not abort, in "
+                             "the same flow, unless git rev-parse HEAD exactly matches the "
+                             "requested pin."),
+                file=rel, line=0, snippet="git checkout <pin> without HEAD verification",
+                category="plugin-provenance", evidence_class="direct"))
+            break
     return findings
 
 

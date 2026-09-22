@@ -21,6 +21,13 @@ import urllib.parse
 from dataclasses import dataclass, asdict
 
 # --- Hardened git invocation -------------------------------------------------
+# NOTE (rebase reconciliation): this helper is IDENTICAL to the one on branch
+# fix/gpg-rce-hotfix (the RCE hotfix that hardens the pre-existing full-scan
+# path). It is ported here because #48 routes git_forensics into --skill-scan
+# and must not ship a raw git call. When the two land, this block MUST reconcile
+# to a single copy (keep one, drop the duplicate) -- they are byte-identical by
+# design so the merge is a delete, not a manual merge.
+#
 # A repository we are auditing controls its own .git/config and any config
 # files inside its tree. Several git config keys name an EXTERNAL PROGRAM that
 # git executes during ordinary read-only operations -- gpg.program (run by
