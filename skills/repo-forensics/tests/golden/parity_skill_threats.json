@@ -2148,6 +2148,27 @@
     "unicode-smuggling"
   ],
   [
+    "User-agent-based content routing, agent-first interleaving (Memory Heist, July 2026)",
+    "critical",
+    "ST-MH-006.md",
+    1,
+    "memory-heist-exfil"
+  ],
+  [
+    "User-agent-based content routing, agent-first interleaving (Memory Heist, July 2026)",
+    "critical",
+    "ST-MH-006.md",
+    2,
+    "memory-heist-exfil"
+  ],
+  [
+    "User-agent-based content routing, agent-first interleaving (Memory Heist, July 2026)",
+    "critical",
+    "ST-MH-006.md",
+    3,
+    "memory-heist-exfil"
+  ],
+  [
     "User-agent-based content routing: AI-agent-specific content serving (Memory Heist, July 2026)",
     "critical",
     "ST-MH-003.md",

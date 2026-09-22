@@ -1,9 +1,9 @@
 {
-  "bundle_version": 2,
+  "bundle_version": 5,
   "generated": "2026-09-22",
   "packs": {
     "dead_anchors": {
-      "pack_version": 2,
+      "pack_version": 5,
       "rules": [
         {
           "category": "dead-anchor-extract",
@@ -279,7 +279,7 @@
       "schema_version": "1.0"
     },
     "mcp_security": {
-      "pack_version": 2,
+      "pack_version": 5,
       "rules": [
         {
           "category": "sql-injection",
@@ -1238,7 +1238,7 @@
       "schema_version": "1.0"
     },
     "runtime_dynamism": {
-      "pack_version": 2,
+      "pack_version": 5,
       "rules": [
         {
           "asset": "loaded code",
@@ -2513,7 +2513,7 @@
       "schema_version": "1.0"
     },
     "sast": {
-      "pack_version": 2,
+      "pack_version": 5,
       "rules": [
         {
           "asset": "server runtime",
@@ -5492,7 +5492,7 @@
       "schema_version": "1.0"
     },
     "secrets": {
-      "pack_version": 2,
+      "pack_version": 5,
       "rules": [
         {
           "asset": "asymmetric private key",
@@ -6508,7 +6508,7 @@
       "schema_version": "1.0"
     },
     "shared": {
-      "pack_version": 2,
+      "pack_version": 5,
       "rules": [
         {
           "category": "shared-verb-list",
@@ -6704,7 +6704,7 @@
       "schema_version": "1.0"
     },
     "skill_threats": {
-      "pack_version": 4,
+      "pack_version": 7,
       "rules": [
         {
           "asset": "agent behavior",
@@ -9700,11 +9700,37 @@
               "PRIVACY.md: we respect the user-agent of Claude and other bots"
             ]
           },
-          "explanation": "Server code that checks for AI agent user-agents and serves different content than what human visitors see. Enables serving a benign page to humans while injecting exfiltration instructions to AI agents. The lookahead requires a conditional/branch keyword (if, check, switch, ==, serve, return, route, etc.) so a mere mention of an agent name in a warn() string or a documentation path line does not false-positive.",
+          "explanation": "Server code that checks for AI agent user-agents and serves different content than what human visitors see. Enables serving a benign page to humans while injecting exfiltration instructions to AI agents. Requires a conditional/branch keyword (if, check, switch, ==, serve, return, route, etc.) after or between the agent/user-agent pair (as in `ua.includes('Claude')`), so a mere mention of an agent name in a warn() string or a documentation path line does not false-positive. Companion rule ST-MH-006 covers the agent-first interleaving. All gaps are bounded (no unbounded lookahead) so hostile long lines cannot trigger catastrophic regex backtracking.",
           "id": "ST-MH-003",
-          "pattern": "(?i)(?=.*(?:\\b(?:if|elsif|elif|else|unless|case|switch|when|check|condition)\\b|==|===|!=|=~|~=|\\.contains\\(|\\.match\\(|\\.includes\\(|\\b(?:serve\\w*|return\\w*|rout\\w*|redirect\\w*|contains|matches|equals?)\\b))(?:(?:user.?agent|UA)[^\\n]{0,60}?(?:Claude|GPT|ChatGPT|OpenAI|Gemini|Copilot|Perplexity|AI\\s+assistant|bot|crawler|spider)|(?:Claude|GPT|ChatGPT|OpenAI|Gemini|Copilot|Perplexity|AI\\s+assistant|bot|crawler|spider)[^\\n]{0,60}?(?:user.?agent|UA))",
+          "pattern": "(?i)(?:(?:(?:user.?agent|UA)[^\\n]{0,60}?(?:Claude|GPT|ChatGPT|OpenAI|Gemini|Copilot|Perplexity|AI\\s+assistant|bot|crawler|spider)|(?:Claude|GPT|ChatGPT|OpenAI|Gemini|Copilot|Perplexity|AI\\s+assistant|bot|crawler|spider)[^\\n]{0,60}?(?:user.?agent|UA))[^\\n]{0,120}?(?:\\b(?:if|elsif|elif|else|unless|case|switch|when|check|condition)\\b|==|!=|=~|~=|\\.match\\(|\\.includes\\(|\\b(?:serve\\w*|return\\w*|rout\\w*|redirect\\w*|contains|matches|equals?)\\b)|(?:user.?agent|UA)[^\\n]{0,60}?(?:\\b(?:if|elsif|elif|else|unless|case|switch|when|check|condition)\\b|==|!=|=~|~=|\\.match\\(|\\.includes\\(|\\b(?:serve\\w*|return\\w*|rout\\w*|redirect\\w*|contains|matches|equals?)\\b)[^\\n]{0,60}?(?:Claude|GPT|ChatGPT|OpenAI|Gemini|Copilot|Perplexity|AI\\s+assistant|bot|crawler|spider))",
           "severity": "high",
           "title": "User-agent-based content routing: AI-agent-specific content serving (Memory Heist, July 2026)",
+          "type": "regex"
+        },
+        {
+          "asset": "agent receives weaponized content invisible to humans",
+          "attacker": "website server code",
+          "boundary": "HTTP request routing -> differentiated content",
+          "category": "memory-heist-exfil",
+          "confidence": 0.7,
+          "examples": {
+            "match": [
+              "Claude gets the alternate page when routing by user-agent",
+              "Gemini traffic is routed by checking the user-agent string",
+              "Requests from ChatGPT are routed based on the user-agent header"
+            ],
+            "no_match": [
+              "log the user-agent for analytics",
+              "block bots in robots.txt",
+              "warn('User-agent: Claude-User bot detected')",
+              "PRIVACY.md: we respect the user-agent of Claude and other bots"
+            ]
+          },
+          "explanation": "Agent-first interleaved variant of ST-MH-003: an AI agent name, then a conditional/branch keyword, then a user-agent reference on the same line (e.g. `Claude ... when routing by user-agent`). Bounded gaps keep hostile long lines linear-time (no catastrophic regex backtracking).",
+          "id": "ST-MH-006",
+          "pattern": "(?i)(?:(?:Claude|GPT|ChatGPT|OpenAI|Gemini|Copilot|Perplexity|AI\\s+assistant|bot|crawler|spider)[^\\n]{0,60}?(?:\\b(?:if|elsif|elif|else|unless|case|switch|when|check|condition)\\b|==|!=|=~|~=|\\.match\\(|\\.includes\\(|\\b(?:serve\\w*|return\\w*|rout\\w*|redirect\\w*|contains|matches|equals?)\\b)[^\\n]{0,60}?(?:user.?agent|UA))",
+          "severity": "high",
+          "title": "User-agent-based content routing, agent-first interleaving (Memory Heist, July 2026)",
           "type": "regex"
         },
         {

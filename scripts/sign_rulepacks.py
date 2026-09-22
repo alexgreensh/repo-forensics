@@ -103,7 +103,7 @@ def _write_and_sign(path, raw_bytes, priv, pub):
         f.write(sig)
 
 
-def main():
+def main(argv=None):
     ap = argparse.ArgumentParser(description="Build + sign feeds (dev-only).")
     key = ap.add_mutually_exclusive_group()
     key.add_argument("--seed-hex", help="Private seed hex (legacy; prefer --seed-file).")
@@ -115,14 +115,18 @@ def main():
                     help="Bundle envelope version (default: prior + 1).")
     ap.add_argument("--allow-unchanged", action="store_true",
                     help="Permit re-signing a bundle with no pack-content changes.")
-    args = ap.parse_args()
+    ap.add_argument("--allow-unsigned-overwrite", action="store_true",
+                    help="Permit --build-only to replace bundle bytes that an "
+                         "existing .sig still covers (re-sign offline before publish).")
+    args = ap.parse_args(argv)
 
     if not args.build_only and not (args.seed_hex or args.seed_file):
         ap.error("--seed-file (preferred) or --seed-hex is required unless --build-only is used")
     if args.seed_file:
-        seed_raw = open(os.path.expanduser(args.seed_file), "rb").read().strip()
+        with open(os.path.expanduser(args.seed_file), "rb") as handle:
+            seed_raw = handle.read()
         try:
-            priv = bytes.fromhex(seed_raw.decode("ascii"))
+            priv = bytes.fromhex(seed_raw.strip().decode("ascii"))
         except (UnicodeDecodeError, ValueError):
             priv = seed_raw
     else:
@@ -155,6 +159,19 @@ def main():
         return 2
     bundle_bytes = json.dumps(bundle, indent=2, sort_keys=True).encode("utf-8")
     if args.build_only:
+        sig_path = _BUNDLE_PATH + ".sig"
+        if os.path.exists(sig_path):
+            try:
+                with open(_BUNDLE_PATH, "rb") as f:
+                    current = f.read()
+            except OSError:
+                current = None
+            if current != bundle_bytes and not args.allow_unsigned_overwrite:
+                print(f"[!] refusing --build-only: {sig_path} exists and would no "
+                      f"longer match the new bundle bytes; re-sign offline before "
+                      f"publishing, or pass --allow-unsigned-overwrite",
+                      file=sys.stderr)
+                return 2
         with open(_BUNDLE_PATH, "wb") as f:
             f.write(bundle_bytes)
         print(f"[+] wrote unsigned {_BUNDLE_PATH} ({len(bundle_bytes)} bytes; "

@@ -325,9 +325,29 @@ def _refresh_rulepacks(scripts_dir):
         return False, msg
 
 
+_RULEPACK_STRUCTURAL_MARKERS = (
+    # Inert bundle: no/insufficient pack can overlay installed versions.
+    "permanently unacceptable",
+    # Tampered or mis-signed feed; deterministic, never transient.
+    "signature verification failed",
+    # Structurally malformed bundle (schema/type/self-test rejections).
+    "bundle has no packs",
+    "schema major",
+    "json parse failed",
+    "not an object",
+    "rules not a list",
+    "rule rejected",
+    "self-test failed",
+    "pack_version not an integer",
+)
+
+
 def _rulepack_failure_is_critical(message):
-    """Only structural publisher failures are critical; age remains advisory."""
-    return "permanently unacceptable" in str(message).lower()
+    """Structural feed/publisher failures are critical; age and fetch blips
+    stay advisory. Markers mirror rulepack_feed.py's failure messages; a
+    cross-module consistency test guards against drift."""
+    text = str(message).lower()
+    return any(marker in text for marker in _RULEPACK_STRUCTURAL_MARKERS)
 
 
 def self_check():

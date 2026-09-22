@@ -332,16 +332,25 @@ def _check_schema(bundle):
 
 
 def _check_overlay_viability(bundle, shipped_dir=None):
-    """Reject a feed that cannot overlay any pack on this installation."""
+    """Reject a feed that cannot fully overlay this installation.
+
+    EVERY pack carried by the bundle must be overlay-capable: its pack_version
+    strictly beats the installed/shipped version (a pack name not shipped here
+    is a NEW pack and overlays from -1). Requiring all packs, not merely one,
+    keeps a junk or stale entry from qualifying a bundle whose real packs are
+    inert.
+    """
     if shipped_dir is None:
         shipped_dir = os.path.join(os.path.dirname(_SCRIPTS_DIR), "data", "rulepacks")
     packs = bundle.get("packs", {})
     if not isinstance(packs, dict) or not packs:
         return False, "bundle has no packs"
-    eligible = []
+    considered = 0
+    eligible = 0
     for name, pack in packs.items():
         if not isinstance(pack, dict):
             continue
+        considered += 1
         version = pack.get("pack_version")
         if isinstance(version, bool) or not isinstance(version, int):
             continue
@@ -356,9 +365,10 @@ def _check_overlay_viability(bundle, shipped_dir=None):
         except (OSError, ValueError):
             pass
         if version > shipped_version:
-            eligible.append(name)
-    if not eligible:
-        return False, "bundle permanently unacceptable: no pack can overlay installed versions"
+            eligible += 1
+    if considered == 0 or eligible != considered:
+        return False, ("bundle permanently unacceptable: not every pack can "
+                       "overlay installed versions")
     return True, ""
 
 
