@@ -682,16 +682,16 @@ Defense-in-depth, not a guarantee. Always verify findings manually. See [LICENSE
 ---
 ## License
 
-**PolyForm Noncommercial 1.0.0**. Personal, research, education: free. Companies of fewer than 5 people (whole-company headcount, not seats): free. Commercial: [reach out](https://linkedin.com/in/alexgreensh).
+**PolyForm Noncommercial 1.0.0**, plus a written [small business permission](LICENSE-SMALL-BUSINESS.md). Personal, research, education: free. Companies with fewer than 5 people and under $20k/month revenue (whole company, not seats): free. Commercial: [reach out](https://linkedin.com/in/alexgreensh).
 
 <details>
 <summary>License FAQ</summary>
 
-**Personal / hobby / research / education?** Go for it. No license purchase needed.
+**Personal / hobby / research / education?** Go for it. No license purchase needed, including your own open-source side projects. What counts is who the work is for, not where it runs: work for your employer is your employer's use, even from home.
 
-**Is your whole company fewer than 5 people (total headcount, not just the seats using it), or under $20k/month?** No-cost commercial license automatically. This is about the size of your entire organization, not how many people install it, so a larger company does not qualify by limiting it to a handful of users. [Sponsor](https://github.com/sponsors/alexgreensh) if you want, not required.
+**Small business?** If your **whole company** has fewer than 5 people **and** under $20k/month revenue, you get a no-cost commercial license, in writing: [LICENSE-SMALL-BUSINESS.md](LICENSE-SMALL-BUSINESS.md). Both limits apply to the entire organization (including any parent or sister companies), not to how many people install it, so a larger company does not qualify by limiting it to a handful of users. It covers use inside your own business, not reselling it or running it as a service for others. [Sponsor](https://github.com/sponsors/alexgreensh) if you want, not required.
 
-**Growing into a business?** Built-in 32-day grace period. Reach out when ready.
+**Growing into a business?** You get 32 days after you stop qualifying to sort out a commercial license. Past use is fine.
 
 **Larger company?** Contact [Alex Greenshpun](https://linkedin.com/in/alexgreensh) or me@alexgreenshpun.com.
 
