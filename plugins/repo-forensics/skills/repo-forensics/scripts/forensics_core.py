@@ -2263,7 +2263,6 @@ def correlate(findings, repo_path=None):
 
     network_keywords = {"network", "http", "fetch", "request", "post", "webhook", "curl", "wget", "exfiltration"}
     exec_keywords = {"eval", "exec", "system", "subprocess", "code execution", "shell"}
-    encoding_keywords = {"base64", "obfuscat", "encoding", "hex string"}
     # Legacy prose-keyword sets retained ONLY for the rules that were not
     # part of the typed-correlation rewrite (Rules 27/28/29 below). Rules 1
     # and 3 classify leaves structurally via _exfil_capabilities instead.
@@ -2319,6 +2318,13 @@ def correlate(findings, repo_path=None):
                 if kw in tags:
                     return f
         return None
+
+    def is_encoding_leaf(f):
+        # "obfuscated-exec" also labels ordinary dynamic imports/reloads;
+        # only a real encoder/encoded-payload finding can seed Rule 2.
+        return (f.category in {"encoding", "hex-encoding"}
+                or (f.scanner == "ast_analysis"
+                    and f.title == "Obfuscated Exec: Encoded Payload"))
 
     def strongest_evidence(findings_iter):
         """Reduce a set of contributing (leaf) findings to the strongest
@@ -2420,14 +2426,19 @@ def correlate(findings, repo_path=None):
         # Require the two sides to come from DISTINCT findings AND the exec side
         # to be a real, non-obfuscation finding so a single "Long Hex String"
         # finding does not self-correlate.
-        encoding_hits = [f for f in file_findings if any(kw in f._tags for kw in encoding_keywords)]
+        encoding_hits = [f for f in file_findings if is_encoding_leaf(f)]
         execution_hits = [f for f in file_findings
                           if f.category not in {"encoding", "obfuscation", "decoded-payload"}
                           and any(kw in f._tags for kw in exec_keywords)]
         if any(a.finding_id != b.finding_id for a in encoding_hits for b in execution_hits):
+            severity = compound_code_severity(filepath, encoding_hits, execution_hits)
+            if not any(f.title != "Long Hex String" for f in encoding_hits):
+                # A bare hex literal can be a checksum. Without a decoder or
+                # encoded-payload finding, nearby execution is only co-occurrence.
+                severity = "high"
             correlated.append(Finding(
                 scanner="correlation",
-                severity=compound_code_severity(filepath, encoding_hits, execution_hits),
+                severity=severity,
                 title="Obfuscated Code Execution",
                 description="Base64/encoding combined with code execution in the same file",
                 file=filepath,
@@ -2532,7 +2543,7 @@ def correlate(findings, repo_path=None):
 
         # Rule 9: Dynamic import/eval + network fetch = "Deferred Payload Loading"
         import_hits = [f for f in file_findings if any(kw in f._tags for kw in dynamic_import_keywords)]
-        network_hits = [f for f in file_findings if any(kw in f._tags for kw in network_keywords)]
+        network_hits = [f for f in file_findings if "network" in _exfil_capabilities(f)]
         if import_hits and network_hits:
             correlated.append(Finding(
                 scanner="correlation",
@@ -2546,7 +2557,9 @@ def correlate(findings, repo_path=None):
             ))
 
         # Rule 10: Date/counter comparison + exec/eval = "Time-Triggered Malware"
-        time_hits = [f for f in file_findings if any(kw in f._tags for kw in time_bomb_keywords)]
+        time_hits = [f for f in file_findings
+                     if f.rule_id not in {"RD-TB-002", "RD-TB-003", "RD-TB-005"}
+                     and any(kw in f._tags for kw in time_bomb_keywords)]
         time_exec_hits = [f for f in file_findings if any(kw in f._tags for kw in exec_keywords)]
         if time_hits and time_exec_hits:
             correlated.append(Finding(
@@ -3188,7 +3201,7 @@ def correlate(findings, repo_path=None):
             elif c.title == "Obfuscated Code Execution":
                 c.evidence_class = strongest_evidence(
                     f for f in file_findings
-                    if any(kw in f._tags for kw in encoding_keywords)
+                    if is_encoding_leaf(f)
                     or (f.category not in {"encoding", "obfuscation", "decoded-payload"}
                         and any(kw in f._tags for kw in exec_keywords))
                 )

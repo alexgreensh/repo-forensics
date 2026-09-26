@@ -390,6 +390,35 @@ class TestCorrelation:
         pair = next(f for f in core.correlate([env, raw]) if f.title == "Potential Data Exfiltration")
         assert pair.severity == "critical"
 
+    def test_dynamic_import_is_not_an_encoding_leaf(self):
+        findings = [
+            core.Finding("ast_analysis", "high", "Dynamic Import: importlib.import_module(variable)", "dynamic module loading", "test_loader.py", 1, "importlib.import_module(name)", "obfuscated-exec"),
+            core.Finding("runtime_dynamism", "high", "Dynamic Import", "code execution at runtime", "test_loader.py", 1, "importlib.import_module(name)", "dynamic-import"),
+        ]
+        assert "Obfuscated Code Execution" not in [f.title for f in core.correlate(findings)]
+
+    def test_hex_checksum_near_subprocess_is_advisory(self):
+        checksum = core.Finding("entropy", "high", "Long Hex String", "may be encoded data", "tests/test_release_installable.py", 35, "0" * 64, "encoding")
+        runner = core.Finding("trifecta_raw", "high", "Subprocess call", "shell execution", "tests/test_release_installable.py", 45, "subprocess.run(['bash', str(GATE)])", "execution")
+        pair = next(f for f in core.correlate([checksum, runner]) if f.title == "Obfuscated Code Execution")
+        assert pair.severity == "high"
+        checksum.title = "Base64 Block"
+        assert next(f for f in core.correlate([checksum, runner]) if f.title == "Obfuscated Code Execution").severity == "critical"
+
+    def test_env_access_is_not_network_for_deferred_payload_rule(self):
+        findings = [
+            core.Finding("runtime_dynamism", "high", "Dynamic Import", "", "loader.py", 5, "importlib.import_module(name)", "dynamic-import"),
+            core.Finding("skill_threats", "low", "Environment variable access", "", "loader.py", 6, "os.environ.get('MODE')", "credential-exfiltration", rule_id="ST-EX-008"),
+        ]
+        assert "Deferred Payload Loading" not in [f.title for f in core.correlate(findings)]
+
+    def test_relative_deadline_does_not_become_time_triggered_malware(self):
+        deadline = core.Finding("runtime_dynamism", "medium", "time.time() compared to variable", "", "worker.py", 5, "while time.time() < deadline:", "time-bomb", rule_id="RD-TB-005")
+        execution = core.Finding("sast", "high", "Dynamic Compile", "code execution", "worker.py", 7, "compile(src, name, 'exec')", "code-execution")
+        assert "Time-Triggered Malware" not in [f.title for f in core.correlate([deadline, execution])]
+        deadline.rule_id = "RD-TB-004"
+        assert "Time-Triggered Malware" in [f.title for f in core.correlate([deadline, execution])]
+
     def test_hook_mentions_do_not_create_install_time_exfiltration(self):
         findings = [
             core.Finding("skill_threats", "high", "Hook guidance", "hook configuration", "runner.py", 1, "hook", "scope-escalation"),

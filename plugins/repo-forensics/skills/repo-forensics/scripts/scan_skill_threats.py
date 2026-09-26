@@ -116,6 +116,12 @@ _AGENT_TOKEN = re.compile(
     r"\b(?:Claude|GPT|ChatGPT|OpenAI|Gemini|Copilot|Perplexity|AI\s+assistant|bot|crawler|spider)\b",
     re.IGNORECASE,
 )
+_MH_PII_ACTION = re.compile(r"\b(?:encode|embed|include|put|hide|pass|send)\b", re.IGNORECASE)
+_MH_PII_FIELD = re.compile(
+    r"(?<![-\w])(?:name|username|email|phone|address|company|employer|hometown|city|birthday|DOB|SSN|security\s+(?:question|answer)|password|secret)\b",
+    re.IGNORECASE,
+)
+_MH_URL_FIELD = re.compile(r"(?<![-\w])(?:URL|path|query|parameter|endpoint|request)\b", re.IGNORECASE)
 
 # ============================================================
 # Category 2: Invisible Unicode Smuggling (critical)
@@ -710,7 +716,15 @@ def scan_content(content, rel_path, budget=None):
 
     if ext in text_exts or ext in code_exts:
         # Cat 3: Prerequisite red flags
-        findings.extend(scan_rules(content, rel_path, PREREQUISITE_RULES, "prerequisite-attack", "critical"))
+        prerequisite_findings = scan_rules(content, rel_path, PREREQUISITE_RULES,
+                                           "prerequisite-attack", "critical")
+        is_workflow = rel_path.replace('\\', '/').startswith('.github/workflows/')
+        for finding in prerequisite_findings:
+            if finding.rule_id == "ST-PR-010" and (is_workflow or ext == '.py'):
+                # An expression in workflow metadata or Python source is not
+                # itself hook-script execution. scan_infra grades shell use.
+                finding.severity = "high"
+        findings.extend(prerequisite_findings)
 
     if ext in code_exts or is_agent_instruction_file:
         # Cat 4: Environment access is a capability until a sink is proven.
@@ -792,6 +806,14 @@ def scan_content(content, rel_path, budget=None):
             or not (1 <= f.line <= len(content_lines))
             or (_UA_TOKEN.search(content_lines[f.line - 1])
                 and _AGENT_TOKEN.search(content_lines[f.line - 1]))
+        ]
+        mh_findings = [
+            f for f in mh_findings
+            if f.rule_id != "ST-MH-004"
+            or not (1 <= f.line <= len(content_lines))
+            or (_MH_PII_ACTION.search(content_lines[f.line - 1])
+                and _MH_PII_FIELD.search(content_lines[f.line - 1])
+                and _MH_URL_FIELD.search(content_lines[f.line - 1]))
         ]
         # v2.13.2 Memory-Heist recalibration (design §5.3). The ST-MH-001..005
         # patterns stay byte-identical (they catch the 5 real UA-routing /
