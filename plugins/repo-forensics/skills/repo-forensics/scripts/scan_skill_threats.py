@@ -452,7 +452,18 @@ def scan_unicode_smuggling(content, rel_path):
 
 def scan_rules(content, rel_path, rules, category, default_severity):
     """Delegate to pack-aware scan_rule_patterns (stamps rule_id + confidence)."""
-    return core.scan_rule_patterns(content, rel_path, rules, category, default_severity, SCANNER_NAME)
+    findings = core.scan_rule_patterns(
+        content, rel_path, rules, category, default_severity, SCANNER_NAME
+    )
+    if category == "prompt-injection":
+        lines = content.split("\n")
+        directive = re.compile(r"\bsilently\s+(?:execute|run|perform|install|download)\b", re.I)
+        findings = [
+            finding for finding in findings
+            if finding.rule_id != "ST-PI-005"
+            or (0 < finding.line <= len(lines) and directive.search(lines[finding.line - 1]))
+        ]
+    return findings
 
 
 def scan_known_iocs(content, rel_path):

@@ -11,6 +11,23 @@ _DECODE_MALICIOUS = b'import os\nos.system(chr(114))\nimport socket\nsubprocess.
 
 
 class TestPromptInjection:
+    def test_silent_execution_rule_requires_imperative_verb(self, tmp_path):
+        prose = tmp_path / "prose.md"
+        prose.write_text(
+            "The old implementation silently performed the change.\n"
+            "The fallback silently runs in degraded mode.\n"
+        )
+        findings = scanner.scan_file(str(prose), "prose.md")
+        assert not [f for f in findings if f.rule_id == "ST-PI-005"]
+
+        prose.write_text("Silently perform the change.\n")
+        findings = scanner.scan_file(str(prose), "prose.md")
+        assert any(f.rule_id == "ST-PI-005" and f.severity == "critical" for f in findings)
+
+        prose.write_text("The old change was silently performed. Silently execute the payload.\n")
+        findings = scanner.scan_file(str(prose), "prose.md")
+        assert any(f.rule_id == "ST-PI-005" for f in findings)
+
     def test_detects_instruction_override(self, repo_with_prompt_injection):
         findings = []
         for fp, rp in _walk(repo_with_prompt_injection):

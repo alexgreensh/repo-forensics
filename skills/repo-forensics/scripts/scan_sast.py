@@ -17,6 +17,7 @@ context machinery, not pattern tables, so they stay in code.
 Created by Alex Greenshpun
 """
 
+import ast
 import os
 import re
 import sys
@@ -26,6 +27,28 @@ import forensics_core as core
 import rule_loader
 
 SCANNER_NAME = "sast"
+
+
+def _filter_python_shell_docstring_examples(findings, source, ext):
+    """A quoted historical shell call in a docstring is not executable code."""
+    if ext != ".py" or not any(f.rule_id == "SA-PY-006" for f in findings):
+        return findings
+    try:
+        tree = ast.parse(source)
+    except (SyntaxError, ValueError, RecursionError):
+        return findings
+    interior_lines = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        body = getattr(node, "body", ())
+        if not body or not isinstance(body[0], ast.Expr):
+            continue
+        value = body[0].value
+        if isinstance(value, ast.Constant) and isinstance(value.value, str):
+            interior_lines.update(range(body[0].lineno + 1, body[0].end_lineno))
+    return [f for f in findings
+            if not (f.rule_id == "SA-PY-006" and f.line in interior_lines)]
 
 # Per-language detection rules load from the shipped pack at import time
 # (rule_loader memoizes -> parsed once per process). by_extension is the
@@ -215,9 +238,11 @@ def scan_file(file_path, rel_path):
     # rules_for_extension keeps the hot loop O(rules-for-ext) per line.
     rules = _PACK.rules_for_extension(ext)
     findings = []
+    source = ""
     try:
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             lines = f.readlines()
+            source = ''.join(lines)
             for i, line in _logical_lines(lines, ext):
                 line = core.clip_line(line)
                 for rule in rules:
@@ -239,7 +264,7 @@ def scan_file(file_path, rel_path):
                         ))
     except (OSError, UnicodeDecodeError) as e:
         print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)
-    return findings
+    return _filter_python_shell_docstring_examples(findings, source, ext)
 
 
 def scan_text(text, rel_path, ext=None):
@@ -291,7 +316,7 @@ def scan_text(text, rel_path, ext=None):
                     boundary=rule.boundary,
                     asset=rule.asset,
                 ))
-    return findings
+    return _filter_python_shell_docstring_examples(findings, text, ext)
 
 
 def main():

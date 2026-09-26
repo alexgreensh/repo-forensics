@@ -94,7 +94,7 @@
     {
       "id": "ST-PI-005",
       "type": "regex",
-      "pattern": "(?i)silently\\s+(execute|run|perform|install|download)",
+      "pattern": "(?i)silently\\s+(execute|run|perform|install|download)\\b",
       "title": "Silent execution directive",
       "severity": "critical",
       "confidence": 0.85,
@@ -108,7 +108,9 @@
         ],
         "no_match": [
           "Loudly announce the run.",
-          "silently it failed"
+          "silently it failed",
+          "silently performed the old behavior",
+          "silently runs in degraded mode"
         ]
       }
     },
