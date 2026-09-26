@@ -789,8 +789,8 @@ def deep_scan_item(dirpath, label, item_type, timeout=None, adjudication_sink=No
     saying so rather than going quiet, and appends the item's baseline key to
     *uncleared_sink* so main() can keep it out of the baseline. The early
     returns above -- no scanner script, no such directory, no time budget
-    left, an OSError launching it -- still return [] and leave the sink
-    untouched.
+    left -- still return [] and leave the sink untouched. A scanner launch
+    error is reported and kept out of the baseline.
     """
     if not os.path.isfile(RUN_FORENSICS_SCRIPT):
         return []
@@ -833,7 +833,9 @@ def deep_scan_item(dirpath, label, item_type, timeout=None, adjudication_sink=No
     except OSError:
         if proc is not None:
             _kill_process_group(pgid, proc)
-        return []
+        if uncleared_sink is not None:
+            uncleared_sink.append(f"{item_type}:{dirpath}")
+        return ["deep scan unavailable: scanner process could not start"]
     finally:
         if proc is not None and proc.stdout and not proc.stdout.closed:
             proc.stdout.close()

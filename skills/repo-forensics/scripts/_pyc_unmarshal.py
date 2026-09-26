@@ -5,9 +5,10 @@ This runs as a DISPOSABLE CHILD of scan_bytecode.py. marshal.loads is
 documented by CPython as unsafe against erroneous or maliciously constructed
 data and can abort the interpreter at the C level (SIGSEGV/SIGABRT) — a crash a
 parent try/except cannot catch. By doing the unmarshal here, in a throwaway
-process under CPU + address-space rlimits, a hostile .pyc can only ever kill
-THIS process. The parent maps any non-zero/negative exit to an "unanalyzable
-bytecode" finding and the scan continues. This is the U2 user-safety property
+process under CPU + address-space rlimits and a deny-default OS sandbox, a
+hostile .pyc cannot access host files, network, or spawn processes. The parent
+maps any non-zero/negative exit to an "unanalyzable bytecode" finding and the
+scan continues. This is the U2 user-safety property
 (KTD6): never let attacker-controlled bytecode crash or hang the real scan.
 
 Usage:  _pyc_unmarshal.py <pyc_path> <header_len>
@@ -20,6 +21,8 @@ eval()s, or otherwise runs it.
 """
 
 import dis
+import ctypes
+import ctypes.util
 import marshal
 import sys
 import types
@@ -34,6 +37,81 @@ CPU_CAP_SEC = 10                     # CPU-seconds ceiling
 MAX_CODE_OBJECTS = 5000              # bound nested-code fan-out
 MAX_DEPTH = 50                       # bound nesting depth
 MAX_OUTPUT_CHARS = 4 * 1024 * 1024   # 4 MB blob cap
+MAX_INPUT_BYTES = 5 * 1024 * 1024
+SANDBOX_UNAVAILABLE = 5
+ANALYSIS_LIMIT = 6
+
+
+class AnalysisLimitExceeded(ValueError):
+    """Partial disassembly must never be reported as complete."""
+
+
+class _BoundedLines(list):
+    def __init__(self):
+        super().__init__()
+        self.chars = 0
+
+    def append(self, line):
+        size = self.chars + len(line) + bool(self)
+        if size > MAX_OUTPUT_CHARS:
+            raise AnalysisLimitExceeded("bytecode output limit exceeded")
+        super().append(line)
+        self.chars = size
+
+
+def _apply_sandbox():
+    """Deny host capabilities before parsing untrusted marshal data.
+
+    No files need opening after this point. Linux needs libseccomp; other
+    unsupported systems skip disassembly instead of parsing without isolation.
+    Resource limits alone cannot contain a native deserializer exploit.
+    """
+    if sys.platform == "darwin":
+        system = ctypes.CDLL("/usr/lib/libSystem.B.dylib", use_errno=True)
+        system.sandbox_init.argtypes = [ctypes.c_char_p, ctypes.c_uint64,
+                                       ctypes.POINTER(ctypes.c_char_p)]
+        system.sandbox_init.restype = ctypes.c_int
+        error = ctypes.c_char_p()
+        return system.sandbox_init(b"(version 1)(deny default)", 0,
+                                   ctypes.byref(error)) == 0
+    if sys.platform != "linux":
+        return False
+    library = ctypes.util.find_library("seccomp")
+    if not library:
+        return False
+    seccomp = ctypes.CDLL(library, use_errno=True)
+    seccomp.seccomp_init.argtypes = [ctypes.c_uint32]
+    seccomp.seccomp_init.restype = ctypes.c_void_p
+    seccomp.seccomp_syscall_resolve_name.argtypes = [ctypes.c_char_p]
+    seccomp.seccomp_syscall_resolve_name.restype = ctypes.c_int
+    seccomp.seccomp_rule_add.argtypes = [ctypes.c_void_p, ctypes.c_uint32,
+                                       ctypes.c_int, ctypes.c_uint]
+    seccomp.seccomp_rule_add.restype = ctypes.c_int
+    seccomp.seccomp_load.argtypes = [ctypes.c_void_p]
+    seccomp.seccomp_load.restype = ctypes.c_int
+    seccomp.seccomp_release.argtypes = [ctypes.c_void_p]
+    seccomp.seccomp_release.restype = None
+    # Unknown syscalls return EPERM. The child keeps only stdin/out/err, so
+    # read/write cannot reach host files through an inherited descriptor.
+    context = seccomp.seccomp_init(0x00050001)  # SCMP_ACT_ERRNO(EPERM)
+    if not context:
+        return False
+    try:
+        for name in (
+            "read", "write", "close", "fstat", "fstat64", "lseek",
+            "mmap", "mmap2", "mprotect", "munmap", "mremap", "brk", "madvise",
+            "rt_sigaction", "rt_sigprocmask", "rt_sigreturn", "sigreturn",
+            "sigaltstack", "futex", "futex_time64", "clock_gettime",
+            "clock_gettime64", "gettimeofday", "getpid", "gettid", "getrandom",
+            "exit", "exit_group",
+        ):
+            number = seccomp.seccomp_syscall_resolve_name(name.encode("ascii"))
+            if number >= 0 and seccomp.seccomp_rule_add(context, 0x7FFF0000,
+                                                       number, 0) != 0:
+                return False
+        return seccomp.seccomp_load(context) == 0
+    finally:
+        seccomp.seccomp_release(context)
 
 
 def _apply_limits():
@@ -75,10 +153,10 @@ def _walk_code(code, out, seen, depth):
     """Recursively collect names, string constants, and opcodes. dis does NOT
     recurse into nested code objects, so we walk co_consts ourselves — an
     os.system inside a function body lives in a nested CodeType."""
-    if depth > MAX_DEPTH or len(seen) >= MAX_CODE_OBJECTS:
-        return
     if id(code) in seen:
         return
+    if depth > MAX_DEPTH or len(seen) >= MAX_CODE_OBJECTS:
+        raise AnalysisLimitExceeded("bytecode traversal limit exceeded")
     seen.add(id(code))
 
     for name in getattr(code, "co_names", ()):  # attrs, globals, imports
@@ -86,12 +164,9 @@ def _walk_code(code, out, seen, depth):
     for const in getattr(code, "co_consts", ()):
         if isinstance(const, str):
             out.append("CONST " + _esc(const))
-    try:
-        for instr in dis.get_instructions(code):
-            arg = (" " + _esc(instr.argval)) if isinstance(instr.argval, str) else ""
-            out.append("OP " + instr.opname + arg)
-    except (ValueError, TypeError):
-        pass
+    for instr in dis.get_instructions(code):
+        arg = (" " + _esc(instr.argval)) if isinstance(instr.argval, str) else ""
+        out.append("OP " + instr.opname + arg)
     for const in getattr(code, "co_consts", ()):
         if isinstance(const, types.CodeType):
             _walk_code(const, out, seen, depth + 1)
@@ -109,19 +184,25 @@ def main():
 
     with open(pyc_path, "rb") as f:
         f.seek(header_len)
-        raw = f.read()
+        raw = f.read(MAX_INPUT_BYTES + 1)
+    if len(raw) > MAX_INPUT_BYTES:
+        sys.exit(ANALYSIS_LIMIT)
 
-    # The unsafe step. If it crashes the interpreter, this process dies and the
-    # parent records "unanalyzable" — the scan is unharmed.
+    try:
+        sandboxed = _apply_sandbox()
+    except (OSError, AttributeError):
+        sandboxed = False
+    if not sandboxed:
+        sys.exit(SANDBOX_UNAVAILABLE)
+
+    # Parse only after the OS has removed the child's host capabilities.
     code = marshal.loads(raw)
     if not isinstance(code, types.CodeType):
         sys.exit(3)
 
-    out = []
+    out = _BoundedLines()
     _walk_code(code, out, set(), 0)
     blob = "\n".join(out)
-    if len(blob) > MAX_OUTPUT_CHARS:
-        blob = blob[:MAX_OUTPUT_CHARS]
     # Write via the byte buffer with surrogatepass: a string constant carrying a
     # lone surrogate (e.g. "\ud800", which marshal round-trips fine) would crash
     # a plain text-mode stdout.write with UnicodeEncodeError, downgrading the
@@ -134,6 +215,8 @@ if __name__ == "__main__":
         main()
     except SystemExit:
         raise
+    except AnalysisLimitExceeded:
+        sys.exit(ANALYSIS_LIMIT)
     except BaseException:
         # Any failure (EOFError/ValueError/MemoryError from a corrupt or hostile
         # marshal stream, recursion errors, etc.) is a non-zero exit the parent

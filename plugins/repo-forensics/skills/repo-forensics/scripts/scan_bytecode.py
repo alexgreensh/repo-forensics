@@ -338,14 +338,21 @@ def _disassemble(pyc_path, header_len, interpreter=None):
     Exactly one of the two is truthy."""
     try:
         proc = subprocess.run(
-            [interpreter or sys.executable, _UNMARSHAL, pyc_path, str(header_len)],
+            [interpreter or sys.executable, "-I", "-S", _UNMARSHAL, pyc_path, str(header_len)],
             capture_output=True, timeout=PER_FILE_TIMEOUT_SEC,
+            stdin=subprocess.DEVNULL,
+            env={"PATH": os.defpath, "LANG": "C.UTF-8"},
+            close_fds=True,
         )
     except subprocess.TimeoutExpired:
         return None, "disassembly timed out"
     except OSError as exc:
         return None, f"subprocess failed: {exc}"
     if proc.returncode != 0:
+        if proc.returncode == 5:
+            return None, "OS sandbox unavailable; unsafe bytecode disassembly was skipped"
+        if proc.returncode == 6:
+            return None, "bytecode analysis exceeded a safety limit; coverage is incomplete"
         # Negative returncode == killed by signal (the C-level crash we isolate).
         if proc.returncode < 0:
             return None, f"interpreter crash unmarshalling bytecode (signal {-proc.returncode})"
@@ -425,6 +432,9 @@ def scan_pyc(pyc_path, rel_path):
     # for richer primitive analysis and to show the analyst the decoded payload.
     blob, error = _disassemble_best(pyc_path, header_len)
     if error is not None:
+        if "OS sandbox unavailable" in error or "safety limit" in error:
+            findings.append(_unanalyzable(rel_path, error))
+            return findings
         # An unreadable compiled file shadowing readable source is suspicious:
         # Python loads cached bytecode over source when the header validates, so
         # this is a place poisoning can hide. But a repo that legitimately commits

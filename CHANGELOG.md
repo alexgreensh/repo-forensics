@@ -24,6 +24,15 @@ All notable changes to repo-forensics. Versions follow semver.
 - Make test fixtures portable across Git Bash and Python's Windows newline
   handling; detect whether Linux bubblewrap can actually create a sandbox
   before attempting dynamic hook execution.
+- Keep changed items out of the SessionStart baseline when the deep scanner
+  process cannot start; report the launch failure instead of a clean result.
+- Keep the Git config plant scan within its wall-clock budget on large source
+  files by tracking active `.git` bindings without rescanning prior bindings.
+- Run bytecode disassembly only after a deny-default OS sandbox is active and
+  report incomplete coverage when isolation or analysis limits prevent it.
+  Restrict macOS dynamic hook execution with a deny-default Seatbelt profile.
+- Reject signed rule-pack overlays that omit active shipped rules without an
+  explicit retirement, preserving those detections when a cache is stale.
 
 ### Fix: automatic paths no longer report clean over a scan that found something
 

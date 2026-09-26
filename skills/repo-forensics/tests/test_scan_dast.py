@@ -187,6 +187,25 @@ class TestSandboxHookExecution:
         not scanner.SANDBOX_AVAILABLE,
         reason="macOS Seatbelt sandbox only",
     )
+    def test_sandbox_denies_system_config_reads(self):
+        # /private/etc lies outside /Users and was readable with allow-default.
+        # Require proof bash starts, so an invalid profile cannot pass the test.
+        profile = os.path.realpath(scanner.SANDBOX_PROFILE)
+        proc = subprocess.run([
+            scanner._SANDBOX_EXEC,
+            '-D', f'HOOK_PATH={profile}',
+            '-D', f'HOOK_DIR={os.path.dirname(profile)}',
+            '-f', profile,
+            '/bin/bash', '-c', 'echo STARTED; /bin/cat /private/etc/hosts',
+        ], capture_output=True, text=True, timeout=5)
+        assert proc.stdout == "STARTED\n"
+        assert proc.returncode != 0
+        assert "Operation not permitted" in proc.stderr
+
+    @pytest.mark.skipif(
+        not scanner.SANDBOX_AVAILABLE,
+        reason="macOS Seatbelt sandbox only",
+    )
     def test_sandbox_denies_writes_outside_users(self, tmp_path):
         target = tmp_path.resolve() / "outside-users-canary"
         if str(target).startswith('/Users/'):

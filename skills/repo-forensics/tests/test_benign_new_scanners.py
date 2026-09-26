@@ -20,6 +20,7 @@ scanner's own isolated child.
 import io
 import os
 import py_compile
+import sys
 import zipfile
 
 import scan_archive
@@ -83,7 +84,11 @@ class TestBenignBytecode:
         src.write_text("import json\n\n\ndef dump(x):\n    return json.dumps(x)\n")
         py_compile.compile(str(src), cfile=str(cache / "util.cpython-314.pyc"), doraise=True)
         findings = scan_bytecode.scan_repo(str(tmp_path))
-        assert findings == [], _titles(findings)
+        if sys.platform in ("darwin", "linux"):
+            assert findings == [], _titles(findings)
+        else:
+            assert any(f.category == "unanalyzable-bytecode" for f in findings)
+            assert _crit_high(findings) == [], _titles(findings)
 
     def test_source_stripped_vendored_wheel_no_finding(self, tmp_path):
         # A stripped wheel ships loose .pyc with no .py under site-packages.
@@ -95,7 +100,11 @@ class TestBenignBytecode:
         src.unlink()
         findings = scan_bytecode.scan_repo(str(tmp_path))
         # Vendored orphan with no primitive -> suppressed entirely.
-        assert findings == [], _titles(findings)
+        if sys.platform in ("darwin", "linux"):
+            assert findings == [], _titles(findings)
+        else:
+            assert any(f.category == "unanalyzable-bytecode" for f in findings)
+            assert _crit_high(findings) == [], _titles(findings)
 
 
 class TestBenignOversize:

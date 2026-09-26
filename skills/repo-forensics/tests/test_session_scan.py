@@ -91,6 +91,18 @@ def test_missing_bash_keeps_changed_item_uncleared(tmp_dir, monkeypatch):
     assert uncleared == [f"plugin:{tmp_dir}"]
 
 
+def test_scanner_spawn_error_keeps_changed_item_uncleared(tmp_dir, monkeypatch):
+    stub_forensics(tmp_dir, monkeypatch, {"findings": []}, 0)
+    monkeypatch.setattr(session_scan.subprocess, "Popen",
+                        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("blocked")))
+    uncleared = []
+    findings = session_scan.deep_scan_item(
+        tmp_dir, "test", "plugin", uncleared_sink=uncleared,
+    )
+    assert findings == ["deep scan unavailable: scanner process could not start"]
+    assert uncleared == [f"plugin:{tmp_dir}"]
+
+
 @pytest.fixture
 def tmp_dir():
     d = tempfile.mkdtemp(prefix="session_scan_test_")

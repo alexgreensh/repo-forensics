@@ -524,6 +524,26 @@ class TestOverlay:
         assert "OVL-001" in log
         assert "silent-detection-removal" in log
 
+    def test_newer_overlay_omitting_shipped_rule_is_rejected(self, tmp_path, monkeypatch):
+        ship = tmp_path / "ship"
+        ship.mkdir()
+        _write_shipped_pack(ship, "ovl", 1, [
+            self._shipped_rule(rid="OVL-001", pat="alpha"),
+            self._shipped_rule(rid="OVL-KEEP", pat="beta"),
+        ])
+        cache = tmp_path / "cache"
+        monkeypatch.setattr(rulepack_feed, "RULEPACK_FEED_PUBKEY_HEX", TEST_PUB.hex())
+        _cache_signed_bundle(cache, _make_bundle(packs={"ovl": {
+            "pack_version": 2, "schema_version": "1.0",
+            "rules": [self._shipped_rule(rid="OVL-KEEP", pat="omega")],
+        }}))
+        rule_loader._reset_overlay_state()
+        shipped = rule_loader._load_pack_file(str(ship / "ovl.json"))
+        result = rule_loader._maybe_overlay("ovl", shipped, cache_dir=str(cache))
+        assert result is shipped
+        assert rule_loader.get_rulepack_degraded() is True
+        assert "OVL-001" in " ".join(rule_loader.get_overlay_log())
+
     def test_cache_tamper_falls_back_to_shipped(self, tmp_path, monkeypatch):
         ship = tmp_path / "ship"
         ship.mkdir()
