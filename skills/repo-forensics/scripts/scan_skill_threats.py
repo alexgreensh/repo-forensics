@@ -16,10 +16,14 @@ All detection patterns are original, informed by published research from:
 Created by Alex Greenshpun
 """
 
+import ast
 import json
+import hashlib
 import os
 import re
 import sys
+import time
+from dataclasses import replace
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import forensics_core as core
@@ -28,6 +32,9 @@ import _context_gate
 from _shared_patterns import EXFIL_VERBS_RE, SKILL_CONFIG_FILES
 
 SCANNER_NAME = "skill_threats"
+_DECODE_CACHE_MIN_CHARS = 64 * 1024
+_DECODE_CACHE_MAX_ENTRIES = 256
+_FULL_AUDIT_DECODE_BUDGET_SEC = 90
 
 # ============================================================
 # Rules-as-data (U4): all behavioral pattern tables, the unicode-smuggling
@@ -110,6 +117,18 @@ UPDATE_CHANNEL_RULES = _rules_for_category("update-channel")
 SUB_AGENT_SPAWN_RULES = _rules_for_category("sub-agent-spawn")
 AUTHORITY_FRAMING_RULES = _rules_for_category("authority-framing")
 MEMORY_HEIST_RULES = _rules_for_category("memory-heist-exfil")
+_UA_ROUTING_RULE_IDS = {"ST-MH-003", "ST-MH-006"}
+_UA_TOKEN = re.compile(r"\b(?:user.?agent|ua)\b", re.IGNORECASE)
+_AGENT_TOKEN = re.compile(
+    r"\b(?:Claude|GPT|ChatGPT|OpenAI|Gemini|Copilot|Perplexity|AI\s+assistant|bot|crawler|spider)\b",
+    re.IGNORECASE,
+)
+_MH_PII_ACTION = re.compile(r"\b(?:encode|embed|include|put|hide|pass|send)\b", re.IGNORECASE)
+_MH_PII_FIELD = re.compile(
+    r"(?<![-\w])(?:name|username|email|phone|address|company|employer|hometown|city|birthday|DOB|SSN|security\s+(?:question|answer)|password|secret)\b",
+    re.IGNORECASE,
+)
+_MH_URL_FIELD = re.compile(r"(?<![-\w])(?:URL|path|query|parameter|endpoint|request)\b", re.IGNORECASE)
 
 # ============================================================
 # Category 2: Invisible Unicode Smuggling (critical)
@@ -173,7 +192,20 @@ def _is_emoji_codepoint(cp):
                       0x274E, 0x2753, 0x2754, 0x2755, 0x2757, 0x2763,
                       0x2764, 0x27A1, 0x2934, 0x2935, 0x2B05, 0x2B06,
                       0x2B07, 0x2B1B, 0x2B1C, 0x2B50, 0x2B55, 0x3030,
-                      0x303D, 0x3297, 0x3299, 0xA9, 0xAE))
+                      0x303D, 0x3297, 0x3299, 0xA9, 0xAE,
+                      # Text-presentation codepoints that legitimately take
+                      # VS16 (U+FE0F) in emoji presentation: (tm), info,
+                      # arrows, zodiac, weather, geometric shapes.
+                      0x203C, 0x2049, 0x2122, 0x2139,
+                      0x2194, 0x2195, 0x2196, 0x2197, 0x2198, 0x2199,
+                      0x21A9, 0x21AA, 0x2614, 0x2615,
+                      0x2648, 0x2649, 0x264A, 0x264B, 0x264C, 0x264D,
+                      0x264E, 0x264F, 0x2650, 0x2651, 0x2652, 0x2653,
+                      0x267F, 0x2693, 0x26A1, 0x26AA, 0x26AB,
+                      0x26BD, 0x26BE, 0x26C4, 0x26C5, 0x26CE,
+                      0x26D4, 0x26EA, 0x26F2, 0x26F3, 0x26F5,
+                      0x26FA, 0x26FD, 0x25B6, 0x25C0,
+                      0x25FB, 0x25FC, 0x25FD, 0x25FE))
 
 
 def _is_emoji_context(content, pos, char):
@@ -434,7 +466,60 @@ def scan_unicode_smuggling(content, rel_path):
 
 def scan_rules(content, rel_path, rules, category, default_severity):
     """Delegate to pack-aware scan_rule_patterns (stamps rule_id + confidence)."""
-    return core.scan_rule_patterns(content, rel_path, rules, category, default_severity, SCANNER_NAME)
+    findings = core.scan_rule_patterns(
+        content, rel_path, rules, category, default_severity, SCANNER_NAME
+    )
+    if category == "prompt-injection":
+        lines = content.split("\n")
+        directive = re.compile(r"\bsilently\s+(?:execute|run|perform|install|download)\b", re.I)
+        findings = [
+            finding for finding in findings
+            if finding.rule_id != "ST-PI-005"
+            or (0 < finding.line <= len(lines) and directive.search(lines[finding.line - 1]))
+        ]
+    if (category in ("prompt-injection", "prerequisite-attack")
+            and any(f.rule_id in ("ST-PI-001", "ST-PR-009") for f in findings)):
+        literal_spans = _test_literal_spans(content, rel_path)
+        lines = content.splitlines()
+        for finding in findings:
+            if finding.rule_id in ("ST-PI-001", "ST-PR-009") and any(
+                    start <= finding.line <= end for start, end in literal_spans):
+                finding.evidence_class = "inferred"
+            elif (finding.rule_id == "ST-PI-001"
+                  and 1 <= finding.line <= len(lines)
+                  and _defensive_quote_comment(lines[finding.line - 1])):
+                finding.evidence_class = "inferred"
+    return findings
+
+
+def _test_literal_spans(content, rel_path):
+    """Return Python test-function string locations used as fixture data."""
+    if not rel_path.endswith('.py'):
+        return ()
+    if not _context_gate.classify_file_context(rel_path, content).is_test_fixture:
+        return ()
+    try:
+        tree = ast.parse(content)
+    except (SyntaxError, ValueError, RecursionError):
+        return ()
+    spans = []
+    for function in ast.walk(tree):
+        if not isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for node in ast.walk(function):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                spans.append((node.lineno, getattr(node, 'end_lineno', node.lineno)))
+    return tuple(spans)
+
+
+def _defensive_quote_comment(line):
+    """Recognize an attack string quoted inside a defensive code comment."""
+    stripped = line.lstrip()
+    return (stripped.startswith('#')
+            and re.search(r'`[^`]*ignore\s+(?:all\s+)?(?:previous|prior|above|earlier)\s+instructions[^`]*`',
+                          stripped, re.IGNORECASE)
+            and re.search(r'\b(?:blocked|rejected|prevented|unsafe|malicious|survived|unbounded)\b',
+                          stripped, re.IGNORECASE))
 
 
 def scan_known_iocs(content, rel_path):
@@ -646,7 +731,7 @@ def _mh_gate_demotes(finding, rel_path, content):
         return False
 
 
-def scan_file(file_path, rel_path, budget=None):
+def scan_file(file_path, rel_path, budget=None, decode_cache=None):
     """Run all categories on a single file (reads, then delegates to scan_content).
 
     `budget`: optional shared scan_decode budget (see main()). When None a fresh
@@ -659,10 +744,10 @@ def scan_file(file_path, rel_path, budget=None):
             content = f.read()
     except (OSError, UnicodeDecodeError):
         return []
-    return scan_content(content, rel_path, budget=budget)
+    return scan_content(content, rel_path, budget=budget, decode_cache=decode_cache)
 
 
-def scan_content(content, rel_path, budget=None):
+def scan_content(content, rel_path, budget=None, decode_cache=None):
     """Run all categories over already-loaded text — an extracted archive
     member, a decoded blob. The KTD7 in-memory entry point scan_archive recurses
     so prompt-injection / unicode-smuggling / exfil / IOC detection reaches
@@ -704,7 +789,15 @@ def scan_content(content, rel_path, budget=None):
 
     if ext in text_exts or ext in code_exts:
         # Cat 3: Prerequisite red flags
-        findings.extend(scan_rules(content, rel_path, PREREQUISITE_RULES, "prerequisite-attack", "critical"))
+        prerequisite_findings = scan_rules(content, rel_path, PREREQUISITE_RULES,
+                                           "prerequisite-attack", "critical")
+        is_workflow = rel_path.replace('\\', '/').startswith('.github/workflows/')
+        for finding in prerequisite_findings:
+            if finding.rule_id == "ST-PR-010" and (is_workflow or ext == '.py'):
+                # An expression in workflow metadata or Python source is not
+                # itself hook-script execution. scan_infra grades shell use.
+                finding.severity = "high"
+        findings.extend(prerequisite_findings)
 
     if ext in code_exts or is_agent_instruction_file:
         # Cat 4: Environment access is a capability until a sink is proven.
@@ -777,6 +870,24 @@ def scan_content(content, rel_path, budget=None):
     if ext in text_exts or ext in code_exts:
         mh_findings = scan_rules(content, rel_path, MEMORY_HEIST_RULES,
                                  "memory-heist-exfil", "critical")
+        # Signed overlay packs may contain broad UA/bot substrings. Require
+        # actual UA and agent words before treating a routing match as real.
+        content_lines = content.splitlines()
+        mh_findings = [
+            f for f in mh_findings
+            if f.rule_id not in _UA_ROUTING_RULE_IDS
+            or not (1 <= f.line <= len(content_lines))
+            or (_UA_TOKEN.search(content_lines[f.line - 1])
+                and _AGENT_TOKEN.search(content_lines[f.line - 1]))
+        ]
+        mh_findings = [
+            f for f in mh_findings
+            if f.rule_id != "ST-MH-004"
+            or not (1 <= f.line <= len(content_lines))
+            or (_MH_PII_ACTION.search(content_lines[f.line - 1])
+                and _MH_PII_FIELD.search(content_lines[f.line - 1])
+                and _MH_URL_FIELD.search(content_lines[f.line - 1]))
+        ]
         # v2.13.2 Memory-Heist recalibration (design §5.3). The ST-MH-001..005
         # patterns stay byte-identical (they catch the 5 real UA-routing /
         # PII-in-URL attacks; tightening them lost those catches at cc440b3).
@@ -809,12 +920,12 @@ def scan_content(content, rel_path, budget=None):
     # (hashes, data-URIs) with false positives. The ONLY finding that surfaces is
     # the additive, FP-safe decoded-payload one, emitted ONLY when the decoded
     # plaintext actually trips a rule.
-    findings.extend(_decode_and_rescan_blobs(content, rel_path, budget))
+    findings.extend(_decode_and_rescan_blobs(content, rel_path, budget, decode_cache))
 
     return findings
 
 
-def _decode_and_rescan_blobs(content, rel_path, budget):
+def _decode_and_rescan_blobs(content, rel_path, budget, decode_cache=None):
     """Detect every FULL encoded run (base64/base85/base32/hex) in `content` via
     the hoisted scan_decode.detect_encoded_blobs (single source of truth, with the
     CORRECTED base85 charset — a real RFC1924 b85 payload is now matched whole and
@@ -835,8 +946,18 @@ def _decode_and_rescan_blobs(content, rel_path, budget):
         return extra
     if budget is None:
         budget = scan_decode.host_budget()
+    cache_key = None
+    if decode_cache is not None and len(content) >= _DECODE_CACHE_MIN_CHARS:
+        cache_key = (os.path.basename(rel_path).lower(),
+                     hashlib.sha256(content.encode("utf-8", "replace")).digest())
+        if cache_key in decode_cache:
+            return [replace(f, file=rel_path, finding_id="") for f in decode_cache[cache_key]]
     blobs = scan_decode.detect_encoded_blobs(content)
     scan_decode.feed_blobs(blobs, rel_path, set(), extra, budget)
+    if (cache_key is not None and len(decode_cache) < _DECODE_CACHE_MAX_ENTRIES
+            and not any(f.category in {"decode-scan-incomplete", "decode-max-depth"}
+                        for f in extra)):
+        decode_cache[cache_key] = tuple(extra)
     return extra
 
 
@@ -932,7 +1053,9 @@ def _scan_prose_imperatives(content, rel_path):
 
 
 def main():
-    args = core.parse_common_args(sys.argv, "AI Skill Threat Scanner")
+    full_audit = "--full-audit" in sys.argv[1:]
+    argv = [arg for arg in sys.argv if arg != "--full-audit"]
+    args = core.parse_common_args(argv, "AI Skill Threat Scanner")
     repo_path = args.repo_path
 
     core.emit_status(args.format, f"[*] Scanning for AI skill threats in {repo_path}...")
@@ -940,18 +1063,22 @@ def main():
     ignore_patterns = core.load_ignore_patterns(repo_path)
     all_findings = []
 
-    # ONE shared decode budget across every file (see scan_decode.new_budget):
-    # the wall-clock deadline + byte cap span the whole scan, never re-armed —
-    # re-arming per blob is what let many blobs blow the 15s auto_scan SIGKILL
-    # into a silent zero.
+    # Quick hook scans keep the 12-second decode ceiling. The explicit full
+    # audit has a 120-second per-scanner runner limit, so its single shared
+    # decode budget can inspect larger trees without expiring mid-scan.
     try:
         import scan_decode
-        budget = scan_decode.host_budget()
+        if full_audit:
+            budget = scan_decode.new_budget(
+                deadline=time.monotonic() + _FULL_AUDIT_DECODE_BUDGET_SEC)
+        else:
+            budget = scan_decode.host_budget()
     except Exception:
         budget = None
+    decode_cache = {}
 
     for file_path, rel_path in core.walk_repo(repo_path, ignore_patterns, skip_binary=True):
-        findings = scan_file(file_path, rel_path, budget=budget)
+        findings = scan_file(file_path, rel_path, budget=budget, decode_cache=decode_cache)
         all_findings.extend(findings)
 
     core.output_findings(all_findings, args.format, SCANNER_NAME)

@@ -4,8 +4,7 @@ scan_dast.py - Dynamic Analysis Security Testing for Claude Code Hooks (v1)
 Executes hook scripts with malicious payloads in a sandboxed subprocess
 and measures behavior: timeout, crash, output amplification, mutation.
 
-Python-only harness with strict sandboxing (subprocess timeout + resource
-limits + no network).
+Python harness with an OS sandbox and bounded process-group cleanup.
 
 Test payloads (8 types):
   1. Prompt injection in tool input
@@ -18,9 +17,9 @@ Test payloads (8 types):
   8. Null byte injection
 
 Safety: All execution happens in subprocess with:
-  - 5-second timeout (kills on exceed)
+  - 5-second timeout (kills the owned process group on exceed)
   - stdout/stderr capture (no terminal passthrough)
-  - No network access (env scrubbed of proxy vars)
+  - No network access (denied by the OS sandbox)
   - Temp directory isolation
   - No shell=True (direct exec only)
 
@@ -31,6 +30,7 @@ import os
 import sys
 import json
 import shutil
+import signal
 import subprocess
 import tempfile
 import time
@@ -41,9 +41,10 @@ import forensics_core as core
 SCANNER_NAME = "dast"
 
 EXEC_TIMEOUT = 5  # seconds
+PROCESS_CLEANUP_TIMEOUT = 1  # bounded drain/reap after killing the process group
 MAX_OUTPUT_BYTES = 1024 * 100  # 100KB - anything more is amplification
 
-# macOS Seatbelt sandbox profile (denies network + /Users read/write,
+# macOS Seatbelt sandbox profile (denies network + all writes + /Users reads,
 # re-allows reads on the specific hook script via HOOK_PATH/HOOK_DIR -D params)
 SANDBOX_PROFILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'dast_sandbox.sb')
 # Resolve dynamically: sandbox-exec is a macOS-only tool, but absolute FHS
@@ -51,8 +52,23 @@ SANDBOX_PROFILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'dast
 _SANDBOX_EXEC = shutil.which('sandbox-exec') or '/usr/bin/sandbox-exec'
 SANDBOX_AVAILABLE = os.path.exists(_SANDBOX_EXEC) and os.path.exists(SANDBOX_PROFILE)
 
-# Linux bubblewrap sandbox (fallback when macOS Seatbelt is unavailable)
-BWRAP_AVAILABLE = shutil.which("bwrap") is not None
+# Linux bubblewrap sandbox (fallback when macOS Seatbelt is unavailable).
+# CI hosts can have bwrap installed while forbidding unprivileged namespaces.
+_BWRAP_EXEC = shutil.which("bwrap")
+def _bwrap_usable():
+    if sys.platform != "linux" or not _BWRAP_EXEC:
+        return False
+    try:
+        probe = subprocess.run(
+            [_BWRAP_EXEC, "--ro-bind", "/", "/", "--dev", "/dev",
+             "--tmpfs", "/tmp", "--unshare-net", "--die-with-parent", "/bin/true"],
+            stdin=subprocess.DEVNULL, capture_output=True, timeout=3, cwd="/",
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return probe.returncode == 0
+
+BWRAP_AVAILABLE = _bwrap_usable()
 
 # 8 malicious payload types for hook testing
 PAYLOADS = [
@@ -192,9 +208,67 @@ def build_safe_env(extra_vars=None):
     return safe_env
 
 
+def _run_hook_process(command, payload_input, env):
+    """Own a POSIX process group, including children retaining output pipes."""
+    if os.name != "posix":
+        raise OSError("DAST process-group isolation requires POSIX")
+    proc = subprocess.Popen(
+        command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE, text=True, errors="replace", env=env,
+        cwd=tempfile.gettempdir(), start_new_session=True,
+    )
+    stdout, stderr = "", ""
+    timed_out = False
+    cleanup_errors = []
+    try:
+        try:
+            stdout, stderr = proc.communicate(payload_input, timeout=EXEC_TIMEOUT)
+        except subprocess.TimeoutExpired as exc:
+            timed_out = True
+            stdout, stderr = exc.stdout or b"", exc.stderr or b""
+    finally:
+        # Even a successful hook can leave a background child running after
+        # closing its pipes. The whole group belongs to this one invocation.
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        except OSError as exc:
+            cleanup_errors.append(f"process group could not be killed: {exc}")
+            try:
+                proc.kill()
+            except OSError as kill_exc:
+                cleanup_errors.append(f"launcher could not be killed: {kill_exc}")
+        try:
+            if timed_out:
+                # Never let an escaped child holding a pipe turn cleanup into
+                # an unbounded communicate(), even after the launcher exits.
+                stdout, stderr = proc.communicate(timeout=PROCESS_CLEANUP_TIMEOUT)
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            cleanup_errors.append(f"process cleanup did not complete: {exc}")
+        finally:
+            for pipe in (proc.stdin, proc.stdout, proc.stderr):
+                if pipe is not None:
+                    try:
+                        pipe.close()
+                    except OSError as exc:
+                        cleanup_errors.append(f"process pipe could not be closed: {exc}")
+            try:
+                proc.wait(timeout=PROCESS_CLEANUP_TIMEOUT)
+            except (subprocess.TimeoutExpired, OSError) as exc:
+                cleanup_errors.append(f"launcher could not be reaped: {exc}")
+    # TimeoutExpired carries bytes even when Popen was opened in text mode.
+    if isinstance(stdout, bytes):
+        stdout = stdout.decode("utf-8", "replace")
+    if isinstance(stderr, bytes):
+        stderr = stderr.decode("utf-8", "replace")
+    return (subprocess.CompletedProcess(command, proc.returncode, stdout, stderr),
+            timed_out, "; ".join(cleanup_errors))
+
+
 def execute_hook_with_payload(hook, payload, repo_path):
     """Execute a hook script with a test payload in a sandboxed subprocess.
-    Returns (findings, execution_result)."""
+    Returns findings, including incomplete coverage when cleanup fails."""
     findings = []
     cmd = hook['command']
 
@@ -213,6 +287,21 @@ def execute_hook_with_payload(hook, payload, repo_path):
 
     if script_path is None:
         # Command might be a direct shell invocation, skip for safety
+        return findings
+
+    def mark_incomplete(reason):
+        if payload == PAYLOADS[0]:
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="medium",
+                title=f"DAST hook not executed: {hook['event']}",
+                description=reason,
+                file=hook['source'], line=0,
+                snippet="Hook execution could not be observed safely",
+                category="scan-incomplete",
+            ))
+
+    if os.name != "posix" or (not SANDBOX_AVAILABLE and not BWRAP_AVAILABLE):
+        mark_incomplete("No macOS Seatbelt or Linux bubblewrap sandbox is available; hook execution was skipped.")
         return findings
 
     # Sanitize env vars: strip null bytes (OS rejects them)
@@ -243,7 +332,6 @@ def execute_hook_with_payload(hook, payload, repo_path):
     # Wrap in macOS Seatbelt sandbox. The profile denies /Users reads broadly;
     # -D params re-allow reads on the specific hook script path so bash can
     # actually load it (without this, every /Users-hosted hook silently fails).
-    sandboxed = True
     if SANDBOX_AVAILABLE:
         # Seatbelt matches rules against the fully-resolved path, so we must
         # pass the realpath — otherwise a symlinked hook would be denied even
@@ -275,7 +363,7 @@ def execute_hook_with_payload(hook, payload, repo_path):
         # hook must have its resolved directory bound, not the link's.
         hook_dir = os.path.dirname(os.path.realpath(script_path))
         exec_cmd = [
-            'bwrap',
+            _BWRAP_EXEC,
             '--ro-bind', '/', '/',
             '--dev', '/dev',
             '--tmpfs', '/tmp',
@@ -283,54 +371,32 @@ def execute_hook_with_payload(hook, payload, repo_path):
             '--unshare-net',
             '--die-with-parent',
         ] + exec_cmd
-    else:
-        sandboxed = False
 
     start = time.monotonic()
     try:
-        proc = subprocess.run(
-            exec_cmd,
-            input=payload.get('stdin', ''),
-            capture_output=True,
-            text=True,
-            timeout=EXEC_TIMEOUT,
-            env=env,
-            cwd=tempfile.gettempdir(),
-        )
+        proc, timed_out, cleanup_error = _run_hook_process(
+            exec_cmd, payload.get('stdin', ''), env)
+        result['timed_out'] = timed_out
         result['exit_code'] = proc.returncode
         result['stdout'] = proc.stdout[:MAX_OUTPUT_BYTES]
         result['stderr'] = proc.stderr[:MAX_OUTPUT_BYTES]
         result['stdout_size'] = len(proc.stdout)
         result['stderr_size'] = len(proc.stderr)
-        result['crashed'] = proc.returncode < 0  # killed by signal
-
-    except subprocess.TimeoutExpired:
-        result['timed_out'] = True
+        result['crashed'] = not timed_out and proc.returncode is not None and proc.returncode < 0
+        if cleanup_error:
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="high",
+                title=f"DAST process cleanup failed: {hook['event']}",
+                description=f"Hook descendants may still be running. {cleanup_error}",
+                file=hook['source'], line=0, snippet="process-cleanup-failed",
+                category="scan-incomplete",
+            ))
 
     except (OSError, PermissionError, ValueError):
-        # Can't execute (e.g., null bytes in env) - not a finding, just skip
+        mark_incomplete("The sandboxed hook process could not be launched; dynamic analysis is incomplete.")
         return findings
 
     result['duration_ms'] = int((time.monotonic() - start) * 1000)
-
-    # Warn once per hook (on the first payload run) when no sandbox is available.
-    # We still execute the hook to preserve existing behavior, but flag reduced
-    # confidence in the findings. Only emit the warning on the first payload so
-    # callers don't get N duplicate findings for N payloads.
-    if not sandboxed and payload == PAYLOADS[0]:
-        findings.append(core.Finding(
-            scanner=SCANNER_NAME, severity="medium",
-            title=f"DAST hook executed without sandbox isolation: {hook['event']}",
-            description=(
-                "Hook script was executed without sandbox isolation. "
-                "Neither macOS sandbox-exec nor Linux bwrap is available on this host. "
-                "DAST findings for this hook have reduced confidence — a malicious hook "
-                "could have affected the host filesystem or network during testing."
-            ),
-            file=hook['source'], line=0,
-            snippet="No sandbox available (sandbox-exec and bwrap both absent)",
-            category="dast-unsandboxed"
-        ))
 
     # Output the HOOK produced, with the launcher's own diagnostics removed.
     #
@@ -352,8 +418,9 @@ def execute_hook_with_payload(hook, payload, repo_path):
     combined_output = result['stdout'] + _hook_stderr
 
     # 127 is "could not execute": no hook ran, so no observation about its
-    # behaviour is available. Report nothing rather than something.
+    # behaviour is available.
     if result['exit_code'] == 127 and not result['stdout']:
+        mark_incomplete("The sandboxed hook process exited before any observable hook output; dynamic analysis is incomplete.")
         return findings
     for canary in ('CANARY_12345', 'CANARY_67890'):
         if canary in combined_output:
@@ -457,6 +524,10 @@ def main():
         for payload in PAYLOADS:
             findings = execute_hook_with_payload(hook, payload, repo_path)
             all_findings.extend(findings)
+            if any(f.category == "scan-incomplete" and
+                   f.snippet == "process-cleanup-failed" for f in findings):
+                core.output_findings(all_findings, args.format, SCANNER_NAME)
+                return
 
     core.output_findings(all_findings, args.format, SCANNER_NAME)
 

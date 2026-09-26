@@ -2,7 +2,43 @@
 
 All notable changes to repo-forensics. Versions follow semver.
 
-## [Unreleased]
+## [2.14.12] - 2026-09-27
+
+### Security: verify plugin checkout provenance and disabled TLS settings
+
+- Detect commit-shaped plugin branch names, mismatched recorded commit pins, and
+  installer checkout flows that do not verify resolved HEAD. Pin lookup is
+  limited to the installed plugin's identity and bounded metadata inside the
+  scanned tree. Unreadable provenance reports a coverage gap.
+- Detect disabled TLS certificate checks in shell, Python, and Node-family
+  download code. Python calls use syntax analysis, and JavaScript comments and
+  string examples do not trigger the new TLS rule.
+- Keep prompt-injection and unsafe-command test specimens visible as inferred
+  evidence when they are Python string data. Grade standalone module loading
+  below critical, while retaining critical for write-then-load behavior and
+  direct evidence for dynamic paths; fixed sibling loads are inferred.
+- Preserve the false-positive controls for scanner correlation, manifest import
+  parsing, in-tree Git hook paths, and sanitizer regexes while merging both
+  protections. The sanitizer patterns now use Unicode escapes so scanning the
+  scanner does not mistake its own defenses for Trojan Source text.
+- Make test fixtures portable across Git Bash and Python's Windows newline
+  handling; detect whether Linux bubblewrap can actually create a sandbox
+  before attempting dynamic hook execution.
+- Keep changed items out of the SessionStart baseline when the deep scanner
+  process cannot start; report the launch failure instead of a clean result.
+- Keep the Git config plant scan within its wall-clock budget on large source
+  files by tracking active `.git` bindings without rescanning prior bindings.
+- Run bytecode disassembly only after a deny-default OS sandbox is active and
+  report incomplete coverage when isolation or analysis limits prevent it.
+  Restrict macOS dynamic hook execution with a deny-default Seatbelt profile.
+- Reject signed rule-pack overlays that omit active shipped rules without an
+  explicit retirement, preserving those detections when a cache is stale.
+- Treat standard SHA-256 manifest records as checksums rather than high-severity
+  hex warnings, while still decoding and scanning their contents.
+- Stop dynamic hook descendants after timeouts and clean exits, and report
+  incomplete coverage if process cleanup fails.
+- Isolate GitHub attestation CLI state outside the scanned target on Windows
+  and skip that probe if a safe writable directory is unavailable.
 
 ### Fix: automatic paths no longer report clean over a scan that found something
 

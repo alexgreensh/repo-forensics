@@ -11,6 +11,7 @@ import sys
 import time
 import tempfile
 import shutil
+import subprocess
 import pytest
 
 SCRIPTS_DIR = os.path.join(os.path.dirname(__file__), '..', 'scripts')
@@ -52,20 +53,54 @@ def create_plugin(base_dir, name, version="1.0.0", deps=None):
 def stub_forensics(tmp_dir, monkeypatch, payload, exit_code):
     """Point RUN_FORENSICS_SCRIPT at a stub that prints `payload` and exits.
 
-    The payload goes through a file rather than an inlined `echo`, so a report
-    carrying quotes, escapes or control bytes reaches deep_scan_item() as
-    written instead of being mangled by the shell. `payload` is a report dict
+    Bash printf plus shlex.quote preserves payload bytes without relying on
+    Git Bash to open a native Windows path. `payload` is a report dict
     (serialised here) or a raw string for the unparseable cases.
     """
-    payload_path = os.path.join(tmp_dir, "stub_payload.json")
     text = payload if isinstance(payload, str) else json.dumps(payload)
-    with open(payload_path, "w", encoding="utf-8") as handle:
-        handle.write(text)
     script = os.path.join(tmp_dir, "stub_forensics.sh")
-    create_file(script, f'#!/bin/bash\ncat {shlex.quote(payload_path)}\nexit {int(exit_code)}\n')
+    body = f"#!/bin/bash\nprintf '%s' {shlex.quote(text)}\nexit {int(exit_code)}\n"
+    with open(script, "wb") as handle:
+        handle.write(body.encode("utf-8"))
     os.chmod(script, 0o755)
     monkeypatch.setattr(session_scan, 'RUN_FORENSICS_SCRIPT', script)
     return script
+
+
+def test_stub_forensics_round_trips_json_through_bash(tmp_dir, monkeypatch):
+    payload = {"findings": [{"title": "quoted ' value", "severity": "high"}]}
+    script = stub_forensics(tmp_dir, monkeypatch, payload, 2)
+    result = subprocess.run(
+        [session_scan._bash_executable(), script, tmp_dir, "--format", "json"], cwd=tmp_dir,
+        text=True, capture_output=True, check=False, start_new_session=True,
+    )
+    assert result.returncode == 2, result.stderr
+    assert result.stdout == json.dumps(payload), (
+        f"stdout={result.stdout!r} stderr={result.stderr!r} script={script!r}"
+    )
+
+
+def test_missing_bash_keeps_changed_item_uncleared(tmp_dir, monkeypatch):
+    stub_forensics(tmp_dir, monkeypatch, {"findings": []}, 0)
+    monkeypatch.setattr(session_scan, "_bash_executable", lambda: None)
+    uncleared = []
+    findings = session_scan.deep_scan_item(
+        tmp_dir, "test", "plugin", uncleared_sink=uncleared,
+    )
+    assert findings == ["deep scan unavailable: Bash not found (install Git for Windows)"]
+    assert uncleared == [f"plugin:{tmp_dir}"]
+
+
+def test_scanner_spawn_error_keeps_changed_item_uncleared(tmp_dir, monkeypatch):
+    stub_forensics(tmp_dir, monkeypatch, {"findings": []}, 0)
+    monkeypatch.setattr(session_scan.subprocess, "Popen",
+                        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("blocked")))
+    uncleared = []
+    findings = session_scan.deep_scan_item(
+        tmp_dir, "test", "plugin", uncleared_sink=uncleared,
+    )
+    assert findings == ["deep scan unavailable: scanner process could not start"]
+    assert uncleared == [f"plugin:{tmp_dir}"]
 
 
 @pytest.fixture

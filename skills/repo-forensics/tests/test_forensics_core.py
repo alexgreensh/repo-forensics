@@ -360,6 +360,79 @@ class TestWalkRepo:
 
 
 class TestCorrelation:
+    @pytest.mark.parametrize("left_category,right_category,title", [
+        ("encoding", "exec", "Obfuscated Code Execution"),
+        ("prompt injection", "exec", "Prompt-Assisted Code Execution"),
+        ("dynamic-import", "network", "Deferred Payload Loading"),
+        ("time-bomb", "exec", "Time-Triggered Malware"),
+    ])
+    def test_distant_code_capabilities_warn_without_blocking(self, left_category, right_category, title):
+        left = core.Finding("scanner_a", "high", left_category, left_category, "app.py", 1, left_category, left_category)
+        right = core.Finding("scanner_b", "high", right_category, right_category, "app.py", 150, right_category, right_category)
+        far = next(f for f in core.correlate([left, right]) if f.title == title)
+        assert far.severity == "high"
+        right.line = 4
+        near = next(f for f in core.correlate([left, right]) if f.title == title)
+        assert near.severity == "critical"
+
+    def test_raw_network_primitive_only_supports_advisory_exfil_correlation(self):
+        env = core.Finding("skill_threats", "low", "Environment variable access", "", "app.py", 1, "os.environ.get('K')", "credential-exfiltration", rule_id="ST-EX-008")
+        raw = core.Finding("trifecta_raw", "high", "Outbound network primitive", "", "app.py", 2, "urlopen(url)", "network")
+        raw_pair = next(f for f in core.correlate([env, raw]) if f.title == "Potential Data Exfiltration")
+        assert raw_pair.severity == "high"
+        direct = core.Finding("sast", "high", "HTTP POST", "", "app.py", 2, "requests.post(url)", "network")
+        direct_pair = next(f for f in core.correlate([env, direct]) if f.title == "Potential Data Exfiltration")
+        assert direct_pair.severity == "critical"
+
+    def test_raw_network_call_with_env_read_on_same_line_still_blocks(self):
+        env = core.Finding("skill_threats", "medium", "Bulk environment access", "", "app.py", 10, "dict(os.environ)", "credential-exfiltration", rule_id="ST-EX-007")
+        raw = core.Finding("trifecta_raw", "high", "Outbound network primitive", "", "app.py", 10, "requests.post(url, json=dict(os.environ))", "network")
+        pair = next(f for f in core.correlate([env, raw]) if f.title == "Potential Data Exfiltration")
+        assert pair.severity == "critical"
+
+    def test_dynamic_import_is_not_an_encoding_leaf(self):
+        findings = [
+            core.Finding("ast_analysis", "high", "Dynamic Import: importlib.import_module(variable)", "dynamic module loading", "test_loader.py", 1, "importlib.import_module(name)", "obfuscated-exec"),
+            core.Finding("runtime_dynamism", "high", "Dynamic Import", "code execution at runtime", "test_loader.py", 1, "importlib.import_module(name)", "dynamic-import"),
+        ]
+        assert "Obfuscated Code Execution" not in [f.title for f in core.correlate(findings)]
+
+    def test_hex_checksum_near_subprocess_is_advisory(self):
+        checksum = core.Finding("entropy", "high", "Long Hex String", "may be encoded data", "tests/test_release_installable.py", 35, "0" * 64, "encoding")
+        runner = core.Finding("trifecta_raw", "high", "Subprocess call", "shell execution", "tests/test_release_installable.py", 45, "subprocess.run(['bash', str(GATE)])", "execution")
+        pair = next(f for f in core.correlate([checksum, runner]) if f.title == "Obfuscated Code Execution")
+        assert pair.severity == "high"
+        checksum.title = "Base64 Block"
+        assert next(f for f in core.correlate([checksum, runner]) if f.title == "Obfuscated Code Execution").severity == "critical"
+
+    def test_env_access_is_not_network_for_deferred_payload_rule(self):
+        findings = [
+            core.Finding("runtime_dynamism", "high", "Dynamic Import", "", "loader.py", 5, "importlib.import_module(name)", "dynamic-import"),
+            core.Finding("skill_threats", "low", "Environment variable access", "", "loader.py", 6, "os.environ.get('MODE')", "credential-exfiltration", rule_id="ST-EX-008"),
+        ]
+        assert "Deferred Payload Loading" not in [f.title for f in core.correlate(findings)]
+
+    def test_relative_deadline_does_not_become_time_triggered_malware(self):
+        deadline = core.Finding("runtime_dynamism", "medium", "time.time() compared to variable", "", "worker.py", 5, "while time.time() < deadline:", "time-bomb", rule_id="RD-TB-005")
+        execution = core.Finding("sast", "high", "Dynamic Compile", "code execution", "worker.py", 7, "compile(src, name, 'exec')", "code-execution")
+        assert "Time-Triggered Malware" not in [f.title for f in core.correlate([deadline, execution])]
+        deadline.rule_id = "RD-TB-004"
+        assert "Time-Triggered Malware" in [f.title for f in core.correlate([deadline, execution])]
+
+    def test_hook_mentions_do_not_create_install_time_exfiltration(self):
+        findings = [
+            core.Finding("skill_threats", "high", "Hook guidance", "hook configuration", "runner.py", 1, "hook", "scope-escalation"),
+            core.Finding("sast", "high", "HTTP POST", "network post request", "runner.py", 5, "requests.post(url)", "network"),
+        ]
+        assert "Install-Time Exfiltration" not in [f.title for f in core.correlate(findings)]
+
+    def test_real_lifecycle_hook_and_network_still_correlate(self):
+        findings = [
+            core.Finding("lifecycle", "high", "NPM Hook: postinstall", "lifecycle hook", "package.json", 0, "postinstall: node install.js", "lifecycle-hook"),
+            core.Finding("sast", "high", "HTTP POST", "network post request", "package.json", 5, "requests.post(url)", "network"),
+        ]
+        assert "Install-Time Exfiltration" in [f.title for f in core.correlate(findings)]
+
     def test_env_plus_network(self):
         findings = [
             core.Finding("secrets", "high", "Env Access", "environ access", "app.py", 1, "", "env access"),
@@ -368,6 +441,25 @@ class TestCorrelation:
         correlated = core.correlate(findings)
         titles = [c.title for c in correlated]
         assert "Potential Data Exfiltration" in titles
+
+    def test_unrelated_direct_leaf_does_not_promote_inferred_exfil_pair(self):
+        findings = [
+            core.Finding("sast", "high", "Env Access", "environ access", "app.py", 1, "", "env access", evidence_class="inferred"),
+            core.Finding("sast", "high", "HTTP POST", "network post request", "app.py", 5, "", "network", evidence_class="inferred"),
+            core.Finding("secrets", "high", "Hardcoded IP", "IP literal", "app.py", 40, "", "hardcoded", evidence_class="direct"),
+        ]
+        correlated = core.correlate(findings)
+        exfil = next(c for c in correlated if c.title == "Potential Data Exfiltration")
+        assert exfil.evidence_class == "inferred"
+
+    def test_direct_contributing_leaf_keeps_exfil_pair_direct(self):
+        findings = [
+            core.Finding("sast", "high", "Env Access", "environ access", "app.py", 1, "", "env access", evidence_class="inferred"),
+            core.Finding("sast", "high", "HTTP POST", "network post request", "app.py", 5, "", "network", evidence_class="direct"),
+        ]
+        correlated = core.correlate(findings)
+        exfil = next(c for c in correlated if c.title == "Potential Data Exfiltration")
+        assert exfil.evidence_class == "direct"
 
     def test_encoding_plus_exec(self):
         findings = [

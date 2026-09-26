@@ -17,6 +17,7 @@ context machinery, not pattern tables, so they stay in code.
 Created by Alex Greenshpun
 """
 
+import ast
 import os
 import re
 import sys
@@ -26,6 +27,28 @@ import forensics_core as core
 import rule_loader
 
 SCANNER_NAME = "sast"
+
+
+def _filter_python_shell_docstring_examples(findings, source, ext):
+    """A quoted historical shell call in a docstring is not executable code."""
+    if ext != ".py" or not any(f.rule_id == "SA-PY-006" for f in findings):
+        return findings
+    try:
+        tree = ast.parse(source)
+    except (SyntaxError, ValueError, RecursionError):
+        return findings
+    interior_lines = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        body = getattr(node, "body", ())
+        if not body or not isinstance(body[0], ast.Expr):
+            continue
+        value = body[0].value
+        if isinstance(value, ast.Constant) and isinstance(value.value, str):
+            interior_lines.update(range(body[0].lineno + 1, body[0].end_lineno))
+    return [f for f in findings
+            if not (f.rule_id == "SA-PY-006" and f.line in interior_lines)]
 
 # Per-language detection rules load from the shipped pack at import time
 # (rule_loader memoizes -> parsed once per process). by_extension is the
@@ -192,6 +215,166 @@ def _logical_lines(lines, ext=None):
         i += 1
 
 
+_STRUCTURED_TLS_IDS = {"SA-PY-032", "SA-JS-040", "SA-TS-020", "SA-TSX-003"}
+_NODE_TLS_RE = re.compile(
+    r"\brejectUnauthorized\s*:\s*false\b|"
+    r"[\"']rejectUnauthorized[\"']\s*:\s*false\b|"
+    r"\b(?:[A-Za-z_$][\w$]*\.)+rejectUnauthorized\s*=\s*false\b|"
+    r"NODE_TLS_REJECT_UNAUTHORIZED\s*=\s*[\"']0[\"']",
+    re.MULTILINE,
+)
+
+
+def _js_code_starts(text):
+    """Mark source positions outside comments and string contents."""
+    code = bytearray(b"\x01") * len(text)
+    mode = "code"
+    template_braces = []
+    i = 0
+    while i < len(text):
+        char = text[i]
+        next_char = text[i + 1] if i + 1 < len(text) else ""
+        if mode == "code":
+            if char == "/" and next_char == "/":
+                end = text.find("\n", i)
+                if end < 0:
+                    end = len(text)
+                code[i:end] = b"\x00" * (end - i)
+                i = end
+                continue
+            if char == "/" and next_char == "*":
+                end = text.find("*/", i + 2)
+                end = len(text) if end < 0 else end + 2
+                code[i:end] = b"\x00" * (end - i)
+                i = end
+                continue
+            if char in ("'", '"'):
+                mode = char
+            elif char == "`":
+                mode = "template"
+                code[i] = 0
+            elif template_braces:
+                if char == "{":
+                    template_braces[-1] += 1
+                elif char == "}":
+                    template_braces[-1] -= 1
+                    if template_braces[-1] == 0:
+                        template_braces.pop()
+                        mode = "template"
+                        code[i] = 0
+        elif mode == "template":
+            code[i] = 0
+            if char == "\\":
+                if i + 1 < len(text):
+                    code[i + 1] = 0
+                    i += 1
+            elif char == "`":
+                mode = "code"
+            elif char == "$" and next_char == "{":
+                code[i + 1] = 0
+                template_braces.append(1)
+                mode = "code"
+                i += 1
+        else:
+            code[i] = 0
+            if char == "\\":
+                if i + 1 < len(text):
+                    code[i + 1] = 0
+                    i += 1
+            elif char == mode:
+                mode = "code"
+        i += 1
+    return code
+
+
+def _rule_finding(rule, rel_path, text, offset, snippet=None):
+    line = text.count("\n", 0, offset) + 1
+    if snippet is None:
+        snippet = text.splitlines()[line - 1] if text.splitlines() else ""
+    return core.Finding(
+        scanner=SCANNER_NAME, severity=rule.severity,
+        title=rule.title, description=f"Potential {rule.category} vulnerability",
+        file=rel_path, line=line, snippet=snippet.strip()[:120],
+        category=rule.category, rule_id=rule.id, confidence=rule.confidence,
+        attacker=rule.attacker, boundary=rule.boundary, asset=rule.asset,
+    )
+
+
+def _qualified_name(node):
+    parts = []
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if isinstance(node, ast.Name):
+        parts.append(node.id)
+    return ".".join(reversed(parts))
+
+
+def _scan_structured_tls(text, rel_path, ext, rules):
+    """Parse TLS-disable forms that line regexes cannot safely model.
+
+    Python calls use AST keyword analysis, so nested calls and multiline calls
+    cannot hide verify=False. Node-family property forms use a whole-file regex
+    because whitespace/newlines do not change their syntax.
+    """
+    by_id = {r.id: r for r in rules}
+    findings = []
+    if ext == ".py" and "SA-PY-032" in by_id:
+        rule = by_id["SA-PY-032"]
+        try:
+            tree = ast.parse(text)
+        except (SyntaxError, ValueError, TypeError, RecursionError):
+            tree = None
+        if tree is None:
+            # Extracted archive/bytecode text and parity corpora may be
+            # intentionally non-parseable. Preserve the old per-line fallback
+            # there; valid Python always takes the AST path below.
+            for match in rule.regex.finditer(text):
+                findings.append(_rule_finding(rule, rel_path, text, match.start(), match.group(0)))
+        else:
+            http_methods = {"request", "get", "post", "put", "patch", "delete", "head", "options"}
+            parents = {}
+            for parent in ast.walk(tree):
+                for child in ast.iter_child_nodes(parent):
+                    parents[child] = parent
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Attribute) and _qualified_name(node) == "ssl.CERT_NONE":
+                    offset = sum(len(x) + 1 for x in text.splitlines()[:node.lineno - 1]) + node.col_offset
+                    findings.append(_rule_finding(rule, rel_path, text, offset))
+                if not isinstance(node, ast.Call):
+                    continue
+                name = _qualified_name(node.func)
+                if name in {"ssl._create_unverified_context"}:
+                    # Avoid double reporting: the surrounding assignment to
+                    # verify_mode=ssl.CERT_NONE is the stronger same-line form.
+                    parent = parents.get(node)
+                    grand = parents.get(parent)
+                    if not (isinstance(grand, ast.Assign) and
+                            isinstance(grand.value, ast.Attribute) and
+                            _qualified_name(grand.value) == "ssl.CERT_NONE"):
+                        offset = sum(len(x) + 1 for x in text.splitlines()[:node.lineno - 1]) + node.col_offset
+                        findings.append(_rule_finding(rule, rel_path, text, offset))
+                    continue
+                root, _, method = name.partition(".")
+                if root not in {"requests", "httpx"} or method not in http_methods:
+                    continue
+                if any(kw.arg == "verify" and isinstance(kw.value, ast.Constant)
+                       and kw.value.value is False for kw in node.keywords):
+                    offset = sum(len(x) + 1 for x in text.splitlines()[:node.lineno - 1]) + node.col_offset
+                    findings.append(_rule_finding(rule, rel_path, text, offset))
+    elif ext in {".js", ".jsx", ".ts", ".tsx"}:
+        rid = {".js": "SA-JS-040", ".jsx": "SA-JS-040", ".ts": "SA-TS-020", ".tsx": "SA-TSX-003"}[ext]
+        rule = by_id.get(rid)
+        if rule:
+            matches = list(_NODE_TLS_RE.finditer(text))
+            code_starts = _js_code_starts(text) if matches else ()
+            for match in matches:
+                if not code_starts[match.start()]:
+                    continue
+                findings.append(_rule_finding(rule, rel_path, text, match.start(), match.group(0)))
+    return findings
+
+
 def scan_file(file_path, rel_path):
     global _pack_error_emitted
 
@@ -209,18 +392,24 @@ def scan_file(file_path, rel_path):
     # allowlist and skipping the ENTIRE ruleset), and routes language variants
     # (.mjs/.cjs/.pyw/.phtml) to their family's rules instead of dropping them.
     ext = core.resolve_scan_ext(file_path, _PACK_EXTENSIONS)
+    ext = {".bash": ".sh", ".zsh": ".sh", ".ksh": ".sh"}.get(ext, ext)
     if not ext:
         return []
 
     # rules_for_extension keeps the hot loop O(rules-for-ext) per line.
     rules = _PACK.rules_for_extension(ext)
     findings = []
+    source = ""
     try:
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             lines = f.readlines()
+            source = ''.join(lines)
+            text = source
             for i, line in _logical_lines(lines, ext):
                 line = core.clip_line(line)
                 for rule in rules:
+                    if rule.id in _STRUCTURED_TLS_IDS:
+                        continue
                     if rule.regex.search(line):
                         findings.append(core.Finding(
                             scanner=SCANNER_NAME,
@@ -237,9 +426,10 @@ def scan_file(file_path, rel_path):
                             boundary=rule.boundary,
                             asset=rule.asset,
                         ))
+            findings.extend(_scan_structured_tls(text, rel_path, ext, rules))
     except (OSError, UnicodeDecodeError) as e:
         print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)
-    return findings
+    return _filter_python_shell_docstring_examples(findings, source, ext)
 
 
 def scan_text(text, rel_path, ext=None):
@@ -275,6 +465,8 @@ def scan_text(text, rel_path, ext=None):
     for i, line in _logical_lines(text.split('\n'), ext):
         line = core.clip_line(line)
         for rule in rules:
+            if rule.id in _STRUCTURED_TLS_IDS:
+                continue
             if rule.regex.search(line):
                 findings.append(core.Finding(
                     scanner=SCANNER_NAME,
@@ -291,7 +483,8 @@ def scan_text(text, rel_path, ext=None):
                     boundary=rule.boundary,
                     asset=rule.asset,
                 ))
-    return findings
+    findings.extend(_scan_structured_tls(text, rel_path, ext, rules))
+    return _filter_python_shell_docstring_examples(findings, text, ext)
 
 
 def main():

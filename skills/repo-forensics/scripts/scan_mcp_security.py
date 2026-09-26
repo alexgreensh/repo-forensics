@@ -20,9 +20,14 @@ Research basis:
 Created by Alex Greenshpun
 """
 
+import ast
 import os
 import re
 import sys
+
+_MATCH_NAME_BINDERS = tuple(cls for cls in (getattr(ast, 'MatchAs', None),
+                                           getattr(ast, 'MatchStar', None)) if cls)
+_MATCH_MAPPING = getattr(ast, 'MatchMapping', None)
 import json as json_module
 import unicodedata
 
@@ -320,7 +325,12 @@ def scan_tool_shadowing(content, rel_path):
     for i, line in enumerate(lines):
         line = core.clip_line(line)
         for rule in TOOL_SHADOWING_RULES:
-            if rule.regex.search(line):
+            matches = rule.regex.finditer(line)
+            if rule.id == "SM-TSH-004":
+                matches = (m for m in matches
+                           if not re.match(r"copy\s+all\s+to\s+clipboard\b",
+                                           line[m.start():], re.IGNORECASE))
+            if any(matches):
                 findings.append(core.Finding(
                     scanner=SCANNER_NAME, severity="critical",
                     title=f"Tool Shadowing: {rule.title}",
@@ -340,6 +350,174 @@ def scan_tool_shadowing(content, rel_path):
 def scan_rules(content, rel_path, rules, category, default_severity):
     """Delegate to pack-aware scan_rule_patterns (stamps rule_id + confidence)."""
     return core.scan_rule_patterns(content, rel_path, rules, category, default_severity, SCANNER_NAME)
+
+
+def _python_docstring_only_lines(content):
+    """Return lines occupied solely by a Python docstring expression."""
+    try:
+        tree = ast.parse(content)
+    except (SyntaxError, ValueError, RecursionError):
+        return set()
+    lines = content.split('\n')
+    result = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        body = getattr(node, 'body', ())
+        if not body or not isinstance(body[0], ast.Expr):
+            continue
+        expr = body[0]
+        if not isinstance(expr.value, ast.Constant) or not isinstance(expr.value.value, str):
+            continue
+        if expr.lineno == expr.end_lineno:
+            line = lines[expr.lineno - 1]
+            if not line[:expr.col_offset].strip() and not line[expr.end_col_offset:].strip():
+                result.add(expr.lineno)
+        else:
+            result.update(range(expr.lineno + 1, expr.end_lineno))
+            if not lines[expr.lineno - 1][:expr.col_offset].strip():
+                result.add(expr.lineno)
+            if not lines[expr.end_lineno - 1][expr.end_col_offset:].strip():
+                result.add(expr.end_lineno)
+    return result
+
+
+def _static_select_arithmetic_lines(content, candidate_lines):
+    """Prove that a SELECT's SQL `+` belongs to a static execute argument."""
+    try:
+        tree = ast.parse(content)
+    except (SyntaxError, ValueError, RecursionError):
+        return set()
+    parent = {child: node for node in ast.walk(tree)
+              for child in ast.iter_child_nodes(node)}
+    scope_nodes = {}
+    static_names = {}
+
+    def scope_of(node):
+        while node is not None and not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Module)):
+            node = parent.get(node)
+        return node
+
+    def nodes_in_scope(scope):
+        if scope not in scope_nodes:
+            result = []
+            stack = [scope]
+            while stack:
+                node = stack.pop()
+                result.append(node)
+                for child in ast.iter_child_nodes(node):
+                    if child is not scope and isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
+                        continue
+                    stack.append(child)
+            scope_nodes[scope] = result
+        return scope_nodes[scope]
+
+    def assigned_literal(name_node):
+        owner = parent.get(name_node)
+        if isinstance(owner, ast.Assign) and name_node in owner.targets:
+            value = owner.value
+        elif isinstance(owner, ast.AnnAssign) and owner.target is name_node:
+            value = owner.value
+        elif isinstance(owner, (ast.Tuple, ast.List)):
+            assignment = parent.get(owner)
+            if not isinstance(assignment, ast.Assign) or owner not in assignment.targets:
+                return False
+            if not isinstance(assignment.value, (ast.Tuple, ast.List)):
+                return False
+            if len(owner.elts) != len(assignment.value.elts):
+                return False
+            value = assignment.value.elts[owner.elts.index(name_node)]
+        else:
+            return False
+        return isinstance(value, ast.Constant) and isinstance(value.value, str)
+
+    def static_name(name, scope):
+        key = (scope, name)
+        if key in static_names:
+            return static_names[key]
+        static_names[key] = False
+        if not isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            return False
+        args = scope.args
+        parameters = list(args.posonlyargs) + list(args.args) + list(args.kwonlyargs)
+        if args.vararg:
+            parameters.append(args.vararg)
+        if args.kwarg:
+            parameters.append(args.kwarg)
+        if name in {arg.arg for arg in parameters}:
+            return False
+        nodes = nodes_in_scope(scope)
+        if any(isinstance(node, (ast.Global, ast.Nonlocal)) and name in node.names
+               for node in nodes):
+            return False
+        for node in nodes:
+            if isinstance(node, ast.ExceptHandler) and node.name == name:
+                return False
+            if _MATCH_NAME_BINDERS and isinstance(node, _MATCH_NAME_BINDERS) and node.name == name:
+                return False
+            if _MATCH_MAPPING and isinstance(node, _MATCH_MAPPING) and node.rest == name:
+                return False
+            if isinstance(node, ast.alias):
+                imported = node.asname or node.name.split('.')[0]
+                if imported in {name, '*'}:
+                    return False
+        if any(isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+               and node.func.id in {"exec", "eval", "locals", "globals", "vars"}
+               for node in nodes):
+            return False
+        for node in ast.walk(scope):
+            if node is scope or not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
+                continue
+            if scope_of(parent.get(node)) is not scope:
+                continue
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.name == name:
+                return False
+            if any((isinstance(child, ast.Name) and child.id == name
+                    and isinstance(child.ctx, (ast.Store, ast.Del)))
+                   or (isinstance(child, ast.Nonlocal) and name in child.names)
+                   for child in ast.walk(node)):
+                return False
+        writes = [node for node in nodes if isinstance(node, ast.Name)
+                  and node.id == name and isinstance(node.ctx, (ast.Store, ast.Del))]
+        result = bool(writes) and all(isinstance(node.ctx, ast.Store)
+                                      and assigned_literal(node) for node in writes)
+        static_names[key] = result
+        return result
+
+    def static_expression(node, scope):
+        if isinstance(node, ast.Constant):
+            return isinstance(node.value, str)
+        if isinstance(node, ast.Name):
+            return static_name(node.id, scope)
+        return (isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add)
+                and static_expression(node.left, scope)
+                and static_expression(node.right, scope))
+
+    safe_lines = set()
+    content_lines = content.split('\n')
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
+            continue
+        if not node.value.lstrip().upper().startswith("SELECT "):
+            continue
+        lines = candidate_lines.intersection(range(node.lineno, node.end_lineno + 1))
+        if not lines:
+            continue
+        lines = {line for line in lines
+                 if content_lines[line - 1].upper().count("SELECT") == 1}
+        if not lines:
+            continue
+        expression = node
+        while isinstance(parent.get(expression), ast.BinOp) and isinstance(parent[expression].op, ast.Add):
+            expression = parent[expression]
+        call = parent.get(expression)
+        if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)
+                and call.func.attr in {"execute", "executemany"}
+                and call.args and call.args[0] is expression):
+            continue
+        if static_expression(expression, scope_of(call)):
+            safe_lines.update(lines)
+    return safe_lines
 
 
 def is_mcp_related(file_path, rel_path, content_sample):
@@ -384,7 +562,18 @@ def scan_file(file_path, rel_path):
     # For code files, run full MCP pattern categories
     if ext in ('.py', '.js', '.ts'):
         # SQL injection: check all code files (not just MCP)
-        findings.extend(scan_rules(content, rel_path, SQL_INJECTION_RULES, "sql-injection", "critical"))
+        sql_findings = scan_rules(content, rel_path, SQL_INJECTION_RULES,
+                                  "sql-injection", "critical")
+        if ext == '.py' and any(f.rule_id == 'SM-SQL-005' for f in sql_findings):
+            candidate_lines = {f.line for f in sql_findings if f.rule_id == 'SM-SQL-005'}
+            static_lines = _static_select_arithmetic_lines(content, candidate_lines)
+            sql_findings = [f for f in sql_findings
+                            if not (f.rule_id == 'SM-SQL-005' and f.line in static_lines)]
+        if ext == '.py' and any(f.rule_id == 'SM-SQL-007' for f in sql_findings):
+            doc_lines = _python_docstring_only_lines(content)
+            sql_findings = [f for f in sql_findings
+                            if not (f.rule_id == 'SM-SQL-007' and f.line in doc_lines)]
+        findings.extend(sql_findings)
 
         # Deeper checks only for likely MCP server files
         content_sample = content[:8000]
@@ -393,14 +582,27 @@ def scan_file(file_path, rel_path):
             findings.extend(scan_rules(content, rel_path, CROSS_DOMAIN_RULES, "cross-domain-privilege", "high"))
             findings.extend(scan_rules(content, rel_path, LOG_EXFIL_RULES, "log-to-leak", "high"))
             findings.extend(scan_tool_shadowing(content, rel_path))
-            findings.extend(scan_rules(content, rel_path, MCP_CONFIG_RULES, "mcp-config-risk", "critical"))
+            config_findings = scan_rules(content, rel_path, MCP_CONFIG_RULES,
+                                         "mcp-config-risk", "critical")
+            if ext == '.py' and any(f.rule_id == 'SM-CFG-005' for f in config_findings):
+                doc_lines = _python_docstring_only_lines(content)
+                config_findings = [f for f in config_findings
+                                   if not (f.rule_id == 'SM-CFG-005' and f.line in doc_lines)]
+            findings.extend(config_findings)
             # Category G: Rug Pull Enablers - dynamic tool descriptions
             findings.extend(scan_rules(content, rel_path, RUG_PULL_RULES, "rug-pull-enabler", "high"))
             findings.extend(scan_rules(content, rel_path, MCP_STDIO_COMMAND_RULES, "mcp-stdio-command-risk", "high"))
 
     # MCP config files (.json) — check for enableAllProjectMcpServers, ANTHROPIC_BASE_URL
     if ext == '.json' or basename in ('settings.json', 'claude_desktop_config.json', '.mcp.json'):
-        findings.extend(scan_rules(content, rel_path, MCP_CONFIG_RULES, "mcp-config-risk", "critical"))
+        config_findings = scan_rules(content, rel_path, MCP_CONFIG_RULES,
+                                      "mcp-config-risk", "critical")
+        if ext == '.json' and basename not in ('settings.json', 'claude_desktop_config.json', '.mcp.json'):
+            lines = content.split('\n')
+            config_findings = [f for f in config_findings
+                               if not (f.rule_id == 'SM-CFG-005' and 1 <= f.line <= len(lines)
+                                       and re.match(r'^\s*"_README"\s*:', lines[f.line - 1]))]
+        findings.extend(config_findings)
 
     # Category H: MCP tool name collision detection
     if ext == '.json' or basename in ('settings.json', 'claude_desktop_config.json', '.mcp.json'):

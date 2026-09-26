@@ -155,6 +155,35 @@ class TestScaleONotNSquared:
 
 
 class TestCaps:
+    def test_repeated_fragments_share_storage_but_keep_file_occurrences(self, tmp_path, monkeypatch):
+        blob = base64.b64encode(b"benign repeated fragment across four files").decode()
+        for i in range(4):
+            (tmp_path / f"copy_{i}.txt").write_text(f'BLOB = "{blob}"\n')
+        monkeypatch.setattr(scanner, "MAX_TOTAL_FRAGMENTS", 1)
+        monkeypatch.setattr(scanner, "MAX_FRAGMENT_OCCURRENCES", 10)
+        original = scanner._merged_groups
+        observed = {}
+
+        def recording(groups):
+            observed["occurrences"] = sum(len(members) for members in groups.values())
+            yield from original(groups)
+
+        monkeypatch.setattr(scanner, "_merged_groups", recording)
+        findings = scanner.scan_repo(str(tmp_path))
+        assert "splitstream-scan-incomplete" not in _cats(findings)
+        assert observed["occurrences"] == 4
+
+    def test_distinct_and_occurrence_caps_still_fail_loud(self, tmp_path, monkeypatch):
+        for i in range(3):
+            blob = base64.b64encode(f"benign distinct fragment number {i}".encode()).decode()
+            (tmp_path / f"part_{i}.txt").write_text(f'BLOB = "{blob}"\n')
+        monkeypatch.setattr(scanner, "MAX_TOTAL_FRAGMENTS", 2)
+        monkeypatch.setattr(scanner, "MAX_FRAGMENT_OCCURRENCES", 10)
+        assert "splitstream-scan-incomplete" in _cats(scanner.scan_repo(str(tmp_path)))
+        monkeypatch.setattr(scanner, "MAX_TOTAL_FRAGMENTS", 10)
+        monkeypatch.setattr(scanner, "MAX_FRAGMENT_OCCURRENCES", 2)
+        assert "splitstream-scan-incomplete" in _cats(scanner.scan_repo(str(tmp_path)))
+
     def test_group_over_member_cap_truncated_still_returns(self, tmp_path, monkeypatch):
         # Lower the member cap so a modest group exceeds it; the scanner must
         # truncate to the cap and still return (no hang/crash).
@@ -551,12 +580,11 @@ class TestHardSafeMemoryBound:
         # Must complete (no OOM/SIGKILL) well within the wall-clock budget.
         assert isinstance(findings, list)
         assert elapsed < 13.0, f"6x large-fragment scan must be bounded, took {elapsed:.1f}s"
-        # Peak RSS must stay far below the old 3.9GB blowup. ru_maxrss is a
-        # high-water mark for the whole process, so we bound the DELTA loosely but
-        # assert it never approaches the gigabyte range the bug produced.
+        # Peak RSS is a high-water mark for the whole pytest process. Other
+        # tests may already have raised it, so bound this scan's increase.
         rss_after = _peak_rss_mb()
-        assert rss_after < 800, (
-            f"peak RSS must stay bounded (was ~3.9GB pre-fix), got {rss_after:.0f}MB"
+        assert rss_after - rss_before < 500, (
+            f"large-fragment scan raised peak RSS by {rss_after - rss_before:.0f}MB"
         )
 
     def test_permutation_sweep_skipped_for_large_fragment_group(self):

@@ -27,6 +27,15 @@ SCANNER_NAME = "entropy"
 BASE64_PATTERN = re.compile(r'[A-Za-z0-9+/]{50,}={0,2}')
 # Long hex string pattern (display finding only; floor 64 to mirror prior FP gate).
 HEX_PATTERN = re.compile(r'(?:0x)?[a-fA-F0-9]{64,}')
+_SHA256SUM_LINE = re.compile(r'[a-fA-F0-9]{64} [ *]\S.*')
+_SHA256SUM_NAMES = {'checksums.sha256', 'sha256sums'}
+
+
+def _is_sha256_manifest_hash(rel_path, line, match):
+    """A standard checksum record is a digest, not an encoded payload claim."""
+    return (os.path.basename(rel_path).lower() in _SHA256SUM_NAMES
+            and match.start() == 0 and len(match.group(0)) == 64
+            and _SHA256SUM_LINE.fullmatch(line) is not None)
 
 
 def shannon_entropy(data):
@@ -137,6 +146,8 @@ def scan_file(file_path, rel_path, threshold=5.8, budget=None):
             # Check for long hex strings (display finding; decode routing is the
             # once-per-file detect_encoded_blobs pass above).
             for m in HEX_PATTERN.finditer(stripped):
+                if _is_sha256_manifest_hash(rel_path, stripped, m):
+                    continue
                 matched = m.group(0)
                 findings.append(core.Finding(
                     scanner=SCANNER_NAME, severity="high",

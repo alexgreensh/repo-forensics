@@ -1534,21 +1534,21 @@
   ],
   [
     "module_from_spec() - runtime module loading from spec",
-    "critical",
+    "high",
     "RD-SMOD-003.py",
     1,
     "self-modification"
   ],
   [
     "module_from_spec() - runtime module loading from spec",
-    "critical",
+    "high",
     "RD-SMOD-003.py",
     2,
     "self-modification"
   ],
   [
     "module_from_spec() - runtime module loading from spec",
-    "critical",
+    "high",
     "RD-SMOD-003.py",
     3,
     "self-modification"

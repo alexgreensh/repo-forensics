@@ -10,6 +10,7 @@ Supports Python and JavaScript/TypeScript.
 Created by Alex Greenshpun
 """
 
+import ast
 import os
 import re
 import sys
@@ -66,9 +67,11 @@ JS_SINKS = [
     re.compile(r'Function\s*\(', re.IGNORECASE),
     re.compile(r'new\s+WebSocket\s*\(', re.IGNORECASE),
 ]
+PYTHON_NETWORK_SINKS = frozenset(PYTHON_SINKS[:5])
+JS_NETWORK_SINKS = frozenset(JS_SINKS[:3] + JS_SINKS[-1:])
 
 # === Assignment tracking ===
-ASSIGN_PATTERN = re.compile(r'(?:(?:const|let|var)\s+)?(\w+)\s*=\s*(.*)')
+ASSIGN_PATTERN = re.compile(r'(?:(?:const|let|var)\s+)?(\w+)\s*=(?!=)\s*(.*)')
 TAINT_PROPAGATORS = [
     re.compile(r'base64\.(b64encode|encode|urlsafe_b64encode)\s*\(', re.IGNORECASE),
     re.compile(r'json\.dumps\s*\(', re.IGNORECASE),
@@ -90,6 +93,29 @@ def detect_language(rel_path):
     return None
 
 
+class _ScopeBindings(ast.NodeVisitor):
+    def __init__(self):
+        self.globals = set()
+        self.nonlocals = set()
+        self.locals = set()
+
+    def visit_Global(self, node):
+        self.globals.update(node.names)
+
+    def visit_Nonlocal(self, node):
+        self.nonlocals.update(node.names)
+
+    def visit_Name(self, node):
+        if isinstance(node.ctx, ast.Store):
+            self.locals.add(node.id)
+
+    def visit_FunctionDef(self, node):
+        self.locals.add(node.name)
+
+    visit_AsyncFunctionDef = visit_FunctionDef
+    visit_ClassDef = visit_FunctionDef
+
+
 def analyze_file(file_path, rel_path):
     """Single-pass forward taint analysis on one file."""
     lang = detect_language(rel_path)
@@ -104,17 +130,75 @@ def analyze_file(file_path, rel_path):
 
     sources = PYTHON_SOURCES if lang == 'python' else JS_SOURCES
     sinks = PYTHON_SINKS if lang == 'python' else JS_SINKS
+    network_sinks = PYTHON_NETWORK_SINKS if lang == 'python' else JS_NETWORK_SINKS
 
     tainted_vars = {}  # var_name -> (source_line, source_desc)
+    scope_starts = defaultdict(list)
+    if lang == 'python':
+        try:
+            tree = ast.parse(''.join(lines))
+            for node in ast.walk(tree):
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    bindings = _ScopeBindings()
+                    for stmt in node.body:
+                        bindings.visit(stmt)
+                    params = set()
+                    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        args = node.args
+                        params.update(a.arg for a in args.posonlyargs + args.args + args.kwonlyargs)
+                        params.update(a.arg for a in (args.vararg, args.kwarg) if a)
+                    bindings.locals.update(params)
+                    scope_starts[node.lineno].append((
+                        node.end_lineno, bindings.globals, bindings.nonlocals,
+                        bindings.locals, params, isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)),
+                    ))
+        except (SyntaxError, ValueError, RecursionError, MemoryError):
+            pass
+    scopes = [(float('inf'), tainted_vars, set(), set(), set(), False)]
     findings = []
 
     for i, line in enumerate(lines):
         line_stripped = line.strip()
         line_no = i + 1
+        if lang == 'python':
+            while len(scopes) > 1 and line_no > scopes[-1][0]:
+                scopes.pop()
+            for end_line, global_names, nonlocal_names, local_names, params, is_function in sorted(
+                scope_starts.get(line_no, []), key=lambda item: item[0], reverse=True,
+            ):
+                scoped_taints = scopes[-1][1].copy()
+                for param in params:
+                    scoped_taints.pop(param, None)
+                scopes.append((end_line, scoped_taints, global_names, nonlocal_names, local_names, is_function))
+            tainted_vars = scopes[-1][1]
 
         # Bound regex backtracking by TRUNCATING, never skipping: dropping the
         # line entirely lets a payload hide behind 10k characters of padding.
         line_stripped = core.clip_line(line_stripped)
+
+        # Reassignment ends the old value's taint unless the RHS carries it.
+        assign_m = ASSIGN_PATTERN.match(line_stripped)
+        if assign_m:
+            lhs = assign_m.group(1)
+            rhs = assign_m.group(2)
+            inherited = None
+            for tvar in tainted_vars:
+                if re.search(r'\b' + re.escape(tvar) + r'\b', rhs):
+                    inherited = tainted_vars[tvar]
+                    break
+            targets = [tainted_vars]
+            if lang == 'python' and lhs in scopes[-1][2]:
+                targets.append(scopes[0][1])
+            elif lang == 'python' and lhs in scopes[-1][3]:
+                for scope in reversed(scopes[:-1]):
+                    if scope[5] and lhs in scope[4]:
+                        targets.append(scope[1])
+                        break
+            for target in targets:
+                if inherited is None:
+                    target.pop(lhs, None)
+                else:
+                    target[lhs] = inherited
 
         # Check if line introduces a tainted source
         for source_pat, source_desc in sources:
@@ -122,22 +206,20 @@ def analyze_file(file_path, rel_path):
             if m:
                 var_name = m.group(1)
                 tainted_vars[var_name] = (line_no, source_desc)
-
-        # Check assignment propagation: if RHS references a tainted var
-        assign_m = ASSIGN_PATTERN.match(line_stripped)
-        if assign_m:
-            lhs = assign_m.group(1)
-            rhs = assign_m.group(2)
-            for tvar in tainted_vars:
-                if re.search(r'\b' + re.escape(tvar) + r'\b', rhs):
-                    tainted_vars[lhs] = tainted_vars[tvar]
-                    break
+                if lang == 'python' and var_name in scopes[-1][2]:
+                    scopes[0][1][var_name] = tainted_vars[var_name]
+                elif lang == 'python' and var_name in scopes[-1][3]:
+                    for scope in reversed(scopes[:-1]):
+                        if scope[5] and var_name in scope[4]:
+                            scope[1][var_name] = tainted_vars[var_name]
+                            break
 
         # Check if any tainted variable reaches a sink
+        sink_text = assign_m.group(2) if assign_m else line_stripped
         for sink_pat in sinks:
-            if sink_pat.search(line_stripped):
+            if sink_pat.search(sink_text):
                 for tvar, (src_line, src_desc) in tainted_vars.items():
-                    if re.search(r'\b' + re.escape(tvar) + r'\b', line_stripped):
+                    if re.search(r'\b' + re.escape(tvar) + r'\b', sink_text):
                         findings.append(core.Finding(
                             scanner=SCANNER_NAME,
                             severity="critical",
@@ -146,7 +228,8 @@ def analyze_file(file_path, rel_path):
                             file=rel_path,
                             line=line_no,
                             snippet=line_stripped[:120],
-                            category="dataflow"
+                            category="dataflow",
+                            rule_id="DF-NET-001" if sink_pat in network_sinks else "DF-EXEC-001",
                         ))
 
     return findings
@@ -198,6 +281,16 @@ def main():
 
     # Cross-file: if file A has tainted sources and file B imports A and has sinks
     import_graph = build_import_graph(repo_path, ignore_patterns)
+    # Only STRONG sources taint a whole module cross-file. Whole-env capture,
+    # env enumeration, and credential-file reads are rare outside exfiltration;
+    # bare process.env reads, dotenv, and JSON config parses are ubiquitous in
+    # legitimate server code and mass-flagged clean packages.
+    cross_file_sources = {
+        'python': [p for p in PYTHON_SOURCES
+                   if p[1] in ("os.environ.copy()", "Sensitive file read", "Sensitive path access")],
+        'javascript': [p for p in JS_SOURCES
+                       if p[1] in ("process.env enumeration", "Sensitive file read")],
+    }
     tainted_modules = set()
     for file_path, rel_path in core.walk_repo(repo_path, ignore_patterns, skip_binary=True):
         lang = detect_language(rel_path)
@@ -210,8 +303,7 @@ def main():
         except (OSError, UnicodeDecodeError):
             continue
 
-        sources = PYTHON_SOURCES if lang == 'python' else JS_SOURCES
-        for source_pat, _ in sources:
+        for source_pat, _ in cross_file_sources[lang]:
             if source_pat.search(content):
                 stem = os.path.splitext(os.path.basename(rel_path))[0]
                 tainted_modules.add(stem)

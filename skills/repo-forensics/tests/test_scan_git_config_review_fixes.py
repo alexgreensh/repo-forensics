@@ -26,6 +26,7 @@ import subprocess
 import sys
 import tarfile
 import textwrap
+import time
 import zipfile
 
 import pytest
@@ -35,6 +36,15 @@ import scan_git_config as scanner
 
 _HAVE_GIT = shutil.which("git") is not None
 needs_git = pytest.mark.skipif(not _HAVE_GIT, reason="git not installed")
+
+
+def test_many_bindings_do_not_exhaust_git_config_budget():
+    text = "".join(f'let safe{i}="value"\n' for i in range(8000))
+    text += "git config core.fsmonitor ./x.sh\nmv stage .git\n"
+    start = time.monotonic()
+    findings = scanner.scan_rename_chain_text(text, "plant.sh")
+    assert time.monotonic() - start < 2
+    assert any(f.rule_id == "GC-REN-001" for f in findings)
 
 
 def _ids(findings):

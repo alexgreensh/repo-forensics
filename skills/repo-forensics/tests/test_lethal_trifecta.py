@@ -14,7 +14,7 @@ import forensics_core as core
 from forensics_core import Finding
 
 
-def _make(scanner_name, title, description, category, filepath="attacker.py"):
+def _make(scanner_name, title, description, category, filepath="attacker.py", rule_id=""):
     """Test helper to build a Finding with keyword-rich fields."""
     return Finding(
         scanner=scanner_name,
@@ -25,6 +25,7 @@ def _make(scanner_name, title, description, category, filepath="attacker.py"):
         line=1,
         snippet=title,
         category=category,
+        rule_id=rule_id,
     )
 
 
@@ -294,6 +295,15 @@ class TestLethalTrifectaAttribution:
         trifecta = [c for c in correlated if c.category == "lethal-trifecta"]
         assert trifecta[0].severity == "critical"
 
+    def test_distant_primitives_remain_visible_as_advisory(self):
+        findings = self._canonical_findings()
+        findings[1].line = 150
+        findings[2].line = 300
+        correlated = core.correlate(findings)
+        trifecta = [c for c in correlated if c.category == "lethal-trifecta"]
+        assert len(trifecta) == 1
+        assert trifecta[0].severity == "high"
+
     def test_title_names_pattern(self):
         correlated = core.correlate(self._canonical_findings())
         trifecta = [c for c in correlated if c.category == "lethal-trifecta"]
@@ -319,7 +329,7 @@ class TestLethalTrifectaCoexistsWithExistingRules:
                   "os.system code execution", "code-execution"),
             _make("dataflow", "outbound webhook post",
                   "requests.post network outbound to webhook",
-                  "exfiltration"),
+                  "dataflow", rule_id="DF-NET-001"),
             _make("secrets", "env credential read",
                   ".env credential read for api_key", "credential-read"),
         ]

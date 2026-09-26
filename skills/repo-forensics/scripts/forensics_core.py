@@ -18,6 +18,7 @@ import hashlib
 import fnmatch
 import subprocess
 import urllib.parse
+from collections import defaultdict
 from dataclasses import dataclass, asdict
 
 # --- Hardened git invocation -------------------------------------------------
@@ -1527,11 +1528,43 @@ def is_binary_file(file_path):
     return ratio > _BINARY_NONTEXT_RATIO
 
 
+
+# Directory names that mark a real source tree next to generated output.
+_SRC_DIR_HINTS = frozenset({'src', 'source', 'app', 'libsrc'})
+
+
+def _effective_skip_dirs(repo_path, skip_dirs):
+    """Keep dist/build in scope when the scan root is a package tarball.
+
+    IGNORE_DIRS skips dist/ and build/ because in a source checkout they hold
+    generated output that only duplicates (or pads) the real code. A published
+    npm package is the opposite layout: the tarball IS the payload, shipped
+    under dist/ (or build/) with no source tree beside it, so skipping those
+    dirs reduces the scan to the manifest and lets packaged malware through
+    (verified on the Sept 2026 relay-driven agent-malware batch). When the root
+    carries a package.json, has no source-dir hint beside it, and a dist/ or
+    build/ directory exists, that directory is the product under audit and is
+    walked. Caller-supplied skip_dirs sets are respected as-is.
+    """
+    if skip_dirs is not IGNORE_DIRS:
+        return skip_dirs
+    try:
+        entries = set(os.listdir(repo_path))
+    except OSError:
+        return skip_dirs
+    if 'package.json' not in entries or entries & _SRC_DIR_HINTS:
+        return skip_dirs
+    refined = set(skip_dirs)
+    for payload_dir in ('dist', 'build'):
+        if payload_dir in entries:
+            refined.discard(payload_dir)
+    return refined
+
 def walk_repo(repo_path, ignore_patterns=None, skip_dirs=None, skip_lockfiles=True, skip_binary=True):
     """Generator that walks a repo respecting ignore rules.
     Yields (file_path, rel_path) tuples."""
     if skip_dirs is None:
-        skip_dirs = IGNORE_DIRS
+        skip_dirs = _effective_skip_dirs(repo_path, IGNORE_DIRS)
     if ignore_patterns is None:
         ignore_patterns = load_ignore_patterns(repo_path)
 
@@ -1587,7 +1620,7 @@ def walk_aux(repo_path, ignore_patterns=None, skip_dirs=None, *,
     default, and .forensicsignore patterns are still honoured.
     """
     if skip_dirs is None:
-        skip_dirs = set(IGNORE_DIRS)
+        skip_dirs = set(_effective_skip_dirs(repo_path, IGNORE_DIRS))
         if reach_pycache:
             skip_dirs.discard('__pycache__')
     if ignore_patterns is None:
@@ -2137,7 +2170,7 @@ def _cross_file_trifecta(by_file, exec_files, network_files, credential_files,
 # by scanners and signed rulepacks (structured fields, not prose).
 _EXFIL_ENV_CATEGORIES = frozenset({
     "env access", "credential-read", "credential-exfiltration",
-    "credential-theft", "secret-exposure",
+    "credential-theft", "secret-exposure", "credential-path-directive",
 })
 _EXFIL_SENSITIVE_READ_CATEGORIES = frozenset({
     "credential-path-directive", "credential-read", "secret-storage",
@@ -2163,10 +2196,6 @@ _EXFIL_NETWORK_SCANNER_CATEGORIES = frozenset({
     ("sast", "exfiltration"),
     ("sast", "git-exfiltration"),
     ("runtime_dynamism", "fetch-execute"),
-    # Tainted-data-reaches-sink findings. The sink list mixes network and exec
-    # sinks and the finding does not say which, so this is deliberately the
-    # broad reading: the finding already asserts data leaves its origin.
-    ("dataflow", "dataflow"),
 })
 
 # Fixed primitive identities from detect_trifecta_raw() and scan_bytecode -
@@ -2213,6 +2242,7 @@ def _exfil_capabilities(f):
         caps.add("sensitive_read")
     if ((category in _EXFIL_NETWORK_CATEGORIES and scanner != "secrets")
             or (scanner, category) in _EXFIL_NETWORK_SCANNER_CATEGORIES
+            or (scanner == "dataflow" and rule_id == "DF-NET-001")
             or rule_id in _EXFIL_NETWORK_RULE_IDS
             or (scanner, f.title) in _EXFIL_NETWORK_PRIMITIVES):
         caps.add("network")
@@ -2265,7 +2295,6 @@ def correlate(findings, repo_path=None):
 
     network_keywords = {"network", "http", "fetch", "request", "post", "webhook", "curl", "wget", "exfiltration"}
     exec_keywords = {"eval", "exec", "system", "subprocess", "code execution", "shell"}
-    encoding_keywords = {"base64", "obfuscat", "encoding", "hex string"}
     # Legacy prose-keyword sets retained ONLY for the rules that were not
     # part of the typed-correlation rewrite (Rules 27/28/29 below). Rules 1
     # and 3 classify leaves structurally via _exfil_capabilities instead.
@@ -2322,6 +2351,13 @@ def correlate(findings, repo_path=None):
                     return f
         return None
 
+    def is_encoding_leaf(f):
+        # "obfuscated-exec" also labels ordinary dynamic imports/reloads;
+        # only a real encoder/encoded-payload finding can seed Rule 2.
+        return (f.category in {"encoding", "hex-encoding"}
+                or (f.scanner == "ast_analysis"
+                    and f.title == "Obfuscated Exec: Encoded Payload"))
+
     def strongest_evidence(findings_iter):
         """Reduce a set of contributing (leaf) findings to the strongest
         evidence_class among them: direct > structural > inferred. An
@@ -2346,6 +2382,53 @@ def correlate(findings, repo_path=None):
         side_b = [f for f in file_findings if capability_b in _exfil_capabilities(f)]
         return any(a.finding_id != b.finding_id for a in side_a for b in side_b)
 
+    def has_corroborated_typed_pair(file_findings, capability_a, capability_b):
+        """Raw trifecta regex leaves alone do not establish an exfil flow."""
+        side_a = [f for f in file_findings if capability_a in _exfil_capabilities(f)
+                  and f.scanner != "trifecta_raw"]
+        side_b = [f for f in file_findings if capability_b in _exfil_capabilities(f)
+                  and f.scanner != "trifecta_raw"]
+        if any(a.finding_id != b.finding_id for a in side_a for b in side_b):
+            return True
+        # A source nested in the very same raw network-call line is direct
+        # composition, even when the network matcher has no richer rule ID.
+        raw_network = [f for f in file_findings if f.scanner == "trifecta_raw"
+                       and capability_b in _exfil_capabilities(f)]
+        return any(a.line > 0 and a.line == b.line and a.snippet and b.snippet
+                   and (a.snippet in b.snippet or b.snippet in a.snippet)
+                   for a in side_a for b in raw_network)
+
+    def compound_code_severity(filepath, *groups):
+        """Code capabilities far apart are a review lead, not a proven chain.
+
+        Keep instruction documents at their existing severity because distant
+        directives can still be executed together by an agent. For code and
+        binaries, require distinct findings in one 25-line region to escalate.
+        """
+        if os.path.splitext(filepath)[1].lower() in {".md", ".markdown", ".txt", ".rst", ".adoc"}:
+            return "critical"
+        events = sorted(
+            (f.line, group_index, f.finding_id)
+            for group_index, group in enumerate(groups)
+            for f in group if f.line > 0
+        )
+        counts = [0] * len(groups)
+        finding_ids = defaultdict(int)
+        left = 0
+        for right, (line, group_index, finding_id) in enumerate(events):
+            counts[group_index] += 1
+            finding_ids[finding_id] += 1
+            while line - events[left][0] > 25:
+                _, old_group, old_id = events[left]
+                counts[old_group] -= 1
+                finding_ids[old_id] -= 1
+                if finding_ids[old_id] == 0:
+                    del finding_ids[old_id]
+                left += 1
+            if all(counts) and len(finding_ids) >= 2:
+                return "critical"
+        return "high"
+
     for filepath, file_findings in by_file.items():
         # Rule 1: env/credential access + network call, from DISTINCT,
         # structurally-typed leaves. Keyword matching over finding prose used
@@ -2356,11 +2439,13 @@ def correlate(findings, repo_path=None):
         # primitive produced a spurious critical BLOCK that masked real
         # verdicts (Pluto reflective-RCE audit, 2026-09-20).
         if has_distinct_typed_pair(file_findings, "env", "network"):
+            corroborated = has_corroborated_typed_pair(file_findings, "env", "network")
             correlated.append(Finding(
                 scanner="correlation",
-                severity="critical",
+                severity="critical" if corroborated else "high",
                 title="Potential Data Exfiltration",
-                description="Environment/credential access combined with network call in the same file",
+                description=("Environment/credential access combined with network call in the same file"
+                             if corroborated else "Raw network and credential primitives co-occur in the same file; data flow is unverified"),
                 file=filepath,
                 line=0,
                 snippet="[compound: env read + network call]",
@@ -2373,13 +2458,19 @@ def correlate(findings, repo_path=None):
         # Require the two sides to come from DISTINCT findings AND the exec side
         # to be a real, non-obfuscation finding so a single "Long Hex String"
         # finding does not self-correlate.
-        enc_find = first_match(file_findings, encoding_keywords)
-        exec_find = first_match(file_findings, exec_keywords,
-                                exclude_categories={"encoding", "obfuscation", "decoded-payload"})
-        if enc_find is not None and exec_find is not None and exec_find is not enc_find:
+        encoding_hits = [f for f in file_findings if is_encoding_leaf(f)]
+        execution_hits = [f for f in file_findings
+                          if f.category not in {"encoding", "obfuscation", "decoded-payload"}
+                          and any(kw in f._tags for kw in exec_keywords)]
+        if any(a.finding_id != b.finding_id for a in encoding_hits for b in execution_hits):
+            severity = compound_code_severity(filepath, encoding_hits, execution_hits)
+            if not any(f.title != "Long Hex String" for f in encoding_hits):
+                # A bare hex literal can be a checksum. Without a decoder or
+                # encoded-payload finding, nearby execution is only co-occurrence.
+                severity = "high"
             correlated.append(Finding(
                 scanner="correlation",
-                severity="critical",
+                severity=severity,
                 title="Obfuscated Code Execution",
                 description="Base64/encoding combined with code execution in the same file",
                 file=filepath,
@@ -2406,10 +2497,12 @@ def correlate(findings, repo_path=None):
                 ))
 
         # Rule 4: prompt injection + code execution (91% of malicious skills per Snyk)
-        if has_category(file_findings, prompt_injection_keywords) and has_category(file_findings, exec_keywords):
+        prompt_hits = [f for f in file_findings if any(kw in f._tags for kw in prompt_injection_keywords)]
+        prompt_exec_hits = [f for f in file_findings if any(kw in f._tags for kw in exec_keywords)]
+        if prompt_hits and prompt_exec_hits:
             correlated.append(Finding(
                 scanner="correlation",
-                severity="critical",
+                severity=compound_code_severity(filepath, prompt_hits, prompt_exec_hits),
                 title="Prompt-Assisted Code Execution",
                 description="Prompt injection combined with code execution in the same file (top malicious skill pattern)",
                 file=filepath,
@@ -2418,8 +2511,12 @@ def correlate(findings, repo_path=None):
                 category="compound-attack"
             ))
 
-        # Rule 5: lifecycle hook + network call
-        if has_category(file_findings, lifecycle_keywords) and has_category(file_findings, network_keywords):
+        # Rule 5: an actionable install hook plus a network capability.
+        if (any(f.scanner == "lifecycle"
+                and f.category in {"lifecycle-hook", "install-script-ioc"}
+                and "(Known Safe Pattern)" not in f.title
+                for f in file_findings)
+                and any("network" in _exfil_capabilities(f) for f in file_findings)):
             correlated.append(Finding(
                 scanner="correlation",
                 severity="critical",
@@ -2478,10 +2575,12 @@ def correlate(findings, repo_path=None):
                 ))
 
         # Rule 9: Dynamic import/eval + network fetch = "Deferred Payload Loading"
-        if has_category(file_findings, dynamic_import_keywords) and has_category(file_findings, network_keywords):
+        import_hits = [f for f in file_findings if any(kw in f._tags for kw in dynamic_import_keywords)]
+        network_hits = [f for f in file_findings if "network" in _exfil_capabilities(f)]
+        if import_hits and network_hits:
             correlated.append(Finding(
                 scanner="correlation",
-                severity="critical",
+                severity=compound_code_severity(filepath, import_hits, network_hits),
                 title="Deferred Payload Loading",
                 description="Dynamic import combined with network fetch in the same file. Code can download and load arbitrary modules at runtime.",
                 file=filepath,
@@ -2491,10 +2590,14 @@ def correlate(findings, repo_path=None):
             ))
 
         # Rule 10: Date/counter comparison + exec/eval = "Time-Triggered Malware"
-        if has_category(file_findings, time_bomb_keywords) and has_category(file_findings, exec_keywords):
+        time_hits = [f for f in file_findings
+                     if f.rule_id not in {"RD-TB-002", "RD-TB-003", "RD-TB-005"}
+                     and any(kw in f._tags for kw in time_bomb_keywords)]
+        time_exec_hits = [f for f in file_findings if any(kw in f._tags for kw in exec_keywords)]
+        if time_hits and time_exec_hits:
             correlated.append(Finding(
                 scanner="correlation",
-                severity="critical",
+                severity=compound_code_severity(filepath, time_hits, time_exec_hits),
                 title="Time-Triggered Malware",
                 description="Time/counter-based activation combined with code execution. Classic time bomb pattern (Socket.dev NuGet, Nov 2025).",
                 file=filepath,
@@ -2707,7 +2810,12 @@ def correlate(findings, repo_path=None):
             # No dedupe is needed because the titles and categories differ.
             correlated.append(Finding(
                 scanner="correlation",
-                severity="critical",
+                severity=compound_code_severity(
+                    filepath,
+                    [file_findings[i] for i in exec_ids],
+                    [file_findings[i] for i in network_ids],
+                    [file_findings[i] for i in credential_ids],
+                ),
                 title="Lethal Trifecta (exec + network + credential read)",
                 description=(
                     "File contains all three primitives of the 'Lethal "
@@ -3102,8 +3210,9 @@ def correlate(findings, repo_path=None):
             ))
 
     # Evidence model (Track A): set each compound's evidence_class from its
-    # contributing leaves. Per-file compounds derive from that file's findings
-    # (strongest wins); repo-wide compounds (file="") default to direct since
+    # contributing leaves. Typed exfil/encoding compounds use only matching
+    # capability leaves; other per-file compounds use the file's findings.
+    # Repo-wide compounds (file="") default to direct since
     # the dir-based Rules 30-36 fire on directive-class categories that come
     # from directive scanners (skill_threats/agent_skills), which are direct.
     # A compound built only from inferred/structural leaves caps at LOW in the
@@ -3111,7 +3220,26 @@ def correlate(findings, repo_path=None):
     # leaf stays eligible for HIGH/CRITICAL.
     for c in correlated:
         if c.file and c.file in by_file:
-            c.evidence_class = strongest_evidence(by_file[c.file])
+            file_findings = by_file[c.file]
+            if c.title == "Potential Data Exfiltration":
+                c.evidence_class = strongest_evidence(
+                    f for f in file_findings
+                    if _exfil_capabilities(f) & {"env", "network"}
+                )
+            elif c.title == "Credential Theft Pattern":
+                c.evidence_class = strongest_evidence(
+                    f for f in file_findings
+                    if _exfil_capabilities(f) & {"sensitive_read", "network"}
+                )
+            elif c.title == "Obfuscated Code Execution":
+                c.evidence_class = strongest_evidence(
+                    f for f in file_findings
+                    if is_encoding_leaf(f)
+                    or (f.category not in {"encoding", "obfuscation", "decoded-payload"}
+                        and any(kw in f._tags for kw in exec_keywords))
+                )
+            else:
+                c.evidence_class = strongest_evidence(file_findings)
         elif not c.file:
             c.evidence_class = "direct"
         else:

@@ -977,12 +977,22 @@ def _maybe_overlay(name, shipped, cache_dir=None):
         _overlay_note(f"{name}: overlay REJECTED ({reason})")
         _set_degraded(True)
         return shipped
-    # Silent-detection-removal guard (KTD-6): a shipped-ACTIVE rule arriving
-    # retired:true in the overlay is surfaced, never silent.
+    # A newer feed may explicitly retire a shipped rule, but omission is not a
+    # retirement decision. Keep the shipped pack when an overlay drops IDs.
     retired = getattr(overlay, "_retired_ids", set())
+    if shipped is not None:
+        shipped_ids = {r.id for r in shipped.all_rules}
+        overlay_ids = {r.id for r in overlay.all_rules}
+        omitted = sorted(shipped_ids - overlay_ids - retired)
+        if omitted:
+            detail = f"{len(omitted)} shipped-active rule(s) omitted: {', '.join(omitted[:5])}"
+            _warn(f"rule-pack overlay for {name!r} rejected: {detail}")
+            _overlay_note(f"{name}: overlay REJECTED ({detail})")
+            _set_degraded(True)
+            return shipped
+    # Explicit retirement is surfaced under the existing KTD-6 policy.
     if shipped is not None and retired:
-        shipped_active = {r.id for r in shipped.all_rules}
-        silenced = sorted(shipped_active & retired)
+        silenced = sorted(shipped_ids & retired)
         for rid in silenced:
             _overlay_note(
                 f"{name}: shipped-active rule {rid} retired by overlay "

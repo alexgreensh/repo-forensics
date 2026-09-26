@@ -526,9 +526,9 @@ def test_c1_all_shipped_packs_load_fully():
     rule_loader._reset_pack_cache()
     expected = {
         "secrets": 46,
-        "sast": 134,
-        "skill_threats": 125,
-        "mcp_security": 44,
+        "sast": 150,
+        "skill_threats": 126,
+        "mcp_security": 46,
         "shared": 5,
         "runtime_dynamism": 70,
     }

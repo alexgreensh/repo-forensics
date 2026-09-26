@@ -2,8 +2,16 @@
 
 import os
 import py_compile
+import subprocess
+import sys
 import pytest
 import scan_bytecode as scanner
+import _pyc_unmarshal as child
+
+_NEEDS_NATIVE_SANDBOX = pytest.mark.skipif(
+    sys.platform not in ("darwin", "linux"),
+    reason="disassembly requires macOS Seatbelt or Linux seccomp",
+)
 
 
 def _compile_to_pyc(src_code, directory, name="mod"):
@@ -99,6 +107,7 @@ class TestBytecodePoisoning:
         assert any(f.severity == "medium" for f in findings
                    if f.category == "opaque-bytecode-with-source")
 
+    @_NEEDS_NATIVE_SANDBOX
     def test_obfuscated_getattr_gadget_flagged(self, tmp_path):
         # getattr(os, chr(115)+"ystem")("id") hides the attribute name from the
         # raw-marker + co_name detectors; the gadget co-occurrence catches it.
@@ -126,6 +135,7 @@ class TestBytecodePoisoning:
         findings = scanner.scan_repo(str(tmp_path))
         assert "bytecode-poisoning" in _cats(findings)
 
+@_NEEDS_NATIVE_SANDBOX
 class TestBytecodeDetection:
     def test_exec_primitive_in_function_body_orphan_elevated(self, tmp_path):
         # os.system inside a function -> lives in a NESTED code object, which the
@@ -223,3 +233,123 @@ class TestSiblingResolution:
         (pkg / "mod.py").write_text("x = 1\n")
         pyc = cache / "mod.cpython-314.pyc"
         assert scanner._sibling_py(str(pyc)) == str(pkg / "mod.py")
+
+
+class TestBytecodeSandbox:
+    @pytest.mark.parametrize("limit", ["MAX_DEPTH", "MAX_CODE_OBJECTS"])
+    def test_traversal_limit_never_returns_partial_success(self, monkeypatch, limit):
+        monkeypatch.setattr(child, limit, 0)
+        code = compile("def nested():\n    return 1\n", "trusted-test.py", "exec")
+        with pytest.raises(ValueError, match="traversal limit"):
+            child._walk_code(code, [], set(), 0)
+
+    def test_bad_disassembly_never_returns_partial_success(self, monkeypatch):
+        def bad_instructions(_):
+            raise ValueError("malformed opcode")
+        monkeypatch.setattr(child.dis, "get_instructions", bad_instructions)
+        with pytest.raises(ValueError, match="malformed opcode"):
+            child._walk_code(compile("x = 1", "trusted-test.py", "exec"), [], set(), 0)
+
+    def test_output_limit_never_returns_partial_success(self, tmp_path, monkeypatch):
+        _, pyc = _compile_to_pyc("x = 'output exceeds cap'\n", tmp_path)
+        monkeypatch.setattr(child.sys, "argv", ["child", str(pyc), "16"])
+        monkeypatch.setattr(child, "_apply_limits", lambda: None)
+        # This trusted fixture runs in the test process; never sandbox pytest.
+        monkeypatch.setattr(child, "_apply_sandbox", lambda: True)
+        monkeypatch.setattr(child, "MAX_OUTPUT_CHARS", 1)
+        with pytest.raises(ValueError, match="output limit"):
+            child.main()
+
+    def test_output_collection_is_bounded_before_join(self, monkeypatch):
+        monkeypatch.setattr(child, "MAX_OUTPUT_CHARS", 4)
+        lines = child._BoundedLines()
+        lines.append("abcd")
+        with pytest.raises(child.AnalysisLimitExceeded):
+            lines.append("excess")
+        assert lines == ["abcd"]
+
+    def test_analysis_limit_maps_to_incomplete_reason(self, monkeypatch):
+        monkeypatch.setattr(scanner.subprocess, "run", lambda *args, **kwargs:
+                            subprocess.CompletedProcess(args[0], child.ANALYSIS_LIMIT, b"", b""))
+        blob, error = scanner._disassemble("input.pyc", 16)
+        assert blob is None
+        assert "safety limit" in error and "incomplete" in error
+
+    def test_sandbox_unavailable_is_visible_in_scan(self, tmp_path, monkeypatch):
+        _compile_to_pyc("value = 42\n", tmp_path)
+        monkeypatch.setattr(scanner, "_disassemble_best", lambda *args: (
+            None, "OS sandbox unavailable; unsafe bytecode disassembly was skipped"))
+        findings = scanner.scan_repo(str(tmp_path))
+        assert "unanalyzable-bytecode" in _cats(findings)
+        assert any("OS sandbox unavailable" in f.description for f in findings)
+
+    def test_unsupported_platform_refuses_sandbox(self, monkeypatch):
+        monkeypatch.setattr(child.sys, "platform", "unsupported")
+        assert child._apply_sandbox() is False
+
+    def test_no_sandbox_never_unmarshals(self, tmp_path, monkeypatch):
+        pyc = tmp_path / "input.pyc"
+        pyc.write_bytes(b"untrusted")
+        monkeypatch.setattr(child.sys, "argv", ["child", str(pyc), "0"])
+        monkeypatch.setattr(child, "_apply_limits", lambda: None)
+        monkeypatch.setattr(child, "_apply_sandbox", lambda: False)
+        monkeypatch.setattr(child.marshal, "loads", lambda _: pytest.fail("parsed without sandbox"))
+        with pytest.raises(SystemExit) as exc:
+            child.main()
+        assert exc.value.code == child.SANDBOX_UNAVAILABLE
+
+    def test_missing_linux_library_fails_closed(self, monkeypatch):
+        monkeypatch.setattr(child.sys, "platform", "linux")
+        monkeypatch.setattr(child.ctypes.util, "find_library", lambda _: None)
+        assert child._apply_sandbox() is False
+
+    def test_launcher_removes_environment_and_reports_sandbox_failure(self, monkeypatch):
+        def run(command, **kwargs):
+            assert command[1:3] == ["-I", "-S"]
+            assert set(kwargs["env"]) == {"PATH", "LANG"}
+            assert kwargs["close_fds"] is True
+            assert kwargs["stdin"] == subprocess.DEVNULL
+            return subprocess.CompletedProcess(command, child.SANDBOX_UNAVAILABLE, b"", b"")
+        monkeypatch.setattr(scanner.subprocess, "run", run)
+        blob, error = scanner._disassemble("input.pyc", 16)
+        assert blob is None
+        assert "OS sandbox unavailable" in error
+
+    @pytest.mark.skipif(sys.platform not in ("darwin", "linux"), reason="native sandbox unavailable")
+    def test_native_sandbox_denies_host_capabilities(self, tmp_path):
+        secret = tmp_path / "secret.txt"
+        secret.write_text("PRIVATE_CANARY")
+        target = tmp_path / "write-target"
+        probe = '''
+import errno, os, socket, sys
+sys.path.insert(0, sys.argv[1])
+import _pyc_unmarshal as child
+network = socket.socket()
+if not child._apply_sandbox():
+    sys.exit(5)
+for operation in (
+    lambda: open(sys.argv[2]).read(),
+    lambda: open(sys.argv[3], "w"),
+    lambda: network.connect(("127.0.0.1", 9)),
+    os.fork,
+):
+    try:
+        operation()
+    except OSError as exc:
+        if exc.errno not in (errno.EPERM, errno.EACCES):
+            raise
+        continue
+    sys.exit(7)
+print("all denied")
+'''
+        proc = subprocess.run(
+            [sys.executable, "-I", "-S", "-c", probe,
+             os.path.dirname(scanner._UNMARSHAL), str(secret), str(target)],
+            capture_output=True, text=True, timeout=10,
+            stdin=subprocess.DEVNULL,
+        )
+        if proc.returncode == child.SANDBOX_UNAVAILABLE:
+            pytest.skip("OS sandbox cannot activate on this host")
+        assert proc.returncode == 0, proc.stderr
+        assert proc.stdout.strip() == "all denied"
+        assert not target.exists()

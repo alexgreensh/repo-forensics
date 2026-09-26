@@ -18,7 +18,9 @@ import importlib.util
 import io
 import marshal
 import os
+import sys
 import zipfile
+import pytest
 
 import forensics_core as core
 import scan_archive
@@ -112,6 +114,7 @@ class TestT6ExtensionBypass:
 
 # --- T7 / T8: .pyc disassembly robustness -----------------------------------
 
+@pytest.mark.skipif(sys.platform not in ("darwin", "linux"), reason="native bytecode sandbox unavailable")
 class TestT7SurrogateConst:
     def test_surrogate_const_does_not_block_analysis(self, tmp_path):
         # A lone-surrogate const beside a real exec primitive: must still analyze.
@@ -126,6 +129,7 @@ class TestT7SurrogateConst:
         assert "unanalyzable-bytecode" not in _cats(findings)
 
 
+@pytest.mark.skipif(sys.platform not in ("darwin", "linux"), reason="native bytecode sandbox unavailable")
 class TestT8BlobForgery:
     def test_const_cannot_forge_import_line(self, tmp_path):
         # A benign module whose ONLY notable content is a const crafted to look

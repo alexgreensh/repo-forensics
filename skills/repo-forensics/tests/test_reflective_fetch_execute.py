@@ -293,16 +293,16 @@ class TestTypedCorrelation:
         assert "Potential Data Exfiltration" in titles, titles
         assert "Credential Theft Pattern" not in titles, titles
 
-    def test_credential_path_directive_rule3(self):
+    def test_credential_path_directive_with_raw_network_is_advisory_without_flow(self):
         sr = core.Finding(
             scanner="skill_threats", severity="high",
             title="Credential-path directive",
             description="instruction to access sensitive file",
             file="SKILL.md", line=1, snippet="read ~/.ssh/id_rsa",
             category="credential-path-directive", rule_id="ST-CR-001")
-        titles = _titles(core.correlate(
-            [sr, _net_primitive(file="SKILL.md")]))
-        assert "Credential Theft Pattern" in titles, titles
+        findings = core.correlate([sr, _net_primitive(file="SKILL.md")])
+        exfil = next(f for f in findings if f.title == "Potential Data Exfiltration")
+        assert exfil.severity == "high"
 
 
 # --------------------------------------------------------------------------

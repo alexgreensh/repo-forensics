@@ -3,6 +3,31 @@
 import scan_sast as scanner
 
 
+class TestShellCallDocstringContext:
+    def test_quoted_history_is_inert_but_executable_call_stays_critical(self, tmp_path):
+        source = (
+            "import subprocess\n"
+            "def run(cmd):\n"
+            '    """Historical example:\n'
+            "    subprocess.run(cmd, shell=True)\n"
+            '    """\n'
+            "    subprocess.run(cmd, shell=True)\n"
+        )
+        path = tmp_path / "runner.py"
+        path.write_text(source)
+        for findings in (scanner.scan_file(str(path), "runner.py"),
+                         scanner.scan_text(source, "runner.py")):
+            hits = [f for f in findings if f.rule_id == "SA-PY-006"]
+            assert [f.line for f in hits] == [6]
+            assert hits[0].severity == "critical"
+
+    def test_same_line_docstring_cannot_hide_executable_call(self, tmp_path):
+        source = 'import subprocess\ndef run(cmd): """historical"""; subprocess.run(cmd, shell=True)\n'
+        path = tmp_path / "runner.py"
+        path.write_text(source)
+        assert any(f.rule_id == "SA-PY-006" for f in scanner.scan_file(str(path), "runner.py"))
+
+
 class TestShellPipeExfiltration:
     """Tests for pipe chain exfiltration patterns in .sh files."""
 

@@ -103,6 +103,48 @@ class TestDocPlaceholderSuppression:
             f"got {[f.snippet for f in aws_findings]}"
         )
 
+    def test_sequential_aws_fixture_is_exact_only(self, tmp_path):
+        (tmp_path / "fixture.mjs").write_text(
+            "AWS_ACCESS_KEY_ID=AKIA1234567890123456\n"
+            "AWS_ACCESS_KEY_ID=AKIANY4M7KQP9XJR2E3F\n"
+        )
+        findings = _scan_repo(tmp_path)
+        aws_keys = [finding.snippet for finding in findings if "AWS Access Key" in finding.title]
+        assert "AKIA1234567890123456" not in aws_keys
+        assert "AKIANY4M7KQP9XJR2E3F" in aws_keys
+
+    def test_regression_fixture_placeholders_are_exact_only(self, tmp_path):
+        samples = (
+            "AKIA1234567890ABCDEF",
+            "sk-ant-BearerSecretTOKEN1234567890abcdefXYZ",
+            "ghp_ABCDEFghijklmnopqrstuvwxyz0123456789",
+            "ghp_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789",
+            "ghp_abcdefghijklmnopqrstuvwxyz0123456789",
+            "ghp_abcdefghijklmnopqrstuvwxyz0123456789AB",
+            "AIzaSyBcDeFgHiJkLmNoPqRsTuVwXyZ01234567",
+            "AIzaSyBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789abc",
+        )
+        for sample in samples:
+            variant = sample[:-1] + ("Z" if sample[-1] != "Z" else "Y")
+            (tmp_path / "fixture.py").write_text(sample + "\n")
+            assert not _scan_repo(tmp_path), sample
+            (tmp_path / "fixture.py").write_text(variant + "\n")
+            assert _scan_repo(tmp_path), variant
+
+    def test_placeholder_prefix_inside_longer_token_still_alerts(self, tmp_path):
+        sample = "ghp_abcdefghijklmnopqrstuvwxyz0123456789"
+        (tmp_path / "fixture.py").write_text(sample + "ABCD\n")
+        assert sample in [finding.snippet for finding in _scan_repo(tmp_path)]
+
+    def test_ansi_escape_before_example_key_is_a_boundary(self, tmp_path):
+        sample = "AKIAIOSFODNN7EXAMPLE"
+        (tmp_path / "fixture.py").write_text(r'"\x07' + sample + r'\x1b"' + "\n")
+        assert not _scan_repo(tmp_path)
+        (tmp_path / "fixture.py").write_text("X" + sample + "\n")
+        assert sample in [finding.snippet for finding in _scan_repo(tmp_path)]
+        (tmp_path / "fixture.py").write_text("7" + sample + "\n")
+        assert sample in [finding.snippet for finding in _scan_repo(tmp_path)]
+
     def test_github_example_pat_not_flagged(self, tmp_path):
         """ghp_0123456789abcdefghijklmnopqrstuvwxyz is a canonical placeholder
         GitHub PAT (sequential alphabet)."""

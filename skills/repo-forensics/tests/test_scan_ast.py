@@ -52,7 +52,9 @@ class TestNewPattern6ImportlibVariable:
             "mod = importlib.import_module(module_name)\n"
         )
         findings = scanner.scan_file(str(f), "evil.py")
-        assert any("importlib.import_module" in f.title for f in findings)
+        hits = [f for f in findings if "importlib.import_module" in f.title]
+        assert len(hits) == 1
+        assert hits[0].severity == "critical" and hits[0].confidence == 0.95
 
     def test_importlib_import_module_literal_no_flag(self, tmp_path):
         f = tmp_path / "safe.py"
@@ -63,6 +65,35 @@ class TestNewPattern6ImportlibVariable:
         findings = scanner.scan_file(str(f), "safe.py")
         importlib_findings = [f for f in findings if "importlib.import_module" in f.title]
         assert len(importlib_findings) == 0
+
+    def test_dynamic_import_in_test_helper_remains_visible_without_block(self, tmp_path):
+        f = tmp_path / "test_loader.py"
+        f.write_text("import importlib\nmod = importlib.import_module(module_name)\n")
+        findings = scanner.scan_file(str(f), "tests/test_loader.py")
+        hits = [finding for finding in findings if finding.title.startswith("Dynamic Import:")]
+        assert len(hits) == 1
+        assert hits[0].severity == "high"
+        assert hits[0].confidence == 0.80
+
+
+class TestSubprocessConcatShellSemantics:
+    def test_argv_list_concat_is_not_shell_injection(self, tmp_path):
+        f = tmp_path / "runner.py"
+        f.write_text("import subprocess\nsubprocess.run(['python', 'proof.py'] + args[1:])\n")
+        findings = scanner.scan_file(str(f), "runner.py")
+        assert not [finding for finding in findings if finding.category == "shell-injection"]
+
+    def test_shell_true_string_concat_still_blocks(self, tmp_path):
+        f = tmp_path / "runner.py"
+        f.write_text("import subprocess\nsubprocess.run('echo ' + untrusted, shell=True)\n")
+        findings = scanner.scan_file(str(f), "runner.py")
+        assert any(finding.category == "shell-injection" and finding.severity == "critical" for finding in findings)
+
+    def test_os_system_string_concat_still_blocks(self, tmp_path):
+        f = tmp_path / "runner.py"
+        f.write_text("import os\nos.system('echo ' + untrusted)\n")
+        findings = scanner.scan_file(str(f), "runner.py")
+        assert any(finding.category == "shell-injection" and finding.severity == "critical" for finding in findings)
 
 
 class TestNewPattern7ImportlibReload:

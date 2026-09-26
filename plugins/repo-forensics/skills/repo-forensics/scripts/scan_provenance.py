@@ -39,6 +39,7 @@ import time
 import json
 import shutil
 import subprocess
+import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import forensics_core as core
@@ -94,7 +95,7 @@ _SAFE_ENV = {
 }
 
 
-def _run(cmd, cwd=None, deadline=None):
+def _run(cmd, cwd=None, deadline=None, env=None):
     """Run an external CLI with a timeout and a hardened env. Returns a dict:
         {"ran": bool, "code": int|None, "out": str, "err": str}
     `ran` is False (and code None) when the tool is missing / timed out / OSError
@@ -119,7 +120,7 @@ def _run(cmd, cwd=None, deadline=None):
             capture_output=True,
             text=True,
             timeout=timeout,
-            env=_SAFE_ENV,
+            env=_SAFE_ENV if env is None else env,
             check=False,
         )
         return {
@@ -324,9 +325,33 @@ def probe_gh(repo_path, deadline=None):
     """gh attestation verify: GitHub artifact attestation (SLSA provenance)."""
     if not shutil.which("gh"):
         return "unchecked"
-    res = _run(["gh", "attestation", "verify", repo_path], cwd=repo_path,
-               deadline=deadline)
-    return _classify_output(res)
+    verdict = "unchecked"
+    try:
+        with tempfile.TemporaryDirectory(prefix="repo-forensics-gh-") as state_dir:
+            target = os.path.realpath(repo_path)
+            state = os.path.realpath(state_dir)
+            try:
+                if os.path.commonpath((target, state)) == target:
+                    return "unchecked"
+            except ValueError:
+                # Different Windows drives are disjoint; neither can contain
+                # the other, so the isolated directory is safe to use.
+                pass
+            # gh may resolve config and state paths relative to cwd on Windows
+            # when APPDATA/LOCALAPPDATA are absent. Keep every writable location
+            # in this disposable directory, never in the scanned artifact.
+            env = {**_SAFE_ENV, "HOME": state_dir, "USERPROFILE": state_dir,
+                   "APPDATA": state_dir, "LOCALAPPDATA": state_dir,
+                   "XDG_CONFIG_HOME": state_dir, "XDG_STATE_HOME": state_dir,
+                   "XDG_CACHE_HOME": state_dir, "GH_CONFIG_DIR": state_dir,
+                   "TEMP": state_dir, "TMP": state_dir}
+            res = _run(["gh", "attestation", "verify", target], cwd=state_dir,
+                       deadline=deadline, env=env)
+            verdict = _classify_output(res)
+    except OSError:
+        # No writable isolation directory means no safe gh invocation.
+        pass
+    return verdict
 
 
 def _verify(artifact_type, repo_path, marker):

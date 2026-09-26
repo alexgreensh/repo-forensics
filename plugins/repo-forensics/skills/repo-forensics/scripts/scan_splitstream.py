@@ -131,9 +131,12 @@ MAX_GROUP_BYTES = 1 * 1024 * 1024  # 1 MB
 MAX_FRAGMENT_BYTES = 2 * 1024 * 1024  # 2 MB
 # Cap on number of files scanned (defence against a huge file count).
 MAX_FILES = 20000
-# Cap on total fragments retained across the whole repo (defence against a repo
-# crafted to explode memory with millions of tiny fragments).
+# Cap on distinct fragment strings retained across the whole repo. Repeated
+# fragments share one string object, while their file occurrences stay separate.
 MAX_TOTAL_FRAGMENTS = 200000
+# Bound the occurrence tuples separately so repetition cannot bypass the memory
+# limit. This still permits mirrored trees without dropping cross-file evidence.
+MAX_FRAGMENT_OCCURRENCES = 300000
 # Cap on fragments collected from ANY SINGLE file (round-2 perf HIGH #2). A single
 # ~1MB file packed with tens of thousands of tiny base64 runs (all under
 # MAX_FRAGMENT_BYTES) previously drove the O(n^2) overlap scan to >30 s -> SIGKILL
@@ -460,8 +463,10 @@ def scan_repo(repo_path, ignore_patterns=None):
     # (alphabet, band) -> list of (rel_path, fragment). dict bucketing is the O(n) core.
     groups = {}
     total_fragments = 0
+    interned_fragments = {}
     scanned = 0
     budget_note_added = False
+    fragment_cap_hit = False
 
     def _add_budget_note(rel_path, category):
         nonlocal budget_note_added
@@ -483,7 +488,7 @@ def scan_repo(repo_path, ignore_patterns=None):
         repo_path, ignore_patterns=ignore_patterns, apply_size_cap=False
     ):
         if (scanned >= MAX_FILES
-                or total_fragments >= MAX_TOTAL_FRAGMENTS
+                or total_fragments >= MAX_FRAGMENT_OCCURRENCES
                 or time.monotonic() >= deadline):
             _add_budget_note(rel_path, "splitstream-scan-incomplete")
             break
@@ -498,17 +503,25 @@ def scan_repo(repo_path, ignore_patterns=None):
         # never running its overlap pass uninterrupted past the budget.
         ex_stats = {}
         for frag in _extract_fragments(text, deadline=deadline, stats=ex_stats):
-            fp = _fingerprint(frag)
-            groups.setdefault(fp, []).append((rel_path, frag))
+            if frag not in interned_fragments:
+                if len(interned_fragments) >= MAX_TOTAL_FRAGMENTS:
+                    _add_budget_note(rel_path, "splitstream-scan-incomplete")
+                    fragment_cap_hit = True
+                    break
+                interned_fragments[frag] = frag
+            canonical = interned_fragments[frag]
+            fp = _fingerprint(canonical)
+            groups.setdefault(fp, []).append((rel_path, canonical))
             total_fragments += 1
-            if total_fragments >= MAX_TOTAL_FRAGMENTS:
+            if total_fragments >= MAX_FRAGMENT_OCCURRENCES:
                 _add_budget_note(rel_path, "splitstream-scan-incomplete")
+                fragment_cap_hit = True
                 break
         # Per-file extraction cap or mid-extraction deadline tripped: emit the
         # fail-loud note (idempotent) so a truncated/timed-out file is never silent.
         if ex_stats.get("truncated"):
             _add_budget_note(rel_path, "splitstream-scan-incomplete")
-        if ex_stats.get("deadline_hit"):
+        if ex_stats.get("deadline_hit") or fragment_cap_hit:
             break
 
     # --- Reassembly pass over groups merging ALL same-alphabet bands ---

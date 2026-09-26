@@ -59,11 +59,11 @@ def _write_shim(path: Path, banner: str | None, *, executable: bool = True) -> N
     banner. Any non --version invocation just marks that it ran."""
     path.parent.mkdir(parents=True, exist_ok=True)
     version_line = f'echo "{banner}"' if banner is not None else "true"
-    path.write_text(
-        f"#!{BASH}\n"
+    path.write_bytes((
+        "#!/bin/sh\n"
         f'[ "$1" = "--version" ] && {{ {version_line}; exit 0; }}\n'
         'echo "SHIM_RAN:$*"\n'
-    )
+    ).encode("utf-8"))
     if executable:
         path.chmod(0o755)
 

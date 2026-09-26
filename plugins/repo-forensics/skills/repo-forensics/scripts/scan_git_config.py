@@ -95,6 +95,7 @@ is spawned against scanned content.
 Created by Alex Greenshpun
 """
 
+from collections import ChainMap
 import os
 import re
 import sys
@@ -357,8 +358,6 @@ def _hookspath_in_tree(value, repo_root):
         return False
     resolved = v if os.path.isabs(v) else os.path.join(repo_root, v)
     resolved = os.path.normpath(resolved)
-    if resolved.lower().startswith(_TEMP_PREFIXES):
-        return False
     return _is_within(os.path.realpath(resolved), os.path.realpath(repo_root))
 
 
@@ -1583,6 +1582,7 @@ def _chain_hits(text):
     if '.git' not in lowered and not _ARM1_HINT_RE.search(text):
         return None, None
     var_state = {}        # name (lower) -> resolved value (str) or None
+    git_vars = set()       # bindings currently resolving to .git
     has_git_var = False
     config_hit = None
     rename_hit = None
@@ -1611,10 +1611,14 @@ def _chain_hits(text):
         # this line's assignments against the pre-line state.
         line_assigns_git = False
         if assigns and not (has_git or has_git_var):
-            probe = state_at(len(line) + 1)
+            # Only this line's bindings can newly resolve to .git. Avoid
+            # copying every prior binding for each line in large source files.
+            probe = ChainMap({}, var_state)
+            for _, name, raw_value in assigns:
+                probe.maps[0][name] = _resolve_assigned_value(raw_value, probe)
             line_assigns_git = any(
-                isinstance(v, str) and v.lower() == ".git"
-                for v in probe.values())
+                isinstance(value, str) and value.lower() == ".git"
+                for value in probe.maps[0].values())
         if has_git or has_git_var or line_assigns_git:
             arm2_hint = False  # gate already open
             hint = True
@@ -1634,12 +1638,13 @@ def _chain_hits(text):
                 # update the flow state (e.g. suffix=git feeding a later
                 # target=.$suffix).
                 for _pos, a_name, a_raw in assigns:
-                    var_state[a_name] = _resolve_assigned_value(
-                        a_raw, var_state)
-                if assigns:
-                    has_git_var = any(
-                        isinstance(v, str) and v.lower() == ".git"
-                        for v in var_state.values())
+                    value = _resolve_assigned_value(a_raw, var_state)
+                    var_state[a_name] = value
+                    if isinstance(value, str) and value.lower() == ".git":
+                        git_vars.add(a_name)
+                    else:
+                        git_vars.discard(a_name)
+                has_git_var = bool(git_vars)
                 continue
         if config_hit is None and _CONFIG_WRITE_RE.search(line):
             config_hit = (line_no, raw.strip())
@@ -1650,11 +1655,13 @@ def _chain_hits(text):
         if config_hit and rename_hit:
             break
         for _pos, a_name, a_raw in assigns:
-            var_state[a_name] = _resolve_assigned_value(a_raw, var_state)
-        if assigns:
-            has_git_var = any(
-                isinstance(v, str) and v.lower() == ".git"
-                for v in var_state.values())
+            value = _resolve_assigned_value(a_raw, var_state)
+            var_state[a_name] = value
+            if isinstance(value, str) and value.lower() == ".git":
+                git_vars.add(a_name)
+            else:
+                git_vars.discard(a_name)
+        has_git_var = bool(git_vars)
     return config_hit, rename_hit
 
 
