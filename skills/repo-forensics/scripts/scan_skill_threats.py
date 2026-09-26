@@ -17,9 +17,12 @@ Created by Alex Greenshpun
 """
 
 import json
+import hashlib
 import os
 import re
 import sys
+import time
+from dataclasses import replace
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import forensics_core as core
@@ -28,6 +31,9 @@ import _context_gate
 from _shared_patterns import EXFIL_VERBS_RE, SKILL_CONFIG_FILES
 
 SCANNER_NAME = "skill_threats"
+_DECODE_CACHE_MIN_CHARS = 64 * 1024
+_DECODE_CACHE_MAX_ENTRIES = 256
+_FULL_AUDIT_DECODE_BUDGET_SEC = 90
 
 # ============================================================
 # Rules-as-data (U4): all behavioral pattern tables, the unicode-smuggling
@@ -658,7 +664,7 @@ def _mh_gate_demotes(finding, rel_path, content):
         return False
 
 
-def scan_file(file_path, rel_path, budget=None):
+def scan_file(file_path, rel_path, budget=None, decode_cache=None):
     """Run all categories on a single file (reads, then delegates to scan_content).
 
     `budget`: optional shared scan_decode budget (see main()). When None a fresh
@@ -671,10 +677,10 @@ def scan_file(file_path, rel_path, budget=None):
             content = f.read()
     except (OSError, UnicodeDecodeError):
         return []
-    return scan_content(content, rel_path, budget=budget)
+    return scan_content(content, rel_path, budget=budget, decode_cache=decode_cache)
 
 
-def scan_content(content, rel_path, budget=None):
+def scan_content(content, rel_path, budget=None, decode_cache=None):
     """Run all categories over already-loaded text — an extracted archive
     member, a decoded blob. The KTD7 in-memory entry point scan_archive recurses
     so prompt-injection / unicode-smuggling / exfil / IOC detection reaches
@@ -847,12 +853,12 @@ def scan_content(content, rel_path, budget=None):
     # (hashes, data-URIs) with false positives. The ONLY finding that surfaces is
     # the additive, FP-safe decoded-payload one, emitted ONLY when the decoded
     # plaintext actually trips a rule.
-    findings.extend(_decode_and_rescan_blobs(content, rel_path, budget))
+    findings.extend(_decode_and_rescan_blobs(content, rel_path, budget, decode_cache))
 
     return findings
 
 
-def _decode_and_rescan_blobs(content, rel_path, budget):
+def _decode_and_rescan_blobs(content, rel_path, budget, decode_cache=None):
     """Detect every FULL encoded run (base64/base85/base32/hex) in `content` via
     the hoisted scan_decode.detect_encoded_blobs (single source of truth, with the
     CORRECTED base85 charset — a real RFC1924 b85 payload is now matched whole and
@@ -873,8 +879,18 @@ def _decode_and_rescan_blobs(content, rel_path, budget):
         return extra
     if budget is None:
         budget = scan_decode.host_budget()
+    cache_key = None
+    if decode_cache is not None and len(content) >= _DECODE_CACHE_MIN_CHARS:
+        cache_key = (os.path.basename(rel_path).lower(),
+                     hashlib.sha256(content.encode("utf-8", "replace")).digest())
+        if cache_key in decode_cache:
+            return [replace(f, file=rel_path, finding_id="") for f in decode_cache[cache_key]]
     blobs = scan_decode.detect_encoded_blobs(content)
     scan_decode.feed_blobs(blobs, rel_path, set(), extra, budget)
+    if (cache_key is not None and len(decode_cache) < _DECODE_CACHE_MAX_ENTRIES
+            and not any(f.category in {"decode-scan-incomplete", "decode-max-depth"}
+                        for f in extra)):
+        decode_cache[cache_key] = tuple(extra)
     return extra
 
 
@@ -970,7 +986,9 @@ def _scan_prose_imperatives(content, rel_path):
 
 
 def main():
-    args = core.parse_common_args(sys.argv, "AI Skill Threat Scanner")
+    full_audit = "--full-audit" in sys.argv[1:]
+    argv = [arg for arg in sys.argv if arg != "--full-audit"]
+    args = core.parse_common_args(argv, "AI Skill Threat Scanner")
     repo_path = args.repo_path
 
     core.emit_status(args.format, f"[*] Scanning for AI skill threats in {repo_path}...")
@@ -978,18 +996,22 @@ def main():
     ignore_patterns = core.load_ignore_patterns(repo_path)
     all_findings = []
 
-    # ONE shared decode budget across every file (see scan_decode.new_budget):
-    # the wall-clock deadline + byte cap span the whole scan, never re-armed —
-    # re-arming per blob is what let many blobs blow the 15s auto_scan SIGKILL
-    # into a silent zero.
+    # Quick hook scans keep the 12-second decode ceiling. The explicit full
+    # audit has a 120-second per-scanner runner limit, so its single shared
+    # decode budget can inspect larger trees without expiring mid-scan.
     try:
         import scan_decode
-        budget = scan_decode.host_budget()
+        if full_audit:
+            budget = scan_decode.new_budget(
+                deadline=time.monotonic() + _FULL_AUDIT_DECODE_BUDGET_SEC)
+        else:
+            budget = scan_decode.host_budget()
     except Exception:
         budget = None
+    decode_cache = {}
 
     for file_path, rel_path in core.walk_repo(repo_path, ignore_patterns, skip_binary=True):
-        findings = scan_file(file_path, rel_path, budget=budget)
+        findings = scan_file(file_path, rel_path, budget=budget, decode_cache=decode_cache)
         all_findings.extend(findings)
 
     core.output_findings(all_findings, args.format, SCANNER_NAME)

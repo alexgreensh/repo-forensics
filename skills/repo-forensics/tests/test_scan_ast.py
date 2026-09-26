@@ -52,7 +52,9 @@ class TestNewPattern6ImportlibVariable:
             "mod = importlib.import_module(module_name)\n"
         )
         findings = scanner.scan_file(str(f), "evil.py")
-        assert any("importlib.import_module" in f.title for f in findings)
+        hits = [f for f in findings if "importlib.import_module" in f.title]
+        assert len(hits) == 1
+        assert hits[0].severity == "critical" and hits[0].confidence == 0.95
 
     def test_importlib_import_module_literal_no_flag(self, tmp_path):
         f = tmp_path / "safe.py"
@@ -71,6 +73,7 @@ class TestNewPattern6ImportlibVariable:
         hits = [finding for finding in findings if finding.title.startswith("Dynamic Import:")]
         assert len(hits) == 1
         assert hits[0].severity == "high"
+        assert hits[0].confidence == 0.80
 
 
 class TestSubprocessConcatShellSemantics:

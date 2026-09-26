@@ -947,6 +947,7 @@ def scan_file(file_path, rel_path, budget=None):
             for finding in visitor.findings:
                 if finding.title == "Dynamic Import: importlib.import_module(variable)":
                     finding.severity = "high"
+                    finding.confidence = min(finding.confidence, core.SEVERITY_CONFIDENCE["high"])
     except Exception:
         pass
     return visitor.findings

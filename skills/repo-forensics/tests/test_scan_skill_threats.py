@@ -301,6 +301,7 @@ class TestDecodeAndRescan:
 
         def counting(deadline=None):
             calls["n"] += 1
+            calls["deadline"] = deadline
             return real(deadline=deadline)
 
         monkeypatch.setattr(scan_decode, "new_budget", counting)
@@ -311,6 +312,43 @@ class TestDecodeAndRescan:
                             ["scan_skill_threats.py", str(tmp_path), "--format", "json"])
         scanner.main()
         assert calls["n"] == 1, "main() must mint exactly one shared budget"
+        assert calls["deadline"] is None, "quick scans keep the short decode deadline"
+
+    def test_full_audit_uses_one_bounded_decode_budget(self, tmp_path, monkeypatch):
+        import scan_decode
+        import time
+        real = scan_decode.new_budget
+        deadlines = []
+
+        def counting(deadline=None):
+            deadlines.append(deadline)
+            return real(deadline=deadline)
+
+        monkeypatch.setattr(scan_decode, "new_budget", counting)
+        (tmp_path / "SKILL.md").write_text("# harmless skill\n")
+        monkeypatch.setattr("sys.argv", ["scan_skill_threats.py", str(tmp_path),
+                                         "--format", "json", "--full-audit"])
+        scanner.main()
+        assert len(deadlines) == 1
+        assert 85 < deadlines[0] - time.monotonic() <= 90
+
+    def test_identical_mirrored_content_reuses_decode_with_each_path(self, monkeypatch):
+        import scan_decode
+        monkeypatch.setattr(scanner, "_DECODE_CACHE_MIN_CHARS", 0)
+        encoded = base64.b64encode(_DECODE_MALICIOUS).decode()
+        content = f"# fixture\nblob: {encoded}\n"
+        budget = scan_decode.new_budget()
+        cache = {}
+        first = scanner.scan_content(content, "one/SKILL.md", budget=budget, decode_cache=cache)
+        spent = budget.decoded_bytes
+        second = scanner.scan_content(content, "two/SKILL.md", budget=budget, decode_cache=cache)
+        first_hits = [f for f in first if f.category == "decoded-payload"]
+        second_hits = [f for f in second if f.category == "decoded-payload"]
+        assert first_hits and second_hits
+        assert budget.decoded_bytes == spent
+        assert {f.file for f in first_hits} == {"one/SKILL.md"}
+        assert {f.file for f in second_hits} == {"two/SKILL.md"}
+        assert {f.finding_id for f in first_hits} != {f.finding_id for f in second_hits}
 
     def test_many_blobs_one_file_bounded(self, tmp_path):
         import time
