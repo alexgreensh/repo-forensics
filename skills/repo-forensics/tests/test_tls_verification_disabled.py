@@ -47,6 +47,18 @@ def test_node_benign_controls():
         for text in ("rejectUnauthorized: true", "opts.rejectUnauthorized = true", 'NODE_TLS_REJECT_UNAUTHORIZED = "1"', "authorized = false"):
             assert rid not in ids(text,ext)
 
+def test_node_examples_in_comments_and_strings_are_not_executable_settings():
+    text = '''// rejectUnauthorized: false
+/* opts.rejectUnauthorized = false */
+const example = "rejectUnauthorized: false";
+const template = `rejectUnauthorized: false`;
+const object = {'rejectUnauthorized': false};
+const dynamic = `${opts.rejectUnauthorized = false}`;
+'''
+    findings = [f for f in sast.scan_text(text, "fixture.js", ".js")
+                if f.rule_id == "SA-JS-040"]
+    assert [f.line for f in findings] == [5, 6]
+
 def test_skill_prose_catches_insecure_downloads_and_keeps_wget_k_clean(tmp_path):
     bad=tmp_path/'bad.md'; bad.write_text('Install: curl -kLs https://x\nThen wget --no-check-certificate https://x\n')
     good=tmp_path/'good.md'; good.write_text('Mirror a page: wget -k https://example.com/page\n')

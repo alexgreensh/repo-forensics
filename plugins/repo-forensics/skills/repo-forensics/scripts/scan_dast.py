@@ -51,8 +51,23 @@ SANDBOX_PROFILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'dast
 _SANDBOX_EXEC = shutil.which('sandbox-exec') or '/usr/bin/sandbox-exec'
 SANDBOX_AVAILABLE = os.path.exists(_SANDBOX_EXEC) and os.path.exists(SANDBOX_PROFILE)
 
-# Linux bubblewrap sandbox (fallback when macOS Seatbelt is unavailable)
-BWRAP_AVAILABLE = shutil.which("bwrap") is not None
+# Linux bubblewrap sandbox (fallback when macOS Seatbelt is unavailable).
+# CI hosts can have bwrap installed while forbidding unprivileged namespaces.
+_BWRAP_EXEC = shutil.which("bwrap")
+def _bwrap_usable():
+    if sys.platform != "linux" or not _BWRAP_EXEC:
+        return False
+    try:
+        probe = subprocess.run(
+            [_BWRAP_EXEC, "--ro-bind", "/", "/", "--dev", "/dev",
+             "--tmpfs", "/tmp", "--unshare-net", "--die-with-parent", "/bin/true"],
+            stdin=subprocess.DEVNULL, capture_output=True, timeout=3, cwd="/",
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return probe.returncode == 0
+
+BWRAP_AVAILABLE = _bwrap_usable()
 
 # 8 malicious payload types for hook testing
 PAYLOADS = [
@@ -289,7 +304,7 @@ def execute_hook_with_payload(hook, payload, repo_path):
         # hook must have its resolved directory bound, not the link's.
         hook_dir = os.path.dirname(os.path.realpath(script_path))
         exec_cmd = [
-            'bwrap',
+            _BWRAP_EXEC,
             '--ro-bind', '/', '/',
             '--dev', '/dev',
             '--tmpfs', '/tmp',

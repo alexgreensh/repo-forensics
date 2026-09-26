@@ -4,6 +4,21 @@ All notable changes to repo-forensics. Versions follow semver.
 
 ## [Unreleased]
 
+### Security: verify plugin checkout provenance and disabled TLS settings
+
+- Detect commit-shaped plugin branch names, mismatched recorded commit pins, and
+  installer checkout flows that do not verify resolved HEAD. Pin lookup is
+  limited to the installed plugin's identity and bounded metadata inside the
+  scanned tree. Unreadable provenance reports a coverage gap.
+- Detect disabled TLS certificate checks in shell, Python, and Node-family
+  download code. Python calls use syntax analysis, and JavaScript comments and
+  string examples do not trigger the new TLS rule.
+- Preserve the false-positive controls for scanner correlation, manifest import
+  parsing, and in-tree Git hook paths while merging both protections.
+- Make test fixtures portable across Git Bash and Python's Windows newline
+  handling; detect whether Linux bubblewrap can actually create a sandbox
+  before attempting dynamic hook execution.
+
 ### Fix: automatic paths no longer report clean over a scan that found something
 
 - **Behavior change (`feat!`):** a SessionStart deep scan that ends nonzero and renders

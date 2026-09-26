@@ -21,7 +21,6 @@ import ast
 import os
 import re
 import sys
-import ast
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import forensics_core as core
@@ -226,6 +225,68 @@ _NODE_TLS_RE = re.compile(
 )
 
 
+def _js_code_starts(text):
+    """Mark source positions outside comments and string contents."""
+    code = bytearray(b"\x01") * len(text)
+    mode = "code"
+    template_braces = []
+    i = 0
+    while i < len(text):
+        char = text[i]
+        next_char = text[i + 1] if i + 1 < len(text) else ""
+        if mode == "code":
+            if char == "/" and next_char == "/":
+                end = text.find("\n", i)
+                if end < 0:
+                    end = len(text)
+                code[i:end] = b"\x00" * (end - i)
+                i = end
+                continue
+            if char == "/" and next_char == "*":
+                end = text.find("*/", i + 2)
+                end = len(text) if end < 0 else end + 2
+                code[i:end] = b"\x00" * (end - i)
+                i = end
+                continue
+            if char in ("'", '"'):
+                mode = char
+            elif char == "`":
+                mode = "template"
+                code[i] = 0
+            elif template_braces:
+                if char == "{":
+                    template_braces[-1] += 1
+                elif char == "}":
+                    template_braces[-1] -= 1
+                    if template_braces[-1] == 0:
+                        template_braces.pop()
+                        mode = "template"
+                        code[i] = 0
+        elif mode == "template":
+            code[i] = 0
+            if char == "\\":
+                if i + 1 < len(text):
+                    code[i + 1] = 0
+                    i += 1
+            elif char == "`":
+                mode = "code"
+            elif char == "$" and next_char == "{":
+                code[i + 1] = 0
+                template_braces.append(1)
+                mode = "code"
+                i += 1
+        else:
+            code[i] = 0
+            if char == "\\":
+                if i + 1 < len(text):
+                    code[i + 1] = 0
+                    i += 1
+            elif char == mode:
+                mode = "code"
+        i += 1
+    return code
+
+
 def _rule_finding(rule, rel_path, text, offset, snippet=None):
     line = text.count("\n", 0, offset) + 1
     if snippet is None:
@@ -305,7 +366,11 @@ def _scan_structured_tls(text, rel_path, ext, rules):
         rid = {".js": "SA-JS-040", ".jsx": "SA-JS-040", ".ts": "SA-TS-020", ".tsx": "SA-TSX-003"}[ext]
         rule = by_id.get(rid)
         if rule:
-            for match in _NODE_TLS_RE.finditer(text):
+            matches = list(_NODE_TLS_RE.finditer(text))
+            code_starts = _js_code_starts(text) if matches else ()
+            for match in matches:
+                if not code_starts[match.start()]:
+                    continue
                 findings.append(_rule_finding(rule, rel_path, text, match.start(), match.group(0)))
     return findings
 

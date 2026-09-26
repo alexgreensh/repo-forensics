@@ -65,7 +65,7 @@ def _hostile_repo(tmp_path, marker):
         "\nsigned\n"
     )
     commit_file = tmp_path / "commit.txt"
-    commit_file.write_text(commit_body)
+    commit_file.write_bytes(commit_body.encode("ascii"))
     with open(commit_file, "rb") as fh:
         sha = subprocess.run(
             ["git", "-C", str(repo), "hash-object", "-t", "commit", "-w", "--stdin"],

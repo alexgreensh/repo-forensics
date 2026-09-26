@@ -357,8 +357,6 @@ def _hookspath_in_tree(value, repo_root):
         return False
     resolved = v if os.path.isabs(v) else os.path.join(repo_root, v)
     resolved = os.path.normpath(resolved)
-    if resolved.lower().startswith(_TEMP_PREFIXES):
-        return False
     return _is_within(os.path.realpath(resolved), os.path.realpath(repo_root))
 
 

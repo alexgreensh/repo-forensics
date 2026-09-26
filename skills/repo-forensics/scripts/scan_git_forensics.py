@@ -231,8 +231,8 @@ def scan_grafts(repo_path):
 _SHA40_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 _AMBIGUOUS_REF_RE = re.compile(r"^(?:[0-9a-fA-F]{40}|FETCH_HEAD)$")
 _PLUGIN_MARKERS = (
-    ".claude-plugin", ".codex-plugin", ".agents", ".gemini",
-    "openclaw.plugin.json", "SKILL.md",
+    ".claude-plugin", ".codex-plugin", ".agents/plugin.json",
+    ".gemini/plugin.json", "openclaw.plugin.json",
 )
 _PIN_KEYS = frozenset({
     "sha", "commit", "commitsha", "commit_sha", "revision", "rev", "gitsha",
@@ -243,11 +243,17 @@ _PIN_METADATA_NAMES = frozenset({
 })
 _MAX_PROVENANCE_FILE_BYTES = 1024 * 1024
 _MAX_METADATA_RECORDS = 50000
+_MAX_PLUGIN_WALK_ENTRIES = 20000
 
 
-def _read_regular_text(path):
-    """Read a bounded regular file without following file symlinks."""
+def _read_regular_text(path, repo_path):
+    """Read a bounded regular file whose resolved path stays in the repo."""
     if os.path.islink(path):
+        return None
+    try:
+        if os.path.commonpath((os.path.realpath(path), os.path.realpath(repo_path))) != os.path.realpath(repo_path):
+            return None
+    except ValueError:
         return None
     try:
         fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
@@ -284,7 +290,7 @@ def _plugin_identity(repo_path):
                 ".agents/plugin.json", ".gemini/plugin.json", "openclaw.plugin.json"):
         path = os.path.join(repo_path, rel)
         try:
-            text = _read_regular_text(path)
+            text = _read_regular_text(path, repo_path)
             if text is None:
                 continue
             data = json.loads(text)
@@ -356,7 +362,7 @@ def _recover_recorded_pins(repo_path):
             continue
         own_manifest_seen = True
         try:
-            text = _read_regular_text(path)
+            text = _read_regular_text(path, repo_path)
             if text is None:
                 ambiguous_identity = True
                 continue
@@ -368,19 +374,24 @@ def _recover_recorded_pins(repo_path):
             matching_records.append(own)
     if identity is None and own_manifest_seen:
         ambiguous_identity = True
+    walked = 0
     for root, dirs, files in os.walk(repo_path):
         rel_root = os.path.relpath(root, repo_path)
         if rel_root.count(os.sep) > 3:
             dirs[:] = []
             continue
-        dirs[:] = [d for d in dirs if d != ".git"]
+        dirs[:] = [d for d in dirs if d not in (".git", "node_modules", "vendor", ".venv")]
+        walked += 1 + len(files)
+        if walked > _MAX_PLUGIN_WALK_ENTRIES:
+            ambiguous_identity = True
+            break
         for name in files:
             if name.lower() not in _PIN_METADATA_NAMES or name.lower() == "plugin.json":
                 continue
             path = os.path.join(root, name)
             metadata_seen = True
             try:
-                text = _read_regular_text(path)
+                text = _read_regular_text(path, repo_path)
                 if text is None:
                     ambiguous_identity = True
                     continue
@@ -486,21 +497,22 @@ def scan_plugin_installers(repo_path):
     if not _is_agent_plugin_repo(repo_path):
         return []
     findings = []
+    skipped = []
+    walked = 0
     for root, dirs, files in os.walk(repo_path):
-        dirs[:] = [d for d in dirs if d not in (".git", "node_modules", "vendor")]
+        dirs[:] = [d for d in dirs if d not in (".git", "node_modules", "vendor", ".venv")]
+        walked += 1 + len(files)
+        if walked > _MAX_PLUGIN_WALK_ENTRIES:
+            skipped.append("plugin tree exceeds scan entry limit")
+            break
         for name in files:
             if not name.endswith((".sh", ".bash", ".zsh", ".js", ".jsx", ".ts", ".tsx", ".py")):
                 continue
             path = os.path.join(root, name)
-            text = _read_regular_text(path)
+            text = _read_regular_text(path, repo_path)
             rel = os.path.relpath(path, repo_path)
             if text is None:
-                findings.append(core.Finding(
-                    scanner=SCANNER_NAME, severity="medium",
-                    title="Agent Plugin Installer Source Not Scanned",
-                    description="Installer source is unreadable, symlinked, or exceeds the scan size limit.",
-                    file=rel, line=0, snippet="installer source skipped",
-                    category="coverage-gap", evidence_class="direct"))
+                skipped.append(rel)
                 continue
             pin_name = r"(?:pinned_?sha|commit_?sha|sha|revision)"
             # Shell and common subprocess/exec representations. We require git,
@@ -536,6 +548,13 @@ def scan_plugin_installers(repo_path):
                                  "unless git rev-parse HEAD exactly matches the requested pin."),
                     file=rel, line=0, snippet="git checkout <pin> without HEAD verification",
                     category="plugin-provenance", evidence_class="direct"))
+    if skipped:
+        findings.append(core.Finding(
+            scanner=SCANNER_NAME, severity="medium",
+            title="Agent Plugin Installer Source Not Scanned",
+            description=f"{len(skipped)} source paths could not be scanned because of input limits or unreadable files.",
+            file=skipped[0], line=0, snippet="installer source skipped",
+            category="coverage-gap", evidence_class="direct"))
     return findings
 
 

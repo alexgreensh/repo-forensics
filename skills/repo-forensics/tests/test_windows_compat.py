@@ -60,7 +60,7 @@ def _write_shim(path: Path, banner: str | None, *, executable: bool = True) -> N
     path.parent.mkdir(parents=True, exist_ok=True)
     version_line = f'echo "{banner}"' if banner is not None else "true"
     path.write_text(
-        f"#!{BASH}\n"
+        "#!/bin/sh\n"
         f'[ "$1" = "--version" ] && {{ {version_line}; exit 0; }}\n'
         'echo "SHIM_RAN:$*"\n'
     )

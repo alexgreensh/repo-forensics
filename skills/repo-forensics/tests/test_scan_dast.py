@@ -12,6 +12,11 @@ _NEEDS_POSIX_HOOKS = pytest.mark.skipif(
     os.name == "nt",
     reason="hook discovery and DAST execution rely on the POSIX executable bit and on running .sh directly; Windows has neither")
 
+_NEEDS_WORKING_SANDBOX = pytest.mark.skipif(
+    not (scanner.SANDBOX_AVAILABLE or scanner.BWRAP_AVAILABLE),
+    reason="DAST needs a usable Seatbelt or bubblewrap sandbox",
+)
+
 
 class TestHookDiscovery:
     def test_finds_registered_hooks(self, repo_with_hook_scripts):
@@ -88,6 +93,7 @@ class TestPayloadExecution:
         assert any(f.category == "scan-incomplete" for f in findings)
 
     @_NEEDS_POSIX_HOOKS
+    @_NEEDS_WORKING_SANDBOX
     def test_detects_env_leak(self, repo_with_hook_scripts):
         hooks = scanner.find_hook_scripts(str(repo_with_hook_scripts))
         # Find the leaky hook
@@ -101,6 +107,7 @@ class TestPayloadExecution:
         findings = scanner.execute_hook_with_payload(leaky[0], env_payload, str(repo_with_hook_scripts))
         assert any("leaked" in f.title.lower() or "canary" in f.snippet.lower() for f in findings)
 
+    @_NEEDS_WORKING_SANDBOX
     def test_detects_timeout(self, repo_with_hook_scripts):
         # The hang-hook.sh sleeps for 30s, should timeout at 5s
         hooks = scanner.find_hook_scripts(str(repo_with_hook_scripts))

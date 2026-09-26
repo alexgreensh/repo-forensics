@@ -25,6 +25,14 @@ def test_fetch_head_branch_in_plugin_is_critical(tmp_path):
 def test_odd_branches_in_generic_repo_are_scoped_out(tmp_path):
     p,pin=repo(tmp_path,plugin=False);git(p,'branch',pin);git(p,'branch','FETCH_HEAD');assert gitf.scan_plugin_checkout_provenance(str(p))==[]
 
+def test_standalone_skill_and_agent_config_are_not_plugin_checkouts(tmp_path):
+    p,pin=repo(tmp_path,plugin=False)
+    (p/'SKILL.md').write_text('# A standalone skill\n')
+    (p/'.agents').mkdir()
+    git(p,'branch',pin)
+    assert gitf.scan_plugin_checkout_provenance(str(p)) == []
+    assert gitf.scan_plugin_installers(str(p)) == []
+
 def test_normal_plugin_branch_without_pin_metadata_is_clean(tmp_path):
     p,_=repo(tmp_path);assert gitf.scan_plugin_checkout_provenance(str(p))==[]
 
@@ -112,6 +120,27 @@ def test_symlinked_metadata_is_not_read(tmp_path):
     fs=gitf.scan_plugin_checkout_provenance(str(p))
     assert 'Agent Plugin Provenance Pin Unavailable' in titles(fs)
     assert 'Agent Plugin Checkout Does Not Match Recorded Pin' not in titles(fs)
+
+def test_symlinked_plugin_manifest_directory_cannot_read_outside_repo(tmp_path):
+    p,_=repo(tmp_path,plugin=False)
+    outside=tmp_path/'outside'
+    outside.mkdir()
+    (outside/'plugin.json').write_text(json.dumps({'name':'x','commit':'a'*40}))
+    try:
+        (p/'.claude-plugin').symlink_to(outside, target_is_directory=True)
+    except OSError:
+        pytest.skip('directory symlink creation unavailable')
+    fs=gitf.scan_plugin_checkout_provenance(str(p))
+    assert 'Agent Plugin Checkout Does Not Match Recorded Pin' not in titles(fs)
+    assert 'Agent Plugin Provenance Pin Unavailable' in titles(fs)
+
+def test_plugin_walk_limit_reports_gap_without_scanning_unbounded_tree(tmp_path, monkeypatch):
+    p,_=repo(tmp_path)
+    for index in range(8):
+        (p/f'file-{index}.py').write_text('pass\n')
+    monkeypatch.setattr(gitf, '_MAX_PLUGIN_WALK_ENTRIES', 5)
+    assert 'Agent Plugin Provenance Pin Unavailable' in titles(gitf.scan_plugin_checkout_provenance(str(p)))
+    assert 'Agent Plugin Installer Source Not Scanned' in titles(gitf.scan_plugin_installers(str(p)))
 
 def test_deep_metadata_is_a_coverage_gap(tmp_path):
     p,_=repo(tmp_path)
