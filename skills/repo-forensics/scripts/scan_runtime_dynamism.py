@@ -238,25 +238,183 @@ def scan_file_regex(file_path, rel_path):
         or js_import_call.search(content_lines[f.line - 1])
     ]
 
-    # v2.13.2 RD-SMOD-003 recalibration (design §5.4). Keep main's critical /
-    # self-modification severity everywhere EXCEPT when the carrier is a test
-    # fixture: the dominant TO FP mass is "dozens of test files loading modules
-    # under test" via module_from_spec. Test-file context demotes to
-    # evidence_class="inferred" (report layer caps severity->low + confidence->
-    # 0.40, records original_severity; the finding stays LISTED). The real
-    # write-then-load attack (case02-write-py-loader) is NOT test-path-shaped
-    # and therefore stays critical/direct. Scoped to RD-SMOD-003 only; other
-    # self-modification rules (RD-SMOD-001/002/004) keep full severity
-    # everywhere until torture shows FP mass worth a policy.
+    # module_from_spec constructs a module but does not execute it. Treat a
+    # standalone call as HIGH; retain CRITICAL when its function writes a file
+    # before loading and executes the resulting module. Test fixtures keep the
+    # existing inferred-evidence cap, and the finding always stays visible.
+    loader_tree = None
+    if any(f.rule_id in {"RD-SMOD-003", "RD-SMOD-004"} for f in findings) and ext == '.py':
+        try:
+            loader_tree = ast.parse(content, filename=file_path)
+        except (SyntaxError, ValueError, RecursionError):
+            pass
+    is_test = (any(f.rule_id in {"RD-SMOD-003", "RD-SMOD-004"} for f in findings)
+               and _context_gate.classify_file_context(rel_path, content).is_test_fixture)
     for f in findings:
         if f.rule_id == "RD-SMOD-003":
             try:
-                if _context_gate.classify_file_context(rel_path, content).is_test_fixture:
+                if is_test:
                     f.evidence_class = "inferred"
+                elif loader_tree is not None and not _write_then_load(loader_tree, f.line):
+                    if _fixed_sibling_loader(loader_tree, f.line):
+                        f.evidence_class = "inferred"
+                    else:
+                        f.severity = "high"
             except Exception:
                 pass
+        elif (f.rule_id == "RD-SMOD-004" and is_test and loader_tree is not None
+              and _test_generated_compile(loader_tree, f.line)):
+            f.evidence_class = "inferred"
 
     return findings
+
+
+def _write_then_load(tree, load_line):
+    """Find a file write and exec_module around one loader in its Python scope."""
+    scope = tree
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if node.lineno <= load_line <= getattr(node, 'end_lineno', node.lineno):
+                if scope is tree or (node.end_lineno - node.lineno
+                                     < scope.end_lineno - scope.lineno):
+                    scope = node
+
+    wrote = False
+    executed = False
+    for node in ast.walk(scope):
+        if not isinstance(node, ast.Call):
+            continue
+        if load_line - 30 <= node.lineno < load_line:
+            if isinstance(node.func, ast.Attribute) and node.func.attr in ('write_text', 'write_bytes'):
+                wrote = True
+            elif isinstance(node.func, ast.Name) and node.func.id == 'open':
+                mode = node.args[1] if len(node.args) > 1 else next(
+                    (kw.value for kw in node.keywords if kw.arg == 'mode'), None)
+                if isinstance(mode, ast.Constant) and isinstance(mode.value, str):
+                    wrote = wrote or any(flag in mode.value for flag in 'wax+')
+        elif (load_line <= node.lineno <= load_line + 30
+              and isinstance(node.func, ast.Attribute)
+              and node.func.attr == 'exec_module'):
+            executed = True
+    return wrote and executed
+
+
+def _test_generated_compile(tree, compile_line):
+    """Recognize a test compiling source returned by a local generator."""
+    scope = tree
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if node.lineno <= compile_line <= getattr(node, 'end_lineno', node.lineno):
+                if scope is tree or (node.end_lineno - node.lineno
+                                     < scope.end_lineno - scope.lineno):
+                    scope = node
+    if scope is tree:
+        return False
+
+    generated = set()
+    for node in sorted(ast.walk(scope), key=lambda item: getattr(item, 'lineno', 0)):
+        if isinstance(node, ast.Assign) and node.lineno < compile_line:
+            value = node.value
+            from_generator = (isinstance(value, ast.Call)
+                              and isinstance(value.func, ast.Attribute)
+                              and value.func.attr.startswith('_generate_'))
+            from_slice = (isinstance(value, ast.Subscript)
+                          and isinstance(value.value, ast.Name)
+                          and value.value.id in generated)
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    if from_generator or from_slice:
+                        generated.add(target.id)
+                    else:
+                        generated.discard(target.id)
+        if (isinstance(node, ast.Call) and node.lineno == compile_line
+                and isinstance(node.func, ast.Name) and node.func.id == 'compile'
+                and node.args and isinstance(node.args[0], ast.Name)
+                and node.args[0].id in generated):
+            return True
+    return False
+
+
+def _fixed_sibling_loader(tree, load_line):
+    """Prove the spec path is a literal .py sibling rooted at __file__."""
+    scope = tree
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if node.lineno <= load_line <= getattr(node, 'end_lineno', node.lineno):
+                if scope is tree or (node.end_lineno - node.lineno
+                                     < scope.end_lineno - scope.lineno):
+                    scope = node
+
+    assignments = {}
+    ambiguous = set()
+    def collect(body):
+        for node in body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                continue
+            if isinstance(node, ast.Assign) and node.lineno < load_line:
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        if target.id in assignments:
+                            ambiguous.add(target.id)
+                        assignments[target.id] = node.value
+            for field in ('body', 'orelse', 'finalbody'):
+                nested = getattr(node, field, None)
+                if isinstance(nested, list):
+                    collect(nested)
+            for handler in getattr(node, 'handlers', ()):
+                collect(handler.body)
+
+    collect(tree.body)
+    if scope is not tree:
+        collect(scope.body)
+
+    def path_proof(expr, seen=frozenset()):
+        if isinstance(expr, ast.Name):
+            if expr.id == '__file__':
+                return True, True
+            if expr.id in seen or expr.id not in assignments or expr.id in ambiguous:
+                return False, False
+            return path_proof(assignments[expr.id], seen | {expr.id})
+        if isinstance(expr, ast.Attribute) and expr.attr in ('parent', 'resolve'):
+            rooted, fixed_py = path_proof(expr.value, seen)
+            return rooted, fixed_py if expr.attr == 'resolve' else False
+        if isinstance(expr, ast.BinOp) and isinstance(expr.op, ast.Div):
+            rooted, _ = path_proof(expr.left, seen)
+            if rooted and isinstance(expr.right, ast.Constant) and isinstance(expr.right.value, str):
+                part = expr.right.value
+                if part not in ('', '.', '..') and '/' not in part and '\\' not in part and ':' not in part:
+                    return True, part.endswith('.py')
+            return False, False
+        if isinstance(expr, ast.Call):
+            name = (expr.func.id if isinstance(expr.func, ast.Name)
+                    else expr.func.attr if isinstance(expr.func, ast.Attribute) else '')
+            if name in ('Path', 'str') and expr.args:
+                return path_proof(expr.args[0], seen)
+            if name in ('resolve', 'expanduser') and isinstance(expr.func, ast.Attribute):
+                return path_proof(expr.func.value, seen)
+            if name == 'next' and expr.args and isinstance(expr.args[0], ast.GeneratorExp):
+                gen = expr.args[0]
+                if len(gen.generators) == 1:
+                    return path_proof(gen.generators[0].iter, seen)
+        if isinstance(expr, (ast.Tuple, ast.List)) and expr.elts:
+            proofs = [path_proof(item, seen) for item in expr.elts]
+            return all(root for root, _ in proofs), all(fixed for _, fixed in proofs)
+        return False, False
+
+    for node in ast.walk(scope):
+        if not (isinstance(node, ast.Call) and node.lineno == load_line
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == 'module_from_spec'
+                and node.args and isinstance(node.args[0], ast.Name)):
+            continue
+        if node.args[0].id in ambiguous:
+            return False
+        spec = assignments.get(node.args[0].id)
+        if not (isinstance(spec, ast.Call) and isinstance(spec.func, ast.Attribute)
+                and spec.func.attr == 'spec_from_file_location' and len(spec.args) >= 2):
+            return False
+        return path_proof(spec.args[1]) == (True, True)
+    return False
 
 
 def scan_file_ast(file_path, rel_path):

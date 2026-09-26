@@ -13,6 +13,10 @@ All notable changes to repo-forensics. Versions follow semver.
 - Detect disabled TLS certificate checks in shell, Python, and Node-family
   download code. Python calls use syntax analysis, and JavaScript comments and
   string examples do not trigger the new TLS rule.
+- Keep prompt-injection and unsafe-command test specimens visible as inferred
+  evidence when they are Python string data. Grade standalone module loading
+  below critical, while retaining critical for write-then-load behavior and
+  direct evidence for dynamic paths; fixed sibling loads are inferred.
 - Preserve the false-positive controls for scanner correlation, manifest import
   parsing, in-tree Git hook paths, and sanitizer regexes while merging both
   protections. The sanitizer patterns now use Unicode escapes so scanning the

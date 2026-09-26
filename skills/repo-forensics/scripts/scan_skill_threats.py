@@ -16,6 +16,7 @@ All detection patterns are original, informed by published research from:
 Created by Alex Greenshpun
 """
 
+import ast
 import json
 import hashlib
 import os
@@ -476,7 +477,49 @@ def scan_rules(content, rel_path, rules, category, default_severity):
             if finding.rule_id != "ST-PI-005"
             or (0 < finding.line <= len(lines) and directive.search(lines[finding.line - 1]))
         ]
+    if (category in ("prompt-injection", "prerequisite-attack")
+            and any(f.rule_id in ("ST-PI-001", "ST-PR-009") for f in findings)):
+        literal_spans = _test_literal_spans(content, rel_path)
+        lines = content.splitlines()
+        for finding in findings:
+            if finding.rule_id in ("ST-PI-001", "ST-PR-009") and any(
+                    start <= finding.line <= end for start, end in literal_spans):
+                finding.evidence_class = "inferred"
+            elif (finding.rule_id == "ST-PI-001"
+                  and 1 <= finding.line <= len(lines)
+                  and _defensive_quote_comment(lines[finding.line - 1])):
+                finding.evidence_class = "inferred"
     return findings
+
+
+def _test_literal_spans(content, rel_path):
+    """Return Python test-function string locations used as fixture data."""
+    if not rel_path.endswith('.py'):
+        return ()
+    if not _context_gate.classify_file_context(rel_path, content).is_test_fixture:
+        return ()
+    try:
+        tree = ast.parse(content)
+    except (SyntaxError, ValueError, RecursionError):
+        return ()
+    spans = []
+    for function in ast.walk(tree):
+        if not isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for node in ast.walk(function):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                spans.append((node.lineno, getattr(node, 'end_lineno', node.lineno)))
+    return tuple(spans)
+
+
+def _defensive_quote_comment(line):
+    """Recognize an attack string quoted inside a defensive code comment."""
+    stripped = line.lstrip()
+    return (stripped.startswith('#')
+            and re.search(r'`[^`]*ignore\s+(?:all\s+)?(?:previous|prior|above|earlier)\s+instructions[^`]*`',
+                          stripped, re.IGNORECASE)
+            and re.search(r'\b(?:blocked|rejected|prevented|unsafe|malicious|survived|unbounded)\b',
+                          stripped, re.IGNORECASE))
 
 
 def scan_known_iocs(content, rel_path):
