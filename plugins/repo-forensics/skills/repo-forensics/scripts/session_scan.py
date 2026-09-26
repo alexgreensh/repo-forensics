@@ -26,6 +26,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -82,6 +83,22 @@ DEEP_SCAN_TIMEOUT_TOTAL = 30     # hard cap for all deep scans combined
 # so one item that can never finish cannot spend the hook's whole budget forever
 # and starve the items behind it. Any change to the item resets the count.
 UNCLEARED_MAX_ATTEMPTS = 3
+
+
+def _bash_executable():
+    """Resolve Git Bash on Windows; bare `bash` selects the WSL launcher there."""
+    if os.name != "nt":
+        return shutil.which("bash") or "/bin/bash"
+    candidates = []
+    git = shutil.which("git")
+    if git:
+        candidates.append(os.path.join(os.path.dirname(os.path.dirname(git)),
+                                       "bin", "bash.exe"))
+    for program_files in (os.environ.get("ProgramFiles"),
+                          os.environ.get("ProgramFiles(x86)")):
+        if program_files:
+            candidates.append(os.path.join(program_files, "Git", "bin", "bash.exe"))
+    return next((path for path in candidates if os.path.isfile(path)), None)
 
 # Suppress via environment variable
 ENV_KILL_SWITCH = "REPO_FORENSICS_SESSION_SCAN"
@@ -784,12 +801,18 @@ def deep_scan_item(dirpath, label, item_type, timeout=None, adjudication_sink=No
     if effective_timeout <= 0:
         return []
 
+    bash = _bash_executable()
+    if not bash:
+        if uncleared_sink is not None:
+            uncleared_sink.append(f"{item_type}:{dirpath}")
+        return ["deep scan unavailable: Bash not found (install Git for Windows)"]
+
     proc = None
     pgid = None
     stdout = ""
     try:
         proc = subprocess.Popen(
-            ["bash", RUN_FORENSICS_SCRIPT, dirpath, "--format", "json"],
+            [bash, RUN_FORENSICS_SCRIPT, dirpath, "--format", "json"],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,

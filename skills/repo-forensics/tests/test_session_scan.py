@@ -71,13 +71,24 @@ def test_stub_forensics_round_trips_json_through_bash(tmp_dir, monkeypatch):
     payload = {"findings": [{"title": "quoted ' value", "severity": "high"}]}
     script = stub_forensics(tmp_dir, monkeypatch, payload, 2)
     result = subprocess.run(
-        ["bash", script, tmp_dir, "--format", "json"], cwd=tmp_dir,
+        [session_scan._bash_executable(), script, tmp_dir, "--format", "json"], cwd=tmp_dir,
         text=True, capture_output=True, check=False, start_new_session=True,
     )
     assert result.returncode == 2, result.stderr
     assert result.stdout == json.dumps(payload), (
         f"stdout={result.stdout!r} stderr={result.stderr!r} script={script!r}"
     )
+
+
+def test_missing_bash_keeps_changed_item_uncleared(tmp_dir, monkeypatch):
+    stub_forensics(tmp_dir, monkeypatch, {"findings": []}, 0)
+    monkeypatch.setattr(session_scan, "_bash_executable", lambda: None)
+    uncleared = []
+    findings = session_scan.deep_scan_item(
+        tmp_dir, "test", "plugin", uncleared_sink=uncleared,
+    )
+    assert findings == ["deep scan unavailable: Bash not found (install Git for Windows)"]
+    assert uncleared == [f"plugin:{tmp_dir}"]
 
 
 @pytest.fixture
