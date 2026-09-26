@@ -280,6 +280,69 @@ class TestPythonUnboundedRanges:
 
 
 class TestFundingUrlFalsePositives:
+    def test_i18next_funding_metadata_is_not_a_registry(self, tmp_path):
+        lock = tmp_path / "package-lock.json"
+        lock.write_text(json.dumps({
+            "lockfileVersion": 3,
+            "packages": {
+                "node_modules/i18next": {
+                    "resolved": "https://registry.npmjs.org/i18next/-/i18next-26.3.1.tgz",
+                    "funding": [
+                        {"url": "https://www.locize.com/i18next"},
+                        {"url": "https://www.i18next.com/how-to/faq"},
+                        {"url": "https://www.locize.com"},
+                        {"url": "http://sponsor.example/support"},
+                    ],
+                },
+            },
+        }))
+        findings = scanner.scan_lockfile(str(lock), "package-lock.json")
+        assert not any(f.category in {"untrusted-registry", "insecure-protocol"} for f in findings)
+
+    def test_funding_domain_used_as_resolved_tarball_is_flagged(self, tmp_path):
+        lock = tmp_path / "package-lock.json"
+        lock.write_text(json.dumps({
+            "lockfileVersion": 3,
+            "packages": {
+                "node_modules/i18next": {
+                    "resolved": "https://opencollective.com/i18next.tgz",
+                    "funding": "https://www.locize.com/i18next",
+                },
+            },
+        }))
+        findings = scanner.scan_lockfile(str(lock), "package-lock.json")
+        assert any(f.category == "untrusted-registry" and "i18next.tgz" in f.snippet for f in findings)
+
+    def test_resolved_registry_hostname_suffix_spoof_is_flagged(self, tmp_path):
+        lock = tmp_path / "package-lock.json"
+        lock.write_text(json.dumps({
+            "lockfileVersion": 3,
+            "packages": {
+                "node_modules/pkg": {
+                    "resolved": "https://registry.npmjs.org.attacker.example/pkg.tgz",
+                },
+            },
+        }))
+        findings = scanner.scan_lockfile(str(lock), "package-lock.json")
+        assert any(f.category == "untrusted-registry" for f in findings)
+
+    def test_v1_nested_resolved_url_is_checked(self, tmp_path):
+        lock = tmp_path / "package-lock.json"
+        lock.write_text(json.dumps({
+            "lockfileVersion": 1,
+            "dependencies": {
+                "outer": {
+                    "resolved": "https://registry.npmjs.org/outer/-/outer-1.0.0.tgz",
+                    "dependencies": {
+                        "inner": {"resolved": "http://evil.example/inner.tgz"},
+                    },
+                },
+            },
+        }))
+        findings = scanner.scan_lockfile(str(lock), "package-lock.json")
+        assert any(f.category == "untrusted-registry" and "inner.tgz" in f.snippet for f in findings)
+        assert any(f.category == "insecure-protocol" and "inner.tgz" in f.snippet for f in findings)
+
     def test_opencollective_not_flagged(self, tmp_path):
         """opencollective.com URLs in lockfiles should NOT be flagged."""
         lock = tmp_path / "package-lock.json"

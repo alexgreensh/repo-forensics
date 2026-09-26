@@ -1338,7 +1338,37 @@ def scan_lockfile(filepath, rel_path):
         with open(filepath, 'r', encoding='utf-8') as f:
             content = f.read()
 
-        urls = re.findall(r'https?://[^\s"\'}]+', content)
+        resolved_urls = None
+        if os.path.basename(filepath) == 'package-lock.json':
+            try:
+                data = json.loads(content)
+            except json.JSONDecodeError:
+                data = None
+            if isinstance(data, dict):
+                resolved_urls = []
+                packages = data.get('packages', {})
+                if isinstance(packages, dict):
+                    resolved_urls.extend(
+                        info['resolved'] for info in packages.values()
+                        if isinstance(info, dict) and isinstance(info.get('resolved'), str)
+                    )
+                dependencies = data.get('dependencies', {})
+                pending = list(dependencies.values()) if isinstance(dependencies, dict) else []
+                while pending:
+                    info = pending.pop()
+                    if not isinstance(info, dict):
+                        continue
+                    if isinstance(info.get('resolved'), str):
+                        resolved_urls.append(info['resolved'])
+                    nested = info.get('dependencies', {})
+                    if isinstance(nested, dict):
+                        pending.extend(nested.values())
+
+        urls = (
+            [url for url in resolved_urls if url.startswith(('http://', 'https://'))]
+            if resolved_urls is not None
+            else re.findall(r'https?://[^\s"\'}]+', content)
+        )
         suspicious = set()
 
         for url in urls:
@@ -1346,11 +1376,15 @@ def scan_lockfile(filepath, rel_path):
             hostname = urlparse(url).hostname or ''
             is_trusted = any(hostname == t or hostname.endswith('.' + t) for t in TRUSTED_REGISTRIES)
             is_benign = any(hostname == d or hostname.endswith('.' + d) for d in KNOWN_BENIGN_DOMAINS)
-            if not is_trusted and not is_benign and "schema.org" not in hostname:
+            if not is_trusted and (resolved_urls is not None or (not is_benign and "schema.org" not in hostname)):
                 suspicious.add(url)
 
         # Flag git+ and git:// resolved URLs in lockfiles (separate regex since https? doesn't match these)
-        git_urls = re.findall(r'(?:git\+https?://|git://)[^\s"\'}]+', content)
+        git_urls = (
+            [url for url in resolved_urls if url.startswith(('git+http://', 'git+https://', 'git://'))]
+            if resolved_urls is not None
+            else re.findall(r'(?:git\+https?://|git://)[^\s"\'}]+', content)
+        )
         for url in git_urls:
             findings.append(core.Finding(
                 scanner=SCANNER_NAME, severity="high",
