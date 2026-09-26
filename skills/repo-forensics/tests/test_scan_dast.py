@@ -2,8 +2,12 @@
 
 import os
 import json
+import io
 import shutil
+import signal
 import subprocess
+import time
+from types import SimpleNamespace
 import pytest
 import scan_dast as scanner
 
@@ -72,7 +76,7 @@ class TestPayloadExecution:
         hook.write_text("#!/bin/sh\nexit 0\n")
         hook.chmod(0o755)
         monkeypatch.setattr(scanner, "SANDBOX_AVAILABLE", True)
-        monkeypatch.setattr(scanner.subprocess, "run", lambda *args, **kwargs: (_ for _ in ()).throw(OSError("sandbox unavailable")))
+        monkeypatch.setattr(scanner.subprocess, "Popen", lambda *args, **kwargs: (_ for _ in ()).throw(OSError("sandbox unavailable")))
         findings = scanner.execute_hook_with_payload(
             {"event": "test", "command": str(hook), "source": "hook.sh"},
             scanner.PAYLOADS[0], str(tmp_path),
@@ -85,7 +89,8 @@ class TestPayloadExecution:
         hook.write_text("#!/bin/sh\nexit 0\n")
         hook.chmod(0o755)
         monkeypatch.setattr(scanner, "SANDBOX_AVAILABLE", True)
-        monkeypatch.setattr(scanner.subprocess, "run", lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 127, "", "sandbox-exec: invalid profile"))
+        monkeypatch.setattr(scanner, "_run_hook_process", lambda *args, **kwargs: (
+            subprocess.CompletedProcess(args[0], 127, "", "sandbox-exec: invalid profile"), False, ""))
         findings = scanner.execute_hook_with_payload(
             {"event": "test", "command": str(hook), "source": "hook.sh"},
             scanner.PAYLOADS[0], str(tmp_path),
@@ -115,6 +120,135 @@ class TestPayloadExecution:
         if hang:
             findings = scanner.execute_hook_with_payload(hang[0], scanner.PAYLOADS[0], str(repo_with_hook_scripts))
             assert any("timeout" in f.title.lower() for f in findings)
+
+    @_NEEDS_POSIX_HOOKS
+    @_NEEDS_WORKING_SANDBOX
+    @pytest.mark.parametrize("wait_for_child", [True, False])
+    def test_hook_descendants_are_stopped(self, tmp_path, monkeypatch, wait_for_child):
+        hook = tmp_path / "spawn.sh"
+        # The second case closes the child's pipes so the leader exits cleanly;
+        # cleanup must still stop its background child.
+        background = "sleep 30 &" if wait_for_child else "(exec 1>&- 2>&-; sleep 30) &"
+        hook.write_text(f"#!/bin/sh\n{background}\nprintf 'CHILD=%s\\n' \"$!\"\n" +
+                        ("wait\n" if wait_for_child else "exit 0\n"))
+        hook.chmod(0o755)
+        monkeypatch.setattr(scanner, "EXEC_TIMEOUT", 0.5)
+        observed = []
+        run_hook = scanner._run_hook_process
+
+        def capture(*args):
+            result = run_hook(*args)
+            observed.append(result[0])
+            return result
+
+        monkeypatch.setattr(scanner, "_run_hook_process", capture)
+        child_pid = None
+        try:
+            start = time.monotonic()
+            findings = scanner.execute_hook_with_payload(
+                {"event": "test", "command": str(hook), "source": "spawn.sh"},
+                scanner.PAYLOADS[0], str(tmp_path),
+            )
+            assert time.monotonic() - start < 4
+            output = observed[0].stdout
+            assert output.startswith("CHILD="), (output, observed[0].stderr, findings)
+            child_pid = int(output.splitlines()[0].split("=", 1)[1])
+            assert any(f.category == "dast-timeout" for f in findings) == wait_for_child
+            assert not any(f.snippet == "process-cleanup-failed" for f in findings)
+            if not wait_for_child:
+                assert findings == []
+            deadline = time.monotonic() + 2
+            while True:
+                state = subprocess.run(["ps", "-p", str(child_pid), "-o", "stat="],
+                                       capture_output=True, text=True, timeout=1)
+                # An orphan zombie has stopped executing and awaits init's reap.
+                if not state.stdout.strip() or state.stdout.strip().startswith("Z"):
+                    break
+                assert time.monotonic() < deadline, f"child {child_pid} survived cleanup"
+                time.sleep(0.02)
+        finally:
+            if child_pid is None and observed and observed[0].stdout.startswith("CHILD="):
+                child_pid = int(observed[0].stdout.splitlines()[0].split("=", 1)[1])
+            if child_pid is not None:
+                try:
+                    os.kill(child_pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+
+    @_NEEDS_POSIX_HOOKS
+    def test_cleanup_failure_is_reported_for_every_payload(self, tmp_path, monkeypatch):
+        hook = tmp_path / "hook.sh"
+        hook.write_text("exit 0\n")
+        monkeypatch.setattr(scanner, "SANDBOX_AVAILABLE", True)
+        monkeypatch.setattr(scanner, "_run_hook_process", lambda *args: (
+            subprocess.CompletedProcess(args[0], -9, "", ""), True, "group kill denied"))
+        findings = scanner.execute_hook_with_payload(
+            {"event": "test", "command": str(hook), "source": "hook.sh"},
+            scanner.PAYLOADS[5], str(tmp_path),
+        )
+        assert any(f.category == "scan-incomplete" and f.severity == "high" and
+                   "group kill denied" in f.description for f in findings)
+
+    @_NEEDS_POSIX_HOOKS
+    def test_failed_cleanup_drain_is_bounded_and_launcher_is_reaped(self, monkeypatch):
+        class StuckProcess:
+            pid = 123456789
+            returncode = None
+
+            def __init__(self):
+                self.stdin, self.stdout, self.stderr = (io.StringIO() for _ in range(3))
+                self.timeouts = []
+                self.killed = False
+                self.reaped = False
+
+            def communicate(self, *args, timeout):
+                self.timeouts.append(timeout)
+                raise subprocess.TimeoutExpired("hook", timeout, output=b"partial")
+
+            def kill(self):
+                self.killed = True
+
+            def wait(self, timeout):
+                assert timeout == scanner.PROCESS_CLEANUP_TIMEOUT
+                self.reaped = True
+                self.returncode = -9
+                return -9
+
+        proc = StuckProcess()
+
+        def launch(*args, **kwargs):
+            assert kwargs["start_new_session"] is True
+            return proc
+
+        def denied_group_kill(*args):
+            raise PermissionError("group kill denied")
+
+        monkeypatch.setattr(scanner.subprocess, "Popen", launch)
+        monkeypatch.setattr(scanner.os, "killpg", denied_group_kill)
+        completed, timed_out, error = scanner._run_hook_process(["hook"], "", {})
+        assert timed_out and completed.stdout == "partial"
+        assert proc.timeouts == [scanner.EXEC_TIMEOUT, scanner.PROCESS_CLEANUP_TIMEOUT]
+        assert proc.killed and proc.reaped
+        assert all(pipe.closed for pipe in (proc.stdin, proc.stdout, proc.stderr))
+        assert "group kill denied" in error and "cleanup did not complete" in error
+
+    def test_cleanup_failure_stops_further_hook_execution(self, monkeypatch):
+        failure = scanner.core.Finding(
+            scanner="dast", severity="high", title="cleanup failed", description="failed",
+            file="hook.sh", line=0, snippet="process-cleanup-failed", category="scan-incomplete")
+        calls, emitted = [], []
+        monkeypatch.setattr(scanner.core, "parse_common_args", lambda *args:
+                            SimpleNamespace(repo_path="repo", format="json"))
+        monkeypatch.setattr(scanner.core, "emit_status", lambda *args: None)
+        monkeypatch.setattr(scanner, "find_hook_scripts", lambda *args:
+                            [{"event": "test", "source": "hook.sh"}] * 2)
+        monkeypatch.setattr(scanner, "execute_hook_with_payload", lambda *args:
+                            calls.append(args) or [failure])
+        monkeypatch.setattr(scanner.core, "output_findings", lambda findings, *args:
+                            emitted.extend(findings))
+        scanner.main()
+        assert len(calls) == 1
+        assert emitted == [failure]
 
     def test_clean_hook_no_findings(self, tmp_path):
         claude_dir = tmp_path / ".claude"

@@ -19,6 +19,23 @@ def _cats(findings):
     return [f.category for f in findings]
 
 
+def test_sha256_manifest_digests_are_not_long_hex_warnings(tmp_path):
+    digest = "a" * 64
+    manifest = tmp_path / "CHECKSUMS.sha256"
+    manifest.write_text(f"{digest}  source.py\n")
+    assert not [f for f in scanner.scan_file(str(manifest), manifest.name)
+                if f.title == "Long Hex String"]
+
+    ordinary = tmp_path / "payload.txt"
+    ordinary.write_text(f"{digest}\n")
+    assert [f for f in scanner.scan_file(str(ordinary), ordinary.name)
+            if f.title == "Long Hex String"]
+
+    manifest.write_text(f"{digest}  payload-{digest}.py\n")
+    assert [f for f in scanner.scan_file(str(manifest), manifest.name)
+            if f.title == "Long Hex String"]
+
+
 class TestDecodeAndRescan:
     def test_base64_payload_flags_both_findings(self, tmp_path):
         """A base64 blob encoding os.system produces BOTH the existing encoding

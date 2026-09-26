@@ -33,6 +33,10 @@ All notable changes to repo-forensics. Versions follow semver.
   Restrict macOS dynamic hook execution with a deny-default Seatbelt profile.
 - Reject signed rule-pack overlays that omit active shipped rules without an
   explicit retirement, preserving those detections when a cache is stale.
+- Treat standard SHA-256 manifest records as checksums rather than high-severity
+  hex warnings, while still decoding and scanning their contents.
+- Stop dynamic hook descendants after timeouts and clean exits, and report
+  incomplete coverage if process cleanup fails.
 
 ### Fix: automatic paths no longer report clean over a scan that found something
 
