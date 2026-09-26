@@ -64,7 +64,8 @@ def stub_forensics(tmp_dir, monkeypatch, payload, exit_code):
     script = os.path.join(tmp_dir, "stub_forensics.sh")
     # deep_scan_item runs the stub with cwd=tmp_dir. A relative name also
     # works in Git Bash on Windows, where cat cannot open a quoted C:\ path.
-    create_file(script, f'#!/bin/bash\ncat stub_payload.json\nexit {int(exit_code)}\n')
+    with open(script, "wb") as handle:
+        handle.write(f'#!/bin/bash\ncat stub_payload.json\nexit {int(exit_code)}\n'.encode("ascii"))
     os.chmod(script, 0o755)
     monkeypatch.setattr(session_scan, 'RUN_FORENSICS_SCRIPT', script)
     return script

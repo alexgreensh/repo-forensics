@@ -65,7 +65,7 @@ ADJUDICATION_HEADER = (
 #   - U+2066-U+2069 BIDI isolates (already in vuln_feed) plus U+2060-U+2064
 #     and U+FEFF zero-width/joiner controls that can hide payload structure.
 _EXTRA_NEUTRALIZE_RE = re.compile(
-    "[｀`⁠-⁤﻿]"
+    r"[\uff40`\u2060-\u2064\ufeff]"
 )
 
 # ANSI / CSI / OSC escape sequences. ESC (\x1b) is already stripped by the
@@ -116,7 +116,7 @@ def sanitize_snippet(text, max_len=200):
         # never silently emits raw control bytes if vuln_feed is unavailable.
         # B2 fix: include C1 range \x80-\x9f (U+009B is single-byte C1 CSI).
         cleaned = re.sub(
-            r"[\x00-\x08\x0b-\x1f\x7f\x80-\x9f‪-‮⁦-⁩]", "", cleaned
+            r"[\x00-\x08\x0b-\x1f\x7f\x80-\x9f\u202a-\u202e\u2066-\u2069]", "", cleaned
         )
 
     # Extension pass: fence/backtick lookalikes + zero-width controls.

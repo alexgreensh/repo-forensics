@@ -14,7 +14,9 @@ All notable changes to repo-forensics. Versions follow semver.
   download code. Python calls use syntax analysis, and JavaScript comments and
   string examples do not trigger the new TLS rule.
 - Preserve the false-positive controls for scanner correlation, manifest import
-  parsing, and in-tree Git hook paths while merging both protections.
+  parsing, in-tree Git hook paths, and sanitizer regexes while merging both
+  protections. The sanitizer patterns now use Unicode escapes so scanning the
+  scanner does not mistake its own defenses for Trojan Source text.
 - Make test fixtures portable across Git Bash and Python's Windows newline
   handling; detect whether Linux bubblewrap can actually create a sandbox
   before attempting dynamic hook execution.

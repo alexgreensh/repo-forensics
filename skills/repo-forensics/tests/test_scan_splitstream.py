@@ -580,12 +580,11 @@ class TestHardSafeMemoryBound:
         # Must complete (no OOM/SIGKILL) well within the wall-clock budget.
         assert isinstance(findings, list)
         assert elapsed < 13.0, f"6x large-fragment scan must be bounded, took {elapsed:.1f}s"
-        # Peak RSS must stay far below the old 3.9GB blowup. ru_maxrss is a
-        # high-water mark for the whole process, so we bound the DELTA loosely but
-        # assert it never approaches the gigabyte range the bug produced.
+        # Peak RSS is a high-water mark for the whole pytest process. Other
+        # tests may already have raised it, so bound this scan's increase.
         rss_after = _peak_rss_mb()
-        assert rss_after < 800, (
-            f"peak RSS must stay bounded (was ~3.9GB pre-fix), got {rss_after:.0f}MB"
+        assert rss_after - rss_before < 500, (
+            f"large-fragment scan raised peak RSS by {rss_after - rss_before:.0f}MB"
         )
 
     def test_permutation_sweep_skipped_for_large_fragment_group(self):

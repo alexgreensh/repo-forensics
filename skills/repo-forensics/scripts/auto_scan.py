@@ -750,7 +750,7 @@ def format_output(findings, command='', pattern_type='', scanned_target=''):
         # Kept self-contained since the import failed.
         import re as _re
         _FALLBACK_CTRL_RE = _re.compile(
-            r"[\x00-\x1f\x7f\x80-\x9f  ‪-‮⁦-⁩⁠-⁤﻿]"
+            r"[\x00-\x1f\x7f\x80-\x9f\u2028\u2029\u202a-\u202e\u2066-\u2069\u2060-\u2064\ufeff]"
         )
 
         def _clean(text, max_len=160):
