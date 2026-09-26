@@ -21,6 +21,7 @@ import ast
 import os
 import re
 import sys
+import ast
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import forensics_core as core
@@ -215,6 +216,99 @@ def _logical_lines(lines, ext=None):
         i += 1
 
 
+_STRUCTURED_TLS_IDS = {"SA-PY-032", "SA-JS-040", "SA-TS-020", "SA-TSX-003"}
+_NODE_TLS_RE = re.compile(
+    r"\brejectUnauthorized\s*:\s*false\b|"
+    r"[\"']rejectUnauthorized[\"']\s*:\s*false\b|"
+    r"\b(?:[A-Za-z_$][\w$]*\.)+rejectUnauthorized\s*=\s*false\b|"
+    r"NODE_TLS_REJECT_UNAUTHORIZED\s*=\s*[\"']0[\"']",
+    re.MULTILINE,
+)
+
+
+def _rule_finding(rule, rel_path, text, offset, snippet=None):
+    line = text.count("\n", 0, offset) + 1
+    if snippet is None:
+        snippet = text.splitlines()[line - 1] if text.splitlines() else ""
+    return core.Finding(
+        scanner=SCANNER_NAME, severity=rule.severity,
+        title=rule.title, description=f"Potential {rule.category} vulnerability",
+        file=rel_path, line=line, snippet=snippet.strip()[:120],
+        category=rule.category, rule_id=rule.id, confidence=rule.confidence,
+        attacker=rule.attacker, boundary=rule.boundary, asset=rule.asset,
+    )
+
+
+def _qualified_name(node):
+    parts = []
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if isinstance(node, ast.Name):
+        parts.append(node.id)
+    return ".".join(reversed(parts))
+
+
+def _scan_structured_tls(text, rel_path, ext, rules):
+    """Parse TLS-disable forms that line regexes cannot safely model.
+
+    Python calls use AST keyword analysis, so nested calls and multiline calls
+    cannot hide verify=False. Node-family property forms use a whole-file regex
+    because whitespace/newlines do not change their syntax.
+    """
+    by_id = {r.id: r for r in rules}
+    findings = []
+    if ext == ".py" and "SA-PY-032" in by_id:
+        rule = by_id["SA-PY-032"]
+        try:
+            tree = ast.parse(text)
+        except (SyntaxError, ValueError, TypeError):
+            tree = None
+        if tree is None:
+            # Extracted archive/bytecode text and parity corpora may be
+            # intentionally non-parseable. Preserve the old per-line fallback
+            # there; valid Python always takes the AST path below.
+            for match in rule.regex.finditer(text):
+                findings.append(_rule_finding(rule, rel_path, text, match.start(), match.group(0)))
+        else:
+            http_methods = {"request", "get", "post", "put", "patch", "delete", "head", "options"}
+            parents = {}
+            for parent in ast.walk(tree):
+                for child in ast.iter_child_nodes(parent):
+                    parents[child] = parent
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                name = _qualified_name(node.func)
+                if name in {"ssl._create_unverified_context"}:
+                    # Avoid double reporting: the surrounding assignment to
+                    # verify_mode=ssl.CERT_NONE is the stronger same-line form.
+                    parent = parents.get(node)
+                    grand = parents.get(parent)
+                    if not (isinstance(grand, ast.Assign) and
+                            isinstance(grand.value, ast.Attribute) and
+                            _qualified_name(grand.value) == "ssl.CERT_NONE"):
+                        offset = sum(len(x) + 1 for x in text.splitlines()[:node.lineno - 1]) + node.col_offset
+                        findings.append(_rule_finding(rule, rel_path, text, offset))
+                    continue
+                root, _, method = name.partition(".")
+                if root not in {"requests", "httpx"} or method not in http_methods:
+                    continue
+                if any(kw.arg == "verify" and isinstance(kw.value, ast.Constant)
+                       and kw.value.value is False for kw in node.keywords):
+                    offset = sum(len(x) + 1 for x in text.splitlines()[:node.lineno - 1]) + node.col_offset
+                    findings.append(_rule_finding(rule, rel_path, text, offset))
+        for match in re.finditer(r"\bssl\.CERT_NONE\b", text):
+            findings.append(_rule_finding(rule, rel_path, text, match.start()))
+    elif ext in {".js", ".jsx", ".ts", ".tsx"}:
+        rid = {".js": "SA-JS-040", ".jsx": "SA-JS-040", ".ts": "SA-TS-020", ".tsx": "SA-TSX-003"}[ext]
+        rule = by_id.get(rid)
+        if rule:
+            for match in _NODE_TLS_RE.finditer(text):
+                findings.append(_rule_finding(rule, rel_path, text, match.start(), match.group(0)))
+    return findings
+
+
 def scan_file(file_path, rel_path):
     global _pack_error_emitted
 
@@ -232,6 +326,7 @@ def scan_file(file_path, rel_path):
     # allowlist and skipping the ENTIRE ruleset), and routes language variants
     # (.mjs/.cjs/.pyw/.phtml) to their family's rules instead of dropping them.
     ext = core.resolve_scan_ext(file_path, _PACK_EXTENSIONS)
+    ext = {".bash": ".sh", ".zsh": ".sh", ".ksh": ".sh"}.get(ext, ext)
     if not ext:
         return []
 
@@ -243,9 +338,12 @@ def scan_file(file_path, rel_path):
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             lines = f.readlines()
             source = ''.join(lines)
+            text = source
             for i, line in _logical_lines(lines, ext):
                 line = core.clip_line(line)
                 for rule in rules:
+                    if rule.id in _STRUCTURED_TLS_IDS:
+                        continue
                     if rule.regex.search(line):
                         findings.append(core.Finding(
                             scanner=SCANNER_NAME,
@@ -262,6 +360,7 @@ def scan_file(file_path, rel_path):
                             boundary=rule.boundary,
                             asset=rule.asset,
                         ))
+            findings.extend(_scan_structured_tls(text, rel_path, ext, rules))
     except (OSError, UnicodeDecodeError) as e:
         print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)
     return _filter_python_shell_docstring_examples(findings, source, ext)
@@ -300,6 +399,8 @@ def scan_text(text, rel_path, ext=None):
     for i, line in _logical_lines(text.split('\n'), ext):
         line = core.clip_line(line)
         for rule in rules:
+            if rule.id in _STRUCTURED_TLS_IDS:
+                continue
             if rule.regex.search(line):
                 findings.append(core.Finding(
                     scanner=SCANNER_NAME,
@@ -316,6 +417,7 @@ def scan_text(text, rel_path, ext=None):
                     boundary=rule.boundary,
                     asset=rule.asset,
                 ))
+    findings.extend(_scan_structured_tls(text, rel_path, ext, rules))
     return _filter_python_shell_docstring_examples(findings, text, ext)
 
 

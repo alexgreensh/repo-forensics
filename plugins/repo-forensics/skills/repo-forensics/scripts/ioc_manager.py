@@ -123,6 +123,25 @@ HARDCODED_MALICIOUS_DOMAINS = [
     "npmjs.help",              # npm maintainer phishing (2025)
     "files.pypihosted.org",    # Fake PyPI mirror (top.gg attack, 2024)
     "filev2.getsession.org",   # TanStack worm: Session P2P exfiltration (May 2026)
+    # AgentGate relay-driven agent-malware batch (verified 2026-09-09)
+    "syhzpqqvrplaqdipcymw.supabase.co",  # @addai/node relay/exfil
+    "vault.add.ai",                     # @addai/node vault endpoint
+    "entities.add.ai",                  # @addai/node entity sync
+    "node.add.ai",                      # @addai/node node pairing
+    "santaclaude.app",                  # @cliphijack/santaclaude C2
+    "primeradiant.com",                 # @cliphijack/santaclaude exfil
+    "canvas.xiaohhhh1.com",             # @xiaohhhh1/canvas-agent agent-relay
+    "agenthub-agent.fyenet.com",        # agenthub-ai relay
+    "agenthub.contetial.com",           # agenthub-multiagent-mcp relay
+    "agenttunnels-live.lakshman111.workers.dev",  # agenttunnels session server
+    "api.claude-cup.com",               # claude-cup leaderboard exfil
+    "newsradar.dreamdt.cn",             # claw-subagent-service relay
+    "mime-bind-border-using.trycloudflare.com",  # llm-interceptor tunnel C2
+    "mangomind-relay-production.up.railway.app",  # mangomind-agent relay
+    "rfsbovvvryfmgpoehlrc.supabase.co", # mangomind-agent backend
+    "relay.teleportus.ai",              # remote-claude-daemon relay
+    "trimprompt.ai",                    # trimprompt telemetry/exfil
+    "aclade.com",                       # aclade-agent relay
     "seed1.getsession.org",    # TanStack worm: Session P2P seed node (May 2026)
     "seed2.getsession.org",    # TanStack worm: Session P2P seed node (May 2026)
     "seed3.getsession.org",    # TanStack worm: Session P2P seed node (May 2026)

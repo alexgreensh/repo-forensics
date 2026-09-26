@@ -1528,11 +1528,43 @@ def is_binary_file(file_path):
     return ratio > _BINARY_NONTEXT_RATIO
 
 
+
+# Directory names that mark a real source tree next to generated output.
+_SRC_DIR_HINTS = frozenset({'src', 'source', 'app', 'libsrc'})
+
+
+def _effective_skip_dirs(repo_path, skip_dirs):
+    """Keep dist/build in scope when the scan root is a package tarball.
+
+    IGNORE_DIRS skips dist/ and build/ because in a source checkout they hold
+    generated output that only duplicates (or pads) the real code. A published
+    npm package is the opposite layout: the tarball IS the payload, shipped
+    under dist/ (or build/) with no source tree beside it, so skipping those
+    dirs reduces the scan to the manifest and lets packaged malware through
+    (verified on the Sept 2026 relay-driven agent-malware batch). When the root
+    carries a package.json, has no source-dir hint beside it, and a dist/ or
+    build/ directory exists, that directory is the product under audit and is
+    walked. Caller-supplied skip_dirs sets are respected as-is.
+    """
+    if skip_dirs is not IGNORE_DIRS:
+        return skip_dirs
+    try:
+        entries = set(os.listdir(repo_path))
+    except OSError:
+        return skip_dirs
+    if 'package.json' not in entries or entries & _SRC_DIR_HINTS:
+        return skip_dirs
+    refined = set(skip_dirs)
+    for payload_dir in ('dist', 'build'):
+        if payload_dir in entries:
+            refined.discard(payload_dir)
+    return refined
+
 def walk_repo(repo_path, ignore_patterns=None, skip_dirs=None, skip_lockfiles=True, skip_binary=True):
     """Generator that walks a repo respecting ignore rules.
     Yields (file_path, rel_path) tuples."""
     if skip_dirs is None:
-        skip_dirs = IGNORE_DIRS
+        skip_dirs = _effective_skip_dirs(repo_path, IGNORE_DIRS)
     if ignore_patterns is None:
         ignore_patterns = load_ignore_patterns(repo_path)
 
@@ -1588,7 +1620,7 @@ def walk_aux(repo_path, ignore_patterns=None, skip_dirs=None, *,
     default, and .forensicsignore patterns are still honoured.
     """
     if skip_dirs is None:
-        skip_dirs = set(IGNORE_DIRS)
+        skip_dirs = set(_effective_skip_dirs(repo_path, IGNORE_DIRS))
         if reach_pycache:
             skip_dirs.discard('__pycache__')
     if ignore_patterns is None:
@@ -2479,9 +2511,10 @@ def correlate(findings, repo_path=None):
                 category="compound-attack"
             ))
 
-        # Rule 5: an actual install hook plus a network capability. Generic
-        # mentions of "hook" in code or test findings are not install hooks.
-        if (any(f.scanner == "lifecycle" and f.category in {"lifecycle-hook", "install-script-ioc"}
+        # Rule 5: an actionable install hook plus a network capability.
+        if (any(f.scanner == "lifecycle"
+                and f.category in {"lifecycle-hook", "install-script-ioc"}
+                and "(Known Safe Pattern)" not in f.title
                 for f in file_findings)
                 and any("network" in _exfil_capabilities(f) for f in file_findings)):
             correlated.append(Finding(

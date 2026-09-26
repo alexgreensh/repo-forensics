@@ -375,6 +375,8 @@ KNOWN_SAFE_HOOKS = re.compile(
     r'rimraf\s+\S+|'
     r'ngcc(\s+[^\s|;&]+)*|'
     r'opencollective\s+postinstall|'
+    r'playwright\s+install(\s+[^\s|;&]+)*|'
+    r'husky(\s+(install|init))?\s*&&\s*npm\s+run\s+(build|compile|prepare)|'
     r'npm\s+run\s+(build|compile|prepare)|'
     r'npx\s+browserslist@latest\s+--update-db|'
     r'lefthook\s+install|'
