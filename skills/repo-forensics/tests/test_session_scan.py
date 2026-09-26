@@ -52,20 +52,15 @@ def create_plugin(base_dir, name, version="1.0.0", deps=None):
 def stub_forensics(tmp_dir, monkeypatch, payload, exit_code):
     """Point RUN_FORENSICS_SCRIPT at a stub that prints `payload` and exits.
 
-    The payload goes through a file rather than an inlined `echo`, so a report
-    carrying quotes, escapes or control bytes reaches deep_scan_item() as
-    written instead of being mangled by the shell. `payload` is a report dict
+    Bash printf plus shlex.quote preserves payload bytes without relying on
+    Git Bash to open a native Windows path. `payload` is a report dict
     (serialised here) or a raw string for the unparseable cases.
     """
-    payload_path = os.path.join(tmp_dir, "stub_payload.json")
     text = payload if isinstance(payload, str) else json.dumps(payload)
-    with open(payload_path, "w", encoding="utf-8") as handle:
-        handle.write(text)
     script = os.path.join(tmp_dir, "stub_forensics.sh")
-    # deep_scan_item runs the stub with cwd=tmp_dir. A relative name also
-    # works in Git Bash on Windows, where cat cannot open a quoted C:\ path.
+    body = f"#!/bin/bash\nprintf '%s' {shlex.quote(text)}\nexit {int(exit_code)}\n"
     with open(script, "wb") as handle:
-        handle.write(f'#!/bin/bash\ncat stub_payload.json\nexit {int(exit_code)}\n'.encode("ascii"))
+        handle.write(body.encode("utf-8"))
     os.chmod(script, 0o755)
     monkeypatch.setattr(session_scan, 'RUN_FORENSICS_SCRIPT', script)
     return script
