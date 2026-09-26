@@ -208,6 +208,8 @@ def extract_js_imports(file_path):
     # builders, template literals), which previously surfaced as phantom-dep
     # titles containing newlines and punctuation.
     def _valid(mod):
+        if mod.startswith('node:'):
+            return re.fullmatch(r'node:[a-z0-9][a-z0-9._~-]*', mod) is not None
         return re.match(
             r'^(?:@[a-z0-9][a-z0-9._~-]*/)?[a-z0-9][a-z0-9._~-]*$', mod
         ) is not None and len(mod) <= 214

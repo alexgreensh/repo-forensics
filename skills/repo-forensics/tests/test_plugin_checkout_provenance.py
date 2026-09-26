@@ -28,6 +28,11 @@ def test_odd_branches_in_generic_repo_are_scoped_out(tmp_path):
 def test_normal_plugin_branch_without_pin_metadata_is_clean(tmp_path):
     p,_=repo(tmp_path);assert gitf.scan_plugin_checkout_provenance(str(p))==[]
 
+def test_plugin_without_git_reports_provenance_gap(tmp_path):
+    p=tmp_path/'plugin';p.mkdir();(p/'.claude-plugin').mkdir()
+    (p/'.claude-plugin/plugin.json').write_text('{"name":"x"}')
+    assert 'Agent Plugin Git Provenance Unavailable' in titles(gitf.scan_plugin_checkout_provenance(str(p)))
+
 def test_recorded_pin_mismatch_is_critical(tmp_path):
     p,pin=repo(tmp_path);(p/'.claude-plugin/plugin.json').write_text(json.dumps({'name':'x','commitSha':pin}));git(p,'add','.');git(p,'commit','-qm','metadata after pin')
     fs=gitf.scan_plugin_checkout_provenance(str(p));assert 'Agent Plugin Checkout Does Not Match Recorded Pin' in titles(fs)
@@ -87,10 +92,37 @@ def test_arbitrary_40_hex_text_is_not_treated_as_pin(tmp_path):
     fs=gitf.scan_plugin_checkout_provenance(str(p));assert 'Agent Plugin Checkout Does Not Match Recorded Pin' not in titles(fs)
 
 def test_malformed_metadata_does_not_crash_or_invent_pin(tmp_path):
-    p,_=repo(tmp_path);(p/'marketplace.json').write_text('{not json');assert gitf.scan_plugin_checkout_provenance(str(p)) == []
+    p,_=repo(tmp_path);(p/'marketplace.json').write_text('{not json')
+    fs=gitf.scan_plugin_checkout_provenance(str(p))
+    assert 'Agent Plugin Provenance Pin Unavailable' in titles(fs)
+    assert 'Agent Plugin Checkout Does Not Match Recorded Pin' not in titles(fs)
 
 def test_huge_metadata_is_bounded(tmp_path):
-    p,_=repo(tmp_path);(p/'marketplace.json').write_text(' '*(1024*1024+1));assert gitf.scan_plugin_checkout_provenance(str(p)) == []
+    p,_=repo(tmp_path);(p/'marketplace.json').write_text(' '*(1024*1024+1))
+    assert 'Agent Plugin Provenance Pin Unavailable' in titles(gitf.scan_plugin_checkout_provenance(str(p)))
+
+def test_symlinked_metadata_is_not_read(tmp_path):
+    p,_=repo(tmp_path)
+    outside=tmp_path/'outside.json'
+    outside.write_text(json.dumps({'plugins':[{'name':'x','commit':'a'*40}]}))
+    try:
+        (p/'marketplace.json').symlink_to(outside)
+    except OSError:
+        pytest.skip('symlink creation unavailable')
+    fs=gitf.scan_plugin_checkout_provenance(str(p))
+    assert 'Agent Plugin Provenance Pin Unavailable' in titles(fs)
+    assert 'Agent Plugin Checkout Does Not Match Recorded Pin' not in titles(fs)
+
+def test_deep_metadata_is_a_coverage_gap(tmp_path):
+    p,_=repo(tmp_path)
+    (p/'marketplace.json').write_text('['*1100+'0'+']'*1100)
+    assert 'Agent Plugin Provenance Pin Unavailable' in titles(gitf.scan_plugin_checkout_provenance(str(p)))
+
+def test_oversize_installer_is_a_coverage_gap(tmp_path):
+    p,_=repo(tmp_path)
+    (p/'install.sh').write_text('x'*(gitf._MAX_PROVENANCE_FILE_BYTES+1))
+    fs=gitf.scan_plugin_installers(str(p))
+    assert 'Agent Plugin Installer Source Not Scanned' in titles(fs)
 
 def test_lowercase_sha_branch_only_exact_40_hex(tmp_path):
     p,_=repo(tmp_path);git(p,'branch','a'*39);git(p,'branch','g'*40);assert gitf.scan_plugin_checkout_provenance(str(p)) == []

@@ -262,7 +262,7 @@ def _scan_structured_tls(text, rel_path, ext, rules):
         rule = by_id["SA-PY-032"]
         try:
             tree = ast.parse(text)
-        except (SyntaxError, ValueError, TypeError):
+        except (SyntaxError, ValueError, TypeError, RecursionError):
             tree = None
         if tree is None:
             # Extracted archive/bytecode text and parity corpora may be
@@ -277,6 +277,9 @@ def _scan_structured_tls(text, rel_path, ext, rules):
                 for child in ast.iter_child_nodes(parent):
                     parents[child] = parent
             for node in ast.walk(tree):
+                if isinstance(node, ast.Attribute) and _qualified_name(node) == "ssl.CERT_NONE":
+                    offset = sum(len(x) + 1 for x in text.splitlines()[:node.lineno - 1]) + node.col_offset
+                    findings.append(_rule_finding(rule, rel_path, text, offset))
                 if not isinstance(node, ast.Call):
                     continue
                 name = _qualified_name(node.func)
@@ -298,8 +301,6 @@ def _scan_structured_tls(text, rel_path, ext, rules):
                        and kw.value.value is False for kw in node.keywords):
                     offset = sum(len(x) + 1 for x in text.splitlines()[:node.lineno - 1]) + node.col_offset
                     findings.append(_rule_finding(rule, rel_path, text, offset))
-        for match in re.finditer(r"\bssl\.CERT_NONE\b", text):
-            findings.append(_rule_finding(rule, rel_path, text, match.start()))
     elif ext in {".js", ".jsx", ".ts", ".tsx"}:
         rid = {".js": "SA-JS-040", ".jsx": "SA-JS-040", ".ts": "SA-TS-020", ".tsx": "SA-TSX-003"}[ext]
         rule = by_id.get(rid)

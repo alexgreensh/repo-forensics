@@ -33,6 +33,10 @@ def test_python_non_tls_verify_controls_stay_clean():
     for text in ("build_artifact(data, verify=False)", "def parse(value, verify=False): pass", "ctx.check_hostname = False", "requests.get(url, verify=True)"):
         assert "SA-PY-032" not in ids(text, ".py")
 
+def test_python_tls_name_in_comment_or_string_is_not_a_disabled_setting():
+    for text in ('# ssl.CERT_NONE is unsafe\npass', 'label = "ssl.CERT_NONE"'):
+        assert "SA-PY-032" not in ids(text, ".py")
+
 def test_node_object_quoted_property_assignment_and_env():
     cases=("new https.Agent({rejectUnauthorized:false})", "const x = {'rejectUnauthorized': false}", "opts.rejectUnauthorized = false", 'process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"')
     for ext,rid in ((".js","SA-JS-040"),(".ts","SA-TS-020"),(".tsx","SA-TSX-003")):

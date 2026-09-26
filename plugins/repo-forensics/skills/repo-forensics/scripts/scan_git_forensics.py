@@ -12,6 +12,7 @@ import os
 import datetime
 import json
 import re
+import stat
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import forensics_core as core
@@ -240,6 +241,29 @@ _PIN_METADATA_NAMES = frozenset({
     "plugin.json", "marketplace.json", "plugins.json", "extensions.json",
     "lock.json", "plugin-lock.json", "marketplace.lock.json",
 })
+_MAX_PROVENANCE_FILE_BYTES = 1024 * 1024
+_MAX_METADATA_RECORDS = 50000
+
+
+def _read_regular_text(path):
+    """Read a bounded regular file without following file symlinks."""
+    if os.path.islink(path):
+        return None
+    try:
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    except OSError:
+        return None
+    try:
+        with os.fdopen(fd, "rb") as source:
+            info = os.fstat(source.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_size > _MAX_PROVENANCE_FILE_BYTES:
+                return None
+            data = source.read(_MAX_PROVENANCE_FILE_BYTES + 1)
+    except OSError:
+        return None
+    if len(data) > _MAX_PROVENANCE_FILE_BYTES:
+        return None
+    return data.decode("utf-8", errors="ignore")
 
 
 def _safe_git(repo_path, *args):
@@ -260,8 +284,11 @@ def _plugin_identity(repo_path):
                 ".agents/plugin.json", ".gemini/plugin.json", "openclaw.plugin.json"):
         path = os.path.join(repo_path, rel)
         try:
-            data = json.load(open(path, "r", encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            text = _read_regular_text(path)
+            if text is None:
+                continue
+            data = json.loads(text)
+        except (RecursionError, json.JSONDecodeError):
             continue
         if isinstance(data, dict):
             for key in ("name", "id", "pluginId", "plugin_id"):
@@ -295,13 +322,18 @@ def _record_pins(value):
 
 
 def _iter_records(value):
-    if isinstance(value, dict):
-        yield value
-        for item in value.values():
-            yield from _iter_records(item)
-    elif isinstance(value, list):
-        for item in value:
-            yield from _iter_records(item)
+    pending = [value]
+    examined = 0
+    while pending:
+        examined += 1
+        if examined > _MAX_METADATA_RECORDS:
+            raise ValueError("plugin metadata record limit exceeded")
+        item = pending.pop()
+        if isinstance(item, dict):
+            yield item
+            pending.extend(reversed(list(item.values())))
+        elif isinstance(item, list):
+            pending.extend(reversed(item))
 
 
 def _recover_recorded_pins(repo_path):
@@ -316,15 +348,26 @@ def _recover_recorded_pins(repo_path):
     matching_records = []
     ambiguous_identity = False
     # The installed plugin's own manifest is authoritative for its own pin.
-    if identity is not None:
-        for rel in (".claude-plugin/plugin.json", ".codex-plugin/plugin.json",
-                    ".agents/plugin.json", ".gemini/plugin.json", "openclaw.plugin.json"):
-            try:
-                own = json.load(open(os.path.join(repo_path, rel), "r", encoding="utf-8"))
-            except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+    own_manifest_seen = False
+    for rel in (".claude-plugin/plugin.json", ".codex-plugin/plugin.json",
+                ".agents/plugin.json", ".gemini/plugin.json", "openclaw.plugin.json"):
+        path = os.path.join(repo_path, rel)
+        if not os.path.lexists(path):
+            continue
+        own_manifest_seen = True
+        try:
+            text = _read_regular_text(path)
+            if text is None:
+                ambiguous_identity = True
                 continue
-            if _record_pins(own):
-                matching_records.append(own)
+            own = json.loads(text)
+        except (RecursionError, json.JSONDecodeError):
+            ambiguous_identity = True
+            continue
+        if identity is not None and _record_pins(own):
+            matching_records.append(own)
+    if identity is None and own_manifest_seen:
+        ambiguous_identity = True
     for root, dirs, files in os.walk(repo_path):
         rel_root = os.path.relpath(root, repo_path)
         if rel_root.count(os.sep) > 3:
@@ -335,14 +378,17 @@ def _recover_recorded_pins(repo_path):
             if name.lower() not in _PIN_METADATA_NAMES or name.lower() == "plugin.json":
                 continue
             path = os.path.join(root, name)
-            try:
-                if os.path.getsize(path) > 1024 * 1024:
-                    continue
-                data = json.load(open(path, "r", encoding="utf-8"))
-            except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-                continue
             metadata_seen = True
-            records = list(_iter_records(data))
+            try:
+                text = _read_regular_text(path)
+                if text is None:
+                    ambiguous_identity = True
+                    continue
+                data = json.loads(text)
+                records = list(_iter_records(data))
+            except (RecursionError, ValueError, json.JSONDecodeError):
+                ambiguous_identity = True
+                continue
             if identity is None:
                 if any(_record_pins(record) for record in records):
                     ambiguous_identity = True
@@ -370,6 +416,12 @@ def scan_plugin_checkout_provenance(repo_path):
     findings = []
     refs = _safe_git(repo_path, "for-each-ref", "--format=%(refname:short)", "refs/heads/")
     if refs is None:
+        findings.append(core.Finding(
+            scanner=SCANNER_NAME, severity="medium",
+            title="Agent Plugin Git Provenance Unavailable",
+            description="Plugin checkout has no readable Git refs; commit provenance cannot be verified.",
+            file=".git", line=0, snippet="Git refs unavailable",
+            category="coverage-gap", evidence_class="direct"))
         return findings
     ambiguous = sorted({r.strip() for r in refs.splitlines()
                         if _AMBIGUOUS_REF_RE.fullmatch(r.strip())})
@@ -383,6 +435,13 @@ def scan_plugin_checkout_provenance(repo_path):
             category="plugin-provenance", evidence_class="direct"))
 
     head = _safe_git(repo_path, "rev-parse", "HEAD")
+    if head is None:
+        findings.append(core.Finding(
+            scanner=SCANNER_NAME, severity="medium",
+            title="Agent Plugin Git Provenance Unavailable",
+            description="Plugin checkout has no readable HEAD; commit provenance cannot be verified.",
+            file=".git/HEAD", line=0, snippet="Git HEAD unavailable",
+            category="coverage-gap", evidence_class="direct"))
     symbolic = _safe_git(repo_path, "symbolic-ref", "--quiet", "--short", "HEAD")
     if symbolic and _AMBIGUOUS_REF_RE.fullmatch(symbolic):
         findings.append(core.Finding(
@@ -433,11 +492,16 @@ def scan_plugin_installers(repo_path):
             if not name.endswith((".sh", ".bash", ".zsh", ".js", ".jsx", ".ts", ".tsx", ".py")):
                 continue
             path = os.path.join(root, name)
-            try:
-                text = open(path, "r", encoding="utf-8", errors="ignore").read()
-            except OSError:
-                continue
+            text = _read_regular_text(path)
             rel = os.path.relpath(path, repo_path)
+            if text is None:
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="medium",
+                    title="Agent Plugin Installer Source Not Scanned",
+                    description="Installer source is unreadable, symlinked, or exceeds the scan size limit.",
+                    file=rel, line=0, snippet="installer source skipped",
+                    category="coverage-gap", evidence_class="direct"))
+                continue
             pin_name = r"(?:pinned_?sha|commit_?sha|sha|revision)"
             # Shell and common subprocess/exec representations. We require git,
             # the relevant subcommand, and the pin/FETCH_HEAD in one bounded call.
