@@ -37,6 +37,8 @@ All notable changes to repo-forensics. Versions follow semver.
   hex warnings, while still decoding and scanning their contents.
 - Stop dynamic hook descendants after timeouts and clean exits, and report
   incomplete coverage if process cleanup fails.
+- Isolate GitHub attestation CLI state outside the scanned target on Windows
+  and skip that probe if a safe writable directory is unavailable.
 
 ### Fix: automatic paths no longer report clean over a scan that found something
 

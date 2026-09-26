@@ -8,6 +8,7 @@ import ast
 import os
 import subprocess
 import time
+from pathlib import Path
 
 import pytest
 
@@ -363,6 +364,56 @@ class TestTotalTimeBudget:
             t <= scanner.SUBPROCESS_TIMEOUT_SEC for t in requested)
 
 
+class TestGhTargetIsolation:
+    def test_relative_gh_state_cannot_dirty_scanned_target(self, tmp_path, monkeypatch):
+        target = tmp_path / "target"
+        target.mkdir()
+        (target / "SKILL.md").write_text("# clean\n")
+        _have_tool(monkeypatch, present=("gh",))
+        state_dirs = []
+
+        def gh_writes_relative_state(cmd, **kwargs):
+            assert cmd[:3] == ["gh", "attestation", "verify"]
+            assert Path(cmd[3]).resolve() == target.resolve()
+            state = Path(kwargs["cwd"])
+            state_dirs.append(state)
+            assert state.resolve() != target.resolve()
+            env = kwargs["env"]
+            for key in ("HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA",
+                        "XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME",
+                        "GH_CONFIG_DIR", "TEMP", "TMP"):
+                assert Path(env[key]).resolve() == state.resolve()
+            relative = state / ".local" / "state" / "gh" / "device-id"
+            relative.parent.mkdir(parents=True)
+            relative.write_text("device-id")
+            return subprocess.CompletedProcess(cmd, 1, "", "no attestation found")
+
+        monkeypatch.setattr(scanner.subprocess, "run", gh_writes_relative_state)
+        assert scanner.probe_gh(str(target)) == "unsigned"
+        assert sorted(p.name for p in target.iterdir()) == ["SKILL.md"]
+        assert len(state_dirs) == 1 and not state_dirs[0].exists()
+
+    def test_gh_skips_when_temp_root_is_inside_target(self, tmp_path, monkeypatch):
+        target = tmp_path / "target"
+        target.mkdir()
+        state = target / "unsafe-temp"
+        state.mkdir()
+        _have_tool(monkeypatch, present=("gh",))
+
+        class UnsafeTemp:
+            def __enter__(self):
+                return str(state)
+
+            def __exit__(self, *args):
+                return False
+
+        monkeypatch.setattr(scanner.tempfile, "TemporaryDirectory",
+                            lambda **kwargs: UnsafeTemp())
+        monkeypatch.setattr(scanner.subprocess, "run", lambda *args, **kwargs:
+                            pytest.fail("gh must not run from inside the target"))
+        assert scanner.probe_gh(str(target)) == "unchecked"
+
+
 class TestZeroDepInvariant:
     def test_only_stdlib_and_forensics_core_imported(self):
         """AST self-check: the module's top-level imports are stdlib +
@@ -373,7 +424,7 @@ class TestZeroDepInvariant:
             tree = ast.parse(fh.read())
 
         stdlib = {
-            "os", "sys", "time", "json", "shutil", "subprocess",
+            "os", "sys", "time", "json", "shutil", "subprocess", "tempfile",
         }
         allowed = stdlib | {"forensics_core"}
         imported_roots = set()

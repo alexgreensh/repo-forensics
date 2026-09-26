@@ -74,7 +74,7 @@
     "scripts/scan_mcp_security.py": "91059a59a3b762fbc78a43de50e8e10ba416357b88855def5027d8921522e8db",
     "scripts/scan_oversize.py": "e9f219f1a5e78924f70be5277543a430cfbb7ea19f4d7d180d0abc6d1b8b47a4",
     "scripts/scan_post_incident.py": "d2418db39cb8d03872110f4c353df8512fbd89bb9c9e6921fde071e792a11cff",
-    "scripts/scan_provenance.py": "e332cad15aaedc31c3a906870a0f63d35897fec5e03b102206e4de0f721a59ae",
+    "scripts/scan_provenance.py": "5281f998ffe90dcb9cb6522b1146163649e4ed6a69200d195f99312f80450edc",
     "scripts/scan_runtime_dynamism.py": "c6806b08dc76693f73ebb742047c7a8a8b35f7f80e9c52c276648325fdafdb21",
     "scripts/scan_sast.py": "ff6543efb352d496c0a7517eefd05c1831873a9ae209bdf94ae550a0b900227f",
     "scripts/scan_secrets.py": "af6c7386766a1530a656eea50c4fba8e23c2a685bfe5629a9e7fdb15ff7a5790",
