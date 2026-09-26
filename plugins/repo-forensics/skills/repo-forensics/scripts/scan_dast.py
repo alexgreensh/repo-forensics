@@ -43,7 +43,7 @@ SCANNER_NAME = "dast"
 EXEC_TIMEOUT = 5  # seconds
 MAX_OUTPUT_BYTES = 1024 * 100  # 100KB - anything more is amplification
 
-# macOS Seatbelt sandbox profile (denies network + /Users read/write,
+# macOS Seatbelt sandbox profile (denies network + all writes + /Users reads,
 # re-allows reads on the specific hook script via HOOK_PATH/HOOK_DIR -D params)
 SANDBOX_PROFILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'dast_sandbox.sb')
 # Resolve dynamically: sandbox-exec is a macOS-only tool, but absolute FHS
@@ -215,6 +215,21 @@ def execute_hook_with_payload(hook, payload, repo_path):
         # Command might be a direct shell invocation, skip for safety
         return findings
 
+    def mark_incomplete(reason):
+        if payload == PAYLOADS[0]:
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="medium",
+                title=f"DAST hook not executed: {hook['event']}",
+                description=reason,
+                file=hook['source'], line=0,
+                snippet="Hook execution could not be observed safely",
+                category="scan-incomplete",
+            ))
+
+    if not SANDBOX_AVAILABLE and not BWRAP_AVAILABLE:
+        mark_incomplete("No macOS Seatbelt or Linux bubblewrap sandbox is available; hook execution was skipped.")
+        return findings
+
     # Sanitize env vars: strip null bytes (OS rejects them)
     raw_extra = payload.get('env_extra', {})
     clean_extra = {k: v.replace('\x00', '') for k, v in raw_extra.items()}
@@ -243,7 +258,6 @@ def execute_hook_with_payload(hook, payload, repo_path):
     # Wrap in macOS Seatbelt sandbox. The profile denies /Users reads broadly;
     # -D params re-allow reads on the specific hook script path so bash can
     # actually load it (without this, every /Users-hosted hook silently fails).
-    sandboxed = True
     if SANDBOX_AVAILABLE:
         # Seatbelt matches rules against the fully-resolved path, so we must
         # pass the realpath — otherwise a symlinked hook would be denied even
@@ -283,8 +297,6 @@ def execute_hook_with_payload(hook, payload, repo_path):
             '--unshare-net',
             '--die-with-parent',
         ] + exec_cmd
-    else:
-        sandboxed = False
 
     start = time.monotonic()
     try:
@@ -308,29 +320,10 @@ def execute_hook_with_payload(hook, payload, repo_path):
         result['timed_out'] = True
 
     except (OSError, PermissionError, ValueError):
-        # Can't execute (e.g., null bytes in env) - not a finding, just skip
+        mark_incomplete("The sandboxed hook process could not be launched; dynamic analysis is incomplete.")
         return findings
 
     result['duration_ms'] = int((time.monotonic() - start) * 1000)
-
-    # Warn once per hook (on the first payload run) when no sandbox is available.
-    # We still execute the hook to preserve existing behavior, but flag reduced
-    # confidence in the findings. Only emit the warning on the first payload so
-    # callers don't get N duplicate findings for N payloads.
-    if not sandboxed and payload == PAYLOADS[0]:
-        findings.append(core.Finding(
-            scanner=SCANNER_NAME, severity="medium",
-            title=f"DAST hook executed without sandbox isolation: {hook['event']}",
-            description=(
-                "Hook script was executed without sandbox isolation. "
-                "Neither macOS sandbox-exec nor Linux bwrap is available on this host. "
-                "DAST findings for this hook have reduced confidence — a malicious hook "
-                "could have affected the host filesystem or network during testing."
-            ),
-            file=hook['source'], line=0,
-            snippet="No sandbox available (sandbox-exec and bwrap both absent)",
-            category="dast-unsandboxed"
-        ))
 
     # Output the HOOK produced, with the launcher's own diagnostics removed.
     #
@@ -352,8 +345,9 @@ def execute_hook_with_payload(hook, payload, repo_path):
     combined_output = result['stdout'] + _hook_stderr
 
     # 127 is "could not execute": no hook ran, so no observation about its
-    # behaviour is available. Report nothing rather than something.
+    # behaviour is available.
     if result['exit_code'] == 127 and not result['stdout']:
+        mark_incomplete("The sandboxed hook process exited before any observable hook output; dynamic analysis is incomplete.")
         return findings
     for canary in ('CANARY_12345', 'CANARY_67890'):
         if canary in combined_output:

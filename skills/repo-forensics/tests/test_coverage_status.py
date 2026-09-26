@@ -98,6 +98,15 @@ class TestBuildCoverageStatus:
         assert status["overall"] == "COMPLETE"
         assert status["gaps"] == []
 
+    def test_dast_without_sandbox_is_incomplete(self):
+        scanners = [_scanner("dast", [
+            {"severity": "medium", "category": "scan-incomplete",
+             "file": "hook.sh", "line": 0, "title": "DAST sandbox unavailable"},
+        ])]
+        status = module.build_coverage_status(scanners, [])
+        assert status["overall"] == "INCOMPLETE"
+        assert status["per_scanner"]["dast"]["status"] == "INCOMPLETE"
+
     def test_dependencies_parse_error_still_incomplete(self):
         scanners = [
             _scanner("dependencies", [], parse_error="No JSON output captured from scanner"),

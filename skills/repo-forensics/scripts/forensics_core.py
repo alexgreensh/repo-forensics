@@ -3102,8 +3102,9 @@ def correlate(findings, repo_path=None):
             ))
 
     # Evidence model (Track A): set each compound's evidence_class from its
-    # contributing leaves. Per-file compounds derive from that file's findings
-    # (strongest wins); repo-wide compounds (file="") default to direct since
+    # contributing leaves. Typed exfil/encoding compounds use only matching
+    # capability leaves; other per-file compounds use the file's findings.
+    # Repo-wide compounds (file="") default to direct since
     # the dir-based Rules 30-36 fire on directive-class categories that come
     # from directive scanners (skill_threats/agent_skills), which are direct.
     # A compound built only from inferred/structural leaves caps at LOW in the
@@ -3111,7 +3112,26 @@ def correlate(findings, repo_path=None):
     # leaf stays eligible for HIGH/CRITICAL.
     for c in correlated:
         if c.file and c.file in by_file:
-            c.evidence_class = strongest_evidence(by_file[c.file])
+            file_findings = by_file[c.file]
+            if c.title == "Potential Data Exfiltration":
+                c.evidence_class = strongest_evidence(
+                    f for f in file_findings
+                    if _exfil_capabilities(f) & {"env", "network"}
+                )
+            elif c.title == "Credential Theft Pattern":
+                c.evidence_class = strongest_evidence(
+                    f for f in file_findings
+                    if _exfil_capabilities(f) & {"sensitive_read", "network"}
+                )
+            elif c.title == "Obfuscated Code Execution":
+                c.evidence_class = strongest_evidence(
+                    f for f in file_findings
+                    if any(kw in f._tags for kw in encoding_keywords)
+                    or (f.category not in {"encoding", "obfuscation", "decoded-payload"}
+                        and any(kw in f._tags for kw in exec_keywords))
+                )
+            else:
+                c.evidence_class = strongest_evidence(file_findings)
         elif not c.file:
             c.evidence_class = "direct"
         else:

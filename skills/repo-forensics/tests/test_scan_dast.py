@@ -47,6 +47,47 @@ class TestSafeEnv:
 
 class TestPayloadExecution:
     @_NEEDS_POSIX_HOOKS
+    def test_without_sandbox_hook_is_not_executed(self, tmp_path, monkeypatch):
+        hook = tmp_path / "hook.sh"
+        marker = tmp_path / "executed"
+        hook.write_text(f"#!/bin/sh\nprintf executed > '{marker}'\n")
+        hook.chmod(0o755)
+        monkeypatch.setattr(scanner, "SANDBOX_AVAILABLE", False)
+        monkeypatch.setattr(scanner, "BWRAP_AVAILABLE", False)
+        findings = scanner.execute_hook_with_payload(
+            {"event": "test", "command": str(hook), "source": "hook.sh"},
+            scanner.PAYLOADS[0], str(tmp_path),
+        )
+        assert not marker.exists()
+        assert any(f.category == "scan-incomplete" for f in findings)
+
+    @_NEEDS_POSIX_HOOKS
+    def test_sandbox_launch_failure_is_incomplete(self, tmp_path, monkeypatch):
+        hook = tmp_path / "hook.sh"
+        hook.write_text("#!/bin/sh\nexit 0\n")
+        hook.chmod(0o755)
+        monkeypatch.setattr(scanner, "SANDBOX_AVAILABLE", True)
+        monkeypatch.setattr(scanner.subprocess, "run", lambda *args, **kwargs: (_ for _ in ()).throw(OSError("sandbox unavailable")))
+        findings = scanner.execute_hook_with_payload(
+            {"event": "test", "command": str(hook), "source": "hook.sh"},
+            scanner.PAYLOADS[0], str(tmp_path),
+        )
+        assert any(f.category == "scan-incomplete" for f in findings)
+
+    @_NEEDS_POSIX_HOOKS
+    def test_sandbox_exit_127_is_incomplete(self, tmp_path, monkeypatch):
+        hook = tmp_path / "hook.sh"
+        hook.write_text("#!/bin/sh\nexit 0\n")
+        hook.chmod(0o755)
+        monkeypatch.setattr(scanner, "SANDBOX_AVAILABLE", True)
+        monkeypatch.setattr(scanner.subprocess, "run", lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 127, "", "sandbox-exec: invalid profile"))
+        findings = scanner.execute_hook_with_payload(
+            {"event": "test", "command": str(hook), "source": "hook.sh"},
+            scanner.PAYLOADS[0], str(tmp_path),
+        )
+        assert any(f.category == "scan-incomplete" for f in findings)
+
+    @_NEEDS_POSIX_HOOKS
     def test_detects_env_leak(self, repo_with_hook_scripts):
         hooks = scanner.find_hook_scripts(str(repo_with_hook_scripts))
         # Find the leaky hook
@@ -134,6 +175,25 @@ class TestSandboxHookExecution:
     than pytest's tmp_path (under /private/var/folders/), because the
     sandbox deny rule only matches literal /Users paths.
     """
+
+    @pytest.mark.skipif(
+        not scanner.SANDBOX_AVAILABLE,
+        reason="macOS Seatbelt sandbox only",
+    )
+    def test_sandbox_denies_writes_outside_users(self, tmp_path):
+        target = tmp_path.resolve() / "outside-users-canary"
+        if str(target).startswith('/Users/'):
+            pytest.skip("Probe target must be outside /Users")
+        profile = os.path.realpath(scanner.SANDBOX_PROFILE)
+        proc = subprocess.run([
+            scanner._SANDBOX_EXEC,
+            '-D', f'HOOK_PATH={profile}',
+            '-D', f'HOOK_DIR={os.path.dirname(profile)}',
+            '-f', profile,
+            '/bin/sh', '-c', 'printf canary > "$1"', 'sh', str(target),
+        ], capture_output=True, text=True, timeout=5)
+        assert proc.returncode != 0
+        assert not target.exists()
 
     @pytest.mark.skipif(
         not scanner.SANDBOX_AVAILABLE,

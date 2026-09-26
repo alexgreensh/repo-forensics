@@ -369,6 +369,25 @@ class TestCorrelation:
         titles = [c.title for c in correlated]
         assert "Potential Data Exfiltration" in titles
 
+    def test_unrelated_direct_leaf_does_not_promote_inferred_exfil_pair(self):
+        findings = [
+            core.Finding("sast", "high", "Env Access", "environ access", "app.py", 1, "", "env access", evidence_class="inferred"),
+            core.Finding("sast", "high", "HTTP POST", "network post request", "app.py", 5, "", "network", evidence_class="inferred"),
+            core.Finding("secrets", "high", "Hardcoded IP", "IP literal", "app.py", 40, "", "hardcoded", evidence_class="direct"),
+        ]
+        correlated = core.correlate(findings)
+        exfil = next(c for c in correlated if c.title == "Potential Data Exfiltration")
+        assert exfil.evidence_class == "inferred"
+
+    def test_direct_contributing_leaf_keeps_exfil_pair_direct(self):
+        findings = [
+            core.Finding("sast", "high", "Env Access", "environ access", "app.py", 1, "", "env access", evidence_class="inferred"),
+            core.Finding("sast", "high", "HTTP POST", "network post request", "app.py", 5, "", "network", evidence_class="direct"),
+        ]
+        correlated = core.correlate(findings)
+        exfil = next(c for c in correlated if c.title == "Potential Data Exfiltration")
+        assert exfil.evidence_class == "direct"
+
     def test_encoding_plus_exec(self):
         findings = [
             core.Finding("entropy", "high", "Base64 Block", "base64 encoding", "evil.py", 1, "", "encoding"),

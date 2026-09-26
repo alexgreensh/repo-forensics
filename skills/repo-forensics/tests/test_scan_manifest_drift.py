@@ -92,6 +92,30 @@ class TestNodePhantomDeps:
         assert len(phantom) == 0
 
 
+class TestJsImportExtraction:
+    def test_prose_apostrophes_do_not_create_imports(self, tmp_path):
+        source = tmp_path / "continuity.ts"
+        source.write_text(
+            "// Extracted from a checkpoint's content.\n"
+            "const status = 'tokens saved';\n"
+            "/* Migrated from Python's re.sub implementation. */\n"
+            "expect(isResumeIntent('continue')).toBe(true);\n"
+        )
+        assert scanner.extract_js_imports(str(source)) == set()
+
+    def test_real_import_forms_still_detected(self, tmp_path):
+        source = tmp_path / "app.ts"
+        source.write_text(
+            'import { readFile } from "node:fs";\n'
+            'import type { Thing } from "@scope/dep";\n'
+            'import "side-effect";\n'
+            'const helper = require("evil-lib");\n'
+        )
+        assert scanner.extract_js_imports(str(source)) == {
+            "node:fs", "@scope/dep", "side-effect", "evil-lib",
+        }
+
+
 class TestRuntimeInstalls:
     def test_pip_install_subprocess(self, tmp_path):
         f = tmp_path / "setup.py"

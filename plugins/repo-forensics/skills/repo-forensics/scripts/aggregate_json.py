@@ -423,10 +423,10 @@ def build_coverage_gap_findings(coverage_status):
     return findings
 
 
-# Scanners that do not follow the per-file scan_file contract and whose own
-# finding categories are not coverage-honesty signals. They are still marked
-# INCOMPLETE if the subprocess itself fails or produces an unexpected exit code.
-_NO_COVERAGE_SCANNER_NAMES = {"dast", "dependencies"}
+# Dependency findings do not follow the per-file scan_file coverage contract.
+# DAST can emit scan-incomplete when no sandbox is available, so its findings
+# must participate in coverage classification.
+_NO_COVERAGE_SCANNER_NAMES = {"dependencies"}
 
 
 def _coverage_status_for_category(category):

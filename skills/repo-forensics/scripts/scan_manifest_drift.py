@@ -215,9 +215,12 @@ def extract_js_imports(file_path):
             else:
                 imports.add(mod.split('/')[0].lower())
 
-    # import ... from 'module' or import 'module'
-    for m in re.finditer(r'(?:import|from)\s+.*?["\']([^"\']+)["\']', content):
-        mod = m.group(1)
+    # Match statements, not "from" in prose that can span into an apostrophe.
+    for m in re.finditer(
+        r'(?m)^[ \t]*(?:import|export)\b(?:[^\n;]*?\bfrom\s+|\s+)(["\'])([^"\'\r\n]+)\1',
+        content,
+    ):
+        mod = m.group(2)
         if not mod.startswith('.'):
             if mod.startswith('@'):
                 parts = mod.split('/')

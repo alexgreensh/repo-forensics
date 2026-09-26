@@ -78,6 +78,97 @@ class TestDockerEnvCopy:
 
 
 class TestGitHubActions:
+    def test_pull_request_target_without_fork_code_is_advisory_once(self, tmp_path):
+        workflow = tmp_path / "cla.yml"
+        workflow.write_text(
+            "on:\n"
+            "  pull_request_target:\n"
+            "# pull_request_target can access the base token\n"
+            "jobs:\n"
+            "  cla:\n"
+            "    steps:\n"
+            "      - if: github.event_name == 'pull_request_target'\n"
+            "        uses: contributor-assistant/github-action@ca4a40a7d1004f18d9960b404b97e5f30a505a08\n"
+        )
+        findings = scanner.scan_github_actions(str(workflow), ".github/workflows/cla.yml")
+        trigger = [f for f in findings if f.title == "GHA: pull_request_target Trigger"]
+        assert len(trigger) == 1
+        assert trigger[0].severity == "medium"
+
+    def test_pull_request_target_with_fork_checkout_and_run_is_critical(self, tmp_path):
+        workflow = tmp_path / "ci.yml"
+        workflow.write_text(
+            "on:\n"
+            "  pull_request_target:\n"
+            "jobs:\n"
+            "  build:\n"
+            "    steps:\n"
+            "      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5\n"
+            "        with:\n"
+            "          ref: ${{ github.event.pull_request.head.sha }}\n"
+            "      - run: npm test\n"
+        )
+        findings = scanner.scan_github_actions(str(workflow), ".github/workflows/ci.yml")
+        assert any(f.title == "GHA: Untrusted PR Code Execution" and f.severity == "critical" for f in findings)
+
+    def test_pull_request_target_with_fork_local_action_is_critical(self, tmp_path):
+        workflow = tmp_path / "ci.yml"
+        workflow.write_text(
+            "on: [pull_request_target]\n"
+            "jobs:\n"
+            "  build:\n"
+            "    steps:\n"
+            "      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5\n"
+            "        with:\n"
+            "          ref: ${{ github.event.pull_request.head.sha }}\n"
+            "      - uses: ./actions/build\n"
+        )
+        findings = scanner.scan_github_actions(str(workflow), ".github/workflows/ci.yml")
+        assert any(f.title == "GHA: Untrusted PR Code Execution" and f.severity == "critical" for f in findings)
+
+    def test_base_checkout_replaces_fork_code_before_run(self, tmp_path):
+        workflow = tmp_path / "ci.yml"
+        workflow.write_text(
+            "on: [pull_request_target]\n"
+            "jobs:\n"
+            "  build:\n"
+            "    steps:\n"
+            "      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5\n"
+            "        with:\n"
+            "          ref: ${{ github.event.pull_request.head.sha }}\n"
+            "      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5\n"
+            "      - run: npm test\n"
+        )
+        findings = scanner.scan_github_actions(str(workflow), ".github/workflows/ci.yml")
+        assert not any(f.title == "GHA: Untrusted PR Code Execution" for f in findings)
+
+    def test_pull_request_target_in_comment_is_not_trigger(self, tmp_path):
+        workflow = tmp_path / "ci.yml"
+        workflow.write_text("on: [push]\n# pull_request_target is not enabled\n")
+        findings = scanner.scan_github_actions(str(workflow), ".github/workflows/ci.yml")
+        assert not any("pull_request_target" in f.title for f in findings)
+
+    def test_pull_request_target_multiline_event_shell_injection_is_critical(self, tmp_path):
+        workflow = tmp_path / "ci.yml"
+        workflow.write_text(
+            "on:\n"
+            "  pull_request_target:\n"
+            "jobs:\n"
+            "  build:\n"
+            "    steps:\n"
+            "      - run: |\n"
+            "          echo '${{ github.event.pull_request.title }}'\n"
+        )
+        findings = scanner.scan_github_actions(str(workflow), ".github/workflows/ci.yml")
+        assert any("Expression Injection" in f.title and f.severity == "critical" for f in findings)
+
+    def test_flow_mapping_pull_request_target_trigger(self, tmp_path):
+        workflow = tmp_path / "ci.yml"
+        workflow.write_text('"on": {pull_request_target: {types: [opened]}}\n')
+        findings = scanner.scan_github_actions(str(workflow), ".github/workflows/ci.yml")
+        trigger = [f for f in findings if f.title == "GHA: pull_request_target Trigger"]
+        assert len(trigger) == 1
+
     def test_detects_pull_request_target(self, repo_with_infra_issues):
         ci_path = str(repo_with_infra_issues / ".github" / "workflows" / "ci.yml")
         findings = scanner.scan_github_actions(ci_path, ".github/workflows/ci.yml")

@@ -23,5 +23,5 @@
 (allow file-read* (literal (param "HOOK_PATH")))
 (allow file-read* (subpath (param "HOOK_DIR")))
 
-;; Deny writing to user home directories — prevents persistence
-(deny file-write* (subpath "/Users"))
+;; Hook code may run, but it must not modify the host filesystem.
+(deny file-write*)

@@ -214,14 +214,25 @@ def scan_github_actions(file_path, rel_path):
         with open(file_path, 'r', encoding='utf-8') as f:
             lines = f.readlines()
 
+        prt_lines = set()
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped.startswith('#'):
+                continue
+            if re.match(r'^["\']?pull_request_target["\']?\s*:', stripped) or re.match(
+                r'^["\']?on["\']?\s*:\s*(?:\[[^]]*\bpull_request_target\b|pull_request_target\b|\{\s*["\']?pull_request_target["\']?\s*:)',
+                stripped,
+            ):
+                prt_lines.add(i)
+
         for i, line in enumerate(lines):
             stripped = line.strip()
 
-            if "pull_request_target" in stripped:
+            if i in prt_lines:
                 findings.append(core.Finding(
-                    scanner=SCANNER_NAME, severity="critical",
+                    scanner=SCANNER_NAME, severity="medium",
                     title="GHA: pull_request_target Trigger",
-                    description="pull_request_target runs with write permissions on forked PRs (script injection risk)",
+                    description="pull_request_target has elevated token and secret access; inspect how PR content is used",
                     file=rel_path, line=i+1, snippet=stripped[:120],
                     category="ci-cd"
                 ))
@@ -454,7 +465,7 @@ def scan_github_actions(file_path, rel_path):
             for expr in ('${{ github.event.', '${{ github.head_ref', '${{ github.event_path', '${{ inputs.'):
                 if expr in block:
                     findings.append(core.Finding(
-                        scanner=SCANNER_NAME, severity="high",
+                        scanner=SCANNER_NAME, severity="critical",
                         title="GHA: Expression Injection in Multi-line Run Block",
                         description=f"Attacker-controlled expression '{expr}...' in shell script (expression injection risk)",
                         file=rel_path, line=line_no, snippet=block.strip()[:120],
@@ -548,7 +559,41 @@ def scan_github_actions(file_path, rel_path):
 
         # pull_request_target + actions/cache save = cache poisoning via forked PR
         non_comment = [ln for ln in lines if not ln.lstrip().startswith('#')]
-        has_prt = any("pull_request_target" in line for line in non_comment)
+        has_prt = bool(prt_lines)
+        if has_prt:
+            for i, line in enumerate(lines):
+                checkout = re.match(r'^(\s*)-\s+uses:\s*actions/checkout@', line)
+                if not checkout:
+                    continue
+                step_indent = len(checkout.group(1))
+                step_end = i + 1
+                while step_end < len(lines):
+                    next_line = lines[step_end]
+                    if next_line.strip() and len(next_line) - len(next_line.lstrip()) <= step_indent:
+                        break
+                    step_end += 1
+                checkout_step = ''.join(lines[i:step_end])
+                untrusted_ref = re.search(
+                    r'(?m)^\s*(?:ref|repository)\s*:\s*.*(?:github\.event\.pull_request\.head|github\.head_ref|refs/pull/)',
+                    checkout_step,
+                )
+                if not untrusted_ref:
+                    continue
+                for run_line in range(step_end, len(lines)):
+                    later = lines[run_line]
+                    if later.strip() and len(later) - len(later.lstrip()) < step_indent:
+                        break
+                    if re.match(r'^\s*-\s+uses:\s*actions/checkout@', later):
+                        break
+                    if re.match(r'^\s*-?\s*(?:run\s*:|uses\s*:\s*\./)', later):
+                        findings.append(core.Finding(
+                            scanner=SCANNER_NAME, severity="critical",
+                            title="GHA: Untrusted PR Code Execution",
+                            description="pull_request_target checks out fork code and then runs a command with elevated access",
+                            file=rel_path, line=run_line + 1, snippet=later.strip()[:120],
+                            category="ci-cd"
+                        ))
+                        break
         has_cache_save = any(
             re.search(r'uses:\s*actions/cache(?:/save)?@', line) for line in non_comment
         )
