@@ -2,7 +2,7 @@
 
 All notable changes to repo-forensics. Versions follow semver.
 
-## [Unreleased]
+## [2.14.12] - 2026-09-27
 
 ### Security: verify plugin checkout provenance and disabled TLS settings
 
