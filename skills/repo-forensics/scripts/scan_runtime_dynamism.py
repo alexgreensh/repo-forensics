@@ -20,6 +20,7 @@ Created by Alex Greenshpun
 
 import os
 import ast
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -225,6 +226,17 @@ def scan_file_regex(file_path, rel_path):
         findings.extend(core.scan_rule_patterns(
             content, rel_path, rules, category, severity, SCANNER_NAME
         ))
+
+    # The shipped or signed-overlay regex can match import(node) at the end
+    # of a helper name such as _render_import(node). Require the JS keyword.
+    content_lines = content.splitlines()
+    js_import_call = re.compile(r"(?<![\w$.])import\s*\(")
+    findings = [
+        f for f in findings
+        if f.rule_id not in {"RD-DYN-006", "RD-DYN-008"}
+        or not (1 <= f.line <= len(content_lines))
+        or js_import_call.search(content_lines[f.line - 1])
+    ]
 
     # v2.13.2 RD-SMOD-003 recalibration (design §5.4). Keep main's critical /
     # self-modification severity everywhere EXCEPT when the carrier is a test

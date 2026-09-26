@@ -67,6 +67,8 @@ JS_SINKS = [
     re.compile(r'Function\s*\(', re.IGNORECASE),
     re.compile(r'new\s+WebSocket\s*\(', re.IGNORECASE),
 ]
+PYTHON_NETWORK_SINKS = frozenset(PYTHON_SINKS[:5])
+JS_NETWORK_SINKS = frozenset(JS_SINKS[:3] + JS_SINKS[-1:])
 
 # === Assignment tracking ===
 ASSIGN_PATTERN = re.compile(r'(?:(?:const|let|var)\s+)?(\w+)\s*=(?!=)\s*(.*)')
@@ -128,6 +130,7 @@ def analyze_file(file_path, rel_path):
 
     sources = PYTHON_SOURCES if lang == 'python' else JS_SOURCES
     sinks = PYTHON_SINKS if lang == 'python' else JS_SINKS
+    network_sinks = PYTHON_NETWORK_SINKS if lang == 'python' else JS_NETWORK_SINKS
 
     tainted_vars = {}  # var_name -> (source_line, source_desc)
     scope_starts = defaultdict(list)
@@ -225,7 +228,8 @@ def analyze_file(file_path, rel_path):
                             file=rel_path,
                             line=line_no,
                             snippet=line_stripped[:120],
-                            category="dataflow"
+                            category="dataflow",
+                            rule_id="DF-NET-001" if sink_pat in network_sinks else "DF-EXEC-001",
                         ))
 
     return findings

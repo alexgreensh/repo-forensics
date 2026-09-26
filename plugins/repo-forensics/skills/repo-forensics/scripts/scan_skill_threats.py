@@ -110,6 +110,12 @@ UPDATE_CHANNEL_RULES = _rules_for_category("update-channel")
 SUB_AGENT_SPAWN_RULES = _rules_for_category("sub-agent-spawn")
 AUTHORITY_FRAMING_RULES = _rules_for_category("authority-framing")
 MEMORY_HEIST_RULES = _rules_for_category("memory-heist-exfil")
+_UA_ROUTING_RULE_IDS = {"ST-MH-003", "ST-MH-006"}
+_UA_TOKEN = re.compile(r"\b(?:user.?agent|ua)\b", re.IGNORECASE)
+_AGENT_TOKEN = re.compile(
+    r"\b(?:Claude|GPT|ChatGPT|OpenAI|Gemini|Copilot|Perplexity|AI\s+assistant|bot|crawler|spider)\b",
+    re.IGNORECASE,
+)
 
 # ============================================================
 # Category 2: Invisible Unicode Smuggling (critical)
@@ -777,6 +783,16 @@ def scan_content(content, rel_path, budget=None):
     if ext in text_exts or ext in code_exts:
         mh_findings = scan_rules(content, rel_path, MEMORY_HEIST_RULES,
                                  "memory-heist-exfil", "critical")
+        # Signed overlay packs may contain broad UA/bot substrings. Require
+        # actual UA and agent words before treating a routing match as real.
+        content_lines = content.splitlines()
+        mh_findings = [
+            f for f in mh_findings
+            if f.rule_id not in _UA_ROUTING_RULE_IDS
+            or not (1 <= f.line <= len(content_lines))
+            or (_UA_TOKEN.search(content_lines[f.line - 1])
+                and _AGENT_TOKEN.search(content_lines[f.line - 1]))
+        ]
         # v2.13.2 Memory-Heist recalibration (design §5.3). The ST-MH-001..005
         # patterns stay byte-identical (they catch the 5 real UA-routing /
         # PII-in-URL attacks; tightening them lost those catches at cc440b3).

@@ -112,11 +112,18 @@ class TestProseOnlyExfilSkillStillBlocks:
         ("sast", "exfiltration"),
         ("sast", "git-exfiltration"),
         ("runtime_dynamism", "fetch-execute"),
-        ("dataflow", "dataflow"),
     ])
     def test_each_typed_source_carries_the_network_capability(self, scanner, category):
         assert "network" in core._exfil_capabilities(
             _finding(scanner, category, "t"))
+
+    def test_dataflow_network_sink_is_typed_but_exec_and_import_cooccurrence_are_not(self):
+        net = _finding("dataflow", "dataflow", "Tainted Data Reaches Sink", rule_id="DF-NET-001")
+        execution = _finding("dataflow", "dataflow", "Tainted Data Reaches Sink", rule_id="DF-EXEC-001")
+        cross_file = _finding("dataflow", "dataflow", "Cross-File Taint: Import from Tainted Module")
+        assert "network" in core._exfil_capabilities(net)
+        assert "network" not in core._exfil_capabilities(execution)
+        assert "network" not in core._exfil_capabilities(cross_file)
 
     def test_the_webhook_service_rule_is_egress_by_id(self):
         assert "network" in core._exfil_capabilities(

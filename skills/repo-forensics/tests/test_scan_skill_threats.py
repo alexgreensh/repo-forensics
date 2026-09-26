@@ -692,6 +692,12 @@ class TestUserAgentRoutingFalsePositives:
     an actual conditional/branch on an agent user-agent, not a mere mention
     of an agent name in a warn() string or a documentation path line."""
 
+    def test_add_back_accounting_comment_does_not_fire(self, tmp_path):
+        f = tmp_path / "savings.ts"
+        f.write_text("// add-back (both add-back pools' actual is 0, so their cf == their contribution).\n")
+        findings = scanner.scan_file(str(f), "src/savings.ts")
+        assert not [finding for finding in findings if finding.rule_id in {"ST-MH-003", "ST-MH-006"}]
+
     def test_warn_string_does_not_fire(self, tmp_path):
         """A warn() call that mentions both 'user-agent' and 'Claude'/'bot' in
         a string literal must NOT fire the user-agent routing detector."""

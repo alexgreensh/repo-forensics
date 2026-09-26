@@ -11,6 +11,12 @@ import scan_runtime_dynamism as scanner
 
 
 class TestDynamicImports:
+    def test_import_suffix_in_helper_name_is_not_dynamic_import(self, tmp_path):
+        f = tmp_path / "structure_map.ts"
+        f.write_text("imports.append(_render_import(node))\n")
+        findings = scanner.scan_file(str(f), "structure_map.ts")
+        assert not [finding for finding in findings if finding.rule_id in {"RD-DYN-006", "RD-DYN-008"}]
+
     def test_module_from_spec_in_test_demotes(self, tmp_path):
         """Restored from cc440b3 as a gating test (design §5.4/§6 #3). The
         broad RD-SMOD-003 pattern still fires on `module_from_spec` (the

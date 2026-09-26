@@ -103,6 +103,16 @@ class TestDocPlaceholderSuppression:
             f"got {[f.snippet for f in aws_findings]}"
         )
 
+    def test_sequential_aws_fixture_is_exact_only(self, tmp_path):
+        (tmp_path / "fixture.mjs").write_text(
+            "AWS_ACCESS_KEY_ID=AKIA1234567890123456\n"
+            "AWS_ACCESS_KEY_ID=AKIANY4M7KQP9XJR2E3F\n"
+        )
+        findings = _scan_repo(tmp_path)
+        aws_keys = [finding.snippet for finding in findings if "AWS Access Key" in finding.title]
+        assert "AKIA1234567890123456" not in aws_keys
+        assert "AKIANY4M7KQP9XJR2E3F" in aws_keys
+
     def test_github_example_pat_not_flagged(self, tmp_path):
         """ghp_0123456789abcdefghijklmnopqrstuvwxyz is a canonical placeholder
         GitHub PAT (sequential alphabet)."""

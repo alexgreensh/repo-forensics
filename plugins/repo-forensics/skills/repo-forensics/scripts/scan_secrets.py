@@ -42,6 +42,7 @@ ENV_FILE_SAFE = {'.env.example', '.env.template', '.env.sample'}
 # contains "example.com" (e.g. db.example.com) is NOT suppressed.
 _DOC_PLACEHOLDER_EXACT = frozenset({
     "AKIAIOSFODNN7EXAMPLE",  # canonical example AWS key ID
+    "AKIA1234567890123456",  # sequential dummy key used in redaction tests
     "ghp_0123456789abcdefghijklmnopqrstuvwxyz",  # canonical example GitHub PAT
 })
 

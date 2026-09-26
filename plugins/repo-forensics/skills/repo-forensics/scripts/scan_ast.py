@@ -16,6 +16,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import forensics_core as core
+import _context_gate
 
 SCANNER_NAME = "ast_analysis"
 
@@ -647,7 +648,13 @@ class ObfuscationVisitor(ast.NodeVisitor):
                 if node.args:
                     first_arg = node.args[0]
                     # Check for BinOp (string concatenation) as first argument
-                    if isinstance(first_arg, ast.BinOp) and isinstance(first_arg.op, ast.Add):
+                    shell_kw = next((kw.value for kw in node.keywords if kw.arg == 'shell'), None)
+                    uses_shell = obj_name == 'os' or (
+                        shell_kw is not None
+                        and not (isinstance(shell_kw, ast.Constant) and shell_kw.value is False)
+                    )
+                    if (uses_shell and isinstance(first_arg, ast.BinOp)
+                            and isinstance(first_arg.op, ast.Add)):
                         self._add(
                             severity="critical",
                             title=f"String Concat into Shell: {obj_name}.{attr_name}(a + b)",
@@ -935,6 +942,13 @@ def scan_file(file_path, rel_path, budget=None):
     visitor = ObfuscationVisitor(rel_path, source_lines, budget=budget)
     visitor.bind(tree)
     visitor.visit(tree)
+    try:
+        if _context_gate.classify_file_context(rel_path, source).is_test_fixture:
+            for finding in visitor.findings:
+                if finding.title == "Dynamic Import: importlib.import_module(variable)":
+                    finding.severity = "high"
+    except Exception:
+        pass
     return visitor.findings
 
 
