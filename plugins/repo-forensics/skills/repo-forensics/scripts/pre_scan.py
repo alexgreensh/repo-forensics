@@ -198,12 +198,722 @@ def is_inert_quote_carrier(command):
     return not PIPE_TO_SHELL.search(residue)
 
 
+# PowerShell download/execution gate. Deliberately duplicated in auto_scan:
+# pre_scan must not import the post-hook (scanner fan-out / recursion risk).
+_PS_FETCH = frozenset(('irm', 'iwr', 'curl', 'wget', 'invoke-restmethod',
+                       'invoke-webrequest', 'start-bitstransfer'))
+_PS_HINT = re.compile(r'(?:irm|iwr|curl|wget|invoke-restmethod|invoke-webrequest|start-bitstransfer|downloadstring|downloadfile|powershell|pwsh)', re.IGNORECASE)
+_PS_EXEC = frozenset(('iex', 'invoke-expression'))
+_PS_SHELL = frozenset(('sh', 'bash', 'zsh', 'dash', 'ksh', 'csh', 'tcsh', 'fish'))
+_PS_HOST = frozenset(('powershell', 'powershell.exe', 'pwsh', 'pwsh.exe'))
+_PS_ENCODED = frozenset(('e', 'ec', 'en', 'enc', 'enco', 'encod', 'encode',
+                         'encoded', 'encodedc', 'encodedco', 'encodedcom',
+                         'encodedcomm', 'encodedcomma', 'encodedcomman',
+                         'encodedcommand'))
+
+
+def _ps_tokens(command, dialect='shell'):
+    """A bounded lexical view, not a PowerShell evaluator. Never runs code.
+
+    Keep literal strings separate from code; command/Invoke-Expression strings
+    are inspected only at their execution sites. Remove PowerShell backtick
+    escapes from names and join escaped line continuations. Comments are inert.
+    """
+    tokens = []
+    i, n = 0, len(command)
+    while i < n:
+        c = command[i]
+        if c.isspace():
+            start = i
+            while i < n and command[i].isspace():
+                i += 1
+            if '\n' in command[start:i] and tokens and tokens[-1] != ('symbol', '|') and command[i:i + 1] != '|':
+                tokens.append(('symbol', ';'))
+        elif command.startswith('<#', i):
+            end = command.find('#>', i + 2)
+            i = n if end < 0 else end + 2
+        elif c == '#':
+            end = command.find('\n', i)
+            if end >= 0 and tokens and tokens[-1] != ('symbol', '|'):
+                tokens.append(('symbol', ';'))
+            i = n if end < 0 else end + 1
+        elif c in "'\"":
+            quote, value = c, []
+            i += 1
+            while i < n:
+                if command[i] == quote:
+                    if i + 1 < n and command[i + 1] == quote:
+                        value.append(quote)
+                        i += 2
+                        continue
+                    i += 1
+                    break
+                if dialect == 'shell' and quote == '"' and command[i] == '\\' and i + 1 < n and command[i + 1] in ('"', '\\'):
+                    # Shell -c strings escape nested quotes with backslashes.
+                    value.append(command[i + 1])
+                    i += 2
+                    continue
+                if quote == '"' and command[i] == '`' and i + 1 < n:
+                    # Retain the escape marker so an escaped dollar is inert.
+                    value.append('`')
+                    i += 1
+                value.append(command[i])
+                i += 1
+            tokens.append(('double' if quote == '"' else 'string', ''.join(value)))
+        elif c in '|;(){}&,=':
+            tokens.append(('symbol', c))
+            i += 1
+        else:
+            value = []
+            while i < n and not command[i].isspace() and command[i] not in "'\"|;(){}&,=#":
+                if command[i] == '`' and i + 1 < n:
+                    i += 1
+                    if command[i] in '\r\n':
+                        if command[i] == '\r' and i + 1 < n and command[i + 1] == '\n':
+                            i += 1
+                        i += 1
+                        continue
+                value.append(command[i])
+                i += 1
+            tokens.append(('word', ''.join(value).lower()))
+    return tokens
+
+
+def _ps_name(tokens, index):
+    kind, value = tokens[index]
+    # Quoted names are invoked ONLY after &, never just because text names a tool.
+    if kind in ('string', 'double') and not (index and tokens[index - 1] in (('symbol', '&'), ('word', '.'))):
+        return ''
+    if kind not in ('word', 'string', 'double'):
+        return ''
+    return value.lower().replace('`', '').replace('\\', '/').rsplit('/', 1)[-1]
+
+
+def _ps_fetches(tokens):
+    for i, (kind, value) in enumerate(tokens):
+        name = _ps_name(tokens, i)
+        if name in _PS_FETCH:
+            # Require a command/expression position, not an argument or URL.
+            if i == 0 or tokens[i - 1][1] in ('(', '|', ';', '{', '&', '=', '.', '-command', '-c', '/c', '/command'):
+                return True
+        if kind == 'word' and ('.downloadstring' in value or '.downloadfile' in value) and (value.startswith('$') or (value.startswith('.') and i and tokens[i - 1][1] == ')')):
+            return True
+    return False
+
+
+def _ps_subexpressions(value):
+    i = 0
+    while i < len(value):
+        if value[i] == '`':
+            i += 2
+        elif value.startswith('$(', i):
+            start, balance = i + 2, 1
+            i += 2
+            while i < len(value) and balance:
+                if value[i] == '`':
+                    i += 2
+                    continue
+                if value[i] == '(':
+                    balance += 1
+                elif value[i] == ')':
+                    balance -= 1
+                i += 1
+            yield value[start:i - 1] if not balance else value[start:i]
+        else:
+            i += 1
+
+
+def _ps_pipe_before(tokens, index, start):
+    while index > start and tokens[index - 1][1] in ('&', 'sudo'):
+        index -= 1
+    return index > start and tokens[index - 1][1] == '|'
+
+
+def _ps_literal_heredoc_directives(line):
+    """Read quoted shell heredoc delimiters outside strings and comments."""
+    i = 0
+    while i < len(line):
+        c = line[i]
+        if c == '#':
+            break
+        if c == '\\':
+            i += 2
+            continue
+        if c in "'\"":
+            quote = c
+            i += 1
+            while i < len(line):
+                if quote == '"' and line[i] == '\\':
+                    i += 2
+                    continue
+                if line[i] == quote:
+                    i += 1
+                    break
+                i += 1
+            continue
+        if line.startswith('<<', i) and (i == 0 or line[i - 1] != '<') and line[i + 2:i + 3] != '<':
+            match = re.match(r"<<(-?)\s*(['\"])([^'\"\r\n]+)\2", line[i:])
+            if match and (i + match.end() == len(line) or line[i + match.end()].isspace() or line[i + match.end()] in '<>|;&()'):
+                yield match.group(3), bool(match.group(1))
+                i += match.end()
+                continue
+        i += 1
+
+
+def _ps_remove_heredoc_operators(line):
+    # The directive lexer already checked quote/comment context. Replace only
+    # accepted operators, preserving other header expressions for inspection.
+    result, i = [], 0
+    while i < len(line):
+        c = line[i]
+        if c == '#':
+            result.append(line[i:])
+            break
+        if c == '\\':
+            result.append(line[i:i + 2])
+            i += 2
+            continue
+        if c in "'\"":
+            quote, start = c, i
+            i += 1
+            while i < len(line):
+                if quote == '"' and line[i] == '\\':
+                    i += 2
+                    continue
+                if line[i] == quote:
+                    i += 1
+                    break
+                i += 1
+            result.append(line[start:i])
+            continue
+        if line.startswith('<<', i) and (i == 0 or line[i - 1] != '<') and line[i + 2:i + 3] != '<':
+            match = re.match(r"<<(-?)\s*(['\"])([^'\"\r\n]+)\2", line[i:])
+            if match and (i + match.end() == len(line) or line[i + match.end()].isspace() or line[i + match.end()] in '<>|;&()'):
+                result.append(' ')
+                i += match.end()
+                continue
+        result.append(c)
+        i += 1
+    return ''.join(result)
+
+
+def _ps_shell_quote_state(line, quote=None):
+    i = 0
+    while i < len(line):
+        c = line[i]
+        if quote is None and c == '#':
+            break
+        if c == '\\' and quote != "'":
+            i += 2
+            continue
+        if quote:
+            if c == quote:
+                quote = None
+        elif c in "'\"":
+            quote = c
+        i += 1
+    return quote
+
+
+def _ps_without_literal_heredocs(command):
+    # Only quoted delimiters have inert shell bodies. Unquoted bodies expand
+    # command substitutions and remain visible to the gate.
+    lines = command.splitlines(keepends=True)
+    output, pending = [], []
+    quote = None
+    for line in lines:
+        if pending:
+            delimiter, strip_tabs = pending[0]
+            check = line.rstrip('\r\n')
+            if strip_tabs:
+                check = check.lstrip('\t')
+            if check == delimiter:
+                pending.pop(0)
+            output.append('\n')
+            continue
+        output.append(line)
+        inside_quote = quote is not None
+        quote = _ps_shell_quote_state(line, quote)
+        # Mask only doc-writing cat/tee bodies. Shell consumers execute their
+        # stdin, and a quoted << inside a string is not a heredoc operator.
+        if inside_quote or not re.match(r'^\s*(?:cat|tee)\b', line) or re.search(r'[|;&]', line):
+            continue
+        pending.extend(_ps_literal_heredoc_directives(line))
+        if pending:
+            output[-1] = _ps_remove_heredoc_operators(line)
+
+    return ''.join(output)
+
+
+# Only identity-style members keep the payload text (`.Trim()`, `.ToString()`,
+# iwr's `.Content`). Other string methods (.Replace, .Substring, indexing) are
+# obfuscation transforms and are a separate follow-up; non-string members
+# (.Length, .Contains(), .name) never carry taint.
+_PS_COPY_METHODS = frozenset(('tostring', 'trim', 'trimstart', 'trimend', 'clone', 'content', 'rawcontent'))
+# Casts that produce a plain value (Boolean, number, date, ...) and so drop the
+# payload text. Every other cast, including unknown ones, keeps the text; array
+# casts also make the value a collection.
+_PS_SANITIZING_CASTS = frozenset((
+    'bool', 'boolean', 'system.boolean', 'int', 'int16', 'int32', 'int64', 'uint16', 'uint32', 'uint64',
+    'long', 'ulong', 'short', 'ushort', 'byte', 'sbyte', 'double', 'float', 'single', 'decimal',
+    'system.int16', 'system.int32', 'system.int64', 'system.uint16', 'system.uint32', 'system.uint64',
+    'system.double', 'system.single', 'system.decimal', 'system.byte', 'system.sbyte',
+    'char', 'system.char', 'datetime', 'system.datetime', 'timespan', 'system.timespan',
+    'guid', 'system.guid', 'version', 'system.version'))
+_PS_ARRAY_CASTS = frozenset(('array', 'system.array'))
+
+_PS_INTERPOLATED = re.compile(r'(?<!`)\$(?:\{([^}]*)\}|([\w:]+))')
+
+
+_PS_CAST_ONE = r'\[((?:[^\[\]]|\[[^\[\]]*\])*)\]'
+_PS_CAST = re.compile(r'^(?:' + _PS_CAST_ONE + r')+')
+
+
+def _ps_cast_info(value):
+    """(drops the text, collection shape: True, False or None for unchanged) for a word's leading [type] casts."""
+    match = _PS_CAST.match(value)
+    names = [c.strip().lower() for c in re.findall(_PS_CAST_ONE, match.group(0))] if match else []
+    if not names:
+        return False, None
+    sanitizes = any(n in _PS_SANITIZING_CASTS for n in names)
+    # The left-most cast that sets a shape (applied last) decides it: an array
+    # cast makes a collection, [string] joins into one string, others keep it.
+    for n in names:
+        if n.endswith('[]') or n in _PS_ARRAY_CASTS:
+            return sanitizes, True
+        if n in ('string', 'system.string'):
+            return sanitizes, False
+    return sanitizes, None
+
+
+def _ps_text_cast(value):
+    """True when the leading [type] casts on a word keep the payload text (or there are none)."""
+    return not _ps_cast_info(value)[0]
+
+
+def _ps_assignments(tokens, start, stop):
+    """Find `$a = $b = <rhs>` (also `[type]$a`, `$a += <rhs>`) in tokens[start:stop].
+
+    Candidates start at the segment start and after every `(` or `{`, so
+    `($b=$a)` and `if (...) { $b=$a }` are seen. The RHS runs to the next `;`
+    outside brackets, so a multiline `$b = (` ... `)` stays one value.
+    Yields (targets, rhs tokens, append, index of the first target).
+    """
+    starts = [start] + [i + 1 for i in range(start, stop) if tokens[i] in (('symbol', '{'), ('symbol', '('))]
+    for first in starts:
+        targets, shapes, sans, append, i = [], [], [], False, first
+        while i < stop:
+            k, casts = i, []
+            while k < stop and tokens[k][0] == 'word' and _PS_CAST.fullmatch(tokens[k][1]):
+                casts.append(tokens[k][1])
+                k += 1
+            if casts and not (k < stop and tokens[k][0] == 'word' and tokens[k][1].startswith('$')):
+                break  # a cast that is not applied to a target
+            here = not all(_ps_text_cast(c) for c in casts)
+            if k >= stop or tokens[k][0] != 'word':
+                break
+            here = here or not _ps_text_cast(tokens[k][1])
+            name, j = _PS_CAST.sub('', tokens[k][1]), k + 1
+            if not name.startswith('$'):
+                break
+            plus = name.endswith('+')
+            if not plus and j < len(tokens) and tokens[j] == ('word', '+'):
+                plus, j = True, j + 1
+            if j >= len(tokens) or tokens[j] != ('symbol', '='):
+                break
+            sans.append(here)
+            shapes.append(_ps_cast_info(''.join(casts) + tokens[k][1])[1])
+            targets.append(name.rstrip('+'))
+            append = append or plus
+            i = j + 1
+        if not targets or i >= len(tokens):
+            continue
+        depth, end = 0, i
+        while end < len(tokens):
+            kind, value = tokens[end]
+            if kind == 'symbol' and value in ('(', '{'):
+                depth += 1
+            elif kind == 'symbol' and value in (')', '}'):
+                depth -= 1
+                if depth < 0 and first != start:
+                    break
+            elif tokens[end] == ('symbol', ';') and depth <= 0:
+                break
+            end += 1
+        # `sans[n]` marks a target whose own cast stores a value, not the payload text.
+        yield targets, tokens[i:end], append, first, shapes, sans
+
+
+def _ps_brace_scopes(tokens):
+    """Per token: innermost brace kind ('def', 'flow' or None) and the tuple of
+    enclosing definition-brace indexes. A `{` that follows `function name`,
+    `=` (script block literal) or `@` (hashtable) only defines code or data;
+    other braces (if/foreach/try/...) run in place.
+    """
+    kinds, chains, stack, chain = [], [], [], ()
+    for i, token in enumerate(tokens):
+        kinds.append(stack[-1][1] if stack else None)
+        chains.append(chain)
+        if token == ('symbol', '{'):
+            p, definition = i - 1, False
+            if p >= 0 and tokens[p] == ('symbol', ')'):
+                depth = 0
+                while p >= 0:
+                    if tokens[p] == ('symbol', ')'):
+                        depth += 1
+                    elif tokens[p] == ('symbol', '('):
+                        depth -= 1
+                        if depth == 0:
+                            break
+                    p -= 1
+                p -= 1
+                definition = p >= 1 and tokens[p - 1][1] in ('function', 'filter', 'workflow')
+            elif p >= 0:
+                definition = (tokens[p] == ('symbol', '=') or tokens[p][1].endswith('@')
+                              or (p >= 1 and tokens[p - 1][1] in ('function', 'filter', 'workflow')))
+            stack.append((i, 'def' if definition else 'flow'))
+            if definition:
+                chain = chain + (i,)
+        elif token == ('symbol', '}') and stack:
+            index, kind = stack.pop()
+            if kind == 'def':
+                chain = chain[:-1]
+    return kinds, chains
+
+
+def _ps_copy_source(value):
+    """Variable named by `$a`, `[string]$a`, `$a.Trim` or `$a.Content` words."""
+    if _ps_cast_info(value)[0]:
+        return None
+    value = _PS_CAST.sub('', value)
+    match = re.match(r'\$[\w:]+', value)
+    if not match:
+        return None
+    rest = value[match.end():]
+    if rest.strip('+') and not (rest.startswith('.') and rest[1:] in _PS_COPY_METHODS):
+        return None
+    return match.group(0)
+
+
+_PS_RESULT_OP = re.compile(r'-[ci]?(?:contains|notcontains|in|notin|is|isnot|and|or|xor|not)$|-(?:band|bor|bxor|bnot|shl|shr)$')
+_PS_FILTER_OP = re.compile(r'-[ci]?(?:eq|ne|gt|lt|ge|le|like|notlike|match|notmatch)$')
+
+
+def _ps_group_end(tokens, i):
+    """Index of the bracket closing tokens[i], or len(tokens) when unbalanced."""
+    depth = 0
+    for j in range(i, len(tokens)):
+        if tokens[j][0] == 'symbol' and tokens[j][1] in ('(', '{'):
+            depth += 1
+        elif tokens[j][0] == 'symbol' and tokens[j][1] in (')', '}'):
+            depth -= 1
+            if depth == 0:
+                return j
+    return len(tokens)
+
+
+def _ps_top_level(tokens, test):
+    """First index of a token at bracket depth 0 for which test(token) holds."""
+    i = 0
+    while i < len(tokens):
+        if tokens[i][0] == 'symbol' and tokens[i][1] in ('(', '{'):
+            i = _ps_group_end(tokens, i)
+        elif test(tokens[i]):
+            return i
+        i += 1
+    return -1
+
+
+class _PsView:
+    """Read-only union of name sets (top level plus enclosing function bodies).
+
+    Sets are shared, never copied, so memory stays flat however many
+    assignments a body has.
+    """
+    __slots__ = ('sets',)
+
+    def __init__(self, sets):
+        self.sets = sets
+
+    def __contains__(self, name):
+        return any(name in names for names in self.sets)
+
+    def __bool__(self):
+        return any(self.sets)
+
+    def isdisjoint(self, names):
+        names = list(names)
+        return all(group.isdisjoint(names) for group in self.sets)
+
+
+def _ps_expr(tokens, remote_vars, collection_vars, dialect='shell', depth=0):
+    """Judge an expression by its result: (may carry payload text, collection-shaped).
+
+    Scalar Boolean/numeric results (-and, -or, -not, -contains, -in, -is, a
+    scalar -eq/-like/-match, [bool]/[int] casts) are not payload. Comparison
+    operators on a collection FILTER it and keep the text, and concatenation
+    or any other operator keeps text from any operand. Collection shape is
+    tracked even for clean values, because text appended later joins it.
+    Interpolation always yields a string. Unsure means tainted.
+    """
+    if depth > 16:
+        # Too deeply nested to judge cheaply: assume any mention keeps the text.
+        return _ps_derives_remote(tokens, remote_vars), True
+
+    def is_op(pattern):
+        return lambda token: token[0] == 'word' and pattern.fullmatch(token[1]) is not None
+    if _ps_top_level(tokens, is_op(_PS_RESULT_OP)) >= 0:
+        return False, False
+    # `x -as A -as B` runs left to right, so the last -as converts last.
+    as_at, offset = -1, 0
+    while True:
+        found = _ps_top_level(tokens[offset:], lambda t: t == ('word', '-as'))
+        if found < 0:
+            break
+        as_at = offset + found
+        offset = as_at + 1
+    if as_at >= 0 and as_at + 1 < len(tokens) and tokens[as_at + 1][0] == 'word' and _PS_CAST.fullmatch(tokens[as_at + 1][1]):
+        sanitizes, collection = _ps_cast_info(tokens[as_at + 1][1])
+        if sanitizes:
+            return False, False
+        tainted, left_collection = _ps_expr(tokens[:as_at], remote_vars, collection_vars, dialect, depth + 1)
+        return tainted, left_collection if collection is None else collection
+    cmp_at = _ps_top_level(tokens, is_op(_PS_FILTER_OP))
+    if cmp_at >= 0:
+        tainted, collection = _ps_expr(tokens[:cmp_at], remote_vars, collection_vars, dialect, depth + 1)
+        return (tainted and collection), collection
+    tainted = collection = False
+    pending = None  # (sanitizes, shape) of a standalone cast waiting for its operand
+    i = 0
+    while i < len(tokens):
+        kind, value = tokens[i]
+        if kind == 'word' and _PS_CAST.fullmatch(value):
+            info = _ps_cast_info(value)
+            if pending is not None:
+                # Contiguous casts compose: any sanitizer drops the text and the
+                # left-most (applied last) cast that sets a shape decides it.
+                info = (pending[0] or info[0], pending[1] if pending[1] is not None else info[1])
+            pending = info
+            i += 1
+            continue
+        sanitized = pending is not None and pending[0]
+        shape = pending[1] if pending is not None else None
+        if kind == 'symbol' and value in ('(', '{'):
+            end = _ps_group_end(tokens, i)
+            inner_t, inner_c = _ps_expr(tokens[i + 1:end], remote_vars, collection_vars, dialect, depth + 1)
+            if not sanitized:
+                tainted = tainted or inner_t
+                collection = collection or (inner_c if shape is None else shape)
+            pending = None
+            i = end + 1
+            continue
+        if kind == 'symbol' and value == ',' or (kind == 'word' and value in ('@', '-split', '-csplit', '-isplit')):
+            collection = True
+        elif kind == 'word':
+            sources = [_ps_copy_source(part) for part in value.split('+') if part]
+            fused_sanitizes, fused_shape = _ps_cast_info(value)
+            if not sanitized and not fused_sanitizes:
+                if any(s in remote_vars for s in sources):
+                    tainted = True
+                explicit = shape if shape is not None else fused_shape
+                if explicit is True or (explicit is None and any(s in collection_vars for s in sources)):
+                    collection = True
+            if not value.startswith('-') and value != '+':
+                pending = None
+        elif kind == 'double':
+            if not sanitized:
+                text = value
+                for expr in _ps_subexpressions(value):
+                    text = text.replace('$(' + expr + ')', '', 1)
+                    inner_t, _ = _ps_expr(_ps_tokens(expr, dialect), remote_vars, collection_vars, dialect, depth + 1)
+                    tainted = tainted or inner_t
+                names = {'$' + (m[0] or m[1]).lower() for m in _PS_INTERPOLATED.findall(text)}
+                if not remote_vars.isdisjoint(names):
+                    tainted = True
+            pending = None
+        i += 1
+    return tainted, collection
+
+
+def _ps_derives_remote(tokens, remote_vars):
+    """True when a value is built from a remote-fetched variable.
+
+    Covers plain copies ($b=$a, ($a), [string]$a, "$a", $a.Trim()), appends
+    and concatenation. Unrelated members ($a.Length) stay untainted.
+    """
+    if not remote_vars:
+        return False
+    for kind, value in tokens:
+        if kind == 'word' and any(_ps_copy_source(part) in remote_vars for part in value.split('+') if part):
+            return True
+        if kind == 'double' and not remote_vars.isdisjoint('$' + (m[0] or m[1]).lower() for m in _PS_INTERPOLATED.findall(value)):
+            return True
+    return False
+
+
+def detects_powershell_execution(command, depth=0, heredocs_masked=False, dialect='shell'):
+    """Block coupled remote fetch+execution and opaque EncodedCommand calls.
+
+    This intentionally does not claim general PowerShell deobfuscation or
+    dataflow analysis. Recursion is limited to quoted executable code bodies.
+    """
+    if not command or depth > 8:
+        return False
+    # Reject non-candidates before allocating the lexical view on the hot path.
+    if not _PS_HINT.search(command.replace('`', '')):
+        return False
+    if not heredocs_masked and dialect == 'shell':
+        command = _ps_without_literal_heredocs(command)
+    tokens = _ps_tokens(command, dialect)
+    # Inspect only the balanced executable subexpression, not trailing prose.
+    for kind, value in tokens:
+        if kind == 'double':
+            for expression in _ps_subexpressions(value):
+                if detects_powershell_execution(expression, depth + 1, dialect=dialect):
+                    return True
+    # Cheap bracket pairing prevents quadratic rescans of nested expressions.
+    ends, stack = {}, []
+    for i, (kind, value) in enumerate(tokens):
+        if kind == 'symbol' and value == '(':
+            stack.append(i)
+        elif kind == 'symbol' and value == ')' and stack:
+            ends[stack.pop()] = i
+    remote_vars, local_vars = set(), {}
+    collection_vars, local_shapes = set(), {}
+    scoped = any(token == ('symbol', '{') for token in tokens)
+    kinds, chains = _ps_brace_scopes(tokens) if scoped else ([], [])
+
+    def view(i, base, locals_):
+        """Names seen at token i: top level plus enclosing definitions (no copies)."""
+        if not scoped or not chains[i] or not locals_:
+            return base
+        return _PsView([base] + [locals_[owner] for owner in chains[i] if owner in locals_])
+
+    def visible(i):
+        """Remote variables seen at token i."""
+        return view(i, remote_vars, local_vars)
+
+    start = 0
+    for stop in range(len(tokens) + 1):
+        if stop < len(tokens) and tokens[stop] != ('symbol', ';'):
+            continue
+        for targets, rhs, append, at, target_shapes, target_sans in _ps_assignments(tokens, start, stop):
+            seen = visible(at)
+            expr_tainted, expr_collection = _ps_expr(rhs, seen, view(at, collection_vars, local_shapes), dialect)
+            tainted = (_ps_fetches(rhs)
+                       or any(kind == 'double' and any(_ps_fetches(_ps_tokens(expr, dialect)) for expr in _ps_subexpressions(value)) for kind, value in rhs)
+                       or expr_tainted)
+            # Writes inside a brace never clear outer taint: an if body may not
+            # run and a function or script block may never be called.
+            if not scoped or kinds[at] is None:
+                owner, shapes, clears = remote_vars, collection_vars, not append and at == start
+            elif not chains[at]:
+                owner, shapes, clears = remote_vars, collection_vars, False
+            else:
+                owner = local_vars.setdefault(chains[at][-1], set())
+                shapes = local_shapes.setdefault(chains[at][-1], set())
+                clears = kinds[at] == 'def' and not append and at == start
+            # Collection shape is tracked for clean values too (text appended
+            # later joins it); `+=` keeps the old shape.
+            # A typed target converts the value: [string]$b = @($a) is a string.
+            # Chained targets convert right to left: each target casts the value
+            # the target to its right received. A sanitizing cast on one target
+            # therefore only clears that target and the ones outside it.
+            as_collection, shape = [], expr_collection
+            for t, kind in reversed(list(zip(targets, target_shapes))):
+                shape = shape if kind is None else kind
+                if shape:
+                    as_collection.append(t)
+            clean = {t for n, t in enumerate(targets) if any(target_sans[n:])}
+            as_scalar = [t for t in targets if t not in as_collection]
+            if as_collection:
+                shapes.update(as_collection)
+            if clears and as_scalar:
+                shapes.difference_update(as_scalar)
+            if tainted:
+                owner.update(t for t in targets if t not in clean)
+            if clears:
+                owner.difference_update(t for t in targets if t in clean or not tainted)
+        for j in range(start, stop):
+            rv = visible(j)
+            name = _ps_name(tokens, j)
+            positioned = j == start or tokens[j - 1][1] in ('(', '|', '{', '&', '.', 'sudo', 'env', '-command', '-c', '/c', '/command', '=')
+            if (name in _PS_HOST or name in _PS_SHELL) and positioned:
+                for k in range(j + 1, stop):
+                    kind, value = tokens[k]
+                    if kind == 'symbol' and value in ('|', ')', '}'):
+                        break
+                    if kind == 'word' and value in ('-f', '-file'):
+                        break
+                    if name in _PS_HOST and kind == 'word' and value.lstrip('-/').split(':', 1)[0] in _PS_ENCODED and value.startswith(('-', '/')):
+                        return True
+                    if kind == 'word' and value in ('-c', '-command', '-commandwithargs', '/c', '/command', '/commandwithargs'):
+                        if k + 1 < stop and tokens[k + 1][0] == 'word' and _ps_derives_remote(tokens[k + 1:k + 2], rv):
+                            return True
+                        if k + 1 < stop and tokens[k + 1][0] in ('string', 'double'):
+                            if detects_powershell_execution(tokens[k + 1][1], depth + 1, dialect='powershell' if name in _PS_HOST else 'shell'):
+                                return True
+                        break
+                if _ps_pipe_before(tokens, j, start) and _ps_fetches(tokens[start:j]):
+                    return True
+            executor = name in _PS_EXEC and positioned
+            method = tokens[j][0] == 'word' and ((tokens[j][1].startswith('$') and '.invokescript' in tokens[j][1]) or (tokens[j][1].startswith('.invokescript') and j > start and tokens[j - 1][1] == ')') or '[scriptblock]::create' == tokens[j][1])
+            if method and (j + 1 >= stop or tokens[j + 1] != ('symbol', '(')):
+                continue
+            if method and '[scriptblock]::create' == tokens[j][1]:
+                # Creating a block is inert until invoked with & or .Invoke().
+                k = j + 1
+                end = ends.get(k, stop)
+                before = j - 1
+                while before >= start and tokens[before][1] == '(':
+                    before -= 1
+                invoked = before >= start and tokens[before] in (('symbol', '&'), ('word', '.'))
+                after = end + 1
+                while after < stop and tokens[after][1] == ')':
+                    after += 1
+                invoked = invoked or (after < stop and tokens[after][1].startswith('.invoke'))
+                if not invoked:
+                    continue
+            if not (executor or method):
+                continue
+            if _ps_pipe_before(tokens, j, start):
+                upstream = tokens[start:j]
+                if _ps_fetches(upstream) or (executor and _ps_derives_remote(upstream, rv)):
+                    return True
+                if executor and any(kind in ('string', 'double') and detects_powershell_execution(value, depth + 1, dialect='powershell') for kind, value in upstream):
+                    return True
+            k = j + 1
+            # Execution cmdlet flags can precede the expression.
+            while k < stop and tokens[k][0] == 'word' and tokens[k][1].startswith('-'):
+                k += 1
+                if k < stop and tokens[k][0] == 'word' and not tokens[k][1].startswith('$'):
+                    k += 1
+            if k < stop and tokens[k] == ('symbol', '('):
+                end = ends.get(k, stop)
+                body = tokens[k + 1:end]
+            else:
+                body = tokens[k:stop]
+            if _ps_fetches(body) or _ps_derives_remote(body, rv):
+                return True
+            if executor and any(value == '$_' for kind, value in body) and (_ps_fetches(tokens[start:j]) or _ps_derives_remote(tokens[start:j], rv)):
+                return True
+            if executor and body and body[0][0] == 'double':
+                if any(_ps_fetches(_ps_tokens(expr, dialect)) or _ps_derives_remote(_ps_tokens(expr, dialect), rv) for expr in _ps_subexpressions(body[0][1])) or _ps_derives_remote(body[:1], rv):
+                    return True
+            if executor and body and body[0][0] in ('string', 'double'):
+                if detects_powershell_execution(body[0][1], depth + 1, dialect='powershell'):
+                    return True
+        start = stop + 1
+    return False
+
+
 def detect_install_command(command):
     """Match command against install patterns.
     Returns (pattern_type, match_obj) or (None, None)."""
     if not command:
         return None, None
-    if PIPE_TO_SHELL.search(command) and not is_inert_quote_carrier(command):
+    executable = _ps_without_literal_heredocs(command)
+    if detects_powershell_execution(executable, heredocs_masked=True) or (PIPE_TO_SHELL.search(executable) and not is_inert_quote_carrier(executable)):
         return 'pipe_to_shell', None
     for pattern, ptype in INSTALL_PATTERNS:
         m = pattern.search(command)
@@ -532,9 +1242,9 @@ def output_approve():
 
 
 BLOCK_PIPE_TO_SHELL = (
-    "[repo-forensics] BLOCKED: Command pipes remote content directly "
-    "to shell execution. This bypasses all package manager security "
-    "checks and can execute arbitrary code."
+    "[repo-forensics] BLOCKED: Command executes downloaded content or uses "
+    "an opaque PowerShell EncodedCommand. This bypasses package manager "
+    "security checks and can execute arbitrary code."
 )
 
 
