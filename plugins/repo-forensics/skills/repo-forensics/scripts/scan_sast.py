@@ -20,6 +20,7 @@ Created by Alex Greenshpun
 import ast
 import os
 import re
+import html as _html
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -100,6 +101,552 @@ CSS_STEG_PATTERNS = [
 
 CSS_STEG_EXTENSIONS = {'.html', '.htm', '.svg', '.jsx', '.tsx', '.vue', '.md'}
 
+# --- CSS compounding shrink -------------------------------------------------
+# Each parent-relative font-size under 1 (em, %, smaller, calc(<one literal>))
+# shrinks text relative to its parent, so a chain of nested elements can render
+# below one pixel even though no single declaration looks hidden. This is a
+# count-and-multiply bound, not a layout engine: every element that carries such
+# a size (through a class, id, tag or attribute rule, or inline style) is counted
+# once and the factors are multiplied as if all of them were nested. Nesting is
+# not verified, so the finding is LOW and says so.
+#
+# Known limits (accepted for a LOW heuristic): a bare *, :is()/:where(),
+# calc() beyond one literal, min()/max()/clamp()/var(), ex/lh/ch units, escapes
+# inside custom properties, and declarations nested under @media or & that lose
+# the enclosing selector are not resolved. Long sibling lists can flag.
+_CSS_SPECIAL = re.compile(r'["\'{}/<\\-]')
+
+
+_CSS_STR_END = {'"': re.compile(r'\\\r\n|\\.|["\n\r\f]', re.DOTALL),
+                "'": re.compile(r"\\\r\n|\\.|['\n\r\f]", re.DOTALL)}
+
+
+_TAG_BODY = re.compile(r'(?:"[^"]*"|\'[^\']*\'|[^>"\'])*')
+
+
+_CSS_TAG_MAX = 20000
+
+
+_CSS_INPUT_MAX = 2000000
+
+
+_CSS_BRACE_LIMIT = 100000
+
+
+_RAW_BODY_TAGS = frozenset(('script', 'style', 'textarea', 'title', 'noscript'))
+_NEST_TAG = re.compile(r'<[a-zA-Z][\w:-]*')
+_MARKUP_NEXT = re.compile(r'<!--|<(/?)([a-zA-Z][\w:-]*)')
+
+
+def _blank_dead_markup(content, live_templates=False):
+    """Blank (keeping newlines, so offsets and lines hold) the parts of an HTML
+    document that are never rendered: comments, script/textarea/title/noscript
+    bodies and whole <template> subtrees (nested templates are counted).
+    <style> bodies stay live; a Vue single-file component keeps its top-level
+    <template> live (live_templates). A tag that never closes blanks nothing. One forward pass over real tags only, so a
+    "<style>" inside a script string or a quoted attribute is not a marker."""
+    spans = []
+    pos = 0
+    n = len(content)
+    depth = 0
+    tstart = 0
+    no_close = set()                          # raw tags with no close tag from some point on
+    while True:
+        m = _MARKUP_NEXT.search(content, pos)
+        if not m:
+            break
+        if m.group() == '<!--':
+            e = content.find('-->', m.end())
+            end = n if e < 0 else e + 3
+            spans.append((m.start(), end))
+            pos = end
+            continue
+        body = _TAG_BODY.match(content, m.end(), min(n, m.end() + _CSS_TAG_MAX))
+        tag_end = max(m.end(), body.end())
+        gt = min(n, tag_end + 1)
+        tag = m.group(2).lower()
+        if m.group(1):
+            if tag == 'template' and depth:
+                depth -= 1
+                if depth == 0:
+                    spans.append((tstart, gt))
+            pos = gt
+            continue
+        selfclose = content[tag_end - 1:tag_end] == '/'
+        if tag in _RAW_BODY_TAGS and not selfclose:
+            ce = None
+            if tag not in no_close:
+                ce = re.compile(r'</' + tag + r'(?=[\s>/])', re.IGNORECASE).search(content, gt)
+                if ce is None:
+                    no_close.add(tag)         # absent here means absent for every later search
+            if ce is None:
+                pos = gt                      # unclosed: stay live, never blank to EOF
+                continue
+            if tag != 'style':
+                spans.append((m.start(), ce.end()))
+            pos = ce.end()
+            continue
+        if tag == 'template' and not selfclose and not live_templates:
+            if depth == 0:
+                tstart = m.start()
+            depth += 1
+        pos = gt
+    if not spans:
+        return content
+    spans.sort()
+    out = []
+    last = 0
+    for a, b in spans:
+        if b <= last:
+            continue
+        a = max(a, last)
+        out.append(content[last:a])
+        out.append(re.sub(r'[^\n]', ' ', content[a:b]))
+        last = b
+    out.append(content[last:])
+    return ''.join(out)
+
+
+def _css_clean(content):
+    """One linear pass: comments become a space and quoted strings become "".
+    A string or comment left open runs to end of line (strings) or end of file
+    and is consumed once. Returns (clean_text, [(position, '{' or '}')], truncated)."""
+    parts = []
+    braces = []
+    out_len = 0
+    seg = 0
+    i = 0
+    n = len(content)
+    truncated = False
+    depth = 0
+    while True:
+        m = _CSS_SPECIAL.search(content, i)
+        if not m:
+            break
+        j = m.start()
+        c = content[j]
+        if c in '{}':
+            if len(braces) >= _CSS_BRACE_LIMIT:
+                truncated = True
+                break
+            depth += 1 if c == '{' else -1
+            parts.append(content[seg:j])
+            out_len += j - seg
+            braces.append((out_len, c))
+            parts.append(c)
+            out_len += 1
+            seg = i = j + 1
+        elif c in '"\'' and depth <= 0 and not (
+                content.rfind('[', max(0, j - 200), j) > content.rfind(']', max(0, j - 200), j)):
+            i = j + 1                         # outside a block and an attribute selector a quote is prose
+        elif c in '"\'':
+            k = j + 1
+            end = -1
+            rx = _CSS_STR_END[c]
+            while True:
+                mm = rx.search(content, k)
+                if not mm:
+                    break
+                g = mm.group()
+                if g == c:
+                    end = mm.end()
+                    break
+                if g in '\n\r\f':
+                    break
+                k = mm.end()
+            if end < 0:
+                i = j + 1                     # unterminated: an ordinary character
+            else:
+                parts.append(content[seg:j])
+                parts.append('""')
+                out_len += (j - seg) + 2
+                seg = i = end
+        elif c == '/' and content.startswith('/*', j):
+            e = content.find('*/', j + 2)
+            end = n if e < 0 else e + 2
+            parts.append(content[seg:j])
+            parts.append(' ')
+            out_len += (j - seg) + 1
+            seg = i = end
+        elif c == '\\':
+            i = j + 2                         # an escaped character is never a delimiter
+        elif (c == '<' and content.startswith('<!--', j)) or (
+                c == '-' and content.startswith('-->', j)):
+            n_tok = 4 if c == '<' else 3      # CDO/CDC end a statement and are otherwise ignored
+            parts.append(content[seg:j])
+            parts.append(';')
+            out_len += (j - seg) + 1
+            seg = i = j + n_tok
+        else:
+            i = j + 1
+    parts.append(content[seg:])
+    return ''.join(parts), braces, truncated
+
+
+_NUM_PAT = r'[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?'   # \d+\.?\d* backtracks quadratically
+
+
+_NEST_SIZE = re.compile(
+    r'(?<![\w-])font-size\s*:\s*(?:calc\(\s*(' + _NUM_PAT + r')\s*(em|%)\s*\)|(' + _NUM_PAT
+    + r')\s*(em|%)|(smaller))', re.IGNORECASE)
+
+
+_SMALLER = 0.833
+
+
+_NEST_MAX_ITEMS = 200000
+_PRELUDE_MAX = 100000
+_COMPOUND_BUCKET_MAX = 64
+# JSX/TSX: className is class, and a style object spells the size fontSize or 'font-size'.
+_JSX_SIZE = re.compile(
+    r'(?:\bfontSize|["\']font-size["\'])\s*:\s*["\']\s*(' + _NUM_PAT + r')\s*(em|%)\s*["\']', re.IGNORECASE)
+
+
+_NEST_SHORT = re.compile(r'(?<![\w-])font\s*:\s*([^;{}]{0,200})', re.IGNORECASE)
+
+
+def _css_ident(sel, i):
+    """Read a CSS identifier starting at i, resolving backslash escapes."""
+    out = []
+    n = len(sel)
+    while i < n:
+        c = sel[i]
+        if c == '\\':
+            i += 1
+            if i >= n:
+                break
+            j = i
+            while j < n and j - i < 6 and sel[j] in '0123456789abcdefABCDEF':
+                j += 1
+            if j > i:
+                try:
+                    out.append(chr(int(sel[i:j], 16)))
+                except (ValueError, OverflowError):
+                    pass
+                i = j + 1 if j < n and sel[j] in ' \t\n\r\f' else j
+            else:
+                out.append(sel[i])
+                i += 1
+        elif c.isalnum() or c in '-_' or ord(c) > 127:
+            out.append(c)
+            i += 1
+        else:
+            break
+    return ''.join(out), i
+
+
+def _split_selector_list(text):
+    """Split a selector list at top-level commas only (not inside parentheses,
+    brackets or strings, and not after a backslash)."""
+    parts = []
+    start = depth = 0
+    quote = ''
+    i, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        if c == '\\':
+            i += 2
+            continue
+        if quote:
+            if c == quote:
+                quote = ''
+        elif c in '"\'':
+            quote = c
+        elif c in '([':
+            depth += 1
+        elif c in ')]':
+            depth = max(0, depth - 1)
+        elif c == ',' and depth == 0:
+            parts.append(text[start:i])
+            start = i + 1
+        i += 1
+    parts.append(text[start:])
+    return parts
+
+
+def _subject_keys(sel):
+    """(kind, name) keys of the last compound selector in `sel`: tag, class, id
+    and attribute names. Pseudo-classes are ignored, so the result is an
+    over-approximation of the elements the selector can match."""
+    keys = []
+    sel = sel.strip(' \t\r\n\f')
+    i, n = 0, len(sel)
+    while i < n:
+        c = sel[i]
+        if c in ' \t\r\n\f>+~':
+            keys = []
+            i += 1
+        elif c in '.#':
+            name, i = _css_ident(sel, i + 1)
+            if name:
+                keys.append(('class' if c == '.' else 'id', name))
+        elif c == '[':
+            j, quote = i + 1, ''
+            while j < n and (quote or sel[j] != ']'):
+                if quote and sel[j] == quote:
+                    quote = ''
+                elif not quote and sel[j] in '"\'':
+                    quote = sel[j]
+                j += 1
+            inner = sel[i + 1:j].lstrip()
+            if inner.startswith('*|'):
+                inner = inner[2:]
+            elif inner.startswith('|') and not inner.startswith('|='):
+                inner = inner[1:]
+            else:
+                pre, k = _css_ident(inner, 0)
+                if inner[k:k + 1] == '|' and inner[k + 1:k + 2] != '=':
+                    inner = inner[k + 1:]
+            name, _ = _css_ident(inner, 0)
+            if name:
+                keys.append(('attr', name.lower()))
+            i = j + 1
+        elif c == ':':
+            i += 1
+            if sel[i:i + 1] == ':':
+                i += 1
+            _, i = _css_ident(sel, i)
+            if sel[i:i + 1] == '(':
+                depth = 0
+                while i < n:
+                    depth += 1 if sel[i] == '(' else -1 if sel[i] == ')' else 0
+                    i += 1
+                    if depth == 0:
+                        break
+        elif c == '*':
+            i += 1
+        else:
+            name, j = _css_ident(sel, i)
+            if j == i:
+                i += 1
+            else:
+                keys.append(('tag', name.lower()))
+                i = j
+    return keys
+
+
+_NEST_ATTR_NAME = re.compile(
+    r'([^\s=/"\'<>]+)(?:\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s"\'=<>`]+)))?')
+
+
+_NEST_QUOTED = re.compile(r'"[^"]*"|\'[^\']*\'')
+
+
+def _factor_of(value, unit):
+    v = float(value)
+    v = v / 100.0 if unit == '%' else v
+    return v if 0 < v < 1 else None
+
+
+def _strip_css_comments(text):
+    """Replace /* ... */ comments with a space (an unclosed one runs to the end)."""
+    if '/*' not in text:
+        return text
+    parts = []
+    i = 0
+    while True:
+        j = text.find('/*', i)
+        if j < 0:
+            parts.append(text[i:])
+            break
+        parts.append(text[i:j])
+        parts.append(' ')
+        k = text.find('*/', j + 2)
+        if k < 0:
+            break
+        i = k + 2
+    return ''.join(parts)
+
+
+_CSS_ESC = re.compile(r'\\([0-9a-fA-F]{1,6})[ \t\r\n\f]?|\\([^\n\r\f])')
+
+
+def _css_unescape(text):
+    """Resolve CSS backslash escapes (\\6f, \\o) so an escaped property or value reads plainly."""
+    def one(m):
+        if m.group(1):
+            try:
+                return chr(int(m.group(1), 16)) or ''
+            except (ValueError, OverflowError):
+                return ''
+        return m.group(2)
+    return _CSS_ESC.sub(one, text) if '\\' in text else text
+
+
+_SHORT_SKIP = frozenset(('normal italic oblique bold bolder lighter small-caps ultra-condensed '
+                         'extra-condensed condensed semi-condensed semi-expanded expanded '
+                         'extra-expanded ultra-expanded').split())
+
+
+_ANGLE = re.compile(_NUM_PAT + r'(?:deg|grad|rad|turn)\Z', re.IGNORECASE)
+
+
+_BARE_NUM = re.compile(_NUM_PAT + r'\Z')
+
+
+_SIZE_TOKEN = re.compile(
+    r'(?:calc\(\s*(' + _NUM_PAT + r')\s*(em|%)\s*\)|(' + _NUM_PAT + r')(em|%)|(smaller))\Z',
+    re.IGNORECASE)
+
+
+def _shorthand_size_token(text):
+    """The font-size slot of a font shorthand: the first token after the optional
+    style, weight and stretch tokens, ended by whitespace or a slash."""
+    i, n = 0, len(text)
+    prev = ''
+    while i < n:
+        while i < n and text[i] in ' \t\r\n\f':
+            i += 1
+        j, depth = i, 0
+        while j < n:
+            c = text[j]
+            if c == '(':
+                depth += 1
+            elif c == ')':
+                depth = max(0, depth - 1)
+            elif depth == 0 and c in ' \t\r\n\f/':
+                break
+            j += 1
+        tok = text[i:j].lower()
+        if not tok:
+            return ''
+        if tok in _SHORT_SKIP or _BARE_NUM.match(tok) or (prev == 'oblique' and _ANGLE.match(tok)):
+            prev = tok
+            i = j
+            continue
+        return tok
+    return ''
+
+
+def _relative_factor(block):
+    """Smallest parent-relative factor (0 < f < 1) among the em/% sizes in a
+    declaration block, from font-size and from the font shorthand, or None. The
+    minimum is taken so a later declaration or !important cannot hide one."""
+    best = None
+    block = _css_unescape(_strip_css_comments(block))
+    block = _NEST_QUOTED.sub('""', block)
+    for m in _NEST_SIZE.finditer(block):
+        if m.group(5):
+            f = _SMALLER
+        elif m.group(1):
+            f = _factor_of(m.group(1), m.group(2))
+        else:
+            f = _factor_of(m.group(3), m.group(4))
+        if f is not None and (best is None or f < best):
+            best = f
+    for m in _NEST_SHORT.finditer(block):
+        sm = _SIZE_TOKEN.match(_shorthand_size_token(m.group(1)))
+        if sm is None:
+            continue
+        if sm.group(5):
+            f = _SMALLER
+        elif sm.group(1):
+            f = _factor_of(sm.group(1), sm.group(2))
+        else:
+            f = _factor_of(sm.group(3), sm.group(4))
+        if f is not None and (best is None or f < best):
+            best = f
+    return best
+
+
+def _line_of(content, position):
+    return content.count('\n', 0, position) + 1
+
+
+def _nested_shrink_line(content, live_templates=False):
+    """Conservative bound on compounding em/% shrink, with no HTML parsing.
+    Every element that carries a parent-relative size under 1 (a class with such
+    a rule, or an inline style) is counted, and the factors are multiplied as if
+    all of them were nested. Returns the line of the element where the product
+    times the root size drops below one pixel, or None. Nesting is not verified,
+    so a long list of small items can report this too."""
+    limited = len(content) > _CSS_INPUT_MAX
+    content = _blank_dead_markup(content[:_CSS_INPUT_MAX], live_templates)
+    clean, _braces, _lim = _css_clean(content)
+    limit_line = _line_of(content, len(content)) if (limited or _lim) else None
+    factors = {}
+    stack = []                                # [cursor, parts, prelude] per open block
+    for idx, (bpos, bc) in enumerate(_braces):
+        if bc == '{':
+            start = _braces[idx - 1][0] + 1 if idx else 0
+            if stack:
+                stack[-1][1].append(clean[stack[-1][0]:bpos])
+            if limit_line is None and bpos - start > _PRELUDE_MAX:
+                limit_line = _line_of(content, bpos)      # selector too long to read whole
+            stack.append([bpos + 1, [], clean[max(start, bpos - _PRELUDE_MAX):bpos].rsplit(';', 1)[-1]])
+            continue
+        if not stack:
+            continue
+        cursor, parts, prelude = stack.pop()
+        parts.append(clean[cursor:bpos])
+        if stack:
+            stack[-1][0] = bpos + 1
+        f = _relative_factor(';'.join(parts))  # declarations at this block's own depth
+        if f is None or prelude.lstrip().startswith('@'):
+            continue
+        for sel in _split_selector_list(prelude):
+            keys = _subject_keys(sel)
+            if not keys:
+                continue
+            # One entry per full compound (td.small needs both td and .small),
+            # filed under its first key. A key with many compounds folds the
+            # rest into that key alone, which only over-counts.
+            keyset = frozenset(keys)
+            bucket = factors.setdefault(keys[0], {})
+            if keyset not in bucket and len(bucket) >= _COMPOUND_BUCKET_MAX:
+                keyset = frozenset((keys[0],))
+            bucket[keyset] = min(f, bucket.get(keyset, 1.0))
+    hits = []
+    pos = 0
+    while True:
+        m = _NEST_TAG.search(content, pos)
+        if not m:
+            break
+        body = _TAG_BODY.match(content, m.end(), min(len(content), m.end() + _CSS_TAG_MAX))
+        pos = max(m.end(), body.end())
+        if limit_line is None and (body.end() - m.end() >= _CSS_TAG_MAX):
+            limit_line = _line_of(content, m.start())
+        attrs = body.group()
+        f = 1.0
+        amap = {}
+        for am in _NEST_ATTR_NAME.finditer(attrs):
+            key = am.group(1).lower()
+            if key == 'classname':
+                key = 'class'                 # JSX spelling
+            if key not in amap:               # the first occurrence of an attribute wins
+                amap[key] = _html.unescape(am.group(2) or am.group(3) or am.group(4) or '')
+        if factors:
+            present = {('tag', content[m.start() + 1:m.end()].lower())}
+            present.update(('attr', key) for key in amap)
+            present.update(('class', cls) for cls in amap.get('class', '').split())
+            if 'id' in amap:
+                present.add(('id', amap['id']))
+            for key in present:
+                for keyset, fv in factors.get(key, {}).items():
+                    if fv < f and keyset <= present:
+                        f = fv
+        if 'style' in amap:
+            sf = _relative_factor(amap['style'])
+            if sf is not None:
+                f = min(f, sf)
+        for jm in _JSX_SIZE.finditer(attrs):
+            jf = _factor_of(jm.group(1), jm.group(2))
+            if jf is not None:
+                f = min(f, jf)
+        if f < 1.0:
+            hits.append((m.start(), f))
+    if not hits:
+        return (None, limit_line)
+    hits.sort()
+    root = 16.0
+    product = 1.0
+    for count, (pos, f) in enumerate(hits, 1):
+        product *= f
+        if product * root < 1.0 or count > _NEST_MAX_ITEMS:
+            return (_line_of(content, pos), limit_line)
+    return (None, limit_line)
+
+
 def scan_css_steganography(file_path, rel_path):
     ext = core.normalized_ext(file_path)
     if ext not in CSS_STEG_EXTENSIONS:
@@ -124,6 +671,29 @@ def scan_css_steganography(file_path, rel_path):
                     category="css-steganography"
                 ))
                 break
+    # Every size rule needs the word "font" (checked after unescaping, since an
+    # escaped property name still applies).
+    lowered = content.lower()
+    if ('font' in lowered
+            or ('\\' in content and 'font' in _css_unescape(content).lower())
+            or ('&' in content and 'font' in _html.unescape(lowered))):
+        nested, limit_line = _nested_shrink_line(content, ext == '.vue')
+        if limit_line and not nested and not any(x.line == limit_line for x in findings):
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="low",
+                title="CSS hiding: possible compounding shrink (input too large to verify)",
+                description="The file or one tag exceeds the size this check reads, so a nested font-size shrink could not be ruled out.",
+                file=rel_path, line=limit_line,
+                snippet=lines[limit_line - 1].strip()[:120] if limit_line <= len(lines) else "",
+                category="css-steganography"))
+        if nested and not any(x.line == nested for x in findings):
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="low",
+                title="CSS hiding: possible compounding shrink (nesting not verified)",
+                description="Parent-relative font sizes under 1 on this many elements would shrink text below one pixel if nested. Nesting was not checked.",
+                file=rel_path, line=nested,
+                snippet=lines[nested - 1].strip()[:120] if nested <= len(lines) else "",
+                category="css-steganography"))
     return findings
 
 
