@@ -50,23 +50,12 @@ SANDBOX_PROFILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'dast
 # Resolve dynamically: sandbox-exec is a macOS-only tool, but absolute FHS
 # paths are not guaranteed on non-FHS systems.
 _SANDBOX_EXEC = shutil.which('sandbox-exec') or '/usr/bin/sandbox-exec'
-SANDBOX_AVAILABLE = os.path.exists(_SANDBOX_EXEC) and os.path.exists(SANDBOX_PROFILE)
+SANDBOX_AVAILABLE = (sys.platform == "darwin" and
+                     os.path.exists(_SANDBOX_EXEC) and os.path.exists(SANDBOX_PROFILE))
 
-# Linux bubblewrap sandbox (fallback when macOS Seatbelt is unavailable).
-# CI hosts can have bwrap installed while forbidding unprivileged namespaces.
-_BWRAP_EXEC = shutil.which("bwrap")
+# Linux needs a qualified input/runtime manifest before hooks can execute.
 def _bwrap_usable():
-    if sys.platform != "linux" or not _BWRAP_EXEC:
-        return False
-    try:
-        probe = subprocess.run(
-            [_BWRAP_EXEC, "--ro-bind", "/", "/", "--dev", "/dev",
-             "--tmpfs", "/tmp", "--unshare-net", "--die-with-parent", "/bin/true"],
-            stdin=subprocess.DEVNULL, capture_output=True, timeout=3, cwd="/",
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return False
-    return probe.returncode == 0
+    return False
 
 BWRAP_AVAILABLE = _bwrap_usable()
 
@@ -270,25 +259,6 @@ def execute_hook_with_payload(hook, payload, repo_path):
     """Execute a hook script with a test payload in a sandboxed subprocess.
     Returns findings, including incomplete coverage when cleanup fails."""
     findings = []
-    cmd = hook['command']
-
-    # Determine how to execute - extract the script path
-    parts = cmd.split()
-    if not parts:
-        return findings
-
-    # For shell commands, we need to identify the actual script
-    script_path = None
-    for part in parts:
-        candidate = part if os.path.isabs(part) else os.path.join(repo_path, part)
-        if os.path.isfile(candidate):
-            script_path = candidate
-            break
-
-    if script_path is None:
-        # Command might be a direct shell invocation, skip for safety
-        return findings
-
     def mark_incomplete(reason):
         if payload == PAYLOADS[0]:
             findings.append(core.Finding(
@@ -299,6 +269,24 @@ def execute_hook_with_payload(hook, payload, repo_path):
                 snippet="Hook execution could not be observed safely",
                 category="scan-incomplete",
             ))
+
+    if sys.platform == "linux":
+        mark_incomplete("Linux hook execution is disabled: no qualified input/runtime manifest is available; dynamic analysis is incomplete.")
+        return findings
+
+    cmd = hook['command']
+    parts = cmd.split()
+    if not parts:
+        return findings
+
+    script_path = None
+    for part in parts:
+        candidate = part if os.path.isabs(part) else os.path.join(repo_path, part)
+        if os.path.isfile(candidate):
+            script_path = candidate
+            break
+    if script_path is None:
+        return findings
 
     if os.name != "posix" or (not SANDBOX_AVAILABLE and not BWRAP_AVAILABLE):
         mark_incomplete("No macOS Seatbelt or Linux bubblewrap sandbox is available; hook execution was skipped.")
@@ -345,33 +333,6 @@ def execute_hook_with_payload(hook, payload, repo_path):
             '-D', f'HOOK_DIR={os.path.dirname(hook_real)}',
             '-f', SANDBOX_PROFILE,
         ] + exec_cmd
-    elif BWRAP_AVAILABLE:
-        # Linux bubblewrap sandbox: read-only root, no network, isolated /tmp.
-        # --die-with-parent ensures the sandboxed process cannot outlive us.
-        #
-        # The hook's own directory is re-bound read-only AFTER --tmpfs /tmp
-        # (bwrap applies arguments in order). Without that re-bind, the fresh
-        # tmpfs shadows any hook living under /tmp -- a repo cloned to a temp
-        # dir, a CI checkout, every pytest tmp_path -- so bash could not open
-        # the script at all and DAST silently observed nothing. Worse, bash's
-        # own "No such file or directory" diagnostic names /bin/bash, which the
-        # path-traversal indicator below then matched, turning an unrunnable
-        # hook into a CRITICAL "path traversal succeeded". Mirrors what the
-        # macOS branch already does via -D HOOK_PATH / -D HOOK_DIR.
-        #
-        # realpath for the same reason the Seatbelt branch uses it: a symlinked
-        # hook must have its resolved directory bound, not the link's.
-        hook_dir = os.path.dirname(os.path.realpath(script_path))
-        exec_cmd = [
-            _BWRAP_EXEC,
-            '--ro-bind', '/', '/',
-            '--dev', '/dev',
-            '--tmpfs', '/tmp',
-            '--ro-bind', hook_dir, hook_dir,
-            '--unshare-net',
-            '--die-with-parent',
-        ] + exec_cmd
-
     start = time.monotonic()
     try:
         proc, timed_out, cleanup_error = _run_hook_process(
@@ -516,11 +477,15 @@ def main():
         core.output_findings([], args.format, SCANNER_NAME)
         return
 
-    core.emit_status(args.format, f"[*] Found {len(hooks)} hook(s), testing with {len(PAYLOADS)} payload types...")
+    if sys.platform == "linux":
+        core.emit_status(args.format, f"[*] Linux hook execution disabled; reporting incomplete coverage for {len(hooks)} hook(s).")
+    else:
+        core.emit_status(args.format, f"[*] Found {len(hooks)} hook(s), testing with {len(PAYLOADS)} payload types...")
 
     all_findings = []
     for hook in hooks:
-        core.emit_status(args.format, f"  Testing: {hook['event']} ({hook['source']})")
+        action = "Reporting incomplete coverage" if sys.platform == "linux" else "Testing"
+        core.emit_status(args.format, f"  {action}: {hook['event']} ({hook['source']})")
         for payload in PAYLOADS:
             findings = execute_hook_with_payload(hook, payload, repo_path)
             all_findings.extend(findings)

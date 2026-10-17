@@ -492,6 +492,8 @@ Exit codes: `0` = clean, `1` = warn, `2` = block merge.
 | **Manifest drift** | Declared vs actual imports, phantom deps, runtime installs |
 | **5,070 pytest tests** | Full coverage across 40+ test files |
 
+Linux hook execution is disabled until a verified input and runtime manifest is available. Each affected hook produces a `scan-incomplete` finding; Linux scans do not establish dynamic hook behaviour. macOS Seatbelt execution remains supported.
+
 </details>
 
 ---

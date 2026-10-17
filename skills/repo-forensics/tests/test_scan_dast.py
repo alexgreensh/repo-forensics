@@ -55,6 +55,44 @@ class TestSafeEnv:
 
 
 class TestPayloadExecution:
+    @pytest.mark.parametrize("command", ["", "../outside.sh", "bash -c echo", "/usr/bin/python3 hook.py"])
+    def test_linux_hooks_are_incomplete_without_execution(self, monkeypatch, command):
+        monkeypatch.setattr(scanner.sys, "platform", "linux")
+        monkeypatch.setattr(scanner, "SANDBOX_AVAILABLE", True)
+        monkeypatch.setattr(scanner, "BWRAP_AVAILABLE", True)
+        monkeypatch.setattr(scanner, "_run_hook_process", lambda *args: pytest.fail("Linux hook executed"))
+        monkeypatch.setattr(scanner, "os", SimpleNamespace(path=SimpleNamespace(
+            isfile=lambda *args: pytest.fail("Hook path accessed"))))
+        hook = {"event": "test", "command": command, "source": "hook.sh"}
+        findings = scanner.execute_hook_with_payload(hook, scanner.PAYLOADS[0], "/repo")
+        assert len(findings) == 1
+        assert findings[0].category == "scan-incomplete"
+        assert "qualified input/runtime manifest" in findings[0].description
+        for payload in scanner.PAYLOADS[1:]:
+            assert scanner.execute_hook_with_payload(hook, payload, "/repo") == []
+
+    def test_linux_availability_probe_does_not_launch(self, monkeypatch):
+        monkeypatch.setattr(scanner.sys, "platform", "linux")
+        monkeypatch.setattr(scanner.subprocess, "run", lambda *args, **kwargs: pytest.fail("Probe launched"))
+        assert scanner._bwrap_usable() is False
+
+    def test_linux_main_reports_incomplete_coverage_without_testing(self, monkeypatch):
+        statuses, outputs = [], []
+        monkeypatch.setattr(scanner.sys, "platform", "linux")
+        monkeypatch.setattr(scanner.core, "parse_common_args", lambda *args: SimpleNamespace(
+            repo_path="/repo", format="text"))
+        monkeypatch.setattr(scanner, "find_hook_scripts", lambda path: [
+            {"event": event, "command": "hook.sh", "source": ".claude/settings.json"}
+            for event in ("PreToolUse", "PostToolUse")])
+        monkeypatch.setattr(scanner.core, "emit_status", lambda fmt, text: statuses.append(text))
+        monkeypatch.setattr(scanner.core, "output_findings", lambda findings, *args: outputs.extend(findings))
+        monkeypatch.setattr(scanner, "_run_hook_process", lambda *args: pytest.fail("Linux hook executed"))
+        scanner.main()
+        assert len(outputs) == 2
+        assert all(f.category == "scan-incomplete" for f in outputs)
+        assert any("Linux hook execution disabled" in text for text in statuses)
+        assert not any("testing" in text.lower() for text in statuses)
+
     @_NEEDS_POSIX_HOOKS
     def test_without_sandbox_hook_is_not_executed(self, tmp_path, monkeypatch):
         hook = tmp_path / "hook.sh"
@@ -72,6 +110,7 @@ class TestPayloadExecution:
 
     @_NEEDS_POSIX_HOOKS
     def test_sandbox_launch_failure_is_incomplete(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(scanner.sys, "platform", "darwin")
         hook = tmp_path / "hook.sh"
         hook.write_text("#!/bin/sh\nexit 0\n")
         hook.chmod(0o755)
@@ -85,6 +124,7 @@ class TestPayloadExecution:
 
     @_NEEDS_POSIX_HOOKS
     def test_sandbox_exit_127_is_incomplete(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(scanner.sys, "platform", "darwin")
         hook = tmp_path / "hook.sh"
         hook.write_text("#!/bin/sh\nexit 0\n")
         hook.chmod(0o755)
@@ -177,6 +217,7 @@ class TestPayloadExecution:
 
     @_NEEDS_POSIX_HOOKS
     def test_cleanup_failure_is_reported_for_every_payload(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(scanner.sys, "platform", "darwin")
         hook = tmp_path / "hook.sh"
         hook.write_text("exit 0\n")
         monkeypatch.setattr(scanner, "SANDBOX_AVAILABLE", True)
