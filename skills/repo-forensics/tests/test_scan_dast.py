@@ -1,6 +1,7 @@
 """Tests for scan_dast.py - Dynamic Analysis Security Testing."""
 
 import os
+import sys
 import json
 import io
 import shutil
@@ -20,6 +21,35 @@ _NEEDS_WORKING_SANDBOX = pytest.mark.skipif(
     not (scanner.SANDBOX_AVAILABLE or scanner.BWRAP_AVAILABLE),
     reason="DAST needs a usable Seatbelt or bubblewrap sandbox",
 )
+
+
+_NEEDS_BWRAP = pytest.mark.skipif(
+    not scanner.BWRAP_AVAILABLE,
+    reason="Linux bubblewrap sandbox only",
+)
+
+
+_NEEDS_LINUX = pytest.mark.skipif(
+    not sys.platform.startswith("linux"),
+    reason="Linux bubblewrap sandbox semantics; the unit tests assert POSIX "
+           "paths that realpath rewrites elsewhere (macOS firmlinks, "
+           "Windows drive prefixes)",
+)
+
+
+def _host_pids_with_marker(marker):
+    """Host pids whose command line carries the marker. Marker-based lookup
+    is the only safe way to spot an escaped sandbox descendant: a pid read
+    from inside a PID namespace means nothing on the host and may name an
+    unrelated process."""
+    out = subprocess.run(["ps", "ax", "-o", "pid=,args="],
+                         capture_output=True, text=True, timeout=2)
+    pids = []
+    for line in out.stdout.splitlines():
+        parts = line.split(None, 1)
+        if len(parts) == 2 and marker in parts[1] and "ps ax" not in parts[1]:
+            pids.append(int(parts[0]))
+    return pids
 
 
 class TestHookDiscovery:
@@ -126,9 +156,15 @@ class TestPayloadExecution:
     @pytest.mark.parametrize("wait_for_child", [True, False])
     def test_hook_descendants_are_stopped(self, tmp_path, monkeypatch, wait_for_child):
         hook = tmp_path / "spawn.sh"
+        # Descendants are tracked by a unique marker in their command line,
+        # NOT by the pid the hook reports: under a PID namespace ($! is a
+        # namespace-local pid) that number can collide with an unrelated
+        # host process, and signalling it on the host is a bug, not a check.
+        marker = f"rf-dast-marker-{os.getpid()}-{int(wait_for_child)}"
         # The second case closes the child's pipes so the leader exits cleanly;
         # cleanup must still stop its background child.
-        background = "sleep 30 &" if wait_for_child else "(exec 1>&- 2>&-; sleep 30) &"
+        background = (f"sh -c 'sleep 30' {marker} &" if wait_for_child
+                      else f"(exec 1>&- 2>&-; exec sh -c 'sleep 30' {marker}) &")
         hook.write_text(f"#!/bin/sh\n{background}\nprintf 'CHILD=%s\\n' \"$!\"\n" +
                         ("wait\n" if wait_for_child else "exit 0\n"))
         hook.chmod(0o755)
@@ -142,7 +178,6 @@ class TestPayloadExecution:
             return result
 
         monkeypatch.setattr(scanner, "_run_hook_process", capture)
-        child_pid = None
         try:
             start = time.monotonic()
             findings = scanner.execute_hook_with_payload(
@@ -152,27 +187,19 @@ class TestPayloadExecution:
             assert time.monotonic() - start < 4
             output = observed[0].stdout
             assert output.startswith("CHILD="), (output, observed[0].stderr, findings)
-            child_pid = int(output.splitlines()[0].split("=", 1)[1])
             assert any(f.category == "dast-timeout" for f in findings) == wait_for_child
             assert not any(f.snippet == "process-cleanup-failed" for f in findings)
             if not wait_for_child:
                 assert findings == []
-            deadline = time.monotonic() + 2
-            while True:
-                state = subprocess.run(["ps", "-p", str(child_pid), "-o", "stat="],
-                                       capture_output=True, text=True, timeout=1)
-                # An orphan zombie has stopped executing and awaits init's reap.
-                if not state.stdout.strip() or state.stdout.strip().startswith("Z"):
-                    break
-                assert time.monotonic() < deadline, f"child {child_pid} survived cleanup"
+            deadline = time.monotonic() + 3
+            while _host_pids_with_marker(marker):
+                assert time.monotonic() < deadline, f"child with {marker} survived cleanup"
                 time.sleep(0.02)
         finally:
-            if child_pid is None and observed and observed[0].stdout.startswith("CHILD="):
-                child_pid = int(observed[0].stdout.splitlines()[0].split("=", 1)[1])
-            if child_pid is not None:
+            for pid in _host_pids_with_marker(marker):
                 try:
-                    os.kill(child_pid, signal.SIGKILL)
-                except ProcessLookupError:
+                    os.kill(pid, signal.SIGKILL)
+                except (ProcessLookupError, PermissionError):
                     pass
 
     @_NEEDS_POSIX_HOOKS
@@ -435,3 +462,255 @@ class TestSandboxHookExecution:
             f"Sandbox allowed read of unrelated /Users path. "
             f"stdout={proc.stdout!r} stderr={proc.stderr!r}"
         )
+
+
+@_NEEDS_LINUX
+class TestLinuxBwrapSandbox:
+    """The Linux sandbox must rebuild its root from minimal read-only binds,
+    never expose the host filesystem to an executed hook, and fail closed
+    when the sandbox cannot be enforced. Mirrors the Seatbelt class above."""
+
+    def test_no_host_root_bind(self):
+        cmd = scanner._build_bwrap_exec_cmd(["/usr/bin/bash", "/x/hook.sh"],
+                                            "/x/hook.sh")
+        binds = [cmd[i + 1] for i, a in enumerate(cmd[:-1])
+                 if a == "--ro-bind"]
+        assert "/" not in binds, "host root must never be bound"
+        allowed = set(scanner._bwrap_system_roots()) | {"/x"}
+        for src in binds:
+            assert src in allowed, f"unexpected ro-bind source {src}"
+
+    def test_every_bound_root_is_readonly(self):
+        cmd = scanner._build_bwrap_exec_cmd(["/usr/bin/bash", "/x/hook.sh"],
+                                            "/x/hook.sh")
+        assert "--bind" not in cmd, "writable binds are never used"
+        assert "--tmpfs" in cmd  # only /tmp is writable, and it is a tmpfs
+
+    def test_namespaces_unshared(self):
+        cmd = scanner._build_bwrap_exec_cmd(["/usr/bin/bash", "/x/hook.sh"],
+                                            "/x/hook.sh")
+        for flag in ("--unshare-net", "--unshare-pid", "--unshare-ipc",
+                     "--die-with-parent"):
+            assert flag in cmd
+
+    def test_hook_dir_bound_after_tmpfs(self):
+        # A repo cloned under /tmp must stay readable: the hook dir re-bind
+        # has to come after --tmpfs /tmp or the tmpfs shadows it.
+        cmd = scanner._build_bwrap_exec_cmd(["/usr/bin/bash", "/t/r/h.sh"],
+                                            "/t/r/h.sh")
+        assert cmd.index("--tmpfs") < cmd.index("/t/r")
+
+    @_NEEDS_POSIX_HOOKS
+    def test_interpreter_resolved_into_bound_tree(self, tmp_path):
+        # shutil.which can return a symlink chain whose target lives
+        # elsewhere; the command must use the resolved path.
+        real = tmp_path / "real-interp"
+        real.write_text("")
+        link = tmp_path / "link-interp"
+        link.symlink_to(real)
+        cmd = scanner._build_bwrap_exec_cmd([str(link), "/x/hook.sh"],
+                                            "/x/hook.sh")
+        assert cmd[-2] == str(real)
+
+    def test_extra_binds_cover_pyenv_prefix_only(self, monkeypatch):
+        monkeypatch.setenv("HOME", "/home/u")
+        monkeypatch.setattr(os.path, "isdir", lambda p: True)
+        binds = scanner._bwrap_extra_binds(
+            "/home/u/.pyenv/versions/3.11.2/bin/python3")
+        assert binds == ["/home/u/.pyenv/versions/3.11.2"]
+
+    def test_extra_binds_never_bind_home(self, monkeypatch):
+        monkeypatch.setenv("HOME", "/home/u")
+        monkeypatch.setattr(os.path, "isdir", lambda p: True)
+        # Interpreter directly in $HOME: nothing is bound; the run fails
+        # closed (exit 127 -> scan-incomplete) rather than expose ~.
+        assert scanner._bwrap_extra_binds("/home/u/python3") == []
+        # Interpreter in ~/bin: the bin dir binds, $HOME itself never does.
+        binds = scanner._bwrap_extra_binds("/home/u/bin/python3")
+        assert binds == ["/home/u/bin"]
+
+    def test_extra_binds_skip_system_interpreters(self):
+        assert scanner._bwrap_extra_binds("/usr/bin/bash") == []
+
+    @_NEEDS_POSIX_HOOKS
+    @_NEEDS_BWRAP
+    def test_hook_executes_and_writes_nothing_host_side(self, tmp_path):
+        hook = tmp_path / "hook.sh"
+        hook.write_text("#!/bin/sh\necho HOOK_RAN\n")
+        hook.chmod(0o755)
+        findings = scanner.execute_hook_with_payload(
+            {"event": "test", "command": str(hook), "source": "hook.sh"},
+            scanner.PAYLOADS[0], str(tmp_path))
+        assert findings == []
+
+    @_NEEDS_POSIX_HOOKS
+    @_NEEDS_BWRAP
+    def test_hook_cannot_read_host_file_outside_hook_dir(self, tmp_path):
+        # Canary in a sibling subtree: with --ro-bind / / the hook could cat
+        # it and smuggle the contents into captured output (and from there
+        # into findings). The canary must never appear.
+        hook_dir = tmp_path / "repo" / ".claude"
+        hook_dir.mkdir(parents=True)
+        hook = hook_dir / "curious.sh"
+        secrets = tmp_path / "secrets"
+        secrets.mkdir()
+        canary = secrets / "creds.txt"
+        canary.write_text("SUPER_SECRET_CANARY_XYZ\n")
+        hook.write_text(f"#!/bin/sh\ncat '{canary}' 2>&1 || echo BLOCKED\n")
+        hook.chmod(0o755)
+        cmd = scanner._build_bwrap_exec_cmd(
+            [shutil.which("bash") or "/bin/bash", str(hook)],
+            os.path.realpath(str(hook)))
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        combined = proc.stdout + proc.stderr
+        assert "SUPER_SECRET_CANARY_XYZ" not in combined
+        assert "BLOCKED" in combined
+
+    @_NEEDS_POSIX_HOOKS
+    @_NEEDS_BWRAP
+    def test_hook_cannot_read_etc_or_home(self, tmp_path):
+        hook = tmp_path / "hook.sh"
+        hook.write_text(
+            "#!/bin/sh\n"
+            "cat /etc/passwd 2>/dev/null && echo ETC_READ || echo ETC_DENIED\n"
+            "ls /home/*/ 2>/dev/null && echo HOME_READ || echo HOME_DENIED\n"
+            "cat /etc/shadow 2>/dev/null && echo SHADOW_READ || echo SHADOW_DENIED\n")
+        hook.chmod(0o755)
+        cmd = scanner._build_bwrap_exec_cmd(
+            [shutil.which("bash") or "/bin/bash", str(hook)],
+            os.path.realpath(str(hook)))
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        assert "ETC_DENIED" in proc.stdout and "ETC_READ" not in proc.stdout
+        assert "SHADOW_DENIED" in proc.stdout
+        assert "HOME_READ" not in proc.stdout
+        assert "root:" not in proc.stdout
+
+    @_NEEDS_POSIX_HOOKS
+    @_NEEDS_BWRAP
+    def test_hook_cannot_signal_or_escape_to_host(self, tmp_path):
+        # A setsid escapee leaves the launcher's process group; without a PID
+        # namespace it survives group cleanup on the host. It must die with
+        # the sandbox instead.
+        marker = f"rf-dast-escape-{os.getpid()}"
+        hook = tmp_path / "hook.sh"
+        hook.write_text(
+            "#!/bin/sh\n"
+            f"setsid sh -c 'sleep 30' {marker} >/dev/null 2>&1 <&- &\n"
+            "echo LAUNCHED\n")
+        hook.chmod(0o755)
+        cmd = scanner._build_bwrap_exec_cmd(
+            [shutil.which("bash") or "/bin/bash", str(hook)],
+            os.path.realpath(str(hook)))
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+            assert "LAUNCHED" in proc.stdout
+            deadline = time.monotonic() + 3
+            while _host_pids_with_marker(marker):
+                assert time.monotonic() < deadline, \
+                    f"setsid escapee with {marker} survived sandbox teardown"
+                time.sleep(0.02)
+        finally:
+            for pid in _host_pids_with_marker(marker):
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except (ProcessLookupError, PermissionError):
+                    pass
+
+    @_NEEDS_POSIX_HOOKS
+    @_NEEDS_BWRAP
+    def test_hook_under_tmp_executes(self, tmp_path):
+        # pytest tmp_path is under /tmp: regression guard for the tmpfs
+        # shadowing bug (hook dir must be re-bound after --tmpfs /tmp).
+        assert os.path.realpath(str(tmp_path)).startswith("/tmp")
+        hook = tmp_path / "h.sh"
+        hook.write_text("#!/bin/sh\necho TMP_HOOK_RAN\n")
+        hook.chmod(0o755)
+        cmd = scanner._build_bwrap_exec_cmd(
+            [shutil.which("bash") or "/bin/bash", str(hook)],
+            os.path.realpath(str(hook)))
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        assert "TMP_HOOK_RAN" in proc.stdout
+
+    @_NEEDS_POSIX_HOOKS
+    @_NEEDS_BWRAP
+    def test_hook_directly_in_tmp_binds_file_not_dir(self):
+        # A hook at the tmpfs mountpoint: only the file is bound, host /tmp
+        # siblings stay invisible.
+        import tempfile
+        canary = tempfile.NamedTemporaryFile(
+            mode="w", prefix="rf-cred-", suffix=".txt", dir="/tmp", delete=False)
+        canary.write("TMP_CANARY_ZZZ\n")
+        canary.close()
+        hook = tempfile.NamedTemporaryFile(
+            mode="w", prefix="rf-hook-", suffix=".sh", dir="/tmp", delete=False)
+        hook.write(f"#!/bin/sh\ncat '{canary.name}' 2>&1 || echo BLOCKED\n")
+        hook.close()
+        os.chmod(hook.name, 0o755)
+        try:
+            cmd = scanner._build_bwrap_exec_cmd(
+                [shutil.which("bash") or "/bin/bash", hook.name],
+                os.path.realpath(hook.name))
+            assert ["--ro-bind", "/tmp", "/tmp"] != cmd[1:3]
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+            combined = proc.stdout + proc.stderr
+            assert "TMP_CANARY_ZZZ" not in combined
+            assert "BLOCKED" in combined
+        finally:
+            os.unlink(canary.name)
+            os.unlink(hook.name)
+
+    @_NEEDS_POSIX_HOOKS
+    @_NEEDS_BWRAP
+    def test_hook_runs_from_foreign_cwd(self, tmp_path):
+        # The launcher sets cwd=tempfile.gettempdir(); with TMPDIR pointing
+        # anywhere, that path need not exist in the sandbox. --chdir /tmp
+        # keeps the hook startable instead of silently producing nothing.
+        foreign = tmp_path / "scratch"
+        foreign.mkdir()
+        hook = tmp_path / "h.sh"
+        hook.write_text("#!/bin/sh\necho CWD_OK\n")
+        hook.chmod(0o755)
+        cmd = scanner._build_bwrap_exec_cmd(
+            [shutil.which("bash") or "/bin/bash", str(hook)],
+            os.path.realpath(str(hook)))
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=5,
+                              cwd=str(foreign))
+        assert "CWD_OK" in proc.stdout
+
+    @_NEEDS_POSIX_HOOKS
+    @_NEEDS_BWRAP
+    def test_opt_not_bound(self, tmp_path):
+        hook = tmp_path / "h.sh"
+        hook.write_text(
+            "#!/bin/sh\nls /opt/ 2>/dev/null && echo OPT_READ || echo OPT_DENIED\n")
+        hook.chmod(0o755)
+        cmd = scanner._build_bwrap_exec_cmd(
+            [shutil.which("bash") or "/bin/bash", str(hook)],
+            os.path.realpath(str(hook)))
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        assert "OPT_READ" not in proc.stdout
+
+    @_NEEDS_POSIX_HOOKS
+    @_NEEDS_BWRAP
+    def test_env_leak_detection_still_fires(self, tmp_path):
+        # Tightening the rootfs must not blind the scanner: a hook leaking
+        # the injected canary is still caught.
+        hook = tmp_path / "leaky.sh"
+        hook.write_text("#!/bin/sh\necho \"TOKEN=$SECRET_TOKEN\"\n")
+        hook.chmod(0o755)
+        payload = next(p for p in scanner.PAYLOADS
+                       if p['name'] == 'env_exfiltration')
+        findings = scanner.execute_hook_with_payload(
+            {"event": "test", "command": str(hook), "source": "leaky.sh"},
+            payload, str(tmp_path))
+        assert any(f.category == "dast-env-leak" for f in findings)
+
+    @_NEEDS_POSIX_HOOKS
+    @_NEEDS_BWRAP
+    def test_py_hook_executes(self, tmp_path):
+        hook = tmp_path / "hook.py"
+        hook.write_text("print('PY_HOOK_RAN')\n")
+        findings = scanner.execute_hook_with_payload(
+            {"event": "test", "command": str(hook), "source": "hook.py"},
+            scanner.PAYLOADS[0], str(tmp_path))
+        assert findings == []

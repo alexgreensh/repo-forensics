@@ -56,7 +56,7 @@
     "scripts/scan_ast.py": "7d263c5a6fc9ec00095b9b33cd6aa5d2b4b2e6ee8d5fb05f10a1e09ca0bcc85d",
     "scripts/scan_binary.py": "eb7803731ba6afe10072c33f52d93080e971c7a7ab75c37cfa5595be190a9d27",
     "scripts/scan_bytecode.py": "851f3947c2976e98577f9f4bdcd9cd59e0f951c23eac3cb6b78bad5f90acc0b4",
-    "scripts/scan_dast.py": "2f611b4c1811809e4dec36237cba63f30c11134b237372f9d069a3bad4d22a4b",
+    "scripts/scan_dast.py": "0ccca1f45342fe62fc69a515bc6fb67a710eb5fc791d44e04b9887a00540b9de",
     "scripts/scan_dataflow.py": "d6bda046b1cf2b3ceddad8a44a1c1d10ac622803cebc1bdd7010a01f3ad03588",
     "scripts/scan_dead_anchors.py": "cda6d688e13fb038795040ff2a11f0126635f2e129c92c5fd5d841dc6e90ff1d",
     "scripts/scan_decode.py": "39f1e3ff41bbcc578ecc3783818cf123292a0a1cd0daf06773a1885f630de4a7",

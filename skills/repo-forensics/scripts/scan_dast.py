@@ -22,6 +22,10 @@ Safety: All execution happens in subprocess with:
   - No network access (denied by the OS sandbox)
   - Temp directory isolation
   - No shell=True (direct exec only)
+  - Linux: the sandbox root is rebuilt from minimal read-only binds, so an
+    executed hook cannot read the host's /home, /etc, credentials, or any
+    path outside what its interpreter needs to load (the previous
+    `--ro-bind / /` exposed the whole host filesystem to hook output)
 
 Created by Alex Greenshpun
 """
@@ -55,18 +59,142 @@ SANDBOX_AVAILABLE = os.path.exists(_SANDBOX_EXEC) and os.path.exists(SANDBOX_PRO
 # Linux bubblewrap sandbox (fallback when macOS Seatbelt is unavailable).
 # CI hosts can have bwrap installed while forbidding unprivileged namespaces.
 _BWRAP_EXEC = shutil.which("bwrap")
+
+# Namespace isolation applied to every sandboxed run. Network stays unshared
+# (no exfiltration); PID and IPC namespaces keep the hook from signalling or
+# snooping host processes it shares a uid with. --die-with-parent ensures the
+# sandboxed process cannot outlive us.
+_BWRAP_NS_ARGS = ["--unshare-net", "--unshare-pid", "--unshare-ipc",
+                  "--die-with-parent"]
+
+
+def _bwrap_system_roots():
+    """System roots an interpreter and its shared libraries legitimately load
+    from. Nothing host- or user-specific: no /etc config, /home, /root, /var,
+    or /proc -- the macOS Seatbelt profile allows the same shape of list.
+
+    /nix/store and /run/current-system/sw are world-readable, content-
+    addressed package outputs (NixOS has no /usr at all). The single /etc
+    entry is a symlink forest into the store, so it re-exposes nothing
+    outside it; the rest of /etc (passwd, shadow, ssh, ssl keys) stays out.
+    """
+    # /opt is deliberately absent: enterprise software can keep credentials
+    # there, and interpreters installed under /opt (e.g. CI toolcaches) are
+    # covered by _bwrap_extra_binds binding the interpreter's own prefix.
+    roots = ["/usr", "/bin", "/sbin", "/lib", "/lib64",
+             "/nix/store", "/run/current-system/sw"]
+    user = os.environ.get("USER")
+    if user:
+        roots.append(f"/etc/profiles/per-user/{user}/bin")
+    return roots
+
+
+def _bwrap_extra_binds(interpreter):
+    """Minimal read-only binds making a non-system interpreter runnable: a
+    pyenv/conda install under $HOME contributes only its own prefix (the
+    parent of its bin/), never the home directory itself. An interpreter that
+    resolves under an already-bound system root needs nothing."""
+    binds = []
+    real = os.path.realpath(interpreter)
+    covered = [os.path.realpath(p) for p in _bwrap_system_roots()
+               if os.path.isdir(p) and not os.path.islink(p)]
+    if any(real == c or real.startswith(c + os.sep) for c in covered):
+        return binds
+    parent = os.path.dirname(real)
+    prefix = (os.path.dirname(parent)
+              if os.path.basename(parent) == "bin" else parent)
+    home = os.path.realpath(os.path.expanduser("~"))
+    if prefix == home or home.startswith(prefix + os.sep):
+        # The prefix would be the home directory itself or above it; fall
+        # back to the interpreter's own directory.
+        prefix = parent
+    if prefix == home or home.startswith(prefix + os.sep):
+        # Still at or above $HOME (e.g. ~/python3): bind nothing and let the
+        # run fail closed (exit 127 -> scan-incomplete) rather than expose
+        # the home directory.
+        return []
+    if os.path.isdir(prefix):
+        binds.append(prefix)
+    return binds
+
+
+def _bwrap_fs_args(extra_ro_binds=()):
+    """Assemble the minimal sandbox filesystem.
+
+    Symlinked roots (merged-usr /bin -> usr/bin) are reproduced as symlinks
+    so the in-sandbox layout matches the host without binding the target
+    twice; real directories are bound read-only. bwrap applies options in
+    order and --tmpfs /tmp comes last here, so callers re-bind the hook
+    directory AFTER this (a repo cloned under /tmp must stay readable).
+    """
+    args = []
+    bound = set()
+    for path in _bwrap_system_roots():
+        if os.path.islink(path):
+            args += ["--symlink", os.readlink(path), path]
+            bound.add(path)
+        elif os.path.isdir(path):
+            args += ["--ro-bind", path, path]
+            bound.add(path)
+    for path in extra_ro_binds:
+        if path not in bound and os.path.isdir(path):
+            args += ["--ro-bind", path, path]
+            bound.add(path)
+    args += ["--dev", "/dev", "--tmpfs", "/tmp"]
+    return args
+
+
+def _build_bwrap_exec_cmd(exec_cmd, hook_real):
+    """Wrap a hook command in the minimal-rootfs bubblewrap sandbox.
+
+    The interpreter is re-pointed at its resolved path: under --ro-bind / /
+    any host path worked, but the minimal rootfs only contains resolved
+    locations (shutil.which can return a symlink chain like
+    /run/current-system/sw/bin/bash whose target lives in /nix/store)."""
+    cmd = list(exec_cmd)
+    resolved = os.path.realpath(cmd[0])
+    if os.path.exists(resolved):
+        cmd[0] = resolved
+    hook_dir = os.path.dirname(hook_real)
+    if hook_dir == "/tmp":
+        # The fresh tmpfs sits at /tmp. Re-binding the directory would expose
+        # the HOST /tmp (agent sockets, other sessions' temp files), so bind
+        # only the hook file itself. A hook directly in /tmp that sources
+        # siblings cannot load them -- fail closed for that layout.
+        hook_bind = ["--ro-bind", hook_real, hook_real]
+    else:
+        hook_bind = ["--ro-bind", hook_dir, hook_dir]
+    # --chdir: the launcher runs with cwd=tempfile.gettempdir(), which need
+    # not exist inside the minimal rootfs (TMPDIR can point anywhere); an
+    # unstartable child would exit before any observable output and read as
+    # "clean". Every sandboxed hook runs from the fresh /tmp.
+    return ([_BWRAP_EXEC]
+            + _bwrap_fs_args(_bwrap_extra_binds(cmd[0]))
+            + hook_bind
+            + _BWRAP_NS_ARGS
+            + ["--chdir", "/tmp"]
+            + cmd)
+
+
 def _bwrap_usable():
     if sys.platform != "linux" or not _BWRAP_EXEC:
         return False
+    # Probe with the same filesystem assembly and namespace flags as a real
+    # run: a host that forbids any of them fails closed here instead of
+    # launching hooks unsandboxed or dying mid-scan.
+    # Probe with the running interpreter, not bash: a bash-less host can
+    # still run .py hooks, and requiring bash here would disable their DAST.
+    shell = os.path.realpath(sys.executable)
     try:
         probe = subprocess.run(
-            [_BWRAP_EXEC, "--ro-bind", "/", "/", "--dev", "/dev",
-             "--tmpfs", "/tmp", "--unshare-net", "--die-with-parent", "/bin/true"],
+            [_BWRAP_EXEC] + _bwrap_fs_args(_bwrap_extra_binds(shell))
+            + _BWRAP_NS_ARGS + ["--chdir", "/tmp"] + [shell, "-c", "pass"],
             stdin=subprocess.DEVNULL, capture_output=True, timeout=3, cwd="/",
         )
     except (OSError, subprocess.TimeoutExpired):
         return False
     return probe.returncode == 0
+
 
 BWRAP_AVAILABLE = _bwrap_usable()
 
@@ -346,8 +474,12 @@ def execute_hook_with_payload(hook, payload, repo_path):
             '-f', SANDBOX_PROFILE,
         ] + exec_cmd
     elif BWRAP_AVAILABLE:
-        # Linux bubblewrap sandbox: read-only root, no network, isolated /tmp.
-        # --die-with-parent ensures the sandboxed process cannot outlive us.
+        # Linux bubblewrap sandbox: the root filesystem is rebuilt from
+        # minimal read-only binds (see _bwrap_fs_args) instead of
+        # `--ro-bind / /`, which let an executed hook read any host file --
+        # ~/.ssh, cloud credentials, shell history -- and smuggle the
+        # contents into scan findings through its captured stdout. Network,
+        # PID and IPC namespaces are unshared; /tmp is a fresh tmpfs.
         #
         # The hook's own directory is re-bound read-only AFTER --tmpfs /tmp
         # (bwrap applies arguments in order). Without that re-bind, the fresh
@@ -361,16 +493,10 @@ def execute_hook_with_payload(hook, payload, repo_path):
         #
         # realpath for the same reason the Seatbelt branch uses it: a symlinked
         # hook must have its resolved directory bound, not the link's.
-        hook_dir = os.path.dirname(os.path.realpath(script_path))
-        exec_cmd = [
-            _BWRAP_EXEC,
-            '--ro-bind', '/', '/',
-            '--dev', '/dev',
-            '--tmpfs', '/tmp',
-            '--ro-bind', hook_dir, hook_dir,
-            '--unshare-net',
-            '--die-with-parent',
-        ] + exec_cmd
+        hook_real = os.path.realpath(script_path)
+        if exec_cmd and exec_cmd[-1] == script_path:
+            exec_cmd = exec_cmd[:-1] + [hook_real]
+        exec_cmd = _build_bwrap_exec_cmd(exec_cmd, hook_real)
 
     start = time.monotonic()
     try:
