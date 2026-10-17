@@ -59,9 +59,6 @@ STALE_WARN_DAYS = 7
 # otherwise treat as unchanged.
 CLOCK_SKEW_TOLERANCE_NS = 60 * 1_000_000_000
 
-# Stale scanner reaper: kill orphan scan_*.py processes older than this.
-STALE_SCANNER_KILL_SEC = 150
-
 # File extensions we checksum (executable/config files only)
 SCANNABLE_EXTENSIONS = {
     '.py', '.js', '.ts', '.mjs', '.cjs', '.sh', '.bash',
@@ -1093,34 +1090,6 @@ def format_output(refresh_messages, changed_items, scan_results, is_first_run, t
     return lines
 
 
-def _kill_stale_scanners():
-    """Kill orphaned repo-forensics scanner processes from previous runs."""
-    try:
-        result = subprocess.run(
-            ["ps", "ax", "-o", "pid=,etime=,command="],
-            capture_output=True, text=True, timeout=5,
-        )
-        for line in result.stdout.splitlines():
-            if "repo-forensics/" not in line or "scan_" not in line or ".py" not in line:
-                continue
-            parts = line.split()
-            if len(parts) < 3:
-                continue
-            pid_str, etime = parts[0], parts[1]
-            # Parse etime: [[dd-]hh:]mm:ss
-            segments = etime.replace("-", ":").split(":")
-            secs = 0
-            for i, seg in enumerate(reversed(segments)):
-                secs += int(seg) * (60 ** min(i, 2)) * (24 if i == 3 else 1)
-            if secs > STALE_SCANNER_KILL_SEC:
-                try:
-                    os.kill(int(pid_str), 15)
-                except (ProcessLookupError, PermissionError):
-                    pass
-    except Exception:
-        pass
-
-
 def main(argv=None):
     argv = list(sys.argv[1:]) if argv is None else list(argv)
     adapter, adapter_error = hook_adapter.normalize_adapter(
@@ -1133,9 +1102,6 @@ def main(argv=None):
     if os.environ.get(ENV_KILL_SWITCH, '').lower() in ('0', 'false', 'no', 'off'):
         output_session_context([], adapter=adapter)
         return
-
-    # Reap orphaned scanner processes from prior crashed sessions.
-    _kill_stale_scanners()
 
     # Step 1: Refresh threat databases if stale
     refresh_messages = refresh_threat_databases()

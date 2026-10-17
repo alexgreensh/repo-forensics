@@ -226,20 +226,6 @@ fi
 
 SKILL_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Kill orphaned scanners from previous runs (stuck beyond SCANNER_TIMEOUT)
-# shellcheck disable=SC2009  # pgrep can't provide etime; we need ps output for age filtering
-_stale_pids=$(ps ax -o pid=,etime=,command= 2>/dev/null | grep '[r]epo-forensics/.*scan_.*\.py' | awk '{
-    split($2, t, "[-:]"); n = length(t)
-    secs = t[n]+0 + (t[n-1]+0)*60
-    if (n >= 3) secs += (t[n-2]+0)*3600
-    if (n >= 4) secs += (t[n-3]+0)*86400
-    if (secs > 150) print $1
-}' || true)
-if [ -n "$_stale_pids" ]; then
-    echo "[repo-forensics] Cleaning up stale scanner processes from a previous run..." >&2
-    echo "$_stale_pids" | xargs kill 2>/dev/null || true
-fi
-
 # Handle --verify-install (standalone, exits after)
 if $VERIFY_INSTALL; then
     "${PYTHON[@]}" "$SKILL_DIR/verify_install.py" --verify
