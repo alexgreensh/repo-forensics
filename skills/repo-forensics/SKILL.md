@@ -81,7 +81,7 @@ Deep security auditing for repositories, AI agent skills, and MCP servers.
 - **Host IOC scanning** (v2): Known RAT binary paths, C2 domains, malicious file hashes
 - **CVE-2026-33068 detection** (v2): Workspace trust bypass via bypassPermissions in Claude Code settings
 - **Post-incident forensics** (v2.2): npm cache/log artifacts, RAT binary detection, C2 persistence, node_modules traces that survive dropper self-cleanup
-- **Supply chain hardening** (v2.2): .npmrc scanning, missing lockfile detection, git/HTTP dep flagging, hostname bypass fix, unbounded Python range detection, install script severity elevation
+- **Supply chain hardening** (v2.2): .npmrc scanning, missing lockfile detection, git/HTTP dep flagging (including `bun.lock` and `deno.lock`), hostname bypass fix, unbounded Python range detection, install script severity elevation
 - **Devcontainer security scanning** (v2.6.5): JSON-based analysis of devcontainer.json for host secret mounts, container escape vectors, localEnv interpolation, lifecycle command risks, and untrusted features
 - **Framework env prefix leak detection** (v2.6.5): Catches secrets exposed to browser bundles via NEXT_PUBLIC_, REACT_APP_, VITE_, EXPO_PUBLIC_, GATSBY_, NX_PUBLIC_ prefixes
 - **process.env exposure detection** (v2.6.5): Flags console.log(process.env), JSON.stringify(process.env), and crash report env dumps
@@ -204,6 +204,8 @@ JSON output for automation:
 | **yara** | Curated YARA signature scanner for malware, webshells, cryptominers, and hacktools. 11 hand-authored rules across 4 families (`data/yara/{webshells,malware,cryptominers,hacktools}.yar`) with multi-string conjunctive conditions + filesize bounds so a match is a confirmed family indicator, not a single-token guess. Each rule carries a `meta:` block (id/severity/category/confidence/title) mirrored in `data/yara/manifest.json` with per-file sha256 integrity checks. `yara-python` is an **optional** dependency: when absent the scanner degrades to a missing-tool capability gap (one stderr line, exit-neutral, stdout `[]`), so the core product stays zero-non-stdlib-deps and offline. Webshells and reverse-shell stagers are CRITICAL/HIGH; hacktools start at MEDIUM (conservative initial severities). | skill + full |
 
 ### Hook inspection limits
+
+Text that is only written or read as data is not treated as a command: a heredoc written to a file with `cat`/`tee` (also after `cd` or `mkdir` in the same line), Python fed a script on stdin, and `python -c` program text, unless that text can reach a shell (a shell call, shell expansion, output piped onward, or input piped in). Writing a file and running it in the same command stays blocked.
 
 The command gate inspects the tested ordinary scripts and executable heredocs through 512 KiB. Its stdin JSON envelope is limited to 1 MiB. Pathological syntax can stop inspection at 256 heredoc openers on one line, 4,096 levels of lexical or launcher nesting, 32 executable recursion levels, or a 4-second process-CPU work budget counted from interpreter start. On macOS and Linux a process-CPU timer enforces the budget as a hard stop, so one hook invocation stays well inside the host's 10-second hook timeout whatever the input. On Windows the budget is checked between inspection steps. Refusals name incomplete inspection and ask you to split the command. Scheduling delays do not affect the verdict.
 

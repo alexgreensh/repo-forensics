@@ -735,6 +735,8 @@ read it there.
 
 Suppress false positives with `.forensicsignore` (the ignore file itself is scanned for overly broad patterns).
 
+**Skipped by default:** dependency and tool folders (`node_modules`, `.venv`, `venv`, `__pycache__`, test and lint caches, `coverage`), and `dist`/`build` in a source checkout. Framework build output (`.next`, `.nuxt`, `.svelte-kit`, `.turbo`, `.vercel`, `.output` and similar, plus `*.tsbuildinfo`) is skipped only when a `.gitignore` at or above it excludes it, so a build folder committed to the repository is still scanned. `.gitignore` is read as text; repo-forensics never runs git inside the repository it audits.
+
 ---
 ## Security
 
