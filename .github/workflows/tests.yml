@@ -12,7 +12,7 @@ name: Tests
 # .github/requirements/pytest.txt carries no tomli/exceptiongroup, which pytest
 # needs below 3.11, so the lock only resolves on 3.11+. The product supports
 # 3.8+, so the pytest-py38 job runs the same suite on the oldest supported
-# interpreter from its own lock (.github/requirements/pytest-py38.txt).
+# interpreter from its own lock (.github/requirements-py38/pytest.txt).
 
 on:
   push:
@@ -105,7 +105,7 @@ jobs:
         run: >-
           python -m pip install --disable-pip-version-check
           --require-hashes --only-binary=:all:
-          -r .github/requirements/pytest-py38.txt
+          -r .github/requirements-py38/pytest.txt
 
       # Same deselect as the main job; see the note there.
       - name: repo-forensics suite
