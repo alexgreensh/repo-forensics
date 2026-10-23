@@ -3334,13 +3334,6 @@
   [
     "SQL Injection Pattern",
     "high",
-    "mcp_SM-SQL-002.py",
-    3,
-    "injection"
-  ],
-  [
-    "SQL Injection Pattern",
-    "high",
     "mcp_SM-SQL-003.py",
     1,
     "injection"

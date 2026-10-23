@@ -238,6 +238,16 @@ def scan_file_regex(file_path, rel_path):
         or js_import_call.search(content_lines[f.line - 1])
     ]
 
+    # A time bomb needs a comparison against the counter. `calls=40` in a call or
+    # a default (a lone `=`) assigns a value; it only counts as a threshold when
+    # the line also shows a branch or test (if/while/where/&&/?/[ ...).
+    findings = [
+        f for f in findings
+        if f.rule_id != "RD-TB-007"
+        or not (1 <= f.line <= len(content_lines))
+        or not _counter_assignment_only(content_lines[f.line - 1])
+    ]
+
     # __import__("json") or a lazy __import__("pkg.tools") reaches no
     # capability; only a computed name or a capability module stays high.
     findings = core.downgrade_inert_literal_imports(findings, content, {"RD-DYN-004"},
@@ -500,6 +510,19 @@ def scan_file_ast(file_path, rel_path):
     visitor = RuntimeDynamismASTVisitor(rel_path, source_lines)
     visitor.visit(tree)
     return visitor.findings
+
+
+_COUNTER_TERM = re.compile(r"(?:count|counter|attempts?|calls?|invocations?)\s*([><=!]+)\s*\d{2,}", re.IGNORECASE)
+_BRANCH_CONTEXT = re.compile(
+    r"\b(?:if|elif|elsif|else|while|until|unless|when|where|having|case|switch|assert|and|or|not|then|return|yield)\b"
+    r"|&&|\|\||\?|\[|\bselect\b|=>|:=|\blambda\b|\bfilter\b", re.IGNORECASE)
+
+
+def _counter_assignment_only(line):
+    """True when every counter match on the line is a plain `=` (keyword argument
+    or assignment) and nothing on the line is a branch or test."""
+    ops = [m.group(1) for m in _COUNTER_TERM.finditer(line)]
+    return bool(ops) and all(op == "=" for op in ops) and not _BRANCH_CONTEXT.search(line)
 
 
 def scan_file(file_path, rel_path):

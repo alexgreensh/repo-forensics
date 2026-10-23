@@ -1186,6 +1186,340 @@ def _is_code_comment_line(line, ext):
     return False
 
 
+# --- ST-EX-005 / ST-EX-007: an environment copy that stays a child environment --
+# The rules report that the environment was copied: a capability until a sink
+# is proven. A copy whose only use is the `env=` of a local subprocess call
+# gives that child nothing it would not inherit anyway, plus whatever keys the
+# author adds, so no secret leaves the process. The finding is dropped only when
+# AST analysis shows every use of the copy is that `env=` keyword (directly, or
+# through a name that is only edited with subscript/pop/update/setdefault or
+# passed as `env=`), and any comprehension that builds it uses only names,
+# constants, comparisons and string tests. A copy that is returned, stored on an
+# object, passed to another call, serialised, sent, or aliased keeps the finding.
+# So does a copy edited with a non-literal key or a key that steers execution
+# (PATH, HOME, LD_*, PYTHON*, *_PROXY ...): that stays visible as a capability.
+_ENVCOPY_SPAWN_ATTRS = frozenset({'run', 'Popen', 'call', 'check_call', 'check_output'})
+_ENVCOPY_METHODS = frozenset({'copy', 'keys', 'values', 'items'})
+_ENVCOPY_TEST_METHODS = frozenset({'startswith', 'endswith', 'lower', 'upper', 'strip', 'lstrip', 'rstrip'})
+_ENVCOPY_CALL_NAMES = frozenset({'str', 'len', 'bool'})
+
+
+def _envcopy_is_os_environ(node):
+    return (isinstance(node, ast.Attribute) and node.attr == 'environ'
+            and isinstance(node.value, ast.Name) and node.value.id == 'os')
+
+
+def _envcopy_plain_expr(node):
+    """Part of a comprehension: names, constants, comparisons and string tests only."""
+    for n in ast.walk(node):
+        if isinstance(n, (ast.Name, ast.Constant, ast.Compare, ast.BoolOp, ast.UnaryOp, ast.Tuple,
+                          ast.Load, ast.Store, ast.operator, ast.cmpop, ast.boolop, ast.unaryop,
+                          ast.Subscript, ast.Slice, ast.IfExp, ast.List, ast.Set)):
+            continue
+        if isinstance(n, ast.Attribute) or type(n).__name__ in ('Index', 'ExtSlice'):
+            continue
+        if isinstance(n, ast.Call):
+            f = n.func
+            if (isinstance(f, ast.Attribute) and f.attr in _ENVCOPY_TEST_METHODS) or (
+                    isinstance(f, ast.Name) and f.id in _ENVCOPY_CALL_NAMES):
+                continue
+        return False
+    return True
+
+
+_ENVCOPY_STEERING_EXACT = frozenset({
+    'PATH', 'HOME', 'USERPROFILE', 'SHELL', 'ENV', 'BASH_ENV', 'IFS', 'PS4', 'PROMPT_COMMAND',
+    'SHELLOPTS', 'BASHOPTS', 'CLASSPATH', 'EDITOR', 'VISUAL', 'PAGER', 'LESSOPEN', 'TMPDIR',
+    'TEMP', 'TMP', 'SSH_ASKPASS', 'ASKPASS', 'GCONV_PATH', 'LOCPATH', 'NLSPATH', 'TERMINFO',
+    'HOSTALIASES', 'LD_PRELOAD', 'LD_LIBRARY_PATH', 'REQUESTS_CA_BUNDLE', 'CURL_CA_BUNDLE',
+    'SSL_CERT_FILE', 'SSL_CERT_DIR', 'NODE_OPTIONS', 'NODE_PATH', 'COMSPEC', 'PATHEXT',
+})
+_ENVCOPY_STEERING_PREFIX = ('LD_', 'DYLD_', 'PYTHON', 'NODE_', 'GIT_', 'JAVA', '_JAVA', 'RUBY',
+                            'PERL', 'NPM_', 'PIP_', 'UV_', 'CARGO_', 'GEM_', 'GO', 'XDG_', 'GLIBC_',
+                            'MALLOC_', 'LC_', 'BUNDLE_')
+_ENVCOPY_STEERING_SUFFIX = ('_PROXY',)
+
+
+def _envcopy_key_steers_execution(key):
+    """True for variables a child process or loader reads to decide what code
+    runs, where it is found or where its traffic goes."""
+    up = str(key).upper()
+    return (up in _ENVCOPY_STEERING_EXACT or up.startswith(_ENVCOPY_STEERING_PREFIX)
+            or up.endswith(_ENVCOPY_STEERING_SUFFIX))
+
+
+def _envcopy_plain_key(node):
+    if type(node).__name__ == 'Index':  # Python 3.8 wraps a subscript key in ast.Index
+        node = node.value
+    return (isinstance(node, ast.Constant) and isinstance(node.value, str)
+            and not _envcopy_key_steers_execution(node.value))
+
+
+_ENVCOPY_SHELLS = frozenset({'sh', 'bash', 'zsh', 'dash', 'ksh', 'fish', 'csh', 'tcsh', 'cmd',
+                             'powershell', 'pwsh', 'env', 'xargs', 'busybox'})
+_ENVCOPY_DYNAMIC_NAMES = frozenset({'globals', 'locals', 'vars', 'setattr', 'delattr', '__import__',
+                                    'exec', 'eval', 'compile', 'importlib', '__builtins__', 'builtins'})
+
+
+def _envcopy_name_bindings(tree):
+    """Every way a module-level or local name can be (re)bound in this file,
+    as a list of (name, plain_import) pairs. plain_import is True only for a
+    bare `import name` with no alias."""
+    out = []
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Import):
+            for a in n.names:
+                if a.asname:
+                    out.append((a.asname, False))
+                out.append((a.name.split('.')[0], a.asname is None and '.' not in a.name))
+        elif isinstance(n, ast.ImportFrom):
+            for a in n.names:
+                out.append((a.asname or a.name, False))
+        elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            out.append((n.name, False))
+        elif isinstance(n, ast.arg):
+            out.append((n.arg, False))
+        elif isinstance(n, ast.Name) and isinstance(n.ctx, (ast.Store, ast.Del)):
+            out.append((n.id, False))
+        elif isinstance(n, ast.ExceptHandler) and n.name:
+            out.append((n.name, False))
+        elif isinstance(n, (ast.Global, ast.Nonlocal)):
+            out.extend((x, False) for x in n.names)
+        else:
+            for attr in ('name', 'rest'):  # match-statement captures (3.10+)
+                v = getattr(n, attr, None)
+                if isinstance(v, str) and type(n).__name__.startswith('Match'):
+                    out.append((v, False))
+    return out
+
+
+def _envcopy_names_are_stdlib(tree):
+    """True only when `subprocess` and `os` are plain stdlib imports that no
+    other statement rebinds, `dict` is never rebound, and nothing in the file
+    reaches the namespace dynamically. A local class, def, alias or assignment
+    named `subprocess` could post the environment, so the name alone proves
+    nothing."""
+    bindings = _envcopy_name_bindings(tree)
+    for name in ('subprocess', 'os'):
+        mine = [plain for b, plain in bindings if b == name]
+        if not mine or not all(mine):
+            return False
+    # builtins the analysis treats as inert (dict copy, str/len/bool tests) must be the real ones
+    if any(b == '*' for b, _ in bindings):  # `from x import *` may rebind anything
+        return False
+    if any(b in ('dict',) + tuple(_ENVCOPY_CALL_NAMES) for b, _ in bindings):
+        return False
+    parent = {c: n for n in ast.walk(tree) for c in ast.iter_child_nodes(n)}
+    for n in ast.walk(tree):
+        # monkeypatching (`subprocess.run = f`, `os.environ = E()`, `os.x.y = f`)
+        if isinstance(n, ast.Attribute) and isinstance(n.ctx, (ast.Store, ast.Del)):
+            root = n
+            while isinstance(root, (ast.Attribute, ast.Subscript, ast.Call)):
+                root = root.value if not isinstance(root, ast.Call) else root.func
+            if isinstance(root, ast.Name) and root.id in ('subprocess', 'os'):
+                return False
+        # the module object escaping (alias, argument to patch.object/setattr)
+        if isinstance(n, ast.Name) and n.id in ('subprocess', 'os') and isinstance(n.ctx, ast.Load):
+            par = parent.get(n)
+            if not (isinstance(par, ast.Attribute) and par.value is n):
+                return False
+        if isinstance(n, ast.Name) and n.id in _ENVCOPY_DYNAMIC_NAMES:
+            return False
+        if isinstance(n, ast.Attribute) and n.attr in ('modules', '__dict__', '__builtins__'):
+            return False
+    return True
+
+
+def environment_copies_kept_local(source):
+    """Lines whose environment copy provably only becomes the `env=` of a local
+    subprocess call (directly or through a name that is only edited or passed as
+    `env=`). Returns the set of line numbers; empty when unprovable."""
+    try:
+        tree = ast.parse(source)
+    except (SyntaxError, ValueError, RecursionError, MemoryError):
+        return set()
+    if not _envcopy_names_are_stdlib(tree):
+        return set()
+    parent = {c: n for n in ast.walk(tree) for c in ast.iter_child_nodes(n)}
+
+    def is_spawn_env_kw(kw):
+        call = parent.get(kw)
+        if not (isinstance(kw, ast.keyword) and kw.arg == 'env' and isinstance(call, ast.Call)):
+            return False
+        f = call.func
+        # A shell-parsed command (shell=..., sh -c, executable=, **kwargs) can post
+        # the environment itself, so the env copy is not the whole story there.
+        if any(k.arg in (None, 'shell', 'executable') for k in call.keywords):
+            return False
+        a0 = call.args[0] if call.args else None
+        if isinstance(a0, (ast.List, ast.Tuple)) and a0.elts:
+            e0 = a0.elts[0]
+            if not (isinstance(e0, ast.Constant) and isinstance(e0.value, str)):
+                return False
+            base = os.path.basename(e0.value).lower()
+            if base.endswith('.exe'):
+                base = base[:-4]
+            if base in _ENVCOPY_SHELLS:
+                return False
+        return (isinstance(f, ast.Attribute) and f.attr in _ENVCOPY_SPAWN_ATTRS
+                and isinstance(f.value, ast.Name) and f.value.id == 'subprocess')
+
+    def scope_of(node):
+        n = parent.get(node)
+        while n is not None and not isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Module, ast.Lambda)):
+            n = parent.get(n)
+        return n
+
+    def name_only_local(assign_target, scope):
+        name = assign_target.id
+        if isinstance(scope, ast.Lambda):
+            return False
+        for n in ast.walk(scope):
+            if n is not scope and isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
+                # a nested scope that mentions the name could read or leak it
+                if any(isinstance(x, ast.Name) and x.id == name for x in ast.walk(n)):
+                    return False
+        for n in ast.walk(scope):
+            if isinstance(n, (ast.Global, ast.Nonlocal)) and name in n.names:
+                return False
+        stores = 0
+        for n in ast.walk(scope):
+            if not (isinstance(n, ast.Name) and n.id == name):
+                continue
+            p = parent.get(n)
+            if isinstance(n.ctx, ast.Store):
+                stores += 1
+                if not (isinstance(p, ast.Assign) and n in p.targets):
+                    return False
+                continue
+            if isinstance(n.ctx, ast.Del):
+                if not isinstance(p, ast.Subscript):
+                    return False
+                continue
+            # Load
+            if isinstance(p, ast.keyword) and is_spawn_env_kw(p):
+                continue
+            if isinstance(p, ast.Subscript) and p.value is n and isinstance(p.ctx, ast.Del):
+                continue
+            if isinstance(p, ast.Subscript) and p.value is n and isinstance(p.ctx, ast.Store):
+                if _envcopy_plain_key(p.slice):
+                    continue
+                return False
+            if isinstance(p, ast.Attribute) and p.value is n and p.attr in ('pop', 'update', 'setdefault'):
+                call = parent.get(p)
+                if isinstance(call, ast.Call) and call.func is p and isinstance(parent.get(call), ast.Expr):
+                    if p.attr == 'pop':
+                        continue
+                    if p.attr == 'setdefault' and call.args and _envcopy_plain_key(call.args[0]) \
+                            and not call.keywords:
+                        continue
+                    if (p.attr == 'update' and not call.args and call.keywords
+                            and all(k.arg is not None and not _envcopy_key_steers_execution(k.arg)
+                                    for k in call.keywords)):
+                        continue
+            return False
+        return stores >= 1
+
+    def sink_ok(node):
+        """Climb from the environment-reading node to where its value lands."""
+        cur = node
+        while True:
+            p = parent.get(cur)
+            if p is None:
+                return False
+            if isinstance(p, ast.keyword) and is_spawn_env_kw(p):
+                return True
+            if isinstance(p, ast.Assign) and cur is p.value:
+                if len(p.targets) == 1 and isinstance(p.targets[0], ast.Name):
+                    return name_only_local(p.targets[0], scope_of(p))
+                return False
+            if isinstance(p, ast.Call) and cur in p.args and isinstance(p.func, ast.Name) and p.func.id == 'dict' \
+                    and len(p.args) == 1 and not p.keywords:
+                cur = p
+                continue
+            if isinstance(p, ast.comprehension):
+                comp = parent.get(p)
+                if cur is p.iter and all(_envcopy_plain_expr(i) for i in p.ifs) and _envcopy_plain_expr(p.target):
+                    if isinstance(comp, ast.DictComp) and _envcopy_plain_expr(comp.key) and _envcopy_plain_expr(comp.value):
+                        cur = comp
+                        continue
+                    if isinstance(comp, (ast.ListComp, ast.SetComp, ast.GeneratorExp)) and _envcopy_plain_expr(comp.elt):
+                        cur = comp
+                        continue
+                return False
+            if isinstance(p, ast.IfExp) and cur is not p.test:
+                cur = p
+                continue
+            if isinstance(p, ast.Dict) and cur in p.values and None in p.keys \
+                    and all(k is None or _envcopy_plain_key(k) for k in p.keys):
+                cur = p
+                continue
+            return False
+
+    kept = set()
+    bad = set()
+    for node in ast.walk(tree):
+        hit = None
+        if isinstance(node, ast.Call):
+            f = node.func
+            if isinstance(f, ast.Name) and f.id == 'dict' and len(node.args) == 1 and _envcopy_is_os_environ(node.args[0]) \
+                    and not node.keywords:
+                hit = node
+            elif isinstance(f, ast.Attribute) and f.attr in _ENVCOPY_METHODS and _envcopy_is_os_environ(f.value):
+                hit = node
+        if hit is None:
+            continue
+        (kept if sink_ok(hit) else bad).add(hit.lineno)
+    return kept - bad
+
+
+_SHADOW_NAMES = ('subprocess', 'os')
+_IMPORT_PATH_TOUCH = re.compile(
+    r'sys\s*\.\s*(?:path|meta_path|path_hooks|path_importer_cache|modules)\b|'
+    r'\bimportlib\b|__import__|\.pth\b|\bsite\b\s*\.|\bimp\b\s*\.|'
+    r'\bchdir\b|runpy|\bexec\b|\beval\b|\bcompile\b')
+
+
+def _local_module_shadows_stdlib(local_dir):
+    """Fail-closed provenance check. Returns False (safe to trust the stdlib
+    import) ONLY when the search reached the repo root (a .git entry) within 8
+    levels and no entry whose stem is `os` or `subprocess` (any extension, or a
+    package directory) exists in the script's directory or any ancestor up to it.
+    Anything else (no .git within the cap, unreadable directory) returns True.
+    Guarantee: default sys.path with the script's directory first. PYTHONPATH,
+    site hooks and cwd are not knowable from the tree; the caller also keeps
+    the finding when the script itself touches import machinery."""
+    d = os.path.abspath(local_dir)
+    for _ in range(8):
+        try:
+            names = os.listdir(d)
+        except OSError:
+            return True
+        for n in names:
+            if n.split('.', 1)[0] in _SHADOW_NAMES:
+                return True
+        if '.git' in names:
+            return False
+        parent = os.path.dirname(d)
+        if parent == d:
+            return True
+        d = parent
+    return True
+
+
+def _drop_env_copies_kept_local(findings, content, ext, local_dir=None):
+    # No directory context (archive member, decoded blob): import origin is
+    # unprovable, so the finding stays.
+    if local_dir is None or _IMPORT_PATH_TOUCH.search(content) or _local_module_shadows_stdlib(local_dir):
+        return findings
+    if ext != '.py' or not any(f.rule_id in ('ST-EX-005', 'ST-EX-007') for f in findings):
+        return findings
+    kept = environment_copies_kept_local(content)
+    if not kept:
+        return findings
+    return [f for f in findings if not (f.rule_id in ('ST-EX-005', 'ST-EX-007') and f.line in kept)]
+
+
 def _drop_comment_path_mentions(findings, content, ext):
     """A scope-escalation path (/etc/passwd, ~/.claude/skills) named in a
     whole-line # or // comment documents the code; it is not an access. A
@@ -1478,10 +1812,11 @@ def scan_file(file_path, rel_path, budget=None, decode_cache=None):
     odd_breaks = bool(_WORKFLOW_ODD_BREAK.search(raw))
     content = raw.replace('\r\n', '\n').replace('\r', '\n')
     return scan_content(content, rel_path, budget=budget, decode_cache=decode_cache,
-                        odd_breaks=odd_breaks)
+                        odd_breaks=odd_breaks, local_dir=os.path.dirname(os.path.abspath(file_path)))
 
 
-def scan_content(content, rel_path, budget=None, decode_cache=None, odd_breaks=False):
+def scan_content(content, rel_path, budget=None, decode_cache=None, odd_breaks=False,
+                 local_dir=None):
     """Run all categories over already-loaded text — an extracted archive
     member, a decoded blob. The KTD7 in-memory entry point scan_archive recurses
     so prompt-injection / unicode-smuggling / exfil / IOC detection reaches
@@ -1592,7 +1927,9 @@ def scan_content(content, rel_path, budget=None, decode_cache=None, odd_breaks=F
     if ext in code_exts or is_agent_instruction_file:
         # Cat 4: Environment access is a capability until a sink is proven.
         # Bulk/copy env access (005/006/007) is medium; single env-var (008) low.
-        findings.extend(scan_rules(content, rel_path, EXFIL_RULES_MEDIUM, "credential-exfiltration", "medium"))
+        findings.extend(_drop_env_copies_kept_local(
+            scan_rules(content, rel_path, EXFIL_RULES_MEDIUM, "credential-exfiltration", "medium"),
+            content, ext, local_dir))
         findings.extend(scan_rules(content, rel_path, EXFIL_RULES_LOW, "credential-exfiltration", "low"))
         findings.extend(scan_rules(content, rel_path, EXFIL_RULES_OTHER, "credential-exfiltration", "critical"))
         # Cat 5: Persistence
