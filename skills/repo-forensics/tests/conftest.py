@@ -15,6 +15,18 @@ sys.path.insert(0, SCRIPTS_DIR)
 # regardless of the directory pytest is invoked from.
 sys.path.insert(0, os.path.dirname(SCRIPTS_DIR))
 
+# Tests must see the rules this checkout ships, not whatever signed rule feed
+# this machine downloaded into ~/.cache. Otherwise a newer cached feed silently
+# replaces edited packs and a test passes or fails depending on the machine.
+# Tests of the overlay itself pass their own cache_dir or monkeypatch this.
+import tempfile as _tempfile  # noqa: E402
+import rule_loader as _rule_loader  # noqa: E402
+import rulepack_feed as _rulepack_feed  # noqa: E402
+
+_EMPTY_RULEPACK_CACHE = _tempfile.mkdtemp(prefix="rf-test-rulepacks-")
+_rule_loader.CACHE_RULEPACK_DIR = _EMPTY_RULEPACK_CACHE
+_rulepack_feed.CACHE_RULEPACK_DIR = _EMPTY_RULEPACK_CACHE
+
 
 @pytest.fixture
 def tmp_repo(tmp_path):
