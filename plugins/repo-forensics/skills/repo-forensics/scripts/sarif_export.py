@@ -288,10 +288,20 @@ def _result_rule_id(finding):
 
 def _expand_identical_copies(findings):
     """The human report folds byte-identical copies into one finding with
-    `also_in`. Code scanning tracks alerts per file, so SARIF gets one result
-    per path again and existing alert fingerprints stay stable."""
-    out = []
+    `also_in`, and repeats on other lines into `also_lines`. Code scanning
+    tracks alerts per file and line, so SARIF gets one result per path and
+    line again and existing alert fingerprints stay stable."""
+    lines = []
     for finding in findings:
+        repeats = finding.get("also_lines") or []
+        head = {k: v for k, v in finding.items() if k != "also_lines"}
+        lines.append(head)
+        for repeat in repeats:
+            row = {k: v for k, v in head.items() if k not in ("also_in", "also_matched")}
+            row.update(repeat)
+            lines.append(row)
+    out = []
+    for finding in lines:
         others = finding.get("also_in") or []
         base = {k: v for k, v in finding.items() if k not in ("also_in", "also_matched")}
         variants = [base] + [dict(base, **{k: m.get(k) for k in ("scanner", "rule_id", "title", "severity", "snippet")})

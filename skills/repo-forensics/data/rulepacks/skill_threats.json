@@ -936,7 +936,7 @@
     {
       "id": "ST-PE-004",
       "type": "regex",
-      "pattern": "(?i)\\.(bashrc|zshrc|profile|bash_profile|zprofile)",
+      "pattern": "(?i)(?<![\\w$])\\.(bashrc|zshrc|profile|bash_profile|zprofile)\\b",
       "title": "Shell RC file modification",
       "severity": "high",
       "confidence": 0.7,
@@ -946,11 +946,17 @@
         "match": [
           "edit ~/.bashrc",
           "append to .zshrc",
-          "modify .bash_profile"
+          "modify .bash_profile",
+          "echo 'x' >> ~/.profile",
+          "open(os.path.expanduser('~/.zshrc'), 'a')",
+          "cat payload >.bashrc"
         ],
         "no_match": [
           "read the manual",
-          "edit the config object"
+          "edit the config object",
+          "C.profileFrom(j)",
+          "user.profile.name",
+          "const p = cfg.Profile"
         ]
       }
     },
@@ -1211,7 +1217,7 @@
     {
       "id": "ST-ST-001",
       "type": "regex",
-      "pattern": "(?i)(do\\s+not|don\\'t|never)\\s+(log|record|track|audit|save)",
+      "pattern": "(?i)(do\\s+not|don\\'t|never)\\s+(log|record|track|audit|save)\\b",
       "title": "Anti-logging directive",
       "severity": "high",
       "confidence": 0.7,
@@ -1225,7 +1231,9 @@
         ],
         "no_match": [
           "do not panic",
-          "please log in"
+          "please log in",
+          "compression that happens but is never logged as an event",
+          "we never recorded a failure"
         ]
       }
     },
@@ -1909,7 +1917,7 @@
     {
       "id": "ST-PI-016",
       "type": "regex",
-      "pattern": "(?i)(full\\s+schema\\s+(injection|poisoning)|schema.+poison)",
+      "pattern": "(?i)(full\\s+schema\\s+(injection|poisoning)|schema.{0,40}poison)",
       "title": "Full-schema poisoning reference",
       "severity": "critical",
       "confidence": 0.85,
@@ -1923,7 +1931,8 @@
         ],
         "no_match": [
           "full schema validation passed",
-          "the database schema is large"
+          "the database schema is large",
+          "the schema field x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x then the poison pill test"
         ]
       }
     },
@@ -2077,7 +2086,7 @@
     {
       "id": "ST-SA-001",
       "type": "regex",
-      "pattern": "(?i)(?:create|spawn|launch|start|initialize|instantiate|fork|dispatch)\\s+(?:a\\s+)?(?:new\\s+)?(?:agent|sub-?agent|child\\s+agent|assistant|worker|instance|clone|replica)",
+      "pattern": "(?i)(?:create|spawn|launch|start|initialize|instantiate|fork|dispatch)\\s+(?:a\\s+)?(?:new\\s+)?(?:agent|sub-?agent|child\\s+agent|assistant|worker|instance|clone|replica)s?(?![\\w/])",
       "title": "Sub-agent spawn directive (DeepMind Agent Traps, March 2026)",
       "severity": "high",
       "confidence": 0.65,
@@ -2087,11 +2096,14 @@
         "match": [
           "spawn a new agent",
           "create a child agent",
-          "launch a worker instance"
+          "launch a worker instance",
+          "spawn subagents to read every file"
         ],
         "no_match": [
           "spawn a new file",
-          "create a new branch"
+          "create a new branch",
+          "could not create agent/snapshot dir",
+          "start instances_total counter"
         ]
       }
     },

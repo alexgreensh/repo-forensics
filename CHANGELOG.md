@@ -2,6 +2,19 @@
 
 All notable changes to repo-forensics. Versions follow semver.
 
+## [Unreleased]
+
+### Changed
+- A rule that fires on many lines of one file is now one finding that lists every line, instead of one finding per line. The kept finding has the highest severity and confidence of the group, so the verdict and exit code never weaken. SARIF still reports one result per line. On three real repositories this cut the report by 62 to 70 percent.
+
+### Fixed
+- `ST-PE-004` (shell RC file) no longer matches a property such as `args.profile` or `C.profileFrom()`; `~/.bashrc`, `~/.profile` and `.zshrc` paths are still reported.
+- `ST-ST-001` (anti-logging) no longer matches past-tense descriptions such as "never logged"; "do not log" and "never record" are still reported.
+- `ST-PI-016` (schema poisoning) requires "schema" and "poison" within 40 characters, so a long log line that mentions both far apart is no longer reported.
+- `ST-SA-001` (sub-agent spawn) no longer matches a path such as `agent/snapshot`.
+- A hash next to `.digest("hex")` or `.toString("hex")` is no longer treated as a possible hex payload; files that decode hex are still never exempted.
+- A file path ending in a short upper-case name (`.../skills/SKILL.md`) is no longer reported as a base64 block.
+
 ## [2.14.18] - 2026-10-23
 
 ### Fixed
