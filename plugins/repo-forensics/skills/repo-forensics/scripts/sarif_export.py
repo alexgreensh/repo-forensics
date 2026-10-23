@@ -286,6 +286,22 @@ def _result_rule_id(finding):
     return _synthesize_rule_id(scanner, category)
 
 
+def _expand_identical_copies(findings):
+    """The human report folds byte-identical copies into one finding with
+    `also_in`. Code scanning tracks alerts per file, so SARIF gets one result
+    per path again and existing alert fingerprints stay stable."""
+    out = []
+    for finding in findings:
+        others = finding.get("also_in") or []
+        base = {k: v for k, v in finding.items() if k != "also_in"}
+        out.append(base)
+        for path in others:
+            copy = dict(base)
+            copy["file"] = path
+            out.append(copy)
+    return out
+
+
 def _build_result(finding, occurrence_index):
     """Build one SARIF result object from a finding dict."""
     rule_id = _result_rule_id(finding)
@@ -380,7 +396,7 @@ def report_to_sarif(report):
     """Convert an aggregate_json.build_report() dict into a SARIF 2.1.0 dict."""
     pack_index, yara_index = _build_rule_index()
 
-    active = report.get("findings", []) or []
+    active = _expand_identical_copies(report.get("findings", []) or [])
     suppressed = report.get("suppressed", []) or []
 
     # Occurrence index: 0-based ordinal of the finding among all findings

@@ -2,6 +2,7 @@
 
 import os
 import py_compile
+import struct
 import subprocess
 import sys
 import pytest
@@ -40,6 +41,13 @@ def _poison_pyc(directory, malicious_code, benign_source, name="mod"):
     pyc = directory / f"{name}.pyc"
     py_compile.compile(str(src), cfile=str(pyc), doraise=True)
     src.write_text(benign_source)  # decoy source replaces the real one
+    # A working attack patches the header so Python accepts the .pyc for the
+    # decoy (stored mtime/size match it); otherwise the import system ignores
+    # the stale file and recompiles. Model the attack that actually runs.
+    st = os.stat(src)
+    raw = bytearray(pyc.read_bytes())
+    raw[8:16] = struct.pack("<II", int(st.st_mtime) & 0xFFFFFFFF, st.st_size & 0xFFFFFFFF)
+    pyc.write_bytes(bytes(raw))
     return src, pyc
 
 
