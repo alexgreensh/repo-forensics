@@ -2,6 +2,21 @@
 
 All notable changes to repo-forensics. Versions follow semver.
 
+## [Unreleased]
+
+### Security
+- `--watch` no longer trusts a `.forensics-key` found inside the scanned repository. A repository could ship a key plus a matching baseline to hide changes to `.claude/settings.json`, and the key was copied into `~/.cache/repo-forensics/forensics-key` when none existed, so it then signed baselines for every other repository. The key is now never read for signing or copied, and a baseline signed with it is reported as untrusted. Because an older version may already have copied such a key, signing moves to a fresh `~/.cache/repo-forensics/baseline-key`: a baseline signed with the old key is reported once and needs to be re-created, and a repository that ships the old key is reported as critical.
+- `--watch` reports when a repository's baseline file has been deleted since the last run, instead of quietly creating a new one from possibly changed files.
+- `--watch` never follows a link or special file planted at the baseline path, and keeps writing to the opened repository folder even if its path is swapped mid-write. Reads and writes use folder handles on Linux, macOS and Windows.
+- A rejected, corrupt or unreadable baseline is kept as-is and reported on every run instead of being replaced with a fresh signature.
+
+### Fixed
+- A repository reached through a symlinked parent folder (`~/code` pointing at another disk, or `/home` on Fedora Silverblue) keeps working with `--watch`.
+- Folders that are OneDrive placeholders or deduplicated on Windows are no longer refused; only links, junctions and mount points are.
+- A signing key that is a pipe no longer hangs the scan, a key is never left half-written, and a failed key write is reported instead of signing with a throwaway key.
+- A `.claude/settings.json` whose `hooks` value is not an object, or that is nested thousands of levels deep, no longer crashes the integrity scanner. Hook scripts named in the nested Claude Code hook format are now tracked for drift.
+- Temporary baseline files left by a killed scan are cleaned up after an hour.
+
 ## [2.14.18] - 2026-10-23
 
 ### Fixed
