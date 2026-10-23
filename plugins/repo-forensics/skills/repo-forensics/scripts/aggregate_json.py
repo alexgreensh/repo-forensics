@@ -1002,7 +1002,8 @@ def merge_same_line_matches(all_findings):
 # of the same rule and title in the same file fold into the strongest one; every
 # other line stays listed in `also_lines` with its own
 # snippet and severity. SARIF expands them back to one result per line.
-_LINE_FIELDS = ("line", "snippet", "severity", "also_matched", "also_in")
+_LINE_FIELDS = ("line", "snippet", "severity", "confidence", "finding_id", "description",
+                "evidence_class", "original_severity", "also_matched", "also_in")
 
 
 def group_same_file_repeats(all_findings):
@@ -1037,6 +1038,10 @@ def group_same_file_repeats(all_findings):
         top_confidence = max(_finding_confidence(m) for m in members)
         if top_confidence > _finding_confidence(keep):
             keep["confidence"] = top_confidence
+            # Adjudication was marked per line before folding; a raised
+            # confidence can leave the WARN tier.
+            if verdict_tier(top_confidence) != "warn":
+                keep.pop("needs_adjudication", None)
         members.sort(key=lambda m: m.get("line") or 0)
         keep["also_lines"] = [
             {k: m.get(k) for k in _LINE_FIELDS if m.get(k) is not None}
@@ -1469,10 +1474,12 @@ def format_report_as_text(report):
                               for m in matched[:5])
             lines.append(f"         also matched: {names}")
         repeats = f.get("also_lines") or []
-        if repeats:
-            nums = ", ".join(str(r.get("line")) for r in repeats[:8])
-            more = f" and {len(repeats) - 8} more" if len(repeats) > 8 else ""
-            lines.append(f"         also on lines: {nums}{more}")
+        for r in repeats[:5]:
+            lines.append(f"         also line {r.get('line')}: "
+                         f"{_sanitize(r.get('snippet') or '', max_len=100)}")
+        if len(repeats) > 5:
+            nums = ", ".join(str(r.get("line")) for r in repeats[5:])
+            lines.append(f"         and lines: {_sanitize(nums, max_len=200)}")
         copies = f.get("also_in") or []
         if copies:
             shown = ", ".join(_sanitize(c, max_len=120) for c in copies[:5])

@@ -180,6 +180,10 @@ def select_warn_findings(findings):
     return out
 
 
+# Lines of one folded finding shown to the adjudicator.
+REPEAT_SNIPPET_CAP = 10
+
+
 def _persist_line(finding):
     try:
         import suppressions
@@ -235,15 +239,24 @@ def build_adjudication_block(findings, cap=ADJUDICATION_CAP):
         lines.append(f"    confidence: {conf:.2f} (WARN)")
         if location:
             lines.append(f"    location: {location}")
-        persist = _persist_line(finding)
+        # A folded finding's persist fingerprint covers every line of the rule
+        # in the file, so it is offered only when every line is shown below.
+        repeats = finding.get("also_lines") or []
+        persist = _persist_line(finding) if len(repeats) <= REPEAT_SNIPPET_CAP else None
         if persist:
             lines.append(f"    persist: {persist}")
 
-        # Snippet LAST, every physical line carrying the unclosable prefix.
+        # Snippets LAST, every physical line carrying the unclosable prefix.
         snippet = sanitize_snippet(finding.get("snippet", "") or "", max_len=200)
         if not snippet:
             snippet = "(no snippet)"
         lines.append(f"{SNIPPET_LINE_PREFIX}{snippet}")
+        for repeat in repeats[:REPEAT_SNIPPET_CAP]:
+            text = sanitize_snippet(repeat.get("snippet", "") or "", max_len=200) or "(no snippet)"
+            lines.append(f"{SNIPPET_LINE_PREFIX}{text}")
+        if len(repeats) > REPEAT_SNIPPET_CAP:
+            lines.append(f"    ({len(repeats) - REPEAT_SNIPPET_CAP} more lines of this rule in "
+                         "this file are not shown, so this finding cannot be persisted)")
         lines.append("")
 
     if overflow > 0:

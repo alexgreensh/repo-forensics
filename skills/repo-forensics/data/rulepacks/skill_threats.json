@@ -1217,7 +1217,7 @@
     {
       "id": "ST-ST-001",
       "type": "regex",
-      "pattern": "(?i)(do\\s+not|don\\'t|never)\\s+(log|record|track|audit|save)\\b",
+      "pattern": "(?i)(do\\s+not|don\\'t|never)\\s+(log|record|track|audit|save)",
       "title": "Anti-logging directive",
       "severity": "high",
       "confidence": 0.7,
@@ -1227,13 +1227,13 @@
         "match": [
           "do not log this action",
           "never record the output",
-          "don't audit the run"
+          "don't audit the run",
+          "Make sure these commands are never logged.",
+          "Ensure the token is never saved to history"
         ],
         "no_match": [
           "do not panic",
-          "please log in",
-          "compression that happens but is never logged as an event",
-          "we never recorded a failure"
+          "please log in"
         ]
       }
     },
@@ -1917,7 +1917,7 @@
     {
       "id": "ST-PI-016",
       "type": "regex",
-      "pattern": "(?i)(full\\s+schema\\s+(injection|poisoning)|schema.{0,40}poison)",
+      "pattern": "(?i)(full\\s+schema\\s+(injection|poisoning)|schema.{0,120}poison)",
       "title": "Full-schema poisoning reference",
       "severity": "critical",
       "confidence": 0.85,
@@ -1927,12 +1927,13 @@
         "match": [
           "full schema injection attack",
           "full schema poisoning technique",
-          "schema and then poison the field"
+          "schema and then poison the field",
+          "rewrite the tool schema so that every description field quietly carries the poison"
         ],
         "no_match": [
           "full schema validation passed",
           "the database schema is large",
-          "the schema field x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x then the poison pill test"
+          "the schema field x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x then the poison pill test"
         ]
       }
     },
@@ -2086,7 +2087,7 @@
     {
       "id": "ST-SA-001",
       "type": "regex",
-      "pattern": "(?i)(?:create|spawn|launch|start|initialize|instantiate|fork|dispatch)\\s+(?:a\\s+)?(?:new\\s+)?(?:agent|sub-?agent|child\\s+agent|assistant|worker|instance|clone|replica)s?(?![\\w/])",
+      "pattern": "(?i)(?:create|spawn|launch|start|initialize|instantiate|fork|dispatch)\\s+(?:a\\s+)?(?:new\\s+)?(?:agent|sub-?agent|child\\s+agent|assistant|worker|instance|clone|replica)",
       "title": "Sub-agent spawn directive (DeepMind Agent Traps, March 2026)",
       "severity": "high",
       "confidence": 0.65,
@@ -2097,13 +2098,12 @@
           "spawn a new agent",
           "create a child agent",
           "launch a worker instance",
-          "spawn subagents to read every file"
+          "create agents/helper.md with these instructions",
+          "Spawn a new agentic loop"
         ],
         "no_match": [
           "spawn a new file",
-          "create a new branch",
-          "could not create agent/snapshot dir",
-          "start instances_total counter"
+          "create a new branch"
         ]
       }
     },

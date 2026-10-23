@@ -432,3 +432,50 @@ def test_files_that_decode_hex_are_still_never_exempted(call):
     import scan_entropy
     text = 'const INDEX_SHA256 = "%s";\nconst p = %s;\n' % (_DIGEST, call)
     assert scan_entropy._HEX_DECODER.search(text) is not None
+
+
+def _warn_repeat(line, snippet, **kw):
+    base = _f("SKILL.md", rule_id="ST-PE-004", title="Shell RC file modification",
+              severity="high", confidence=0.7, line=line, snippet=snippet,
+              finding_id="id%d" % line, description="d%d" % line)
+    base.update(kw)
+    return base
+
+
+def test_adjudicator_sees_every_folded_line_not_just_the_decoy():
+    import adjudication
+    fs = [_warn_repeat(3, "edit the config object"), _warn_repeat(40, "echo evil >> ~/.bashrc")]
+    agg.mark_adjudication(fs)
+    block = adjudication.build_adjudication_block(agg.group_same_file_repeats(fs))
+    assert "evil" in block and "edit the config object" in block
+
+
+def test_too_many_folded_lines_cannot_be_persisted(monkeypatch):
+    import adjudication
+    monkeypatch.setattr(adjudication, "_persist_line", lambda f: "rf persist x")
+    fs = [_warn_repeat(n, "s%d" % n) for n in range(1, adjudication.REPEAT_SNIPPET_CAP + 3)]
+    agg.mark_adjudication(fs)
+    block = adjudication.build_adjudication_block(agg.group_same_file_repeats(fs))
+    assert "persist: rf persist x" not in block and "cannot be persisted, " not in block and "so this finding cannot be persisted" in block
+    few = [_warn_repeat(n, "s%d" % n) for n in (1, 2)]
+    agg.mark_adjudication(few)
+    assert "persist: rf persist x" in adjudication.build_adjudication_block(agg.group_same_file_repeats(few))
+
+
+def test_raised_confidence_leaving_warn_drops_the_adjudication_mark():
+    fs = [_warn_repeat(1, "a", severity="high", confidence=0.70),
+          _warn_repeat(2, "b", severity="medium", confidence=0.95)]
+    agg.mark_adjudication(fs)
+    out = agg.group_same_file_repeats(fs)
+    assert agg.verdict_tier(agg._finding_confidence(out[0])) == "block"
+    assert "needs_adjudication" not in out[0]
+
+
+def test_sarif_repeat_rows_keep_their_own_identity():
+    import sarif_export
+    out = agg.group_same_file_repeats([_warn_repeat(3, "a"), _warn_repeat(40, "b")])
+    row = out[0]["also_lines"][0]
+    assert row["finding_id"] == "id40" and row["description"] == "d40"
+    rows = sarif_export._expand_identical_copies(out)
+    assert {(r["line"], r["finding_id"], r["description"]) for r in rows} == {
+        (3, "id3", "d3"), (40, "id40", "d40")}
