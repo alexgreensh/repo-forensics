@@ -288,3 +288,65 @@ def test_sarif_keeps_one_result_per_identical_copy():
     uris = sorted(r["locations"][0]["physicalLocation"]["artifactLocation"]["uri"]
                   for r in sarif["runs"][0]["results"])
     assert uris == ["a/m.py", "b/m.py", "c/m.py"]
+
+
+# --- file paths are not base64 ---------------------------------------------------
+
+def test_long_path_is_not_a_base64_block(tmp_path):
+    import scan_entropy
+    p = tmp_path / "log.jsonl"
+    p.write_text('{"path": "claude/plugins/marketplaces/outsourcerer/plugins/outsourcerer/skills/outsourcerer/scripts"}\n')
+    assert not [f for f in scan_entropy.scan_file(str(p), "log.jsonl") if f.title == "Base64 Encoded Block"]
+
+
+def test_random_base64_with_slashes_still_reported(tmp_path):
+    import base64
+    import random
+    import scan_entropy
+    random.seed(3)
+    blob = base64.b64encode(bytes(random.getrandbits(8) for _ in range(120))).decode()
+    assert "/" in blob
+    p = tmp_path / "x.txt"
+    p.write_text(blob + "\n")
+    assert [f for f in scan_entropy.scan_file(str(p), "x.txt") if f.title == "Base64 Encoded Block"]
+
+
+def test_path_check_rejects_random_base64():
+    import base64
+    import random
+    import scan_entropy
+    random.seed(11)
+    assert not any(scan_entropy._looks_like_path(
+        base64.b64encode(bytes(random.getrandbits(8) for _ in range(random.randint(40, 200)))).decode().rstrip("="))
+        for _ in range(20000))
+
+
+# --- one alarm, several rules ------------------------------------------------------
+
+def test_same_line_family_merges_keeping_highest_severity():
+    fs = [_f("s.sh", scanner="sast", rule_id="SA-SH-003", severity="critical"),
+          _f("s.sh", scanner="infra", rule_id="", title="Shell: Pipe-to-Shell Install", severity="high"),
+          _f("s.sh", scanner="skill_threats", rule_id="ST-PR-001", severity="critical")]
+    out = agg.merge_same_line_matches(fs)
+    assert len(out) == 1 and out[0]["severity"] == "critical"
+    assert out[0]["rule_id"] == "SA-SH-003"
+    assert sorted(m["rule_id"] or m["title"] for m in out[0]["also_matched"]) == [
+        "ST-PR-001", "Shell: Pipe-to-Shell Install"]
+
+
+def test_different_threats_on_one_line_stay_separate():
+    fs = [_f("a.py", rule_id="SC-SEC-007", title="OpenAI API Key"),
+          _f("a.py", rule_id="SA-SH-003", title="Pipe to Shell Interpreter")]
+    assert len(agg.merge_same_line_matches(fs)) == 2
+
+
+def test_sarif_expands_merged_rules():
+    import sarif_export
+    f = _f("s.sh", rule_id="SA-SH-003")
+    f["also_matched"] = [{"scanner": "skill_threats", "rule_id": "ST-PR-001",
+                          "title": "Pipe-to-shell download pattern", "severity": "critical", "snippet": "x"}]
+    sarif = sarif_export.report_to_sarif({"findings": [f], "suppressed": []})
+    rule_ids = [r["ruleId"] for r in sarif["runs"][0]["results"]]
+    assert len(rule_ids) == 2 and len(set(rule_ids)) == 2
+    assert any("SA-SH-003" in r for r in rule_ids) and any("ST-PR-001" in r for r in rule_ids)
+

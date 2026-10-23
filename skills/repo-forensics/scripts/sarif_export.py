@@ -293,12 +293,15 @@ def _expand_identical_copies(findings):
     out = []
     for finding in findings:
         others = finding.get("also_in") or []
-        base = {k: v for k, v in finding.items() if k != "also_in"}
-        out.append(base)
-        for path in others:
-            copy = dict(base)
-            copy["file"] = path
-            out.append(copy)
+        base = {k: v for k, v in finding.items() if k not in ("also_in", "also_matched")}
+        variants = [base] + [dict(base, **{k: m.get(k) for k in ("scanner", "rule_id", "title", "severity", "snippet")})
+                             for m in finding.get("also_matched") or []]
+        for variant in variants:
+            out.append(variant)
+            for path in others:
+                copy = dict(variant)
+                copy["file"] = path
+                out.append(copy)
     return out
 
 

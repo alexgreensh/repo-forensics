@@ -16,6 +16,8 @@ All notable changes to repo-forensics. Versions follow semver.
 - Tests that create a fresh temp folder with `mkdtemp`, name it `HOME` and delete it afterwards are no longer reported as a home-directory wipe. Rebinding, shadowing, parameters, fallbacks and `eval` keep the finding. In shell scripts, `rm -rf "$home"` on a lowercase local variable is no longer read as `$HOME`. PowerShell and batch files, where variable names ignore case, are unchanged.
 - Compiled `.pyc` files whose `.py` contains every name and marker they use are graded LOW ("also in source") instead of hidden logic. The source-versus-bytecode check now covers every call, network and token name the bytecode scanner looks for, so a `.pyc` that adds one stays HIGH. A timestamp `.pyc` that no longer matches its source is reported as a stale cache, since Python will not load it.
 - Bytecode from Python 3.15 is decoded instead of being reported as unreadable.
+- A long file path such as `claude/plugins/marketplaces/...` is no longer reported as a "Base64 Encoded Block". Every encoded blob is still decoded and rescanned as before.
+- One line matched by several rules for the same threat (a download piped to a shell trips four; a hardcoded IP trips two) is reported once at the highest severity, naming every rule that matched. SARIF still gives one result per rule.
 - Online package checks stop after 45 seconds and report how many packages were not checked, instead of the dependency scanner being killed and the whole report ending as a scanner failure. The "limit reached" note appears once per scan, not once per lockfile.
 
 ## [2.14.17] - 2026-10-22

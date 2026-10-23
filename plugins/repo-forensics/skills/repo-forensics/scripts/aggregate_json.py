@@ -945,6 +945,71 @@ def _file_digest(repo_path, rel, cache):
     return digest
 
 
+# --- One alarm, several rules -------------------------------------------------------
+# Some threats are matched by more than one rule or scanner (a download piped to
+# a shell trips four). On the same file and line they are one finding: the
+# highest severity is kept and every other match is listed in `also_matched`.
+# Only listed families and identical titles merge, so two different threats on
+# one line stay separate. SARIF expands the matches back out per rule.
+_SAME_LINE_FAMILIES = {
+    "SA-SH-002": "pipe-to-shell", "SA-SH-003": "pipe-to-shell", "ST-PR-001": "pipe-to-shell",
+    "Shell: Pipe-to-Shell Install": "pipe-to-shell",
+    "SA-PY-009": "hardcoded-ip", "SC-NET-001": "hardcoded-ip",
+    "ST-ST-004": "output-suppression", "ST-ST-005": "output-suppression",
+}
+
+
+def _same_line_family(f):
+    return (_SAME_LINE_FAMILIES.get(f.get("rule_id") or "")
+            or _SAME_LINE_FAMILIES.get(f.get("title") or "")
+            or "title:" + (f.get("title") or ""))
+
+
+def merge_same_line_matches(all_findings):
+    groups = {}
+    order = []
+    for f in all_findings:
+        line = f.get("line") or 0
+        if not f.get("file") or line <= 0 or f.get("scanner") in ("meta", "correlation"):
+            order.append((None, f))
+            continue
+        key = (f["file"], line, _same_line_family(f))
+        if key not in groups:
+            groups[key] = []
+            order.append((key, None))
+        groups[key].append(f)
+    out = []
+    for key, f in order:
+        if key is None:
+            out.append(f)
+            continue
+        members = groups[key]
+        if len(members) == 1:
+            out.append(members[0])
+            continue
+        members.sort(key=lambda m: (-SEVERITY_ORDER.get(m.get("severity", "low"), 0),
+                                    -float(m.get("confidence") or 0)))
+        keep = members[0]
+        keep["also_matched"] = [
+            {k: m.get(k) for k in ("scanner", "rule_id", "title", "severity", "snippet")}
+            for m in members[1:]]
+        out.append(keep)
+    return out
+
+
+def fold_scanner_sections(scanners, before_ids, all_findings):
+    """Drop folded findings from the per-scanner lists the text report prints."""
+    folded = before_ids - {id(f) for f in all_findings}
+    if not folded:
+        return
+    for scanner in scanners:
+        current = scanner.get("findings", []) or []
+        kept = [f for f in current if id(f) not in folded]
+        if len(kept) != len(current):
+            scanner["findings"] = kept
+            scanner["finding_count"] = len(kept)
+
+
 def collapse_identical_copies(all_findings, repo_path):
     cache = {}
     groups = {}
@@ -1251,14 +1316,8 @@ def build_report(tmpdir, repo_path, skill_scan):
     # a LOW note and the report exited 0 over a live, uninspected payload.
     before_ids = {id(f) for f in all_findings}
     all_findings = collapse_identical_copies(all_findings, repo_path)
-    folded = before_ids - {id(f) for f in all_findings}
-    if folded:
-        # Scanner sections render from their own lists (same dict objects).
-        for scanner in scanners:
-            kept = [f for f in scanner.get("findings", []) or [] if id(f) not in folded]
-            if len(kept) != len(scanner.get("findings", []) or []):
-                scanner["findings"] = kept
-                scanner["finding_count"] = len(kept)
+    all_findings = merge_same_line_matches(all_findings)
+    fold_scanner_sections(scanners, before_ids, all_findings)
 
     coverage_status = build_coverage_status(scanners, all_findings)
     if build_output_exclusions:
@@ -1355,6 +1414,11 @@ def format_report_as_text(report):
         snip = f.get("snippet", "")
         if snip:
             lines.append(f"         {_sanitize(snip, max_len=120)}")
+        matched = f.get("also_matched") or []
+        if matched:
+            names = ", ".join(_sanitize(m.get("rule_id") or m.get("title") or "", max_len=60)
+                              for m in matched[:5])
+            lines.append(f"         also matched: {names}")
         copies = f.get("also_in") or []
         if copies:
             shown = ", ".join(_sanitize(c, max_len=120) for c in copies[:5])
