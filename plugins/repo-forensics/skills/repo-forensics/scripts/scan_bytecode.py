@@ -29,6 +29,7 @@ import functools
 import os
 import re
 import shutil
+import struct
 import subprocess
 import sys
 import time
@@ -99,6 +100,17 @@ _POISON_NAME_MARKERS = (
     b"subprocess", b"eval", b"exec", b"compile", b"__import__", b"marshal",
     b"socket", b"urlopen", b"urlretrieve", b"b64decode", b"b16decode",
 )
+# Every name the native-primitive detector keys on is diffed too, so a .pyc
+# that adds a call, network or token name its source lacks is caught here as
+# poisoning. That is what lets the enrichment below grade itself down when the
+# diff is clean: the primitives it sees are then the source's own code, which
+# every source scanner already reports.
+_POISON_NAME_MARKERS = tuple(dict.fromkeys(
+    _POISON_NAME_MARKERS + tuple(
+        n.encode("ascii") for n in sorted(
+            _EXEC_OS_NAMES | _EXEC_SUBPROC_NAMES | _EXEC_BUILTIN_NAMES | _NET_MODULES
+            | _NET_NAMES | _CRED_NAME_MARKERS | _OBFUSCATION_MODULES
+            | {"getattr", "setattr", "import_module", "loads", "b85decode", "a85decode"}))))
 _POISON_SUBSTR_MARKERS = (
     b"/dev/tcp", b"http://", b"https://", b".ssh/id_", b".aws/credentials",
     b".netrc", b"/etc/shadow",
@@ -282,6 +294,27 @@ def _native_primitives(blob, rel_path):
     return findings
 
 
+def _pyc_is_stale(raw, sibling_path):
+    """True when Python would refuse this .pyc and recompile from source.
+
+    A PEP 552 timestamp .pyc (flags 0) is used only while its stored source
+    mtime and size match the .py on disk. When either differs the import system
+    ignores the file, so nothing in it can run. Hash-based .pyc (checked or
+    unchecked) and any header we cannot read are never treated as stale.
+    """
+    try:
+        if len(raw) < 16 or pyc_header_len(raw[:4]) != 16:
+            return False
+        flags, mtime, size = struct.unpack("<III", raw[4:16])
+        if flags != 0:
+            return False
+        st = os.stat(sibling_path)
+    except (OSError, struct.error):
+        return False
+    return (mtime != (int(st.st_mtime) & 0xFFFFFFFF)
+            or size != (st.st_size & 0xFFFFFFFF))
+
+
 def pyc_header_len(magic4):
     """Header length (bytes before the marshalled code object) from the 4-byte
     .pyc magic, or None if it is not a recognizable pyc magic.
@@ -426,7 +459,23 @@ def scan_pyc(pyc_path, rel_path):
     # danger primitives in the raw bytecode that are absent from the sibling
     # source = poisoning. This is the verdict; everything below only enriches it.
     poison = _poison_markers_vs_source(raw, sibling, rel_path) if has_source else []
-    findings.extend(poison)
+    stale = has_source and _pyc_is_stale(raw, sibling)
+    if poison and stale:
+        # A leftover cache from an older version of the source. Python will
+        # not load it, so the difference cannot run; keep it on record.
+        for f in poison:
+            f.severity = "low"
+            f.title = "Stale bytecode differs from its source (not loaded by Python)"
+            f.description = (
+                "This timestamp .pyc no longer matches its .py (stored mtime/size "
+                "differ), so the import system ignores it and recompiles. Markers "
+                f"only in bytecode: {f.snippet}. Usually a cache left from an older "
+                "version of the file; delete __pycache__ to clear it.")
+            f.category = "bytecode-stale"
+        findings.extend(poison)
+        poison = []
+    else:
+        findings.extend(poison)
 
     # (2) Best-effort disassembly (host first, then other installed interpreters)
     # for richer primitive analysis and to show the analyst the decoded payload.
@@ -475,13 +524,21 @@ def scan_pyc(pyc_path, rel_path):
         hits.append(h)
 
     matched_primitive = len(hits) > 0
+    # Source present and the marker diff is clean: the .pyc holds nothing the
+    # .py does not, so these primitives are visible to every source scanner.
+    # Keep them on record at LOW rather than as hidden logic.
+    in_source = has_source and not poison
     for h in hits:
         findings.append(core.Finding(
-            scanner=SCANNER_NAME, severity=h.severity,
-            title=f"Hidden logic in bytecode: {h.title}",
+            scanner=SCANNER_NAME, severity="low" if in_source else h.severity,
+            title=(f"Bytecode primitive (also in source): {h.title}" if in_source
+                   else f"Hidden logic in bytecode: {h.title}"),
             description=(
-                "Pattern matched inside compiled .pyc bytecode (invisible to "
-                "source-only scanners). " + h.description
+                ("Pattern matched in a compiled .pyc whose sibling .py contains every "
+                 "danger name and marker it references, so the logic is not hidden: "
+                 "source scanners report it there. " if in_source else
+                 "Pattern matched inside compiled .pyc bytecode (invisible to "
+                 "source-only scanners). ") + h.description
             ),
             file=rel_path, line=0, snippet=h.snippet,
             category="bytecode-hidden-logic",

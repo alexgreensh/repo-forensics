@@ -31,6 +31,23 @@ _SHA256SUM_LINE = re.compile(r'[a-fA-F0-9]{64} [ *]\S.*')
 _SHA256SUM_NAMES = {'checksums.sha256', 'sha256sums'}
 
 
+# A long run of letters and slashes is often a file path, which the base64
+# alphabet happens to contain. Display-only: every blob is still decoded and
+# rescanned by detect_encoded_blobs above, so a real payload is not hidden.
+_PATH_SEGMENT = re.compile(r'(?:[a-z]+|(?:[A-Z][a-z]+)+|[a-z]+(?:[A-Z][a-z]+)+)[0-9]{0,3}')
+
+
+def _looks_like_path(run):
+    if '+' in run or '=' in run:
+        return False
+    segments = run.strip('/').split('/')
+    if len(segments) < 3 or any(not seg for seg in segments):
+        return False
+    if sum(len(seg) for seg in segments) < 3 * len(segments):
+        return False
+    return all(_PATH_SEGMENT.fullmatch(seg) for seg in segments)
+
+
 def _is_sha256_manifest_hash(rel_path, line, match):
     """A standard checksum record is a digest, not an encoded payload claim."""
     return (os.path.basename(rel_path).lower() in _SHA256SUM_NAMES
@@ -239,6 +256,8 @@ def scan_file(file_path, rel_path, threshold=5.8, budget=None):
                 if 'data:' in prefix and prefix.rstrip().endswith(';base64,'):
                     continue
                 if _is_lockfile_integrity(basename, stripped, m, False):
+                    continue
+                if _looks_like_path(matched):
                     continue
                 if len(matched) >= 80:
                     findings.append(core.Finding(

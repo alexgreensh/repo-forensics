@@ -41,7 +41,46 @@ _INERT_SUBSTITUTION = re.compile(
 _MAX_INERT_PASSES = 16
 
 
-def _nesting_survives(rule, line):
+# `case` arm pattern list (`a|b|c) cmd`): the `|` separates patterns, it is not
+# a pipe. Only the command after the closing paren is checked by the rule.
+# Two conditions must both hold before the pattern list is skipped: the line
+# sits inside a `case ... in` ... `esac` block, and no pattern token carries
+# brace-expansion characters. `{curl,-s,url}|sh)` closing a subshell is a real
+# pipe-to-shell, not an arm, and a file with no case block never skips anything.
+_CASE_ARM = re.compile(r'^\s*[^(){},\s|;&$`]*(?:\|[^(){},\s|;&$`]*)+\)\s*')
+_CASE_OPEN = re.compile(r'(?:^|[;&|(]\s*)case\b[^\n]*?\bin\b')
+_ESAC = re.compile(r'(?:^|[;&|(\s])esac\b')
+_SHELL_CASE_EXTS = frozenset({'.sh', '.bash', '.zsh', '.ksh'})
+
+
+def _case_depth_after(depth, line):
+    """Track `case ... in` / `esac` nesting across logical lines (shell only).
+
+    Returns (depth, arm_next): arm_next is True only when the next line can
+    start a new arm, i.e. this line opened the block (`... in`) or ended an
+    earlier arm (`;;`, `;&`, `;;&`). A line inside an arm body is never an arm,
+    so `(\ncurl|sh)` placed in a body is still checked.
+    """
+    stripped = line.strip()
+    if not stripped or stripped.startswith('#'):
+        return depth, None
+    opened = _CASE_OPEN.search(stripped)
+    if opened:
+        depth += 1
+    depth -= len(_ESAC.findall(stripped))
+    depth = max(depth, 0)
+    arm_next = depth > 0 and (
+        bool(re.search(r'\bin\s*$', stripped)) and bool(opened)
+        or stripped.endswith((';;', ';&', ';;&')))
+    return depth, arm_next
+
+
+def _nesting_survives(rule, line, in_case=False):
+    if rule.id == "SA-SH-003":
+        m = _CASE_ARM.match(line) if in_case else None
+        if m:
+            return rule.regex.search(line[m.end():]) is not None
+        return True
     if rule.id != "SA-SH-004":
         return True
     for _ in range(_MAX_INERT_PASSES):
@@ -75,6 +114,257 @@ def _filter_python_shell_docstring_examples(findings, source, ext):
             interior_lines.update(range(body[0].lineno + 1, body[0].end_lineno))
     return [f for f in findings
             if not (f.rule_id == "SA-PY-006" and f.line in interior_lines)]
+
+# --- SA-PY-008: execute() whose SQL text is provably the author's own -----------
+# The regex fires on any execute( call that shows `%s`, `+`, `.format` or an
+# f-string. A finding is dropped only when AST analysis of the same call proves
+# every piece of the SQL text is fixed in this file: string literals, numeric
+# casts (int/float/len, which can only yield digits), and names bound only to
+# such values (a literal assigned once or conditionally, a loop variable over a
+# literal tuple/list, an app-level constant). Anything caller-controlled keeps
+# the finding: a parameter, an attribute, a call result, an imported name, a
+# rebinding from a non-static value, a `global` write, or any use of exec/eval/
+# globals/locals/vars/setattr (module names) or in the function (local names).
+_SQL_CASTS = frozenset({'int', 'float', 'len', 'bool'})
+_SQL_DYNAMIC_NAMES = frozenset({'exec', 'eval', 'globals', 'locals', 'vars', 'setattr', 'compile', '__import__'})
+_SQL_SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
+_SQL_COMPS = (ast.ListComp, ast.SetComp, ast.GeneratorExp, ast.DictComp)
+
+
+def _static_sql_call_lines(source):
+    try:
+        tree = ast.parse(source)
+    except (SyntaxError, ValueError, RecursionError, MemoryError):
+        return None
+    parent = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+    dynamic = False
+    binders = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in _SQL_DYNAMIC_NAMES:
+            dynamic = True
+        if isinstance(node, ast.Attribute) and node.attr in ('__dict__', 'modules'):
+            dynamic = True
+        if isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
+            binders.add(node.id)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            binders.add(node.name)
+        elif isinstance(node, ast.alias):
+            if node.name == '*':
+                dynamic = True
+            binders.add(node.asname or node.name.split('.')[0])
+        elif isinstance(node, ast.arg):
+            binders.add(node.arg)
+    casts = _SQL_CASTS - binders
+
+    def enclosing_scopes(node):
+        chain = []
+        node = parent.get(node)
+        while node is not None:
+            if isinstance(node, _SQL_COMPS + (ast.FunctionDef, ast.AsyncFunctionDef, ast.Module)):
+                chain.append(node)
+            elif isinstance(node, (ast.ClassDef, ast.Lambda)):
+                chain.append(node)
+            node = parent.get(node)
+        return chain
+
+    def own_nodes(scope):
+        """Nodes of `scope` excluding nested function/class/lambda bodies."""
+        out, stack = [], [scope]
+        while stack:
+            node = stack.pop()
+            out.append(node)
+            for child in ast.iter_child_nodes(node):
+                if child is not scope and isinstance(child, _SQL_SCOPES):
+                    out.append(child)
+                    continue
+                stack.append(child)
+        return out
+
+    cache = {}
+
+    def literal_tuple(value):
+        return isinstance(value, (ast.Tuple, ast.List, ast.Set)) and all(
+            isinstance(e, ast.Constant) and isinstance(e.value, (str, int, float)) for e in value.elts)
+
+    def name_static(name, scope, seen):
+        key = (name, scope)
+        if key in cache:
+            return cache[key]
+        if key in seen:
+            return False
+        seen = seen | {key}
+        result = _name_static(name, scope, seen)
+        cache[key] = result
+        return result
+
+    def _name_static(name, scope, seen):
+        if isinstance(scope, _SQL_COMPS):
+            for gen in scope.generators:
+                targets = [gen.target] if isinstance(gen.target, ast.Name) else []
+                if any(t.id == name for t in targets):
+                    return literal_tuple(gen.iter)
+                if any(isinstance(n, ast.Name) and n.id == name for n in ast.walk(gen.target)):
+                    return False
+            return None  # not bound here: ask the next scope out
+        if isinstance(scope, (ast.ClassDef, ast.Lambda)):
+            return False
+        is_module = isinstance(scope, ast.Module)
+        if is_module and dynamic:
+            return False
+        if not is_module:
+            a = scope.args
+            params = list(a.posonlyargs) + list(a.args) + list(a.kwonlyargs)
+            params += [x for x in (a.vararg, a.kwarg) if x]
+            if any(p.arg == name for p in params):
+                return False
+        nodes = own_nodes(scope)
+        if not is_module and any(
+                isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in _SQL_DYNAMIC_NAMES
+                for n in nodes):
+            return False
+        writes = []
+        for node in nodes:
+            if isinstance(node, ast.Name) and node.id == name and isinstance(node.ctx, (ast.Store, ast.Del)):
+                writes.append(node)
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.name == name:
+                return False
+            elif isinstance(node, ast.alias) and (node.asname or node.name.split('.')[0]) == name:
+                return False
+            elif isinstance(node, ast.ExceptHandler) and node.name == name:
+                return False
+            elif isinstance(node, (ast.Global, ast.Nonlocal)) and name in node.names:
+                if not is_module:
+                    return False
+        if is_module:
+            # `global NAME` in a function makes that function's stores writes too.
+            for fn in ast.walk(tree):
+                if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)) and any(
+                        isinstance(g, ast.Global) and name in g.names for g in ast.walk(fn)):
+                    return False
+        # Nested scopes that rebind the name through nonlocal/global.
+        for node in ast.walk(scope):
+            if node is not scope and isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if any(isinstance(g, (ast.Global, ast.Nonlocal)) and name in g.names for g in ast.walk(node)):
+                    return False
+        if not writes:
+            return None
+        for w in writes:
+            if not isinstance(w.ctx, ast.Store):
+                return False
+            owner = parent.get(w)
+            if isinstance(owner, ast.Assign) and w in owner.targets:
+                if not expr_static(owner.value, scope, seen):
+                    return False
+            elif isinstance(owner, ast.AnnAssign) and owner.target is w and owner.value is not None:
+                if not expr_static(owner.value, scope, seen):
+                    return False
+            elif isinstance(owner, ast.AugAssign) and owner.target is w and isinstance(owner.op, ast.Add):
+                if not expr_static(owner.value, scope, seen):
+                    return False
+            elif isinstance(owner, ast.For) and owner.target is w:
+                if not (literal_tuple(owner.iter)):
+                    return False
+            else:
+                return False
+        return True
+
+    def resolve_name(name, node, seen):
+        for scope in enclosing_scopes(node):
+            verdict = name_static(name, scope, seen)
+            if verdict is None:
+                continue
+            return verdict
+        return False
+
+    def expr_static(expr, scope, seen):
+        """SQL *text* made only of fixed pieces."""
+        if isinstance(expr, ast.Constant):
+            return isinstance(expr.value, (str, int, float))
+        if isinstance(expr, ast.JoinedStr):
+            for v in expr.values:
+                if isinstance(v, ast.Constant):
+                    continue
+                if not isinstance(v, ast.FormattedValue) or not value_safe(v.value, v, seen):
+                    return False
+                if v.format_spec is not None and not expr_static(v.format_spec, scope, seen):
+                    return False
+            return True
+        if isinstance(expr, ast.Name):
+            return resolve_name(expr.id, expr, seen)
+        if isinstance(expr, ast.IfExp):
+            return expr_static(expr.body, scope, seen) and expr_static(expr.orelse, scope, seen)
+        if isinstance(expr, ast.BinOp):
+            if isinstance(expr.op, ast.Add):
+                return expr_static(expr.left, scope, seen) and expr_static(expr.right, scope, seen)
+            if isinstance(expr.op, ast.Mod):
+                right = expr.right
+                items = right.elts if isinstance(right, ast.Tuple) else [right]
+                return expr_static(expr.left, scope, seen) and all(value_safe(i, expr, seen) for i in items)
+            if isinstance(expr.op, ast.Mult):
+                return (expr_static(expr.left, scope, seen) and value_safe(expr.right, expr, seen)) or (
+                    expr_static(expr.right, scope, seen) and value_safe(expr.left, expr, seen))
+            return False
+        if isinstance(expr, ast.Call) and isinstance(expr.func, ast.Attribute):
+            attr = expr.func.attr
+            if attr == 'format' and expr_static(expr.func.value, scope, seen):
+                return (all(value_safe(a, expr, seen) for a in expr.args)
+                        and all(k.arg is not None and value_safe(k.value, expr, seen) for k in expr.keywords))
+            if attr == 'join' and expr_static(expr.func.value, scope, seen) and len(expr.args) == 1 and not expr.keywords:
+                return iterable_static(expr.args[0], expr, seen)
+        return False
+
+    def iterable_static(expr, anchor, seen):
+        if literal_tuple(expr):
+            return True
+        if isinstance(expr, ast.Name):
+            for scope in enclosing_scopes(expr):
+                writes = [n for n in own_nodes(scope) if isinstance(n, ast.Name)
+                          and n.id == expr.id and isinstance(n.ctx, (ast.Store, ast.Del))]
+                if writes:
+                    return all(isinstance(parent.get(w), ast.Assign) and w in parent[w].targets
+                               and isinstance(parent[w].value, ast.Tuple) and literal_tuple(parent[w].value)
+                               for w in writes)
+            return False
+        if isinstance(expr, ast.BinOp) and isinstance(expr.op, ast.Mult):
+            return (isinstance(expr.left, ast.Constant) and isinstance(expr.left.value, str)
+                    and value_safe(expr.right, expr, seen))
+        return False
+
+    def value_safe(expr, anchor, seen):
+        """A value interpolated into SQL text can only add fixed characters."""
+        if isinstance(expr, ast.Constant):
+            return isinstance(expr.value, (str, int, float, bool))
+        if isinstance(expr, ast.Call) and isinstance(expr.func, ast.Name) and expr.func.id in casts:
+            return True
+        if isinstance(expr, ast.Name):
+            return resolve_name(expr.id, expr, seen)
+        return expr_static(expr, None, seen)
+
+    safe_lines, unsafe_lines = set(), set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        f = node.func
+        is_exec = (isinstance(f, ast.Attribute) and f.attr == 'execute') or (
+            isinstance(f, ast.Name) and f.id == 'execute')
+        if not is_exec:
+            continue
+        lines = range(node.lineno, (node.end_lineno or node.lineno) + 1)
+        first = node.args[0] if node.args else None
+        ok = (first is not None and not isinstance(first, ast.Starred)
+              and expr_static(first, None, frozenset()))
+        (safe_lines if ok else unsafe_lines).update(lines)
+    return safe_lines - unsafe_lines
+
+
+def _filter_static_sql_execute(findings, source, ext):
+    if ext != ".py" or not any(f.rule_id == "SA-PY-008" for f in findings):
+        return findings
+    safe = _static_sql_call_lines(source)
+    if not safe:
+        return findings
+    return [f for f in findings if not (f.rule_id == "SA-PY-008" and f.line in safe)]
+
 
 # Per-language detection rules load from the shipped pack at import time
 # (rule_loader memoizes -> parsed once per process). by_extension is the
@@ -1036,12 +1326,19 @@ def scan_file(file_path, rel_path):
             lines = f.readlines()
             source = ''.join(lines)
             text = source
+            case_depth = 0
+            arm_ok = False
             for i, line in _logical_lines(lines, ext):
                 line = core.clip_line(line)
+                in_case = arm_ok
+                if ext in _SHELL_CASE_EXTS:
+                    case_depth, nxt = _case_depth_after(case_depth, line)
+                    if nxt is not None:
+                        arm_ok = nxt
                 for rule in rules:
                     if rule.id in _STRUCTURED_TLS_IDS:
                         continue
-                    if rule.regex.search(line) and _nesting_survives(rule, line):
+                    if rule.regex.search(line) and _nesting_survives(rule, line, in_case):
                         findings.append(core.Finding(
                             scanner=SCANNER_NAME,
                             severity=rule.severity,
@@ -1062,7 +1359,7 @@ def scan_file(file_path, rel_path):
         print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)
     findings = core.downgrade_inert_literal_imports(findings, source, _DYNAMIC_IMPORT_IDS,
                                                     file_path, rel_path)
-    return _filter_python_shell_docstring_examples(findings, source, ext)
+    return _filter_static_sql_execute(_filter_python_shell_docstring_examples(findings, source, ext), source, ext)
 
 
 def scan_text(text, rel_path, ext=None):
@@ -1095,12 +1392,19 @@ def scan_text(text, rel_path, ext=None):
     # Unicode-line-boundary split-evasion). _logical_lines applies the same
     # continuation joining as scan_file so in-memory text cannot smuggle a
     # split token past the per-line patterns either.
+    case_depth = 0
+    arm_ok = False
     for i, line in _logical_lines(text.split('\n'), ext):
         line = core.clip_line(line)
+        in_case = arm_ok
+        if ext in _SHELL_CASE_EXTS:
+            case_depth, nxt = _case_depth_after(case_depth, line)
+            if nxt is not None:
+                arm_ok = nxt
         for rule in rules:
             if rule.id in _STRUCTURED_TLS_IDS:
                 continue
-            if rule.regex.search(line) and _nesting_survives(rule, line):
+            if rule.regex.search(line) and _nesting_survives(rule, line, in_case):
                 findings.append(core.Finding(
                     scanner=SCANNER_NAME,
                     severity=rule.severity,
@@ -1118,7 +1422,7 @@ def scan_text(text, rel_path, ext=None):
                 ))
     findings.extend(_scan_structured_tls(text, rel_path, ext, rules))
     findings = core.downgrade_inert_literal_imports(findings, text, _DYNAMIC_IMPORT_IDS)
-    return _filter_python_shell_docstring_examples(findings, text, ext)
+    return _filter_static_sql_execute(_filter_python_shell_docstring_examples(findings, text, ext), text, ext)
 
 
 def main():

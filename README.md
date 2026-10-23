@@ -209,7 +209,7 @@ Scanning never requires network access. The feed is a freshness layer on top of 
 ---
 ## Battle-Tested Against Real Attacks
 
-6,321 tests across 40+ test files. Not synthetic toy examples: detection patterns built from real supply chain campaigns that hit production systems.
+6,390 tests across 40+ test files. Not synthetic toy examples: detection patterns built from real supply chain campaigns that hit production systems.
 
 **Named attack campaigns in the IOC database:**
 
@@ -240,7 +240,7 @@ Scanning never requires network access. The feed is a freshness layer on top of 
 
 Every campaign above has version-pinned IOCs in `compromised_versions.json`, detection rules in the lifecycle and dependency scanners, and correlation rules for compound attack patterns.
 
-**The tests are safe to run.** All 6,321 tests use synthetic fixtures in temporary directories. No real malware is downloaded or executed. Pattern matching runs against fake package.json files containing attack signatures, the same way antivirus software tests against EICAR strings.
+**The tests are safe to run.** All 6,390 tests use synthetic fixtures in temporary directories. No real malware is downloaded or executed. Pattern matching runs against fake package.json files containing attack signatures, the same way antivirus software tests against EICAR strings.
 
 ---
 ## Why Not the Alternatives?
@@ -496,7 +496,7 @@ Exit codes: `0` = clean, `1` = warn, `2` = block merge.
 | **IOC auto-update** | `--update-iocs` pulls latest C2 IPs, malicious domains, known-bad packages |
 | **Installation verification** | `--verify-install` checks repo-forensics itself for tampering |
 | **Manifest drift** | Declared vs actual imports, phantom deps, runtime installs |
-| **6,321 pytest tests** | Full coverage across 40+ test files |
+| **6,390 pytest tests** | Full coverage across 40+ test files |
 
 </details>
 
@@ -721,24 +721,6 @@ No pip install. No API keys. No Docker. No dependencies.
 ./skills/repo-forensics/scripts/run_forensics.sh /path/to/repo --format json     # CI/CD machine-readable output
 ./skills/repo-forensics/scripts/run_forensics.sh /path/to/repo --verify-install  # Verify installation integrity
 ```
-
-Watch mode preserves an existing baseline when its signature cannot be trusted or its
-JSON/structure cannot be read. The finding remains visible on later runs instead of
-silently signing a replacement. Inspect and retain a copy of the rejected baseline;
-only after reviewing the repository's current state should you deliberately remove
-`.forensics-baseline.json` and run `--watch` to create a fresh baseline. This also
-applies to unsigned legacy baselines. Valid baselines signed by the old repository
-key still verify and migrate automatically.
-
-Signing-key creation publishes a fully written private file through a hard link.
-The key-cache filesystem must support hard links; otherwise watch mode reports a
-save failure without creating a baseline. An empty existing key is refused rather
-than used for signing. Retain a copy and review affected baselines before removing
-an empty key and deliberately creating a new baseline. This protects the final key
-file on POSIX; key-cache parent directories remain trusted, and Windows key reads
-do not yet reject reparse points. A force-killed writer can leave a private temporary
-key file in the cache.
-
 
 > **Installed via Claude Code plugin marketplace?** Enable auto-update: `/plugin` > **Marketplaces** tab > select repo-forensics > **Enable auto-update**. Otherwise you won't get new scanners, IOCs, or detection fixes automatically.
 

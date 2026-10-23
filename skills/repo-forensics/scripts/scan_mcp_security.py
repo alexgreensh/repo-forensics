@@ -427,9 +427,23 @@ def _static_select_arithmetic_lines(content, candidate_lines):
             if len(owner.elts) != len(assignment.value.elts):
                 return False
             value = assignment.value.elts[owner.elts.index(name_node)]
+        elif (isinstance(owner, ast.AugAssign) and owner.target is name_node
+              and isinstance(owner.op, ast.Add)):
+            # `where += "AND x = ? "`: appending only static text keeps it static
+            return static_expression(owner.value, scope_of(owner))
         else:
             return False
-        return isinstance(value, ast.Constant) and isinstance(value.value, str)
+        return literal_choice(value)
+
+    def literal_choice(value):
+        """A string literal, or a conditional expression whose every branch is
+        one (`"substr(ts,1,10)" if by_day else "NULL"`): the SQL text can only
+        be one of the author's own strings, never caller input."""
+        if isinstance(value, ast.Constant):
+            return isinstance(value.value, str)
+        if isinstance(value, ast.IfExp):
+            return literal_choice(value.body) and literal_choice(value.orelse)
+        return False
 
     def static_name(name, scope):
         key = (scope, name)
@@ -489,6 +503,8 @@ def _static_select_arithmetic_lines(content, candidate_lines):
             return isinstance(node.value, str)
         if isinstance(node, ast.Name):
             return static_name(node.id, scope)
+        if isinstance(node, ast.IfExp):
+            return static_expression(node.body, scope) and static_expression(node.orelse, scope)
         return (isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add)
                 and static_expression(node.left, scope)
                 and static_expression(node.right, scope))
@@ -593,11 +609,12 @@ def scan_file(file_path, rel_path):
         # SQL injection: check all code files (not just MCP)
         sql_findings = scan_rules(content, rel_path, SQL_INJECTION_RULES,
                                   "sql-injection", "critical")
-        if ext == '.py' and any(f.rule_id == 'SM-SQL-005' for f in sql_findings):
-            candidate_lines = {f.line for f in sql_findings if f.rule_id == 'SM-SQL-005'}
+        _CONCAT_IDS = ('SM-SQL-005', 'SM-SQL-009')
+        if ext == '.py' and any(f.rule_id in _CONCAT_IDS for f in sql_findings):
+            candidate_lines = {f.line for f in sql_findings if f.rule_id in _CONCAT_IDS}
             static_lines = _static_select_arithmetic_lines(content, candidate_lines)
             sql_findings = [f for f in sql_findings
-                            if not (f.rule_id == 'SM-SQL-005' and f.line in static_lines)]
+                            if not (f.rule_id in _CONCAT_IDS and f.line in static_lines)]
         if ext == '.py' and any(f.rule_id == 'SM-SQL-007' for f in sql_findings):
             doc_lines = _python_docstring_only_lines(content)
             sql_findings = [f for f in sql_findings

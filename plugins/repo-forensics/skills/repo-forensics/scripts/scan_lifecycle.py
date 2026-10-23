@@ -349,6 +349,100 @@ RECURSIVE_DELETE = re.compile(
     r'[\s\S]{0,120}recursive\s*:\s*(?:true|!0|1)\b'
 )
 
+# Test suites commonly do `const HOME = mkdtempSync(...)`, point process.env.HOME
+# at it, and `rmSync(HOME, {recursive:true})` afterwards. mkdtemp always creates a
+# NEW empty folder, so deleting it cannot wipe anything that existed before.
+# The exemption is fail-closed: the delete target must be a bare name declared
+# exactly once from a mkdtemp call and never written, shadowed or used as a
+# parameter anywhere else in the file. os.homedir()/process.env.HOME targets
+# are never exempt.
+_MKDTEMP_CALL = re.compile(
+    r'(?:await\s+)?(?:(?:fs|fsp|fs\s*\.\s*promises)\s*\.\s*)?mkdtemp(?:Sync)?\s*\(')
+_JS_DYNAMIC_SCOPE = re.compile(r'\beval\s*\(|\bnew\s+Function\b|\bwith\s*\(')
+
+
+def _call_end(text, open_paren):
+    """Index just past the paren that closes text[open_paren], or -1."""
+    depth = 0
+    for i in range(open_paren, len(text)):
+        ch = text[i]
+        if ch == '(':
+            depth += 1
+        elif ch == ')':
+            depth -= 1
+            if depth == 0:
+                return i + 1
+    return -1
+
+
+def _first_unexempt_home_delete(content):
+    # search() from each start, not finditer(): the pattern's 120-char options
+    # window can swallow a second delete into the first match.
+    pos = 0
+    while True:
+        m = RECURSIVE_DELETE.search(content, pos)
+        if m is None:
+            return None
+        if not _deletes_fresh_temp_dir(content, m.group(2)):
+            return m
+        pos = m.start() + 1
+
+
+def _deletes_fresh_temp_dir(content, target):
+    if not re.fullmatch(r'[A-Za-z_$][\w$]*', target or ''):
+        return False
+    if _JS_DYNAMIC_SCOPE.search(content):
+        return False
+    name = re.escape(target)
+    ident = r'(?<![\w$.])' + name + r'(?![\w$])'
+    decls = list(re.finditer(r'\b(?:const|let|var)\s+' + name + r'\s*=\s*', content))
+    if len(decls) != 1:
+        return False
+    decl = decls[0]
+    call = _MKDTEMP_CALL.match(content, decl.end())
+    if not call:
+        return False
+    end = _call_end(content, call.end() - 1)
+    # The whole initializer must be the mkdtemp call: no `|| os.homedir()`.
+    if end < 0 or not re.match(r'[ \t]*;?[ \t]*(?:\n|$)', content[end:]):
+        return False
+    decl_name_at = decl.start() + content[decl.start():decl.end()].index(target)
+    write_patterns = (
+        ident + r'\s*(?:[-+*/%&|^]|\*\*|<<|>>>?|&&|\|\||\?\?)?=(?![=>])',   # assignment
+        r'(?:\+\+|--)\s*' + name + r'(?![\w$])|' + ident + r'\s*(?:\+\+|--)',
+        r'\b(?:const|let|var)\s*[{\[][^=;]*' + ident,                       # destructuring declaration
+        ident + r'\s*[,}\]][^;\n=]*=(?![=>])',                             # destructuring target
+        r'\bfunction\b[^(]*\([^)]*' + ident,                                # parameter
+        r'\([^()]*' + ident + r'[^()]*\)\s*(?:=>|\{)|' + ident + r'\s*=>',  # arrow / method parameter
+        r'\bfor\s*\(\s*(?:const|let|var)?\s*' + name + r'\s+(?:of|in)\b',
+        r'\bcatch\s*\(\s*' + name + r'\b',
+        r'\b(?:class|function)\s+' + name + r'\b',
+        r'\bimport\b[^;\n]*' + ident,
+    )
+    for pattern in write_patterns:
+        for m in re.finditer(pattern, content):
+            if not (m.start() <= decl_name_at < m.end()):
+                return False
+    return True
+
+
+# Shell variables are case-sensitive: `rm -rf "$home"` deletes a local variable
+# (usually `home=$(mktemp -d)` in a test), not $HOME. The patterns are compiled
+# case-insensitive for the command and flags, so a `$name` target must be the
+# exact HOME spelling. PowerShell and batch resolve variables case-insensitively,
+# so there every spelling still counts.
+_CASE_INSENSITIVE_VAR_EXTS = ('.ps1', '.psm1', '.psd1', '.bat', '.cmd')
+
+
+def _is_home_target(match, rel_path):
+    target = match.group(1) if match.re.groups else ''
+    if not target.startswith('$') or target.startswith('$env:'):
+        return True
+    if (rel_path or '').lower().endswith(_CASE_INSENSITIVE_VAR_EXTS):
+        return True
+    return target in ('$HOME', '${HOME}')
+
+
 # File types worth running the Second Coming content signatures over. Manifests,
 # JS/TS entrypoints, workflow YAML, and install shell scripts cover every observed
 # delivery surface for this campaign.
@@ -998,7 +1092,7 @@ def scan_second_coming_indicators(file_path, rel_path):
                 ))
 
             for pattern, desc in DEADMAN_DESTRUCT_PATTERNS:
-                if pattern.search(line):
+                if any(_is_home_target(m, rel_path) for m in pattern.finditer(line)):
                     findings.append(core.Finding(
                         scanner=SCANNER_NAME, severity="critical",
                         title=f"Dead-Man's Switch: {desc}",
@@ -1035,7 +1129,7 @@ def scan_second_coming_indicators(file_path, rel_path):
 
         # File-level combined signal: home-directory resolution + recursive delete.
         # Neither half is conclusive alone; together they are the JS dead-man's switch.
-        delete_match = RECURSIVE_DELETE.search(content)
+        delete_match = _first_unexempt_home_delete(content)
         if delete_match and HOMEDIR_REFERENCE.search(content):
             line_no = content.count('\n', 0, delete_match.start()) + 1
             findings.append(core.Finding(

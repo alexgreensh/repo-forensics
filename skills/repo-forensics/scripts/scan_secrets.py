@@ -91,6 +91,30 @@ def _is_doc_placeholder(snippet, full_line="", match_start=None, match_end=None)
     return False
 
 
+_SVG_GEOMETRY_ATTR = re.compile(
+    r'(?<![\w:-])(?:d|points|viewBox|transform)\s*=\s*"([0-9eE.,\s+\-]*(?:[MmLlHhVvCcSsQqTtAaZz][0-9eE.,\s+\-]*)*)"')
+
+
+def _ip_match_is_noise(line, match, rel_path):
+    """True when a SC-NET-001 hit is not an address at all: a four-number slice
+    of a longer dotted number run (version strings, numeric tables), or
+    zero-padded numbers inside SVG geometry attributes (path coordinates, not octets).
+    Loopback and unspecified addresses are real addresses and are kept as-is."""
+    text = match.group(0)
+    before = line[max(0, match.start() - 2):match.start()]
+    after = line[match.end():match.end() + 2]
+    if re.search(r'\d\.$', before) or re.match(r'\.\d', after):
+        return True
+    ext = os.path.splitext(rel_path)[1].lower()
+    if ext == '.svg' and any(len(o) > 1 and o[0] == '0' for o in text.split('.')):
+        # only when the numbers sit inside a geometry attribute value; the
+        # same digits in script text, an href or element text are kept.
+        for attr in _SVG_GEOMETRY_ATTR.finditer(line):
+            if attr.start(1) <= match.start() and match.end() <= attr.end(1):
+                return True
+    return False
+
+
 def _emit_line_findings(findings, rule, line, line_no, rel_path):
     """Emit one finding per non-placeholder match of `rule` on `line`.
 
@@ -105,6 +129,8 @@ def _emit_line_findings(findings, rule, line, line_no, rel_path):
     for match in rule.regex.finditer(line):
         snippet = match.group(0)
         if _is_doc_placeholder(snippet, full_line=line, match_start=match.start(), match_end=match.end()):
+            continue
+        if rule.id == 'SC-NET-001' and _ip_match_is_noise(line, match, rel_path):
             continue
         if len(snippet) > 80:
             snippet = snippet[:77] + "..."
