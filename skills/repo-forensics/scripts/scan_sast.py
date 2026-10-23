@@ -41,7 +41,46 @@ _INERT_SUBSTITUTION = re.compile(
 _MAX_INERT_PASSES = 16
 
 
-def _nesting_survives(rule, line):
+# `case` arm pattern list (`a|b|c) cmd`): the `|` separates patterns, it is not
+# a pipe. Only the command after the closing paren is checked by the rule.
+# Two conditions must both hold before the pattern list is skipped: the line
+# sits inside a `case ... in` ... `esac` block, and no pattern token carries
+# brace-expansion characters. `{curl,-s,url}|sh)` closing a subshell is a real
+# pipe-to-shell, not an arm, and a file with no case block never skips anything.
+_CASE_ARM = re.compile(r'^\s*[^(){},\s|;&$`]*(?:\|[^(){},\s|;&$`]*)+\)\s*')
+_CASE_OPEN = re.compile(r'(?:^|[;&|(]\s*)case\b[^\n]*?\bin\b')
+_ESAC = re.compile(r'(?:^|[;&|(\s])esac\b')
+_SHELL_CASE_EXTS = frozenset({'.sh', '.bash', '.zsh', '.ksh'})
+
+
+def _case_depth_after(depth, line):
+    """Track `case ... in` / `esac` nesting across logical lines (shell only).
+
+    Returns (depth, arm_next): arm_next is True only when the next line can
+    start a new arm, i.e. this line opened the block (`... in`) or ended an
+    earlier arm (`;;`, `;&`, `;;&`). A line inside an arm body is never an arm,
+    so `(\ncurl|sh)` placed in a body is still checked.
+    """
+    stripped = line.strip()
+    if not stripped or stripped.startswith('#'):
+        return depth, None
+    opened = _CASE_OPEN.search(stripped)
+    if opened:
+        depth += 1
+    depth -= len(_ESAC.findall(stripped))
+    depth = max(depth, 0)
+    arm_next = depth > 0 and (
+        bool(re.search(r'\bin\s*$', stripped)) and bool(opened)
+        or stripped.endswith((';;', ';&', ';;&')))
+    return depth, arm_next
+
+
+def _nesting_survives(rule, line, in_case=False):
+    if rule.id == "SA-SH-003":
+        m = _CASE_ARM.match(line) if in_case else None
+        if m:
+            return rule.regex.search(line[m.end():]) is not None
+        return True
     if rule.id != "SA-SH-004":
         return True
     for _ in range(_MAX_INERT_PASSES):
@@ -1036,12 +1075,19 @@ def scan_file(file_path, rel_path):
             lines = f.readlines()
             source = ''.join(lines)
             text = source
+            case_depth = 0
+            arm_ok = False
             for i, line in _logical_lines(lines, ext):
                 line = core.clip_line(line)
+                in_case = arm_ok
+                if ext in _SHELL_CASE_EXTS:
+                    case_depth, nxt = _case_depth_after(case_depth, line)
+                    if nxt is not None:
+                        arm_ok = nxt
                 for rule in rules:
                     if rule.id in _STRUCTURED_TLS_IDS:
                         continue
-                    if rule.regex.search(line) and _nesting_survives(rule, line):
+                    if rule.regex.search(line) and _nesting_survives(rule, line, in_case):
                         findings.append(core.Finding(
                             scanner=SCANNER_NAME,
                             severity=rule.severity,
@@ -1095,12 +1141,19 @@ def scan_text(text, rel_path, ext=None):
     # Unicode-line-boundary split-evasion). _logical_lines applies the same
     # continuation joining as scan_file so in-memory text cannot smuggle a
     # split token past the per-line patterns either.
+    case_depth = 0
+    arm_ok = False
     for i, line in _logical_lines(text.split('\n'), ext):
         line = core.clip_line(line)
+        in_case = arm_ok
+        if ext in _SHELL_CASE_EXTS:
+            case_depth, nxt = _case_depth_after(case_depth, line)
+            if nxt is not None:
+                arm_ok = nxt
         for rule in rules:
             if rule.id in _STRUCTURED_TLS_IDS:
                 continue
-            if rule.regex.search(line) and _nesting_survives(rule, line):
+            if rule.regex.search(line) and _nesting_survives(rule, line, in_case):
                 findings.append(core.Finding(
                     scanner=SCANNER_NAME,
                     severity=rule.severity,

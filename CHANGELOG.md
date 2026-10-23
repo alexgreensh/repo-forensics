@@ -2,6 +2,13 @@
 
 All notable changes to repo-forensics. Versions follow semver.
 
+## [Unreleased]
+
+### Fixed
+- `SC-NET-001` no longer reports a four-number slice of a longer dotted number run (for example `1.2.3.4.5`), or zero-padded numbers inside the `d`, `points`, `viewBox` and `transform` attributes of an `.svg` file. The same digits in script text, links, element text or other attributes, and trailing-hostname forms such as `203.0.113.9.evil.example`, are still reported. Loopback and unspecified addresses are unchanged. Known trade-off: an address followed by a fifth number (`203.0.113.9.443`, the `ip.port` form some tools print) reads as a longer number run and is not reported.
+- `SA-SH-003` no longer treats the `|` in a shell `case` pattern list (`a|b|c) ...`) as a pipe. A real pipe to a shell, including one inside a case arm's command, is still reported. The skip applies only to a line directly after `case ... in` or an arm's `;;`, with no brace or comma in the pattern, so `{curl,-s,url}|sh)` and a `curl|sh)` line inside an arm body are still reported.
+- `SM-SQL-005` and `SM-SQL-009` treat a column chosen between string literals (`"x" if c else "NULL"`) as static. A caller-controlled column is still reported.
+
 ## [2.14.17] - 2026-10-22
 
 ### Added
