@@ -798,6 +798,13 @@
     "mcp-tool-injection"
   ],
   [
+    "Full-schema poisoning reference",
+    "critical",
+    "ST-PI-016.md",
+    4,
+    "mcp-tool-injection"
+  ],
+  [
     "GHA Runner Service Installation (Shai-Hulud backdoor pattern)",
     "high",
     "SA-SH-014.sh",
@@ -1829,6 +1836,20 @@
     "high",
     "ST-SA-001.md",
     3,
+    "sub-agent-spawn"
+  ],
+  [
+    "Sub-agent spawn directive (DeepMind Agent Traps, March 2026)",
+    "high",
+    "ST-SA-001.md",
+    4,
+    "sub-agent-spawn"
+  ],
+  [
+    "Sub-agent spawn directive (DeepMind Agent Traps, March 2026)",
+    "high",
+    "ST-SA-001.md",
+    5,
     "sub-agent-spawn"
   ],
   [

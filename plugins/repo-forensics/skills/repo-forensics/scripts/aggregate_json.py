@@ -997,6 +997,59 @@ def merge_same_line_matches(all_findings):
     return out
 
 
+# --- One rule, many lines in one file ------------------------------------------------
+# A rule that fires on 20 lines of one file is one thing to review, not 20. Repeats
+# of the same rule and title in the same file fold into the strongest one; every
+# other line stays listed in `also_lines` with its own
+# snippet and severity. SARIF expands them back to one result per line.
+_LINE_FIELDS = ("line", "snippet", "severity", "confidence", "finding_id", "description",
+                "evidence_class", "original_severity", "also_matched", "also_in")
+
+
+def group_same_file_repeats(all_findings):
+    groups = {}
+    order = []
+    for f in all_findings:
+        line = f.get("line") or 0
+        if not f.get("file") or line <= 0 or f.get("scanner") in ("meta", "correlation"):
+            order.append((None, f))
+            continue
+        key = (f["file"], f.get("scanner"), f.get("rule_id") or "", f.get("title") or "",
+               f.get("category") or "")
+        if key not in groups:
+            groups[key] = []
+            order.append((key, None))
+        groups[key].append(f)
+    out = []
+    for key, f in order:
+        if key is None:
+            out.append(f)
+            continue
+        members = groups[key]
+        if len(members) == 1:
+            out.append(members[0])
+            continue
+        # The kept finding carries the verdict tier, so it must be the strongest
+        # by severity and then confidence; ties go to the earliest line.
+        keep = min(members, key=lambda m: (-SEVERITY_ORDER.get(m.get("severity", "low"), 0),
+                                           -_finding_confidence(m), m.get("line") or 0))
+        # A weaker-severity line can still carry higher confidence (and so a
+        # stronger verdict tier); the folded finding keeps the highest of both.
+        top_confidence = max(_finding_confidence(m) for m in members)
+        if top_confidence > _finding_confidence(keep):
+            keep["confidence"] = top_confidence
+            # Adjudication was marked per line before folding; a raised
+            # confidence can leave the WARN tier.
+            if verdict_tier(top_confidence) != "warn":
+                keep.pop("needs_adjudication", None)
+        members.sort(key=lambda m: m.get("line") or 0)
+        keep["also_lines"] = [
+            {k: m.get(k) for k in _LINE_FIELDS if m.get(k) is not None}
+            for m in members if m is not keep]
+        out.append(keep)
+    return out
+
+
 def fold_scanner_sections(scanners, before_ids, all_findings):
     """Drop folded findings from the per-scanner lists the text report prints."""
     folded = before_ids - {id(f) for f in all_findings}
@@ -1317,6 +1370,7 @@ def build_report(tmpdir, repo_path, skill_scan):
     before_ids = {id(f) for f in all_findings}
     all_findings = collapse_identical_copies(all_findings, repo_path)
     all_findings = merge_same_line_matches(all_findings)
+    all_findings = group_same_file_repeats(all_findings)
     fold_scanner_sections(scanners, before_ids, all_findings)
 
     coverage_status = build_coverage_status(scanners, all_findings)
@@ -1419,6 +1473,13 @@ def format_report_as_text(report):
             names = ", ".join(_sanitize(m.get("rule_id") or m.get("title") or "", max_len=60)
                               for m in matched[:5])
             lines.append(f"         also matched: {names}")
+        repeats = f.get("also_lines") or []
+        for r in repeats[:5]:
+            lines.append(f"         also line {r.get('line')}: "
+                         f"{_sanitize(r.get('snippet') or '', max_len=100)}")
+        if len(repeats) > 5:
+            nums = ", ".join(str(r.get("line")) for r in repeats[5:])
+            lines.append(f"         and lines: {_sanitize(nums, max_len=200)}")
         copies = f.get("also_in") or []
         if copies:
             shown = ", ".join(_sanitize(c, max_len=120) for c in copies[:5])

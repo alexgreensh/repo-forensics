@@ -1,6 +1,6 @@
 {
   "name": "repo-forensics",
-  "version": "2.14.18",
+  "version": "2.14.19",
   "description": "Offline security scanner for AI-agent repos, skills, plugins, and MCP servers",
   "author": {
     "name": "Alex Greenshpun",

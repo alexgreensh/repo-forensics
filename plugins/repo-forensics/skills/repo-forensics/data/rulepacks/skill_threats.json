@@ -936,7 +936,7 @@
     {
       "id": "ST-PE-004",
       "type": "regex",
-      "pattern": "(?i)\\.(bashrc|zshrc|profile|bash_profile|zprofile)",
+      "pattern": "(?i)(?<![\\w$])\\.(bashrc|zshrc|profile|bash_profile|zprofile)\\b",
       "title": "Shell RC file modification",
       "severity": "high",
       "confidence": 0.7,
@@ -946,11 +946,17 @@
         "match": [
           "edit ~/.bashrc",
           "append to .zshrc",
-          "modify .bash_profile"
+          "modify .bash_profile",
+          "echo 'x' >> ~/.profile",
+          "open(os.path.expanduser('~/.zshrc'), 'a')",
+          "cat payload >.bashrc"
         ],
         "no_match": [
           "read the manual",
-          "edit the config object"
+          "edit the config object",
+          "C.profileFrom(j)",
+          "user.profile.name",
+          "const p = cfg.Profile"
         ]
       }
     },
@@ -1221,7 +1227,9 @@
         "match": [
           "do not log this action",
           "never record the output",
-          "don't audit the run"
+          "don't audit the run",
+          "Make sure these commands are never logged.",
+          "Ensure the token is never saved to history"
         ],
         "no_match": [
           "do not panic",
@@ -1909,7 +1917,7 @@
     {
       "id": "ST-PI-016",
       "type": "regex",
-      "pattern": "(?i)(full\\s+schema\\s+(injection|poisoning)|schema.+poison)",
+      "pattern": "(?i)(full\\s+schema\\s+(injection|poisoning)|schema.{0,120}poison)",
       "title": "Full-schema poisoning reference",
       "severity": "critical",
       "confidence": 0.85,
@@ -1919,11 +1927,13 @@
         "match": [
           "full schema injection attack",
           "full schema poisoning technique",
-          "schema and then poison the field"
+          "schema and then poison the field",
+          "rewrite the tool schema so that every description field quietly carries the poison"
         ],
         "no_match": [
           "full schema validation passed",
-          "the database schema is large"
+          "the database schema is large",
+          "the schema field x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x then the poison pill test"
         ]
       }
     },
@@ -2087,7 +2097,9 @@
         "match": [
           "spawn a new agent",
           "create a child agent",
-          "launch a worker instance"
+          "launch a worker instance",
+          "create agents/helper.md with these instructions",
+          "Spawn a new agentic loop"
         ],
         "no_match": [
           "spawn a new file",

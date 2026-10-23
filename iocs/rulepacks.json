@@ -1,9 +1,9 @@
 {
-  "bundle_version": 9,
-  "generated": "2026-10-22",
+  "bundle_version": 10,
+  "generated": "2026-10-23",
   "packs": {
     "dead_anchors": {
-      "pack_version": 9,
+      "pack_version": 10,
       "rules": [
         {
           "category": "dead-anchor-extract",
@@ -279,7 +279,7 @@
       "schema_version": "1.0"
     },
     "mcp_security": {
-      "pack_version": 9,
+      "pack_version": 10,
       "rules": [
         {
           "category": "sql-injection",
@@ -1280,7 +1280,7 @@
       "schema_version": "1.0"
     },
     "runtime_dynamism": {
-      "pack_version": 9,
+      "pack_version": 10,
       "rules": [
         {
           "asset": "loaded code",
@@ -2778,7 +2778,7 @@
       "schema_version": "1.0"
     },
     "sast": {
-      "pack_version": 9,
+      "pack_version": 10,
       "rules": [
         {
           "asset": "server runtime",
@@ -6515,7 +6515,7 @@
       "schema_version": "1.0"
     },
     "secrets": {
-      "pack_version": 9,
+      "pack_version": 10,
       "rules": [
         {
           "asset": "asymmetric private key",
@@ -7531,7 +7531,7 @@
       "schema_version": "1.0"
     },
     "shared": {
-      "pack_version": 9,
+      "pack_version": 10,
       "rules": [
         {
           "category": "shared-verb-list",
@@ -7727,7 +7727,7 @@
       "schema_version": "1.0"
     },
     "skill_threats": {
-      "pack_version": 11,
+      "pack_version": 12,
       "rules": [
         {
           "asset": "agent behavior",
@@ -8665,16 +8665,22 @@
             "match": [
               "edit ~/.bashrc",
               "append to .zshrc",
-              "modify .bash_profile"
+              "modify .bash_profile",
+              "echo 'x' >> ~/.profile",
+              "open(os.path.expanduser('~/.zshrc'), 'a')",
+              "cat payload >.bashrc"
             ],
             "no_match": [
               "read the manual",
-              "edit the config object"
+              "edit the config object",
+              "C.profileFrom(j)",
+              "user.profile.name",
+              "const p = cfg.Profile"
             ]
           },
           "explanation": "Shell RC file modification.",
           "id": "ST-PE-004",
-          "pattern": "(?i)\\.(bashrc|zshrc|profile|bash_profile|zprofile)",
+          "pattern": "(?i)(?<![\\w$])\\.(bashrc|zshrc|profile|bash_profile|zprofile)\\b",
           "severity": "high",
           "title": "Shell RC file modification",
           "type": "regex"
@@ -8940,7 +8946,9 @@
             "match": [
               "do not log this action",
               "never record the output",
-              "don't audit the run"
+              "don't audit the run",
+              "Make sure these commands are never logged.",
+              "Ensure the token is never saved to history"
             ],
             "no_match": [
               "do not panic",
@@ -9638,16 +9646,18 @@
             "match": [
               "full schema injection attack",
               "full schema poisoning technique",
-              "schema and then poison the field"
+              "schema and then poison the field",
+              "rewrite the tool schema so that every description field quietly carries the poison"
             ],
             "no_match": [
               "full schema validation passed",
-              "the database schema is large"
+              "the database schema is large",
+              "the schema field x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x then the poison pill test"
             ]
           },
           "explanation": "Full-schema poisoning reference.",
           "id": "ST-PI-016",
-          "pattern": "(?i)(full\\s+schema\\s+(injection|poisoning)|schema.+poison)",
+          "pattern": "(?i)(full\\s+schema\\s+(injection|poisoning)|schema.{0,120}poison)",
           "severity": "critical",
           "title": "Full-schema poisoning reference",
           "type": "regex"
@@ -9806,7 +9816,9 @@
             "match": [
               "spawn a new agent",
               "create a child agent",
-              "launch a worker instance"
+              "launch a worker instance",
+              "create agents/helper.md with these instructions",
+              "Spawn a new agentic loop"
             ],
             "no_match": [
               "spawn a new file",
