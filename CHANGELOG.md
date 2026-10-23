@@ -2,7 +2,7 @@
 
 All notable changes to repo-forensics. Versions follow semver.
 
-## [Unreleased]
+## [2.14.18] - 2026-10-23
 
 ### Fixed
 - `SC-NET-001` no longer reports a four-number slice of a longer dotted number run (for example `1.2.3.4.5`), or zero-padded numbers inside the `d`, `points`, `viewBox` and `transform` attributes of an `.svg` file. The same digits in script text, links, element text or other attributes, and trailing-hostname forms such as `203.0.113.9.evil.example`, are still reported. Loopback and unspecified addresses are unchanged. Known trade-off: an address followed by a fifth number (`203.0.113.9.443`, the `ip.port` form some tools print) reads as a longer number run and is not reported.
