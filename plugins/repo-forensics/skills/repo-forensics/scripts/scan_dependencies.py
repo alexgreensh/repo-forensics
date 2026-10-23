@@ -8,6 +8,7 @@ Created by Alex Greenshpun
 
 import sys
 import os
+import time
 import json
 import difflib
 import math
@@ -503,6 +504,13 @@ _FRESHNESS_STATE = {
     "queried": set(),      # dedup (ecosystem, name_lower, version)
     "query_count": 0,      # hard cap tracking
     "max_queries": 100,    # hard cap
+    # Wall-clock budget for all registry lookups. run_forensics.sh kills a
+    # scanner at 120s, and a killed scanner turns the whole report into a
+    # scanner failure (exit 99) with no dependency findings at all. Stopping
+    # the lookups early keeps every offline check and reports the gap instead.
+    "time_budget_s": 45.0,
+    "started_at": None,
+    "time_skipped": 0,
 }
 
 
@@ -688,6 +696,7 @@ def _check_freshness(ecosystem, pkg_versions, rel_path):
 
     findings = []
     skipped_count = 0
+    time_skipped = 0
 
     for pkg, version in pkg_versions.items():
         if not isinstance(pkg, str) or not isinstance(version, str):
@@ -707,6 +716,13 @@ def _check_freshness(ecosystem, pkg_versions, rel_path):
         # Enforce hard query cap
         if _FRESHNESS_STATE["query_count"] >= _FRESHNESS_STATE["max_queries"]:
             skipped_count += 1
+            continue
+        now = time.monotonic()
+        if _FRESHNESS_STATE["started_at"] is None:
+            _FRESHNESS_STATE["started_at"] = now
+        elif now - _FRESHNESS_STATE["started_at"] > _FRESHNESS_STATE["time_budget_s"]:
+            _FRESHNESS_STATE["time_skipped"] += 1
+            time_skipped += 1
             continue
         _FRESHNESS_STATE["query_count"] += 1
 
@@ -820,8 +836,57 @@ def _check_freshness(ecosystem, pkg_versions, rel_path):
             snippet=f"Query cap: {_FRESHNESS_STATE['max_queries']}",
             category="freshness-query-cap",
         ))
+    if time_skipped > 0:
+        findings.append(core.Finding(
+            scanner=SCANNER_NAME, severity="medium",
+            title="Freshness check time limit reached",
+            description=(
+                f"{time_skipped} packages were not checked for publish age or "
+                f"maintainer changes: registry lookups hit the "
+                f"{_FRESHNESS_STATE['time_budget_s']:.0f}s budget. Offline checks "
+                f"(known-bad versions, typosquats, lockfile tampering) still ran."
+            ),
+            file=rel_path, line=0,
+            snippet=f"{time_skipped} packages not checked",
+            category="freshness-query-cap",
+        ))
 
     return findings
+
+
+def _merge_freshness_cap_findings(findings):
+    """One "limit reached" notice per scan, not one per manifest.
+
+    The query cap and time budget are scan-wide, so a repo with many lockfiles
+    used to repeat the same notice for each. Counts are summed and every
+    affected manifest is still named.
+    """
+    caps = [f for f in findings if f.category == "freshness-query-cap"]
+    if len(caps) < 2:
+        return findings
+    merged = {}
+    for f in caps:
+        m = re.match(r"(\d+)", f.description or "") or re.match(r"(\d+)", f.snippet or "")
+        entry = merged.setdefault(f.title, {"first": f, "count": 0, "files": []})
+        entry["count"] += int(m.group(1)) if m else 0
+        if f.file not in entry["files"]:
+            entry["files"].append(f.file)
+    out = [f for f in findings if f.category != "freshness-query-cap"]
+    for title, entry in merged.items():
+        first = entry["first"]
+        files = entry["files"]
+        out.append(core.Finding(
+            scanner=first.scanner, severity=first.severity, title=title,
+            description=(f"{entry['count']} packages were not checked for publish age "
+                         f"or maintainer changes across {len(files)} manifest(s): "
+                         + ", ".join(files[:10])
+                         + (f" and {len(files) - 10} more" if len(files) > 10 else "")
+                         + ". Offline checks still ran."),
+            file=files[0], line=0,
+            snippet=f"{entry['count']} packages not checked",
+            category="freshness-query-cap",
+        ))
+    return out
 
 
 def _get_compromised_versions_db():
@@ -2763,6 +2828,7 @@ def main():
     # Surface enrichment state (offline/no-vulns/rulepack-degraded) as
     # a scanner-emitted finding, never as a cross-import from aggregate_json.
     all_findings.extend(_enrichment_status_findings())
+    all_findings = _merge_freshness_cap_findings(all_findings)
 
     # Surface vuln-feed cache freshness on each CVE finding so the aggregator
     # can set enrichment_status.vulns without importing vuln_feed.

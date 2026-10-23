@@ -2,6 +2,16 @@
 
 All notable changes to repo-forensics. Versions follow semver.
 
+## [Unreleased]
+
+### Fixed
+- Repositories that ship the same file in several places (a plugin mirror, a vendored copy) report each finding once. Files must be byte-identical. The report names every other path. SARIF still gives code scanning one result per path.
+- Reading a home-folder or `~/.claude` path, or copying the environment, is graded LOW in code that sends nothing out from the same file. It keeps full severity next to any network or exfiltration finding and in agent instruction files. Credential files, persistence writes and destructive deletes are reported by their own rules, unchanged. One note in the report counts every finding graded down.
+- Tests that create a fresh temp folder with `mkdtemp`, name it `HOME` and delete it afterwards are no longer reported as a home-directory wipe. Rebinding, shadowing, parameters, fallbacks and `eval` keep the finding. In shell scripts, `rm -rf "$home"` on a lowercase local variable is no longer read as `$HOME`. PowerShell and batch files, where variable names ignore case, are unchanged.
+- Compiled `.pyc` files whose `.py` contains every name and marker they use are graded LOW ("also in source") instead of hidden logic. The source-versus-bytecode check now covers every call, network and token name the bytecode scanner looks for, so a `.pyc` that adds one stays HIGH. A timestamp `.pyc` that no longer matches its source is reported as a stale cache, since Python will not load it.
+- Bytecode from Python 3.15 is decoded instead of being reported as unreadable.
+- Online package checks stop after 45 seconds and report how many packages were not checked, instead of the dependency scanner being killed and the whole report ending as a scanner failure. The "limit reached" note appears once per scan, not once per lockfile.
+
 ## [2.14.17] - 2026-10-22
 
 ### Added

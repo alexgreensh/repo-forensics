@@ -17,6 +17,7 @@ constructs, executes, or evaluates a code object.
 """
 
 import dis
+from collections.abc import Mapping
 import ctypes
 import ctypes.util
 import importlib.util
@@ -233,7 +234,7 @@ class _Reader:
         return value
 
     def code(self, depth):
-        if not (3, 8) <= sys.version_info[:2] <= (3, 14):
+        if not (3, 8) <= sys.version_info[:2] <= (3, 15):
             raise ValueError("unsupported bytecode version")
         # CPython writes fixed-width integers before the object fields.
         for _ in range(5 if sys.version_info >= (3, 11) else 6):
@@ -326,6 +327,9 @@ def _instructions(code):
         raise ValueError("odd-length wordcode")
     extended = 0
     caches = getattr(dis, "_inline_cache_entries", None)
+    # 3.15 ships the table as a frozendict: treat any mapping like a dict.
+    if caches is not None and not isinstance(caches, (list, dict)) and isinstance(caches, Mapping):
+        caches = dict(caches)
     if sys.version_info >= (3, 11) and (not isinstance(caches, (list, dict)) or not caches):
         raise AnalysisLimitExceeded("inline cache table unavailable")
     offset = 0
@@ -340,6 +344,8 @@ def _instructions(code):
         else:
             extended = 0
         if name == "IMPORT_NAME":
+            if sys.version_info >= (3, 15):
+                arg >>= 2  # low two bits carry the lazy-import flags (PEP 810)
             if arg >= len(code.co_names):
                 raise ValueError("invalid import name index")
             target = code.co_names[arg]

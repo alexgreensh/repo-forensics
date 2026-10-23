@@ -6,8 +6,10 @@ Reads per-scanner stdout/stderr files from a temp directory, validates JSON payl
 builds a machine-readable aggregate document, and writes a fail-closed exit code file.
 """
 
+import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -837,6 +839,146 @@ def apply_evidence_caps(all_findings):
     return all_findings
 
 
+# --- Capability findings ------------------------------------------------------
+# These rules report what code CAN touch (a home-folder path, a ~/.claude path,
+# a copy of the environment), not that anything leaves the machine. In code
+# files that is what most agent tooling does, and as HIGH/MEDIUM it buried the
+# real findings. They drop to LOW only when nothing in the same file can send
+# data out. The dangerous forms keep their own rules and are never capped here:
+# credential files (~/.ssh, ~/.aws, ~/.claude/settings.json: ST-CR-*, ST-EX-004,
+# SA-JS-028), persistence writes (ST-PE-*), destructive deletes (ST-PR-*).
+# Runs AFTER correlation, so attack chains still see the original findings.
+CAPABILITY_RULE_IDS = frozenset({"ST-SP-002", "ST-SP-005", "ST-EX-005", "ST-EX-006", "ST-EX-007"})
+_CAPABILITY_CODE_EXTS = frozenset({
+    ".py", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".mts", ".cts", ".sh", ".bash",
+    ".zsh", ".ps1", ".psm1", ".rb", ".go", ".rs", ".java", ".kt", ".php", ".pl", ".lua",
+})
+# Deliberately broad: any of these words in a same-file finding keeps full
+# severity. Whole words only ("post" must not match "PostgreSQL"), and the
+# env-read rules are excluded because their category name says "exfiltration"
+# without any sink being present.
+_OUTBOUND_HINTS = re.compile(
+    r"\b(?:network\w*|https?|fetch\w*|request|requests|post|webhooks?|curl|wget|"
+    r"exfil\w*|sockets?|upload\w*|send\w*|smtp|dns|urls?|beacon\w*|c2|"
+    r"trifecta|outbound)\b")
+_NOT_A_SINK_RULE_IDS = CAPABILITY_RULE_IDS | {"ST-EX-008"}
+
+
+def apply_capability_caps(all_findings):
+    """Grade capability-only findings down to LOW in files with no outbound path.
+
+    Keeps `original_severity`, sets `capability: true`, and appends one LOW
+    meta finding naming how many were graded down, so nothing is silent.
+    """
+    outbound_files = set()
+    for f in all_findings:
+        if f.get("rule_id") in _NOT_A_SINK_RULE_IDS:
+            continue
+        text = " ".join(str(f.get(k) or "") for k in ("category", "title")).lower()
+        if _OUTBOUND_HINTS.search(text.replace("-", " ").replace("_", " ")):
+            outbound_files.add(f.get("file", ""))
+    capped = 0
+    for f in all_findings:
+        if f.get("rule_id") not in CAPABILITY_RULE_IDS:
+            continue
+        path = f.get("file", "") or ""
+        if os.path.splitext(path)[1].lower() not in _CAPABILITY_CODE_EXTS:
+            continue  # agent instructions and docs: a path there is a directive
+        f["capability"] = True
+        if path in outbound_files:
+            continue
+        sev = f.get("severity", "low")
+        if SEVERITY_ORDER.get(sev, 0) > SEVERITY_ORDER["low"]:
+            f.setdefault("original_severity", sev)
+            f["severity"] = "low"
+            conf = f.get("confidence")
+            if conf is None or float(conf) > _SEVERITY_CONFIDENCE["low"]:
+                f["confidence"] = _SEVERITY_CONFIDENCE["low"]
+            capped += 1
+    if capped:
+        all_findings.append({
+            "scanner": "meta", "severity": "low",
+            "title": "Capability findings graded to LOW",
+            "description": (
+                f"{capped} finding(s) that only show what code can reach (a home or "
+                f"~/.claude path, an environment copy) were graded down to LOW: nothing "
+                f"in the same file sends data out. Credential files, persistence writes "
+                f"and destructive deletes are reported by their own rules at full severity."
+            ),
+            "file": "", "line": 0,
+            "snippet": f"{capped} capability finding(s) graded down",
+            "category": "configuration", "rule_id": "",
+            "confidence": _SEVERITY_CONFIDENCE["low"], "evidence_class": "direct",
+        })
+    return all_findings
+
+
+# --- Identical copies ------------------------------------------------------------
+# Repos often ship the same file several times (a plugin mirror, a vendored
+# copy). Each copy produced its own findings, doubling or tripling the report.
+# Findings collapse only when the files are byte-identical (SHA-256) and the
+# finding is the same rule, title, severity, line and snippet: one entry is
+# kept and every other path is listed in `also_in`. Symlinks, unreadable or
+# very large files never collapse. Severities are unchanged, so the exit code
+# cannot move.
+_COPY_HASH_MAX_BYTES = 20 * 1024 * 1024
+
+
+def _file_digest(repo_path, rel, cache):
+    if rel in cache:
+        return cache[rel]
+    digest = None
+    try:
+        full = os.path.join(repo_path, rel)
+        real_root = os.path.realpath(repo_path)
+        if (os.path.realpath(full).startswith(real_root + os.sep)
+                and not os.path.islink(full) and os.path.isfile(full)
+                and os.path.getsize(full) <= _COPY_HASH_MAX_BYTES):
+            h = hashlib.sha256()
+            with open(full, "rb") as fh:
+                for chunk in iter(lambda: fh.read(1 << 20), b""):
+                    h.update(chunk)
+            digest = h.hexdigest()
+    except (OSError, ValueError):
+        digest = None
+    cache[rel] = digest
+    return digest
+
+
+def collapse_identical_copies(all_findings, repo_path):
+    cache = {}
+    groups = {}
+    order = []
+    for f in all_findings:
+        rel = f.get("file") or ""
+        digest = _file_digest(repo_path, rel, cache) if rel and repo_path else None
+        if digest is None:
+            order.append(("single", id(f), f))
+            continue
+        key = (digest, f.get("scanner"), f.get("rule_id"), f.get("title"),
+               f.get("severity"), f.get("line"), f.get("snippet"), f.get("category"))
+        if key not in groups:
+            groups[key] = []
+            order.append(("group", key, None))
+        groups[key].append(f)
+    out = []
+    for kind, key, f in order:
+        if kind == "single":
+            out.append(f)
+            continue
+        members = groups[key]
+        if len(members) == 1:
+            out.append(members[0])
+            continue
+        members.sort(key=lambda m: (m["file"].count("/"), m["file"]))
+        keep = members[0]  # same dict the scanner section holds, edited in place
+        others = sorted({m["file"] for m in members[1:]} - {keep["file"]})
+        if others:
+            keep["also_in"] = others
+        out.append(keep)
+    return out
+
+
 def apply_capability_declarations(all_findings, repo_path):
     """Annotate findings whose behavior matches a declared capability.
 
@@ -1044,6 +1186,7 @@ def build_report(tmpdir, repo_path, skill_scan):
     # adjudication marking so the cap shapes the final severity that drives
     # summary/exit-code, but BEFORE sort/summary so counts reflect the cap.
     apply_evidence_caps(all_findings)
+    apply_capability_caps(all_findings)
 
     # Capability declaration ledger. A first-party .forensics-capabilities
     # file is parsed and used ONLY to annotate matching findings for the human
@@ -1091,6 +1234,17 @@ def build_report(tmpdir, repo_path, skill_scan):
     # unsampled middle of an oversized file — becomes a real MEDIUM finding and
     # therefore floors the exit code at 1. Previously each of these emitted only
     # a LOW note and the report exited 0 over a live, uninspected payload.
+    before_ids = {id(f) for f in all_findings}
+    all_findings = collapse_identical_copies(all_findings, repo_path)
+    folded = before_ids - {id(f) for f in all_findings}
+    if folded:
+        # Scanner sections render from their own lists (same dict objects).
+        for scanner in scanners:
+            kept = [f for f in scanner.get("findings", []) or [] if id(f) not in folded]
+            if len(kept) != len(scanner.get("findings", []) or []):
+                scanner["findings"] = kept
+                scanner["finding_count"] = len(kept)
+
     coverage_status = build_coverage_status(scanners, all_findings)
     all_findings.extend(build_coverage_gap_findings(coverage_status))
 
@@ -1183,6 +1337,11 @@ def format_report_as_text(report):
                 snip = f.get("snippet", "")
                 if snip:
                     lines.append(f"         {_sanitize(snip, max_len=120)}")
+                copies = f.get("also_in") or []
+                if copies:
+                    shown = ", ".join(_sanitize(c, max_len=120) for c in copies[:5])
+                    more = f" and {len(copies) - 5} more" if len(copies) > 5 else ""
+                    lines.append(f"         same file also at: {shown}{more}")
                 tm = []
                 if f.get("attacker"):
                     tm.append(f"attacker={f['attacker']}")
