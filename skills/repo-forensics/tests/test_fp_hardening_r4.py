@@ -263,7 +263,7 @@ def test_dict_literal_spreading_the_environment_keeps_steering_keys_visible(tmp_
     assert _envcopy(tmp_path, body) == [2, 4]
 
 
-# --- review round: name shadowing -------------------------------------------
+# --- name shadowing ------------------------------------------------------
 
 def test_subprocess_name_shadowing_keeps_env_copy_visible(tmp_path):
     shadows = {
