@@ -233,61 +233,62 @@ class TestHMACSigning:
             key2 = f.read()
         assert key1 == key2
 
-    def test_legacy_repo_key_verifies_and_migrates(self, repo_with_hooks):
-        """Existing baselines signed by the old repo-root key must stay trusted."""
-        key = b"legacy signing key for tests!!123"
-        legacy_key_path = repo_with_hooks / scanner.SIGNING_KEY_FILENAME
-        legacy_key_path.write_bytes(key)
-        legacy_key_path.chmod(0o600)
-
-        files = scanner.find_critical_files(str(repo_with_hooks))
+    @staticmethod
+    def _plant_repo_key_baseline(repo, key):
+        (repo / scanner.SIGNING_KEY_FILENAME).write_bytes(key)
+        files = scanner.find_critical_files(str(repo))
         baseline = {
-            'files': {
-                rel_path: scanner.sha256_file(full_path)
-                for rel_path, full_path in files.items()
-            },
+            'files': {rel: scanner.sha256_file(full) for rel, full in files.items()},
             '_meta': {'created': '2026-01-01T00:00:00Z', 'tool': 'legacy', 'version': 'v1'},
         }
         content = json.dumps(baseline, sort_keys=True)
         baseline['_hmac'] = hmac.new(key, content.encode('utf-8'), hashlib.sha256).hexdigest()
-        baseline_path = repo_with_hooks / scanner.BASELINE_FILENAME
-        baseline_path.write_text(json.dumps(baseline))
+        path = repo / scanner.BASELINE_FILENAME
+        path.write_text(json.dumps(baseline))
+        return path
 
-        loaded, integrity_findings = scanner.load_baseline(str(repo_with_hooks))
+    def test_repo_key_baseline_is_refused_and_key_never_copied(self, repo_with_hooks):
+        """A repo can ship a key plus a matching baseline; that proves nothing."""
+        key = b"planted signing key shipped in the repo"
+        baseline_path = self._plant_repo_key_baseline(repo_with_hooks, key)
+        before = baseline_path.read_bytes()
 
-        assert loaded is not None
-        assert [f for f in integrity_findings if f.category == "integrity-hmac"] == []
-        new_key_path = scanner._get_signing_key_path()
-        assert os.path.exists(new_key_path)
-        with open(new_key_path, 'rb') as f:
-            assert f.read() == key
-        assert not legacy_key_path.exists()
+        loaded, findings = scanner.load_baseline(str(repo_with_hooks))
 
-    def test_legacy_repo_key_prevents_watch_reset(self, repo_with_hooks):
-        """Watch mode must compare against a legacy signed baseline, not recreate it."""
-        key = b"legacy signing key for tests!!456"
-        legacy_key_path = repo_with_hooks / scanner.SIGNING_KEY_FILENAME
-        legacy_key_path.write_bytes(key)
+        assert loaded is None
+        assert any("key stored in the repository" in f.title and f.severity == "high"
+                   for f in findings)
+        assert not os.path.exists(scanner._get_signing_key_path())
+        assert (repo_with_hooks / scanner.SIGNING_KEY_FILENAME).read_bytes() == key
+        assert baseline_path.read_bytes() == before
 
-        files = scanner.find_critical_files(str(repo_with_hooks))
-        baseline = {
-            'files': {
-                rel_path: scanner.sha256_file(full_path)
-                for rel_path, full_path in files.items()
-            },
-            '_meta': {'created': '2026-01-01T00:00:00Z', 'tool': 'legacy', 'version': 'v1'},
-        }
-        content = json.dumps(baseline, sort_keys=True)
-        baseline['_hmac'] = hmac.new(key, content.encode('utf-8'), hashlib.sha256).hexdigest()
-        baseline_path = repo_with_hooks / scanner.BASELINE_FILENAME
-        baseline_path.write_text(json.dumps(baseline))
+    def test_repo_key_baseline_refused_even_when_home_key_exists(self, repo_with_hooks):
+        scanner._get_or_create_signing_key(str(repo_with_hooks))
+        home_key = open(scanner._get_signing_key_path(), 'rb').read()
+        self._plant_repo_key_baseline(repo_with_hooks, b"planted key, home key already set")
+        findings = scanner.watch_mode(str(repo_with_hooks),
+                                      scanner.find_critical_files(str(repo_with_hooks)), "text")
+        assert any("key stored in the repository" in f.title for f in findings)
+        assert open(scanner._get_signing_key_path(), 'rb').read() == home_key
 
-        (repo_with_hooks / "CLAUDE.md").write_text("# modified\n")
+    def test_planted_repo_key_is_never_used_to_sign(self, repo_with_hooks):
+        planted = b"planted key without any baseline yet"
+        (repo_with_hooks / scanner.SIGNING_KEY_FILENAME).write_bytes(planted)
+        scanner.watch_mode(str(repo_with_hooks),
+                           scanner.find_critical_files(str(repo_with_hooks)), "text")
+        home_key = open(scanner._get_signing_key_path(), 'rb').read()
+        assert home_key != planted and len(home_key) == 32
+        loaded, findings = scanner.load_baseline(str(repo_with_hooks))
+        assert loaded is not None and findings == []
 
-        findings = scanner.watch_mode(str(repo_with_hooks), scanner.find_critical_files(str(repo_with_hooks)), "text")
-
-        assert any("File modified since baseline: CLAUDE.md" in f.title for f in findings)
-        assert not any("Signing key missing" in f.title for f in findings)
+    def test_unreadable_home_key_is_reported_not_called_tampering(self, repo_with_hooks):
+        scanner.watch_mode(str(repo_with_hooks), {}, "text")
+        key_path = scanner._get_signing_key_path()
+        os.remove(key_path)
+        os.mkdir(key_path)
+        loaded, findings = scanner.load_baseline(str(repo_with_hooks))
+        assert loaded is None
+        assert [f.title for f in findings] == ["Signing key unreadable"]
 
 
 class TestSigningKeyOutsideRepo:
@@ -468,14 +469,51 @@ class TestBaselineSafeIO:
             scanner.save_baseline(str(tmp_path), {'files': {'bad': object()}})
         assert path.read_text() == 'old baseline'
 
-    def test_save_refuses_symlinked_parent(self, tmp_path):
+    @pytest.mark.skipif(os.name == 'nt', reason='POSIX symlink')
+    def test_repo_reached_through_symlinked_parent_still_works(self, tmp_path):
+        """~/code -> /Volumes/x or /home -> var/home must not disable --watch."""
         real = tmp_path / 'real'
-        real.mkdir()
+        (real / 'repo').mkdir(parents=True)
         link = tmp_path / 'link'
         link.symlink_to(real, target_is_directory=True)
-        with pytest.raises(OSError):
-            scanner.save_baseline(str(link), {'files': {}})
-        assert not (real / scanner.BASELINE_FILENAME).exists()
+        repo = str(link / 'repo')
+        scanner.save_baseline(repo, {'files': {}})
+        loaded, findings = scanner.load_baseline(repo)
+        assert loaded['files'] == {} and findings == []
+        assert (real / 'repo' / scanner.BASELINE_FILENAME).is_file()
+
+    @pytest.mark.skipif(os.name == 'nt' or not (hasattr(os, 'O_PATH') or hasattr(os, 'O_SEARCH'))
+                        or os.geteuid() == 0, reason='needs search-only opens, non-root')
+    def test_repo_under_execute_only_parent_still_works(self, tmp_path):
+        parent = tmp_path / 'xonly'
+        (parent / 'repo').mkdir(parents=True)
+        parent.chmod(0o111)
+        try:
+            scanner.save_baseline(str(parent / 'repo'), {'files': {}})
+            loaded, findings = scanner.load_baseline(str(parent / 'repo'))
+            assert loaded['files'] == {} and findings == []
+        finally:
+            parent.chmod(0o755)
+
+    @pytest.mark.skipif(os.name == 'nt', reason='POSIX temp sweep')
+    def test_stale_temp_from_killed_writer_is_removed(self, tmp_path):
+        stale = tmp_path / ('.forensics-baseline-' + 'a' * 32 + '.tmp')
+        fresh = tmp_path / ('.forensics-baseline-' + 'b' * 32 + '.tmp')
+        victim = tmp_path / 'victim'
+        victim.write_text('keep')
+        linked = tmp_path / ('.forensics-baseline-' + 'c' * 32 + '.tmp')
+        linked.symlink_to(victim)
+        lookalike = tmp_path / '.forensics-baseline-notours.tmp'
+        for path in (stale, fresh, lookalike):
+            path.write_text('x')
+        old = scanner.time.time() - 2 * scanner._STALE_AFTER_SECONDS
+        for path in (stale, lookalike):
+            os.utime(path, (old, old))
+        os.utime(linked, (old, old), follow_symlinks=False)
+        scanner.save_baseline(str(tmp_path), {'files': {}})
+        assert not stale.exists()
+        assert fresh.exists() and lookalike.exists() and linked.is_symlink()
+        assert victim.read_text() == 'keep'
 
     def test_save_replaces_hardlink_not_victim(self, tmp_path):
         victim = tmp_path / 'victim'
@@ -728,3 +766,33 @@ class TestSigningKeyFileSafety:
         path.write_bytes(b'')
         with pytest.raises(OSError):
             scanner._read_signing_key(str(path))
+
+
+class TestHostileSettingsShapes:
+    @pytest.mark.parametrize('contents', [
+        '{"hooks": 1}', '[1, 2]', '{"hooks": {"E": [5, null, "x"]}}',
+        '{"hooks": {"E": [{"hooks": 7}]}}', '{"hooks": {"E": [{"command": 9}]}}',
+        '"text"',
+    ])
+    def test_malformed_settings_never_crash_the_scanner(self, tmp_path, contents):
+        (tmp_path / '.claude').mkdir()
+        settings = tmp_path / '.claude' / 'settings.json'
+        settings.write_text(contents)
+        files = scanner.find_critical_files(str(tmp_path))
+        assert '.claude/settings.json' in {p.replace(os.sep, '/') for p in files}
+        scanner.check_hooks_in_settings(str(settings), '.claude/settings.json')
+        scanner.watch_mode(str(tmp_path), files, 'text')
+
+    def test_nested_hook_script_is_tracked_for_drift(self, tmp_path):
+        (tmp_path / '.claude').mkdir()
+        (tmp_path / 'hooks').mkdir()
+        (tmp_path / 'hooks' / 'start.sh').write_text('echo hi\n')
+        (tmp_path / '.claude' / 'settings.json').write_text(json.dumps({'hooks': {
+            'SessionStart': [{'matcher': '', 'hooks': [
+                {'type': 'command', 'command': 'bash hooks/start.sh'}]}]}}))
+        files = scanner.find_critical_files(str(tmp_path))
+        assert os.path.join('hooks', 'start.sh') in files
+        scanner.watch_mode(str(tmp_path), files, 'text')
+        (tmp_path / 'hooks' / 'start.sh').write_text('echo changed\n')
+        findings = scanner.watch_mode(str(tmp_path), scanner.find_critical_files(str(tmp_path)), 'text')
+        assert any(f.category == 'integrity-drift' for f in findings)

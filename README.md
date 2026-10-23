@@ -722,6 +722,18 @@ No pip install. No API keys. No Docker. No dependencies.
 ./skills/repo-forensics/scripts/run_forensics.sh /path/to/repo --verify-install  # Verify installation integrity
 ```
 
+Watch mode never replaces a baseline it cannot trust. If the signature does not verify,
+or the file is not valid baseline JSON, the scan reports it on every run and leaves the
+file untouched. To start over, keep a copy of the rejected baseline, review the
+repository, then delete `.forensics-baseline.json` and run `--watch` again.
+
+The signing key lives in `~/.cache/repo-forensics/forensics-key`, never in the repository.
+A `.forensics-key` file inside a repository is ignored: anyone who ships the repository
+can ship a key and a matching baseline. Baselines from versions before 2.9.3, which kept the
+key in the repository, are reported until you delete both files and run `--watch` again.
+The key is written in full before it becomes visible, so the cache folder must support
+hard links (every common filesystem does).
+
 > **Installed via Claude Code plugin marketplace?** Enable auto-update: `/plugin` > **Marketplaces** tab > select repo-forensics > **Enable auto-update**. Otherwise you won't get new scanners, IOCs, or detection fixes automatically.
 
 </details>

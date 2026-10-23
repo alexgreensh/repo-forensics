@@ -102,46 +102,51 @@ def _write_signing_key(path, key):
         os.unlink(temporary)
 
 
-def _migrate_legacy_signing_key(repo_path, key):
-    """Copy a verified legacy key outside the repo and remove the old copy."""
-    new_path = _get_signing_key_path()
-    legacy_path = _get_legacy_signing_key_path(repo_path)
-    if not os.path.lexists(new_path):
-        try:
-            _write_signing_key(new_path, key)
-        except FileExistsError:
-            _read_signing_key(new_path)  # A concurrent creator must leave a readable key.
-    try:
-        os.remove(legacy_path)
-    except OSError:
-        pass
-
-
 def _get_or_create_signing_key(repo_path):  # repo_path kept for API compatibility
     """Get or create a 32-byte HMAC signing key for baseline integrity verification.
 
     The key is stored in ~/.cache/repo-forensics/forensics-key so it is never
-    committed or readable from inside the repository.
+    committed or readable from inside the repository. A key found inside the
+    repository is never used or copied: whoever ships the repo can ship a key
+    plus a matching baseline, so it proves nothing.
     """
     key_path = _get_signing_key_path()
     try:
         return _read_signing_key(key_path)
     except FileNotFoundError:
         pass
-    legacy_path = _get_legacy_signing_key_path(repo_path)
-    try:
-        key = _read_signing_key(legacy_path)
-    except FileNotFoundError:
-        key = None
-    if key is not None:
-        _migrate_legacy_signing_key(repo_path, key)
-        return _read_signing_key(key_path)
     key = secrets.token_bytes(32)
     try:
         _write_signing_key(key_path, key)
     except FileExistsError:
         return _read_signing_key(key_path)
     return key
+
+
+def _hook_commands(data, nested=True):
+    """Yield (event, command) from settings hooks.
+
+    Claude Code nests commands as {"matcher": ..., "hooks": [{"command": ...}]};
+    older files put "command" on the entry itself. Anything malformed is skipped
+    so a hostile settings file cannot crash the scanner.
+    """
+    hooks = data.get('hooks') if isinstance(data, dict) else None
+    if not isinstance(hooks, dict):
+        return
+    for event_name, entries in hooks.items():
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            if isinstance(entry, str):
+                yield str(event_name), entry
+                continue
+            if not isinstance(entry, dict):
+                continue
+            inner = entry.get('hooks') if nested else None
+            for hook in [entry] + (inner if isinstance(inner, list) else []):
+                command = hook.get('command') if isinstance(hook, dict) else None
+                if isinstance(command, str):
+                    yield str(event_name), command
 
 
 def find_critical_files(repo_path):
@@ -170,19 +175,15 @@ def find_critical_files(repo_path):
         try:
             with open(settings_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            for event_name, hook_list in data.get('hooks', {}).items():
-                if not isinstance(hook_list, list):
-                    continue
-                for hook in hook_list:
-                    cmd = hook.get('command', '') if isinstance(hook, dict) else ''
-                    # Extract script paths from hook commands
-                    for token in cmd.split():
-                        if token.endswith(('.sh', '.bash', '.py', '.js')):
-                            script_path = os.path.join(repo_path, token) if not os.path.isabs(token) else token
-                            if os.path.isfile(script_path):
-                                rp = os.path.relpath(script_path, repo_path)
-                                found[rp] = script_path
-        except (json.JSONDecodeError, OSError):
+            for _event_name, cmd in _hook_commands(data):
+                # Extract script paths from hook commands
+                for token in cmd.split():
+                    if token.endswith(('.sh', '.bash', '.py', '.js')):
+                        script_path = os.path.join(repo_path, token) if not os.path.isabs(token) else token
+                        if os.path.isfile(script_path):
+                            rp = os.path.relpath(script_path, repo_path)
+                            found[rp] = script_path
+        except (ValueError, OSError):
             pass
 
     return found
@@ -196,37 +197,33 @@ def check_hooks_in_settings(filepath, rel_path):
             content = f.read()
             data = json.loads(content)
 
-        if 'hooks' in data:
-            hooks = data['hooks']
-            for event_name, hook_list in hooks.items():
-                if not isinstance(hook_list, list):
-                    continue
-                for hook in hook_list:
-                    cmd = hook.get('command', '') if isinstance(hook, dict) else str(hook)
-                    if cmd:
+        # Nested hooks are reported by the infra, lifecycle and skill-threat
+        # scanners; repeating them here would only add duplicates.
+        for event_name, cmd in _hook_commands(data, nested=False):
+            if cmd:
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="high",
+                    title=f"Hook registered: {event_name}",
+                    description=f"Shell command executes on {event_name} event (verify this is intentional)",
+                    file=rel_path, line=0,
+                    snippet=cmd[:120],
+                    category="hook-configuration"
+                ))
+                # Check for especially dangerous patterns
+                dangerous = ['curl', 'wget', 'bash -c', 'eval', 'base64', '/dev/tcp']
+                for d in dangerous:
+                    if d in cmd.lower():
                         findings.append(core.Finding(
-                            scanner=SCANNER_NAME, severity="high",
-                            title=f"Hook registered: {event_name}",
-                            description=f"Shell command executes on {event_name} event (verify this is intentional)",
+                            scanner=SCANNER_NAME, severity="critical",
+                            title=f"Dangerous command in hook: {event_name}",
+                            description=f"Hook contains '{d}' pattern (potential RCE/exfiltration)",
                             file=rel_path, line=0,
                             snippet=cmd[:120],
-                            category="hook-configuration"
+                            category="hook-dangerous"
                         ))
-                        # Check for especially dangerous patterns
-                        dangerous = ['curl', 'wget', 'bash -c', 'eval', 'base64', '/dev/tcp']
-                        for d in dangerous:
-                            if d in cmd.lower():
-                                findings.append(core.Finding(
-                                    scanner=SCANNER_NAME, severity="critical",
-                                    title=f"Dangerous command in hook: {event_name}",
-                                    description=f"Hook contains '{d}' pattern (potential RCE/exfiltration)",
-                                    file=rel_path, line=0,
-                                    snippet=cmd[:120],
-                                    category="hook-dangerous"
-                                ))
-                                break
+                        break
 
-    except (json.JSONDecodeError, OSError, KeyError):
+    except (ValueError, OSError):
         pass
     return findings
 
@@ -324,8 +321,12 @@ class _WindowsBaselineIO:
             if not self.kernel.GetFileInformationByHandleEx(result, 9,
                     c.byref(info), c.sizeof(info)):
                 raise c.WinError(c.get_last_error())
-            if info.FileAttributes & 0x400 or bool(info.FileAttributes & 0x10) != directory:
-                raise OSError('Baseline path contains a reparse point or wrong file type')
+            # Refuse only name-surrogate reparse points (symlinks, junctions,
+            # mount points). OneDrive placeholders and dedup files carry other
+            # tags and are ordinary folders/files for this purpose.
+            surrogate = info.FileAttributes & 0x400 and info.ReparseTag & 0x20000000
+            if surrogate or bool(info.FileAttributes & 0x10) != directory:
+                raise OSError('Baseline path contains a link or wrong file type')
             return result
         except BaseException:
             self.close(result)
@@ -345,7 +346,13 @@ class _WindowsBaselineIO:
     @contextlib.contextmanager
     def directory(self, repo_path):
         import ntpath
-        path = ntpath.abspath(repo_path)
+        # Resolve the user's chosen path once (a junctioned parent is fine);
+        # every component below it is then opened without following links.
+        path = ntpath.realpath(repo_path)
+        if path.startswith('\\\\?\\UNC\\'):
+            path = '\\\\' + path[8:]
+        elif path.startswith('\\\\?\\'):
+            path = path[4:]
         drive, tail = ntpath.splitdrive(path)
         # Standard drive roots and UNC shares only, not device/pipe namespaces.
         if not drive or drive.startswith(('\\\\?\\', '\\\\.\\')):
@@ -447,32 +454,25 @@ def _windows_write_baseline(repo_path, payload):
 def _baseline_directory(repo_path):
     """Pin every POSIX path component without following links.
 
-    An opened directory remains the destination even if its pathname is renamed.
+    The path the user chose is resolved once, so a repo reached through a
+    symlinked parent (~/code -> /Volumes/x, /home -> var/home) still works.
+    The threat is links planted inside the repo, and the baseline sits at the
+    repo root, so from the resolved path down nothing is followed. An opened
+    directory remains the destination even if its pathname is renamed.
     Windows uses separate handle-relative native operations, never a path fallback.
     """
     if os.name == 'nt':
         raise OSError('Safe baseline directory access is unavailable')
-    path = os.path.abspath(repo_path)
-    fd = os.open(os.path.sep, os.O_RDONLY | os.O_DIRECTORY)
+    components = [part for part in os.path.realpath(repo_path).split(os.path.sep) if part]
+    # Parents only need search permission; the repo directory itself is opened
+    # for reading so it can be fsynced after the rename.
+    search = getattr(os, 'O_PATH', 0) or getattr(os, 'O_SEARCH', 0) or os.O_RDONLY
+    fd = os.open(os.path.sep, search | os.O_DIRECTORY)
     try:
-        components = [part for part in path.split(os.path.sep) if part]
-        # macOS ships these root-owned aliases. Expand only these exact system
-        # links, never an arbitrary repo/user symlink. Targets are still opened
-        # component by component with O_NOFOLLOW.
-        aliases = {"tmp": "private/tmp", "var": "private/var", "etc": "private/etc"}
-        if sys.platform == "darwin" and components and components[0] in aliases:
-            first = components[0]
-            info = os.stat(first, dir_fd=fd, follow_symlinks=False)
-            root = os.fstat(fd)
-            if (stat.S_ISLNK(info.st_mode) and info.st_uid == 0 and
-                    root.st_uid == 0 and not root.st_mode & 0o022 and
-                    os.readlink(first, dir_fd=fd).lstrip("/") == aliases[first]):
-                components = aliases[first].split("/") + components[1:]
-        for part in components:
-            if not part:
-                continue
-            child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
-                            dir_fd=fd)
+        for index, part in enumerate(components):
+            last = index == len(components) - 1
+            child = os.open(part, (os.O_RDONLY if last else search) |
+                            os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
             os.close(fd)
             fd = child
         yield fd
@@ -535,11 +535,40 @@ def _write_baseline(repo_path, baseline):
             _baseline_stat(directory)
             os.replace(temporary, BASELINE_FILENAME,
                        src_dir_fd=directory, dst_dir_fd=directory)
+            with contextlib.suppress(OSError):
+                os.fsync(directory)
         finally:
             try:
                 os.unlink(temporary, dir_fd=directory)
             except FileNotFoundError:
                 pass
+        _remove_stale_temporaries(directory)
+
+
+_TEMPORARY_NAME = re.compile(r'\.forensics-baseline-[0-9a-f]{32}\.tmp')
+_STALE_AFTER_SECONDS = 3600
+
+
+def _remove_stale_temporaries(directory):
+    """Delete our own temp files left by a writer that was killed mid-write.
+
+    Only exact temp names, only regular files owned by this user, only when
+    older than an hour so a concurrent writer is never disturbed. unlink with
+    dir_fd never follows a link.
+    """
+    try:
+        names = os.listdir(directory)
+    except OSError:
+        return
+    cutoff = time.time() - _STALE_AFTER_SECONDS
+    for name in names:
+        if not _TEMPORARY_NAME.fullmatch(name):
+            continue
+        with contextlib.suppress(OSError):
+            info = os.stat(name, dir_fd=directory, follow_symlinks=False)
+            if (stat.S_ISREG(info.st_mode) and info.st_uid == os.geteuid()
+                    and info.st_mtime < cutoff):
+                os.unlink(name, dir_fd=directory)
 
 
 def _invalid_baseline_finding():
@@ -574,6 +603,28 @@ def _valid_baseline_shape(baseline):
     return True
 
 
+def _signed_by_repo_key(repo_path, stored_hmac, content):
+    """True when the baseline verifies only against a key stored in the repo."""
+    try:
+        key = _read_signing_key(_get_legacy_signing_key_path(repo_path))
+    except OSError:
+        return False
+    return hmac.compare_digest(stored_hmac, hmac.new(key, content, hashlib.sha256).hexdigest())
+
+
+def _repo_key_finding():
+    return core.Finding(
+        scanner=SCANNER_NAME, severity="high",
+        title="Baseline signed with a key stored in the repository",
+        description="The baseline verifies only against " + SIGNING_KEY_FILENAME + " inside the "
+                    "repository. Anyone who ships the repository can ship that key and a "
+                    "matching baseline, so it is not trusted and the key is not used. If you "
+                    "created it with an older version, review the repository, then delete "
+                    + SIGNING_KEY_FILENAME + " and " + BASELINE_FILENAME + " and run --watch "
+                    "again.",
+        file=BASELINE_FILENAME, line=0, snippet="", category="integrity-hmac")
+
+
 def load_baseline(repo_path):
     """Load existing baseline from .forensics-baseline.json with HMAC verification.
 
@@ -602,13 +653,26 @@ def load_baseline(repo_path):
     stored_hmac = baseline.pop('_hmac', None)
 
     if stored_hmac is not None:
-        # Baseline has an HMAC, verify it
-        key_paths = [
-            _get_signing_key_path(),
-            _get_legacy_signing_key_path(repo_path),
-        ]
-        existing_key_paths = [path for path in key_paths if os.path.exists(path)]
-        if not existing_key_paths:
+        content = json.dumps(baseline, sort_keys=True).encode('utf-8')
+        try:
+            key = _read_signing_key(_get_signing_key_path())
+        except FileNotFoundError:
+            key = None
+        except OSError as exc:
+            integrity_findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="high",
+                title="Signing key unreadable",
+                description="The signing key could not be read safely, so the baseline "
+                            "cannot be verified: " + str(exc),
+                file=BASELINE_FILENAME, line=0, snippet="", category="integrity-baseline-io"))
+            return None, integrity_findings
+        if key is not None and hmac.compare_digest(
+                stored_hmac, hmac.new(key, content, hashlib.sha256).hexdigest()):
+            return baseline, integrity_findings
+        if _signed_by_repo_key(repo_path, stored_hmac, content):
+            integrity_findings.append(_repo_key_finding())
+            return None, integrity_findings
+        if key is None:
             integrity_findings.append(core.Finding(
                 scanner=SCANNER_NAME, severity="high",
                 title="Signing key missing for HMAC-signed baseline",
@@ -618,20 +682,6 @@ def load_baseline(repo_path):
                 category="integrity-hmac"
             ))
             return None, integrity_findings
-        content = json.dumps(baseline, sort_keys=True)
-        for key_path in existing_key_paths:
-            try:
-                key = _read_signing_key(key_path)
-            except OSError:
-                continue
-            expected = hmac.new(key, content.encode('utf-8'), hashlib.sha256).hexdigest()
-            if hmac.compare_digest(stored_hmac, expected):
-                if key_path == _get_legacy_signing_key_path(repo_path):
-                    try:
-                        _migrate_legacy_signing_key(repo_path, key)
-                    except OSError:
-                        pass
-                return baseline, integrity_findings
         integrity_findings.append(core.Finding(
             scanner=SCANNER_NAME, severity="critical",
             title="Baseline integrity compromised",
