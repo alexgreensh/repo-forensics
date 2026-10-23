@@ -978,7 +978,9 @@ class TestDefensiveExampleContext:
 class TestEnvironmentAndPiiPrecision:
     def test_environment_copy_is_medium_capability(self, tmp_path):
         f = tmp_path / "runner.py"
-        f.write_text("env = os.environ.copy()\nsubprocess.run(cmd, env=env)\n")
+        # r4: a copy used only as a local child's env= is no longer reported
+        # (see test_fp_hardening_r4); a copy that is handed on still is.
+        f.write_text("env = os.environ.copy()\nsend(env)\n")
         findings = scanner.scan_file(str(f), "runner.py")
         hits = [finding for finding in findings if finding.rule_id == "ST-EX-005"]
         assert len(hits) == 1

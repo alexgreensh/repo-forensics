@@ -655,6 +655,9 @@ class TestFreshnessDetection:
         scanner._FRESHNESS_STATE["queried"] = set()
         scanner._FRESHNESS_STATE["query_count"] = 0
         scanner._FRESHNESS_STATE["max_queries"] = 100
+        # A scan run by an earlier test starts the wall-clock budget; clear it.
+        scanner._FRESHNESS_STATE["started_at"] = None
+        scanner._FRESHNESS_STATE["time_skipped"] = 0
 
     def test_signal_very_new(self):
         """Package published 12 hours ago -> high severity freshness-very-new."""
