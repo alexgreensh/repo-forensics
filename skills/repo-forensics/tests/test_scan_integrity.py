@@ -796,3 +796,67 @@ class TestHostileSettingsShapes:
         (tmp_path / 'hooks' / 'start.sh').write_text('echo changed\n')
         findings = scanner.watch_mode(str(tmp_path), scanner.find_critical_files(str(tmp_path)), 'text')
         assert any(f.category == 'integrity-drift' for f in findings)
+
+
+class TestRetiredKeyAndRemovedBaseline:
+    """Up to 2.14.18 a repo's key could be copied into ~/.cache/.../forensics-key."""
+
+    @staticmethod
+    def _sign_with(repo, key):
+        files = scanner.find_critical_files(str(repo))
+        baseline = {'files': {r: scanner.sha256_file(p) for r, p in files.items()},
+                    '_meta': {'created': '2026-01-01T00:00:00Z', 'tool': 't', 'version': 'v1'}}
+        content = json.dumps(baseline, sort_keys=True)
+        baseline['_hmac'] = hmac.new(key, content.encode('utf-8'), hashlib.sha256).hexdigest()
+        (repo / scanner.BASELINE_FILENAME).write_text(json.dumps(baseline))
+
+    @staticmethod
+    def _plant_retired(key):
+        path = scanner._get_retired_signing_key_path()
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'wb') as f:
+            f.write(key)
+
+    def test_new_key_never_reuses_the_retired_file(self, repo_with_hooks):
+        assert scanner._get_signing_key_path() != scanner._get_retired_signing_key_path()
+        self._plant_retired(b'imported from a hostile repo')
+        scanner.watch_mode(str(repo_with_hooks), scanner.find_critical_files(str(repo_with_hooks)), 'text')
+        assert open(scanner._get_signing_key_path(), 'rb').read() != b'imported from a hostile repo'
+
+    def test_baseline_signed_with_retired_key_is_not_trusted(self, repo_with_hooks):
+        """Forged baseline approving a malicious CLAUDE.md must not read as clean."""
+        imported = b'key an old version copied from a hostile repo'
+        self._plant_retired(imported)
+        (repo_with_hooks / 'CLAUDE.md').write_text('# malicious\n')
+        self._sign_with(repo_with_hooks, imported)
+        findings = scanner.watch_mode(str(repo_with_hooks),
+                                      scanner.find_critical_files(str(repo_with_hooks)), 'text')
+        assert [f.title for f in findings] == ['Baseline signed with a retired key']
+
+    def test_repo_shipping_the_retired_key_is_critical(self, repo_with_hooks):
+        imported = b'key an old version copied from a hostile repo'
+        self._plant_retired(imported)
+        (repo_with_hooks / scanner.SIGNING_KEY_FILENAME).write_bytes(imported)
+        findings = scanner.watch_mode(str(repo_with_hooks),
+                                      scanner.find_critical_files(str(repo_with_hooks)), 'text')
+        assert any(f.severity == 'critical' and 'ships the key' in f.title for f in findings)
+
+    def test_removed_baseline_is_reported_then_recreated(self, repo_with_hooks):
+        files = scanner.find_critical_files(str(repo_with_hooks))
+        assert scanner.watch_mode(str(repo_with_hooks), files, 'text') == []
+        (repo_with_hooks / scanner.BASELINE_FILENAME).unlink()
+        (repo_with_hooks / 'CLAUDE.md').write_text('# tampered after the pull\n')
+        findings = scanner.watch_mode(str(repo_with_hooks), scanner.find_critical_files(str(repo_with_hooks)), 'text')
+        assert [f.title for f in findings] == ['Integrity baseline was removed']
+        assert (repo_with_hooks / scanner.BASELINE_FILENAME).exists()
+        assert scanner.watch_mode(str(repo_with_hooks), scanner.find_critical_files(str(repo_with_hooks)), 'text') == []
+
+    def test_first_run_without_marker_is_quiet(self, repo_with_hooks):
+        assert scanner.watch_mode(str(repo_with_hooks), scanner.find_critical_files(str(repo_with_hooks)), 'text') == []
+
+    def test_deeply_nested_settings_never_crash(self, tmp_path):
+        (tmp_path / '.claude').mkdir()
+        settings = tmp_path / '.claude' / 'settings.json'
+        settings.write_text('[' * 100000)
+        scanner.find_critical_files(str(tmp_path))
+        scanner.check_hooks_in_settings(str(settings), '.claude/settings.json')

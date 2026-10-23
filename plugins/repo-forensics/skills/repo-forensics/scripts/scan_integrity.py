@@ -54,8 +54,25 @@ SIGNING_KEY_FILENAME = '.forensics-key'
 
 
 def _get_signing_key_path():
-    """Return the path where the HMAC signing key is stored (outside the repo)."""
+    """Return the path where the HMAC signing key is stored (outside the repo).
+
+    This file is only ever created from fresh random bytes. Versions up to
+    2.14.18 used `forensics-key` instead and could fill it with a key copied
+    from a scanned repository, so that file is retired, never written, and
+    only read to explain why an old baseline is no longer trusted.
+    """
+    return os.path.expanduser("~/.cache/repo-forensics/baseline-key")
+
+
+def _get_retired_signing_key_path():
     return os.path.expanduser("~/.cache/repo-forensics/forensics-key")
+
+
+def _baseline_marker_path(repo_path):
+    """Per-repo marker outside the repo, so a deleted baseline is noticed."""
+    real = os.path.realpath(repo_path)
+    name = hashlib.sha256(real.encode('utf-8', 'surrogatepass')).hexdigest()
+    return os.path.expanduser(os.path.join("~/.cache/repo-forensics/baselines", name))
 
 
 def _get_legacy_signing_key_path(repo_path):
@@ -105,7 +122,7 @@ def _write_signing_key(path, key):
 def _get_or_create_signing_key(repo_path):  # repo_path kept for API compatibility
     """Get or create a 32-byte HMAC signing key for baseline integrity verification.
 
-    The key is stored in ~/.cache/repo-forensics/forensics-key so it is never
+    The key is stored in ~/.cache/repo-forensics/baseline-key so it is never
     committed or readable from inside the repository. A key found inside the
     repository is never used or copied: whoever ships the repo can ship a key
     plus a matching baseline, so it proves nothing.
@@ -183,7 +200,7 @@ def find_critical_files(repo_path):
                         if os.path.isfile(script_path):
                             rp = os.path.relpath(script_path, repo_path)
                             found[rp] = script_path
-        except (ValueError, OSError):
+        except (ValueError, OSError, RecursionError):
             pass
 
     return found
@@ -223,7 +240,7 @@ def check_hooks_in_settings(filepath, rel_path):
                         ))
                         break
 
-    except (ValueError, OSError):
+    except (ValueError, OSError, RecursionError):
         pass
     return findings
 
@@ -571,6 +588,17 @@ def _remove_stale_temporaries(directory):
                 os.unlink(name, dir_fd=directory)
 
 
+def _missing_baseline_finding():
+    return core.Finding(
+        scanner=SCANNER_NAME, severity="high",
+        title="Integrity baseline was removed",
+        description="This repository had a baseline, but " + BASELINE_FILENAME + " is gone, "
+                    "so changes made since the last run cannot be checked. A new baseline "
+                    "was created from the current files; review the critical files "
+                    "(.claude/settings.json, CLAUDE.md, hooks) before trusting it.",
+        file=BASELINE_FILENAME, line=0, snippet="", category="integrity-baseline-missing")
+
+
 def _invalid_baseline_finding():
     return core.Finding(
         scanner=SCANNER_NAME, severity="high",
@@ -612,6 +640,48 @@ def _signed_by_repo_key(repo_path, stored_hmac, content):
     return hmac.compare_digest(stored_hmac, hmac.new(key, content, hashlib.sha256).hexdigest())
 
 
+def _signed_by_retired_key(stored_hmac, content):
+    try:
+        key = _read_signing_key(_get_retired_signing_key_path())
+    except OSError:
+        return False
+    return hmac.compare_digest(stored_hmac, hmac.new(key, content, hashlib.sha256).hexdigest())
+
+
+def _retired_key_finding():
+    return core.Finding(
+        scanner=SCANNER_NAME, severity="high",
+        title="Baseline signed with a retired key",
+        description="Versions up to 2.14.18 could copy a signing key from a scanned "
+                    "repository into ~/.cache/repo-forensics/forensics-key, so baselines "
+                    "signed with that key are no longer trusted. Review the repository, "
+                    "then delete " + BASELINE_FILENAME + " and run --watch again to sign a "
+                    "new baseline with a fresh key.",
+        file=BASELINE_FILENAME, line=0, snippet="", category="integrity-hmac")
+
+
+def _shipped_retired_key_finding():
+    return core.Finding(
+        scanner=SCANNER_NAME, severity="critical",
+        title="Repository ships the key this machine used to sign baselines",
+        description="The repository's " + SIGNING_KEY_FILENAME + " matches "
+                    "~/.cache/repo-forensics/forensics-key. An older version copied it "
+                    "from a repository, so whoever made that repository could forge "
+                    "baselines for every repository watched with it. Those baselines are "
+                    "no longer trusted; delete ~/.cache/repo-forensics/forensics-key and "
+                    "re-create baselines you rely on.",
+        file=SIGNING_KEY_FILENAME, line=0, snippet="", category="integrity-hmac")
+
+
+def _repo_ships_retired_key(repo_path):
+    try:
+        repo_key = _read_signing_key(_get_legacy_signing_key_path(repo_path))
+        retired = _read_signing_key(_get_retired_signing_key_path())
+    except OSError:
+        return False
+    return hmac.compare_digest(repo_key, retired)
+
+
 def _repo_key_finding():
     return core.Finding(
         scanner=SCANNER_NAME, severity="high",
@@ -645,6 +715,8 @@ def load_baseline(repo_path):
             file=BASELINE_FILENAME, line=0, snippet="", category="integrity-baseline-io"))
         return None, integrity_findings
     if baseline is _BASELINE_MISSING:
+        if os.path.exists(_baseline_marker_path(repo_path)):
+            integrity_findings.append(_missing_baseline_finding())
         return None, integrity_findings
 
     if not _valid_baseline_shape(baseline):
@@ -671,6 +743,9 @@ def load_baseline(repo_path):
             return baseline, integrity_findings
         if _signed_by_repo_key(repo_path, stored_hmac, content):
             integrity_findings.append(_repo_key_finding())
+            return None, integrity_findings
+        if _signed_by_retired_key(stored_hmac, content):
+            integrity_findings.append(_retired_key_finding())
             return None, integrity_findings
         if key is None:
             integrity_findings.append(core.Finding(
@@ -716,6 +791,11 @@ def save_baseline(repo_path, baseline_data):
     content = json.dumps(baseline_data, sort_keys=True)
     baseline_data['_hmac'] = hmac.new(key, content.encode('utf-8'), hashlib.sha256).hexdigest()
     _write_baseline(repo_path, baseline_data)
+    with contextlib.suppress(OSError):
+        marker = _baseline_marker_path(repo_path)
+        os.makedirs(os.path.dirname(marker), mode=0o700, exist_ok=True)
+        with open(marker, 'a', encoding='utf-8'):
+            pass
 
 
 def _baseline_write_finding(exc):
@@ -728,9 +808,12 @@ def _baseline_write_finding(exc):
 def watch_mode(repo_path, critical_files, output_format):
     """--watch mode: store baselines on first run, detect drift on subsequent runs."""
     findings = []
+    if _repo_ships_retired_key(repo_path):
+        findings.append(_shipped_retired_key_finding())
     existing, integrity_findings = load_baseline(repo_path)
     findings.extend(integrity_findings)
-    if integrity_findings:
+    # A removed baseline is reported, then re-created from the current state.
+    if any(f.category != "integrity-baseline-missing" for f in integrity_findings):
         core.emit_status(output_format,
                          "[!] Baseline is untrusted; preserved without replacement. "
                          "Inspect it before deliberately removing it to create a new baseline.")

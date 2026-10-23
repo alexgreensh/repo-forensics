@@ -70,7 +70,7 @@
     "scripts/scan_git_forensics.py": "306d425a33a3fcc836d9af31927344e89cfd4e356a6efb84f8ebea0c99986eeb",
     "scripts/scan_history.py": "c6c0199437e748596e3939913489471b944cd2fd787f47f4b11de04ad0218529",
     "scripts/scan_infra.py": "79e6542c2b6c02054fb9eedba289bba5fa885aad64f04b21be4fac41fc8712ce",
-    "scripts/scan_integrity.py": "dd617a81c497e3ed494a15fb1803ed65cc04509be2cf560bd6336203fc54490c",
+    "scripts/scan_integrity.py": "417ae575735412736037cf5fc3dbbedaeee9c0ef06f472bcd53b220aa8bde704",
     "scripts/scan_lifecycle.py": "021137e2a377e358cb949fd153d9dd4c3649fd1387196386da69bc521926a7bc",
     "scripts/scan_manifest_drift.py": "612d35cb3098a0cf41dea6a0dd78d49fdbfefdb0e3fb7fd256ad1bee7a2941f9",
     "scripts/scan_mcp_security.py": "50b8a644efd95650facb5bfdcbd0d5bfcf7ce6b48f3374ff70647b6c442c8c02",
