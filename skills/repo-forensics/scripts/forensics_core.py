@@ -1481,6 +1481,88 @@ def warn_forensicsignore(repo_path):
     return findings
 
 
+def build_output_skip_findings(repo_path):
+    """INFO findings naming each build-output directory excluded from the scan.
+
+    Returns [] unless the operator opted into skipping gitignored build
+    output (BUILD_OUTPUT_SKIP_ENV_VAR). When skipping is active, every
+    excluded folder is named with its file count: a repository under audit
+    can ship both the folder and the .gitignore that excludes it, so a skip
+    must never be silent. LOW severity tiers these as INFO in the report and
+    keeps them out of the exit-code contract (own-project scans stay green);
+    the disclosure exists so an exclusion is always visible, not to gate.
+    """
+    if not build_output_skip_enabled():
+        return []
+    findings = []
+    gitignores = {}
+    skip_dirs = _effective_skip_dirs(repo_path, IGNORE_DIRS)
+    cap = 25
+    for root, dirs, _files in os.walk(repo_path, followlinks=False):
+        hits = [d for d in sorted(dirs)
+                if d not in skip_dirs
+                and is_ignored_build_output(repo_path, root, d, gitignores)]
+        if not hits:
+            continue
+        hit_set = set(hits)
+        for d in hits:
+            path = os.path.join(root, d)
+            file_count = 0
+            truncated = False
+            for _r, _ds, _fs in os.walk(path, followlinks=False):
+                file_count += len(_fs)
+                if file_count > 100000:
+                    truncated = True
+                    break
+            rel = os.path.relpath(path, repo_path).replace(os.sep, "/")
+            count = f"{file_count}+" if truncated else str(file_count)
+            findings.append(Finding(
+                scanner="meta", severity="low",
+                title="Build output excluded from scan",
+                description=(
+                    f"{rel}: {count} file(s) not scanned - a .gitignore excludes "
+                    f"this generated build folder and {BUILD_OUTPUT_SKIP_ENV_VAR} "
+                    "is set. The repository under audit can ship both the folder "
+                    "and the .gitignore that excludes it, so excluded content is "
+                    "unverified. Unset the variable to scan everything."
+                ),
+                file=rel, line=0,
+                snippet=f"{count} file(s) excluded",
+                category="build-output-excluded",
+                evidence_class="direct",
+            ))
+        # Do not descend into excluded folders: their contents were counted
+        # above, and nested build folders inside them are not separate skips.
+        dirs[:] = [d for d in dirs if d not in hit_set]
+        if len(findings) >= cap:
+            break
+    # An exclusion past the cap is still disclosed: one summary finding names
+    # the overflow so a large repo cannot hide exclusions behind the cap.
+    if len(findings) >= cap:
+        overflow = 0
+        for root, dirs, _files in os.walk(repo_path, followlinks=False):
+            hits = [d for d in sorted(dirs)
+                    if d not in skip_dirs
+                    and is_ignored_build_output(repo_path, root, d, gitignores)]
+            overflow += len(hits)
+            dirs[:] = [d for d in dirs if d not in set(hits)]
+        overflow -= len(findings)
+        if overflow > 0:
+            findings.append(Finding(
+                scanner="meta", severity="low",
+                title="Build output exclusions truncated",
+                description=(
+                    f"{overflow} further excluded build folder(s) are not listed "
+                    f"individually (cap {cap}). They are equally unverified."
+                ),
+                file="", line=0, snippet="",
+                category="build-output-excluded",
+                evidence_class="direct",
+            ))
+    findings.sort(key=lambda f: f.file)
+    return findings
+
+
 def should_ignore(file_path, repo_root, patterns):
     """Checks if a file path matches any ignore pattern."""
     if not patterns:
@@ -1629,11 +1711,14 @@ def _effective_skip_dirs(repo_path, skip_dirs):
             refined.discard(payload_dir)
     return refined
 
-# Framework build output (Next.js, Nuxt, SvelteKit, Turborepo, ...). Skipped
-# only when a .gitignore at or above it lists it: a dev build sitting in a
-# checkout is generated noise, but the same folder committed to the repo is
-# content an attacker chose to ship, so it stays in scope. .gitignore is read
-# as text; git itself is never run inside the repo under audit.
+# Framework build output (Next.js, Nuxt, SvelteKit, Turborepo, ...). A dev
+# build sitting in a checkout is generated noise, so the operator can opt into
+# skipping it (BUILD_OUTPUT_SKIP_ENV_VAR below). The skip applies only when a
+# .gitignore at or above the folder lists it. .gitignore is read as text; git
+# itself is never run inside the repo under audit. Note the trust boundary:
+# in a repository under audit both the folder and the .gitignore are shipped
+# by the repo, so this skip is OFF unless the operator asks for it, and every
+# skipped folder is disclosed in the report (build_output_skip_findings).
 GENERATED_BUILD_DIRS = frozenset({
     '.next', '.nuxt', '.svelte-kit', '.turbo', '.vercel', '.output', '.parcel-cache',
     '.angular', '.docusaurus', '.astro', '.expo', '.vite', '.webpack', '.serverless',
@@ -1662,6 +1747,23 @@ def _gitignore_patterns(directory, cache):
 # Generated build files with the same rule (TypeScript's incremental cache is
 # a file of content hashes that reads as high-entropy noise).
 GENERATED_BUILD_FILE_SUFFIXES = ('.tsbuildinfo',)
+
+# Operator opt-in for skipping generated build output. The DEFAULT is to scan
+# everything: when auditing code you did not write, both the build folder and
+# the .gitignore that would exclude it are shipped by the repository under
+# audit, so repository-supplied ignore rules are never trusted to narrow
+# coverage. Set FORENSICS_SKIP_BUILD_OUTPUT=1 (or true/yes/on) to skip
+# gitignored build output when scanning your own projects. The opt-in lives
+# in the operator's environment precisely so the audited repo cannot set it.
+BUILD_OUTPUT_SKIP_ENV_VAR = "FORENSICS_SKIP_BUILD_OUTPUT"
+
+_BUILD_OUTPUT_SKIP_TRUTHY = frozenset({"1", "true", "yes", "on"})
+
+
+def build_output_skip_enabled(environ=None):
+    """True when the operator opted into skipping gitignored build output."""
+    env = os.environ if environ is None else environ
+    return env.get(BUILD_OUTPUT_SKIP_ENV_VAR, "").strip().lower() in _BUILD_OUTPUT_SKIP_TRUTHY
 
 
 def is_ignored_build_output(repo_path, root, name, cache):
@@ -1715,14 +1817,16 @@ def walk_repo(repo_path, ignore_patterns=None, skip_dirs=None, skip_lockfiles=Tr
         ignore_patterns = load_ignore_patterns(repo_path)
 
     gitignores = {}
+    skip_build_output = build_output_skip_enabled()
     for root, dirs, files in os.walk(repo_path, followlinks=False):
         dirs[:] = [d for d in dirs if d not in skip_dirs
-                   and not is_ignored_build_output(repo_path, root, d, gitignores)]
+                   and not (skip_build_output
+                            and is_ignored_build_output(repo_path, root, d, gitignores))]
 
         for filename in files:
             if skip_lockfiles and filename in LOCKFILES:
                 continue
-            if is_ignored_build_file(repo_path, root, filename, gitignores):
+            if skip_build_output and is_ignored_build_file(repo_path, root, filename, gitignores):
                 continue
 
             file_path = os.path.join(root, filename)
@@ -1777,18 +1881,20 @@ def walk_aux(repo_path, ignore_patterns=None, skip_dirs=None, *,
         ignore_patterns = load_ignore_patterns(repo_path)
 
     gitignores = {}
+    skip_build_output = build_output_skip_enabled()
     for root, dirs, files in os.walk(repo_path, followlinks=False):
         # Deterministic order: os.walk yields readdir order (filesystem-dependent),
         # and these scanners enforce global budgets over the walk — which file a
         # fan-out decoy starves must not depend on inode layout, or the fail-loud
         # "budget exhausted" naming becomes nondeterministic.
         dirs[:] = sorted(d for d in dirs if d not in skip_dirs
-                         and not is_ignored_build_output(repo_path, root, d, gitignores))
+                         and not (skip_build_output
+                                  and is_ignored_build_output(repo_path, root, d, gitignores)))
 
         for filename in sorted(files):
             if skip_lockfiles and filename in LOCKFILES:
                 continue
-            if is_ignored_build_file(repo_path, root, filename, gitignores):
+            if skip_build_output and is_ignored_build_file(repo_path, root, filename, gitignores):
                 continue
 
             file_path = os.path.join(root, filename)

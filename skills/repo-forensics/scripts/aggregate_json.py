@@ -1176,6 +1176,21 @@ def build_report(tmpdir, repo_path, skill_scan):
     except (ImportError, OSError) as e:
         print(f"[!] .forensicsignore warning skipped: {e}", file=sys.stderr)
 
+    # Build-output exclusions (FORENSICS_SKIP_BUILD_OUTPUT opt-in) must be
+    # visible in the report, never silent: the audited repo ships both the
+    # build folder and the .gitignore that excludes it. One LOW finding per
+    # excluded folder, tiering as INFO and staying out of the exit-code
+    # contract, naming the folder and its unverified file count. The same
+    # exclusions also feed the coverage-honesty gate below so the report can
+    # never claim COMPLETE coverage over content it skipped.
+    build_output_exclusions = []
+    try:
+        import forensics_core as _core_bo
+        build_output_exclusions = _core_bo.build_output_skip_findings(repo_path)
+        all_findings.extend(f.to_dict() for f in build_output_exclusions)
+    except (ImportError, OSError) as e:
+        print(f"[!] build-output exclusion disclosure skipped: {e}", file=sys.stderr)
+
     # Mark WARN-tier (non-correlation) findings for LLM adjudication (U8).
     # Additive per-finding flag; does not touch severity counts or exit code.
     mark_adjudication(all_findings)
@@ -1246,6 +1261,24 @@ def build_report(tmpdir, repo_path, skill_scan):
                 scanner["finding_count"] = len(kept)
 
     coverage_status = build_coverage_status(scanners, all_findings)
+    if build_output_exclusions:
+        # An excluded build folder is known-uninspected surface: coverage is
+        # INCOMPLETE, never COMPLETE, while any exclusion is active. This
+        # stays informational (not a blocking category), so the exit-code
+        # contract is untouched; the LOW findings above carry the detail.
+        for exclusion in build_output_exclusions:
+            coverage_status["gaps"].append({
+                "scanner": "meta",
+                "category": "build-output-excluded",
+                "reason": f"{exclusion.file}: build output excluded by operator opt-in",
+            })
+        coverage_status["overall"] = _worse_status(
+            coverage_status["overall"], "INCOMPLETE",
+            {"COMPLETE": 0, "INCOMPLETE": 1, "UNSUPPORTED": 2})
+        coverage_status["per_scanner"]["meta"] = {
+            "status": "INCOMPLETE",
+            "reasons": ["build-output-excluded"],
+        }
     all_findings.extend(build_coverage_gap_findings(coverage_status))
 
     all_findings.sort(key=lambda item: -SEVERITY_ORDER.get(item.get("severity", "low"), 0))
@@ -1310,6 +1343,33 @@ def format_report_as_text(report):
             cleaned = _re.sub(r"\s+", " ", cleaned).strip()
             return cleaned[:max_len]
 
+    def _render_finding(f):
+        sev = f.get("severity", "low")
+        color = SEVERITY_COLORS.get(sev, "")
+        loc = f"{f.get('file', '')}:{f.get('line', 0)}" if f.get('line', 0) > 0 else f.get('file', '')
+        title = _sanitize(f.get('title', '') or '', max_len=160)
+        desc = _sanitize(f.get('description', '') or '', max_len=300)
+        lines.append(f"  {color}[{sev.upper()}]{RESET} {title}")
+        lines.append(f"         {loc}")
+        lines.append(f"         {desc}")
+        snip = f.get("snippet", "")
+        if snip:
+            lines.append(f"         {_sanitize(snip, max_len=120)}")
+        copies = f.get("also_in") or []
+        if copies:
+            shown = ", ".join(_sanitize(c, max_len=120) for c in copies[:5])
+            more = f" and {len(copies) - 5} more" if len(copies) > 5 else ""
+            lines.append(f"         same file also at: {shown}{more}")
+        tm = []
+        if f.get("attacker"):
+            tm.append(f"attacker={f['attacker']}")
+        if f.get("boundary"):
+            tm.append(f"boundary={f['boundary']}")
+        if f.get("asset"):
+            tm.append(f"asset={f['asset']}")
+        if tm:
+            lines.append(f"         threat model: {' | '.join(tm)}")
+
     lines = []
     lines.append("")
     lines.append("==========================================")
@@ -1326,31 +1386,18 @@ def format_report_as_text(report):
             lines.append("  No findings.")
         else:
             for f in findings:
-                sev = f.get("severity", "low")
-                color = SEVERITY_COLORS.get(sev, "")
-                loc = f"{f.get('file', '')}:{f.get('line', 0)}" if f.get('line', 0) > 0 else f.get('file', '')
-                title = _sanitize(f.get('title', '') or '', max_len=160)
-                desc = _sanitize(f.get('description', '') or '', max_len=300)
-                lines.append(f"  {color}[{sev.upper()}]{RESET} {title}")
-                lines.append(f"         {loc}")
-                lines.append(f"         {desc}")
-                snip = f.get("snippet", "")
-                if snip:
-                    lines.append(f"         {_sanitize(snip, max_len=120)}")
-                copies = f.get("also_in") or []
-                if copies:
-                    shown = ", ".join(_sanitize(c, max_len=120) for c in copies[:5])
-                    more = f" and {len(copies) - 5} more" if len(copies) > 5 else ""
-                    lines.append(f"         same file also at: {shown}{more}")
-                tm = []
-                if f.get("attacker"):
-                    tm.append(f"attacker={f['attacker']}")
-                if f.get("boundary"):
-                    tm.append(f"boundary={f['boundary']}")
-                if f.get("asset"):
-                    tm.append(f"asset={f['asset']}")
-                if tm:
-                    lines.append(f"         threat model: {' | '.join(tm)}")
+                _render_finding(f)
+    # Meta findings (report-level disclosures: .forensicsignore warnings,
+    # build-output exclusions, coverage-gap MEDIUMs) live in the flat findings
+    # list, not in any scanner entry. Counted in the summary but previously
+    # never printed in text mode, so a MEDIUM coverage gap could floor the
+    # exit code without ever appearing in the report the user reads.
+    meta_findings = [f for f in report.get("findings", []) if f.get("scanner") == "meta"]
+    if meta_findings:
+        lines.append("")
+        lines.append("--- [meta] ---")
+        for f in meta_findings:
+            _render_finding(f)
     summary = report["summary"]
     lines.append("")
     lines.append("==========================================")
