@@ -62,7 +62,7 @@
     "scripts/scan_dataflow.py": "d6bda046b1cf2b3ceddad8a44a1c1d10ac622803cebc1bdd7010a01f3ad03588",
     "scripts/scan_dead_anchors.py": "cda6d688e13fb038795040ff2a11f0126635f2e129c92c5fd5d841dc6e90ff1d",
     "scripts/scan_decode.py": "a552d65f7d2ba9694af64e9adc794d833dadca65b9c9c2b750f888efee793f1d",
-    "scripts/scan_dependencies.py": "37bc6e65066d07a02507ea55d8c958f0101658147157ecdcc35842c93897f345",
+    "scripts/scan_dependencies.py": "b52d9f22e1e6b26f34f8625b3092a21a2d97d178c49ae2f4e1e5d66922d86db0",
     "scripts/scan_devcontainer.py": "066c27d4e4273a2d37ef3b989cd92735beba25fed1bd618111f3558e6d16ef7a",
     "scripts/scan_entropy.py": "50805154f52a53e396f398a4406034dcd880492496c45e069a4b24499865b511",
     "scripts/scan_entrypoint.py": "5873c0d7e8b332d79184bcd9153c61eb2e9f42a614d314938dc1cc7b813d9485",
@@ -118,5 +118,9 @@
     ".cursor-plugin/plugin.json": "e434c027d20daa9971fe104e53ba2008e308bfd8f081b58b7864ef2f12c998f3",
     ".kimi-plugin/plugin.json": "b9810ca5896e82358be0103c542d3f8f021c3535145ce3999dacbde873d880f6"
   },
-  "manifest_count": 6
+  "manifest_count": 6,
+  "repo_source_manifests": {
+    ".agents/plugins/marketplace.json": "1fb6dcd1f514fe8787cf52c0d3f8982ac509b0c1e09fe70c1a0cd1590d6fb15e"
+  },
+  "source_manifest_count": 1
 }

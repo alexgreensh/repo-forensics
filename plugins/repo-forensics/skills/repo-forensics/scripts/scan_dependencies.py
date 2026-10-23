@@ -509,7 +509,7 @@ _FRESHNESS_STATE = {
     # scanner failure (exit 99) with no dependency findings at all. Stopping
     # the lookups early keeps every offline check and reports the gap instead.
     "time_budget_s": 45.0,
-    "started_at": None,
+    "started_at": None,    # set by main(); direct callers run without a budget
     "time_skipped": 0,
 }
 
@@ -717,10 +717,8 @@ def _check_freshness(ecosystem, pkg_versions, rel_path):
         if _FRESHNESS_STATE["query_count"] >= _FRESHNESS_STATE["max_queries"]:
             skipped_count += 1
             continue
-        now = time.monotonic()
-        if _FRESHNESS_STATE["started_at"] is None:
-            _FRESHNESS_STATE["started_at"] = now
-        elif now - _FRESHNESS_STATE["started_at"] > _FRESHNESS_STATE["time_budget_s"]:
+        started = _FRESHNESS_STATE["started_at"]
+        if started is not None and time.monotonic() - started > _FRESHNESS_STATE["time_budget_s"]:
             _FRESHNESS_STATE["time_skipped"] += 1
             time_skipped += 1
             continue
@@ -2760,6 +2758,7 @@ def main():
     _VULN_STATE["offline"] = bool(args.offline)
 
     _FRESHNESS_STATE["enabled"] = not args.skip_freshness and not args.no_vulns
+    _FRESHNESS_STATE["started_at"] = time.monotonic()
     _FRESHNESS_STATE["offline"] = bool(args.offline)
     _FRESHNESS_STATE["queried"] = set()
     _FRESHNESS_STATE["query_count"] = 0
