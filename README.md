@@ -731,7 +731,7 @@ The signing key lives in `~/.cache/repo-forensics/baseline-key`, never in the re
 and is only ever created from fresh random bytes. A `.forensics-key` file inside a repository
 is ignored: anyone who ships the repository can ship a key and a matching baseline. Versions
 up to 2.14.18 could copy such a key into `~/.cache/repo-forensics/forensics-key`, so
-baselines signed with that older key are reported once; delete the baseline and run
+baselines signed with that older key are reported on every run until you delete the baseline and run
 `--watch` again to sign a new one. If a baseline file disappears, the next `--watch` run
 reports it before creating a new one.
 The key is written in full before it becomes visible, so the cache folder must support
