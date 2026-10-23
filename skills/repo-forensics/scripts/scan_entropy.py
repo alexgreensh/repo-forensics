@@ -34,7 +34,7 @@ _SHA256SUM_NAMES = {'checksums.sha256', 'sha256sums'}
 # A long run of letters and slashes is often a file path, which the base64
 # alphabet happens to contain. Display-only: every blob is still decoded and
 # rescanned by detect_encoded_blobs above, so a real payload is not hidden.
-_PATH_SEGMENT = re.compile(r'(?:[a-z]+|(?:[A-Z][a-z]+)+|[a-z]+(?:[A-Z][a-z]+)+)[0-9]{0,3}')
+_PATH_SEGMENT = re.compile(r'(?:[a-z]+|(?:[A-Z][a-z]+)+|[a-z]+(?:[A-Z][a-z]+)+|[A-Z]{2,8})[0-9]{0,3}')
 
 
 def _looks_like_path(run):
@@ -73,10 +73,11 @@ _DIGEST_NAME = re.compile(
     r'|fingerprints?|pub(?:lic)?[_-]?keys?|verify(?:ing)?[_-]?keys?|signatures?'
     r'|integrity|pinned)(?![a-z])')
 # A file that turns hex back into bytes can be storing a payload in "digest"
-# rows, so nothing in it is exempted as a digest.
+# rows, so nothing in it is exempted as a digest. `.digest('hex')` and
+# `.toString('hex')` produce hex rather than decode it, so they do not count.
 _HEX_DECODER = re.compile(
     r'(?i)fromhex|unhexlify|a2b_hex|hex2bin|DecodeString|xxd\s+-r'
-    r'|["\']hex["\']|\bpack\s*\(\s*["\']H')
+    r'|(?<!digest\()(?<!toString\()["\']hex["\']|\bpack\s*\(\s*["\']H')
 # More named digests than this in one file is a table, not a pin: report them.
 _MAX_NAMED_DIGESTS = 8
 # Lockfiles whose integrity fields are skipped one field at a time (the older

@@ -2,7 +2,7 @@
 
 All notable changes to repo-forensics. Versions follow semver.
 
-## [Unreleased]
+## [2.14.19] - 2026-10-23
 
 ### Security
 - `--watch` no longer trusts a `.forensics-key` found inside the scanned repository. A repository could ship a key plus a matching baseline to hide changes to `.claude/settings.json`, and the key was copied into `~/.cache/repo-forensics/forensics-key` when none existed, so it then signed baselines for every other repository. The key is now never read for signing or copied, and a baseline signed with it is reported as untrusted. Because an older version may already have copied such a key, signing moves to a fresh `~/.cache/repo-forensics/baseline-key`: a baseline signed with the old key is reported once and needs to be re-created, and a repository that ships the old key is reported as critical.
@@ -10,7 +10,14 @@ All notable changes to repo-forensics. Versions follow semver.
 - `--watch` never follows a link or special file planted at the baseline path, and keeps writing to the opened repository folder even if its path is swapped mid-write. Reads and writes use folder handles on Linux, macOS and Windows.
 - A rejected, corrupt or unreadable baseline is kept as-is and reported on every run instead of being replaced with a fresh signature.
 
+### Changed
+- A rule that fires on many lines of one file is now one finding that lists every line, instead of one finding per line. The kept finding has the highest severity and confidence of the group, so the verdict and exit code never weaken. The text report and the adjudication block show every line's snippet, and a folded finding can be persisted only when all of its lines are shown. SARIF still reports one result per line. On three real repositories this cut the report by 62 to 70 percent.
+
 ### Fixed
+- `ST-PE-004` (shell RC file) no longer matches a property such as `args.profile` or `C.profileFrom()`; `~/.bashrc`, `~/.profile` and `.zshrc` paths are still reported.
+- `ST-PI-016` (schema poisoning) requires "schema" and "poison" within 120 characters, so a long log line that mentions both far apart is no longer reported.
+- A hash next to `.digest("hex")` or `.toString("hex")` is no longer treated as a possible hex payload; files that decode hex are still never exempted.
+- A file path ending in a short upper-case name (`.../skills/SKILL.md`) is no longer reported as a base64 block.
 - A repository reached through a symlinked parent folder (`~/code` pointing at another disk, or `/home` on Fedora Silverblue) keeps working with `--watch`.
 - Folders that are OneDrive placeholders or deduplicated on Windows are no longer refused; only links, junctions and mount points are.
 - A signing key that is a pipe no longer hangs the scan, a key is never left half-written, and a failed key write is reported instead of signing with a throwaway key.
