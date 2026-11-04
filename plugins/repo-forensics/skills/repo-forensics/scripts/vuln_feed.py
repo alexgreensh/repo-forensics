@@ -41,6 +41,7 @@ Created by Alex Greenshpun
 import os
 import sys
 import json
+import math
 import re
 import time
 import urllib.request
@@ -149,15 +150,22 @@ def _load_cache(path, max_age_hours):
             return None
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
+        if not isinstance(data, dict):
+            return None
         cached_at = data.get("_cached_at", 0)
-        if not isinstance(cached_at, (int, float)):
+        # bool is an int subclass; non-finite floats (NaN/inf) defeat every
+        # comparison below; every int is finite. Compare without float
+        # arithmetic so bignum ints cannot overflow into an exception.
+        if (not isinstance(cached_at, (int, float)) or isinstance(cached_at, bool)
+                or (isinstance(cached_at, float) and not math.isfinite(cached_at))):
             return None
         now = time.time()
         # Reject future-dated timestamps (clock skew attack -> eternal cache).
         if cached_at > now + 300:
             return None
-        age_hours = (now - cached_at) / 3600
-        if age_hours > max_age_hours:
+        # max_age_hours=None waives ONLY the age limit (stale-cache last
+        # resort); every other gate above still applies.
+        if max_age_hours is not None and cached_at < now - max_age_hours * 3600:
             return None
         return data
     except (OSError, json.JSONDecodeError, ValueError):
@@ -281,6 +289,14 @@ def update_kev_cache(cache_dir=None):
     return True, f"KEV catalog cached: {len(cve_ids)} CVEs (v{payload['catalogVersion']})"
 
 
+def _kev_cache_passes_floor(cached):
+    """Consumer-side mirror of update_kev_cache's acceptance invariant: the
+    public KEV catalog has 1000+ entries, so fewer than 100 entries means
+    truncated or poisoned data and must never be trusted."""
+    ids = cached.get("cve_ids")
+    return isinstance(ids, list) and len(ids) >= 100
+
+
 def get_kev_cves(cache_dir=None, offline=False):
     """Return the set of CVE IDs currently in the CISA KEV catalog.
 
@@ -292,8 +308,9 @@ def get_kev_cves(cache_dir=None, offline=False):
     cached = _load_cache(path, KEV_CACHE_MAX_AGE_HOURS)
     # Sanity floor: real KEV catalog has 1000+ CVEs. A cache with <100 entries
     # is almost certainly poisoned or truncated — treat as miss and refresh.
-    if cached is not None and len(cached.get("cve_ids") or []) < 100:
-        print("[!] KEV cache appears truncated/poisoned; refreshing",
+    if cached is not None and not _kev_cache_passes_floor(cached):
+        print("[!] KEV cache appears truncated/poisoned; "
+              + ("refreshing" if not offline else "ignoring"),
               file=sys.stderr)
         cached = None
     if cached is None and not offline:
@@ -301,13 +318,14 @@ def get_kev_cves(cache_dir=None, offline=False):
         if ok:
             cached = _load_cache(path, KEV_CACHE_MAX_AGE_HOURS)
     if cached is None:
-        # Try stale cache as last resort
-        if os.path.exists(path):
-            try:
-                with open(path, "r", encoding="utf-8") as f:
-                    cached = json.load(f)
-            except (OSError, json.JSONDecodeError):
-                return set()
+        # Stale cache as last resort: the age limit is waived, but every
+        # other content gate still holds — size cap, JSON object shape,
+        # numeric non-future _cached_at, and the same >=100-CVE floor.
+        # A cache rejected above must not be resurrected here when the
+        # refresh is unavailable (offline or fetch failure).
+        candidate = _load_cache(path, None)
+        if candidate is not None and _kev_cache_passes_floor(candidate):
+            cached = candidate
         else:
             return set()
     ids = cached.get("cve_ids", [])
