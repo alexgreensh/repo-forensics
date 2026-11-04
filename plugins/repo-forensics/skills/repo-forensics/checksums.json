@@ -88,7 +88,7 @@
     "scripts/suppressions.py": "a8573cacf9c6621ed8262d4468bd2be097a6337816323db452daabfcab495ac4",
     "scripts/validate_manifests.py": "23c2ee9c540590954fcd135409c5d54386a5346a59402c53ff745bf796ab649f",
     "scripts/verify_install.py": "f3e94b7e3df3e60f7a2199b8cb2914c254ebb571d8ed44d6cf6154c2870190bb",
-    "scripts/vuln_feed.py": "0b56e20969beb8fbc59650114a34ac8743d1a0862ff3ae56b07e92d2e368a141"
+    "scripts/vuln_feed.py": "65114dbdb11777c6c1f4205984d9ef974e8e9c7509bda2ec29790ec4cdf14fc2"
   },
   "repo_symlinks": {
     "skill": "skills/repo-forensics"
