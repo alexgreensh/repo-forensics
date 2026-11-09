@@ -258,10 +258,13 @@ def test_stale_cache_is_ignored_when_offline_false_and_refresh_works(tmp_path, m
 
 
 def test_offline_uses_stale_cache_as_fallback(tmp_path):
+    # Stale-but-sane: old timestamp, but a realistic >=100-CVE catalog.
+    # (A <100-CVE cache is poisoned/truncated by the feed's own floor and
+    # must NOT be trusted offline — see the regression tests below.)
     stale = {
         "_cached_at": time.time() - (48 * 3600),
         "catalogVersion": "stale",
-        "cve_ids": ["CVE-1999-0001"],
+        "cve_ids": ["CVE-1999-0001"] + [f"CVE-2025-{i:05d}" for i in range(100)],
     }
     path = tmp_path / vuln_feed.KEV_CACHE_FILENAME
     path.write_text(json.dumps(stale))
@@ -280,6 +283,111 @@ def test_poisoned_cache_file_does_not_crash(tmp_path):
 def test_cache_file_totally_garbage(tmp_path):
     path = tmp_path / vuln_feed.KEV_CACHE_FILENAME
     path.write_bytes(b"\x00\x01\x02garbage")
+    result = vuln_feed.get_kev_cves(cache_dir=str(tmp_path), offline=True)
+    assert result == set()
+
+
+def test_offline_cache_below_cve_floor_rejected(tmp_path):
+    """Regression: the offline last-resort reread must enforce the same
+    <100-CVE sanity floor as the normal load path. A poisoned/truncated
+    cache resurrected offline silently blinds the scanner to KEV hits."""
+    poisoned = {
+        "_cached_at": time.time(),
+        "catalogVersion": "poisoned",
+        "cve_ids": [f"CVE-2026-{i:05d}" for i in range(5)],
+    }
+    path = tmp_path / vuln_feed.KEV_CACHE_FILENAME
+    path.write_text(json.dumps(poisoned))
+    result = vuln_feed.get_kev_cves(cache_dir=str(tmp_path), offline=True)
+    assert result == set()
+
+
+def test_offline_future_dated_cache_rejected(tmp_path):
+    """Regression: the offline last-resort reread must reject future-dated
+    caches (clock-skew attack pins a poisoned cache forever)."""
+    future = {
+        "_cached_at": time.time() + 86400,
+        "catalogVersion": "eternal",
+        "cve_ids": [f"CVE-2026-{10000 + i:05d}" for i in range(150)],
+    }
+    path = tmp_path / vuln_feed.KEV_CACHE_FILENAME
+    path.write_text(json.dumps(future))
+    result = vuln_feed.get_kev_cves(cache_dir=str(tmp_path), offline=True)
+    assert result == set()
+
+
+def test_failed_refresh_does_not_resurrect_rejected_cache(tmp_path, monkeypatch):
+    """A cache the floor rejected must stay rejected when the online refresh
+    fails: the last-resort reread applies the same content gates."""
+    poisoned = {
+        "_cached_at": time.time(),
+        "catalogVersion": "poisoned",
+        "cve_ids": [f"CVE-2026-{i:05d}" for i in range(5)],
+    }
+    path = tmp_path / vuln_feed.KEV_CACHE_FILENAME
+    path.write_text(json.dumps(poisoned))
+
+    def _boom(req, timeout=None):
+        raise urllib.error.URLError("network down")
+
+    monkeypatch.setattr(vuln_feed.urllib.request, "urlopen", _boom)
+    result = vuln_feed.get_kev_cves(cache_dir=str(tmp_path))
+    assert result == set()
+
+
+def test_non_dict_cache_json_does_not_crash(tmp_path):
+    """A cache file holding valid JSON that is not an object must be
+    rejected, not crash with AttributeError."""
+    path = tmp_path / vuln_feed.KEV_CACHE_FILENAME
+    path.write_text(json.dumps([1, 2, 3]))
+    assert vuln_feed.get_kev_cves(cache_dir=str(tmp_path), offline=True) == set()
+
+
+def test_non_finite_cached_at_rejected(tmp_path):
+    """Regression (torture R1): NaN/Infinity timestamps defeat every age
+    comparison (NaN > x is False, NaN > max_age is False), so a NaN cache
+    is treated as fresh forever online and trusted offline. Non-finite
+    _cached_at values must be rejected on every path."""
+    for literal in ("NaN", "Infinity", "-Infinity"):
+        path = tmp_path / vuln_feed.KEV_CACHE_FILENAME
+        path.write_text(
+            '{"_cached_at": %s, "cve_ids": [%s]}'
+            % (literal, ",".join('"CVE-2026-%05d"' % i for i in range(150)))
+        )
+        assert vuln_feed.get_kev_cves(cache_dir=str(tmp_path), offline=True) == set(), literal
+
+
+def test_huge_int_cached_at_does_not_crash(tmp_path):
+    """Regression (torture R2): a bignum _cached_at must not crash float
+    conversions; it is simply invalid."""
+    path = tmp_path / vuln_feed.KEV_CACHE_FILENAME
+    body = '{"_cached_at": %s, "cve_ids": [%s]}' % (
+        "1" * 400, ",".join('"CVE-2026-%05d"' % i for i in range(150)))
+    path.write_text(body)
+    assert vuln_feed.get_kev_cves(cache_dir=str(tmp_path), offline=True) == set()
+
+
+def test_non_list_cve_ids_rejected(tmp_path):
+    """Regression (torture R2): cve_ids that is not a list (int/str/dict)
+    must be rejected, not crash len() or iteration."""
+    path = tmp_path / vuln_feed.KEV_CACHE_FILENAME
+    for bad in (5, "CVE-2026-00001", {"a": 1}, None):
+        path.write_text(json.dumps({"_cached_at": time.time(), "cve_ids": bad}))
+        assert vuln_feed.get_kev_cves(cache_dir=str(tmp_path), offline=True) == set(), bad
+
+
+def test_offline_oversized_cache_rejected(tmp_path, monkeypatch):
+    """Regression: the offline last-resort reread must honor the cache file
+    size cap like the normal load path."""
+    monkeypatch.setattr(vuln_feed, "_CACHE_FILE_MAX_BYTES", 256)
+    big = {
+        "_cached_at": time.time(),
+        "catalogVersion": "oversized",
+        "cve_ids": [f"CVE-2026-{10000 + i:05d}" for i in range(150)],
+        "pad": "x" * 1024,
+    }
+    path = tmp_path / vuln_feed.KEV_CACHE_FILENAME
+    path.write_text(json.dumps(big))
     result = vuln_feed.get_kev_cves(cache_dir=str(tmp_path), offline=True)
     assert result == set()
 
