@@ -33,7 +33,7 @@ Provenance is git-dated: every scanner's first commit is in this repo's history,
 | PylangGhost RAT (benign v1.0.0 weaponized in v1.0.1) | community disclosure | 2026 | `manifest_drift`, `runtime_dynamism` | |
 | TeamPCP campaign (cascading supply chain, WAV steganography) | community disclosure | 2026 | `infra`, `dependencies`, `binary`, `skill_threats` | |
 | Tool Poisoning (`<IMPORTANT>` tag as canonical TPA) | [Invariant Labs](https://invariantlabs.ai/blog/mcp-security-notification-tool-poisoning-attacks) | 2025 | `mcp_security` | |
-| SQL to Prompt escalation (SQL injection stores malicious prompts) | [Trend Micro](https://www.trendmicro.com/en_us/research/25/e/mcp-security.html) | 2025 | `mcp_security` | |
+| SQL to Prompt escalation (SQL injection stores malicious prompts) | [Trend Micro](https://www.trendmicro.com/en_us/research/25/f/why-a-classic-mcp-server-vulnerability-can-undermine-your-entire-ai-agent.html) | 2025 | `mcp_security` | |
 | Lies-in-the-Loop (HITL dialog manipulation via text padding) | [Checkmarx](https://checkmarx.com/zero-post/bypassing-ai-agent-defenses-with-lies-in-the-loop/) | 2025 | `skill_threats` | |
 | 11 emerging MCP risks (attack taxonomy) | [Checkmarx](https://checkmarx.com/zero-post/11-emerging-ai-security-risks-with-mcp-model-context-protocol/) | 2025 | `mcp_security` | |
 | Shai-Hulud (first NPM worm, destructive fallback, self-hosted runner backdoor) | [Checkmarx](https://checkmarx.com/zero-post/inside-shai-huluds-maw-how-the-npm-worm-exploits-and-propagates/) | 2025 | `sast`, `skill_threats`, `dependencies` | |
